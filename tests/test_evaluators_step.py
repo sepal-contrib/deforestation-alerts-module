@@ -1374,3 +1374,125 @@ def test_the_return_panels_title_and_note_are_blocks(data_root):
             assert "display:block" in line.style_.replace(" ", ""), text
     finally:
         rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Review nearby alerts together (spec 2026-10-26 §3.2, §3.3)
+# ---------------------------------------------------------------------------
+def _group_box(rc):
+    return rc.find(v.Checkbox, class_="defo-group-option")
+
+
+def _group_radius(rc):
+    return rc.find(v.TextField, class_="defo-group-radius")
+
+
+def _group_include(rc):
+    return rc.find(v.Checkbox, class_="defo-group-include")
+
+
+def _group_note(rc):
+    return rc.find(v.Html, class_="defo-group-note").widget.children[0]
+
+
+def _grouped(p, *, radius=500.0, include=False):
+    p.group_review = models.GroupReview(enabled=True, radius_m=radius, include_reviewed=include)
+    return p
+
+
+@pytest.mark.parametrize("multi", [None, False, True])
+def test_the_group_option_is_off_by_default_and_saves_when_ticked(data_root, multi):
+    s = _state(_project(multi=multi), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        assert _group_box(rc).widget.v_model is False and not _group_box(rc).widget.disabled
+        labels = [_strings(w) for w in rc.find(v.Html, class_="defo-group-label").widgets]
+        assert labels == [["mdi-vector-union", t("evaluators.group_label")]]
+        assert not _group_radius(rc).widgets and not _group_include(rc).widgets
+        assert _group_note(rc) == t("evaluators.group_note")
+        _group_box(rc).widget.v_model = True
+        assert s.project.value.group_review.enabled is True
+        assert _group_radius(rc).widget.v_model == "500" and _group_radius(rc).widget.suffix == "m"
+        assert _group_include(rc).widget.v_model is False
+        assert t("evaluators.group_include_reviewed_hint") in _strings(rc.container)
+        _group_include(rc).widget.v_model = True
+        assert s.project.value.group_review.include_reviewed is True
+        _group_box(rc).widget.v_model = False
+        assert s.project.value.group_review.enabled is False
+    finally:
+        rc.close()
+
+
+def test_a_click_on_the_group_text_toggles_its_box(data_root):
+    s = _state(_project(multi=False), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        rc.find(v.Html, class_="defo-group-label").widget.fire_event("click", None)
+        assert s.project.value.group_review.enabled is True
+    finally:
+        rc.close()
+
+
+def test_a_bad_distance_shows_an_error_and_keeps_the_last_value(data_root):
+    s = _state(_grouped(_project(multi=False)), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        _group_radius(rc).widget.v_model = "5001"
+        assert _group_radius(rc).widget.error_messages == [t("evaluators.group_radius_error")]
+        assert _group_radius(rc).widget.v_model == "5001"  # what was typed stays to be fixed
+        assert s.project.value.group_review.radius_m == 500.0
+        _group_radius(rc).widget.v_model = "300"
+        assert s.project.value.group_review.radius_m == 300.0
+        assert not _group_radius(rc).widget.error_messages
+    finally:
+        rc.close()
+
+
+def test_saved_groups_lock_the_option_on(data_root):
+    p = _grouped(_project(multi=False))
+    p.alert_sets[SET_ID].n_groups = 2
+    _box, rc = _render(_state(p, _gdf(evaluators=("",) * 4)))
+    try:
+        assert _group_box(rc).widget.v_model is True and _group_box(rc).widget.disabled is True
+        assert _group_radius(rc).widget.disabled is True
+        assert not _group_include(rc).widget.disabled
+        assert _group_note(rc) == tn("evaluators.group_locked_groups", 2)
+    finally:
+        rc.close()
+
+
+@pytest.mark.parametrize("radius, note", [(None, "evaluators.group_locked_split_off"),
+                                          (250.0, "evaluators.group_locked_split_on")])
+def test_a_split_locks_the_option_distance_and_include(data_root, radius, note):
+    made = _split().model_copy(update={"group_radius_m": radius, "group_include_reviewed": radius is not None})
+    _box, rc = _render(_state(_grouped(_project(split=made)), _gdf()))
+    try:
+        assert _group_box(rc).widget.disabled is True
+        assert _group_note(rc) == t(note)
+        if radius is None:  # the split's record, not the project's setting
+            assert _group_box(rc).widget.v_model is False and not _group_radius(rc).widgets
+        else:
+            assert _group_box(rc).widget.v_model is True
+            assert _group_radius(rc).widget.v_model == "250" and _group_radius(rc).widget.disabled is True
+            assert _group_include(rc).widget.v_model is True and _group_include(rc).widget.disabled is True
+    finally:
+        rc.close()
+
+
+def test_a_review_copy_shows_the_setting_read_only(data_root):
+    copy = ReviewCopy(evaluator="Bo", evaluator_index=2, set_id=SET_ID, split_id="s1", set_fingerprint="fp",
+                      origin_project="c", imported_at=datetime.now())
+    made = _split().model_copy(update={"group_radius_m": 750.0})
+    p = _project("c__e02-bo", split=made, review_copy=copy, multi=False)
+    s = _state(p, _gdf())
+    _box, rc = _render(s)
+    try:
+        assert t("evaluators.return_title") in _strings(rc.container)
+        assert _group_box(rc).widget.v_model is True and _group_box(rc).widget.disabled is True
+        assert _group_radius(rc).widget.v_model == "750" and _group_radius(rc).widget.disabled is True
+        assert _group_include(rc).widget.v_model is False and _group_include(rc).widget.disabled is True
+        assert _group_note(rc) == t("evaluators.group_copy_note")
+        rc.find(v.Html, class_="defo-group-label").widget.fire_event("click", None)
+        assert s.project.value.group_review.enabled is False
+    finally:
+        rc.close()

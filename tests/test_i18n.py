@@ -112,6 +112,8 @@ SAME_IN = {
         "steps.raster_input.field_source", "steps.layers.field_composite",
         # "catalogue", "format" and "source" are the same words in French.
         "steps.prepare.f_catalogue", "steps.prepare.f_format", "steps.prepare.sec_source",
+        # "distance" is the same word in French.
+        "evaluators.group_radius_label",
     },
     "pt-BR": {
         # "item", "status", "total", "normal", "raster" and "download" are the same

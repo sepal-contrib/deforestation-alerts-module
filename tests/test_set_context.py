@@ -817,7 +817,21 @@ def test_record_review_does_not_count_missing_statuses(monkeypatch):
     monkeypatch.setattr(ctx, "_update_set", lambda gdf, field, value, target=None: seen.append((field, value)))
     gdf = pd.DataFrame({"status": ["Confirmed", None, "Not reviewed", float("nan")]})
     ctx.record_review(gdf)
-    assert seen == [("n_reviewed", 1)]
+    assert seen == [("n_reviewed", 1), ("n_groups", 0)]
+
+
+def test_record_review_keeps_the_group_count(tmp_path, monkeypatch):
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    gdf = _review_alerts(n=3)
+    gdf["alert_id"] = [100, 101, 102]
+    gdf["status"] = ["Confirmed", "Confirmed", "Not reviewed"]
+    gdf["review_group"] = pd.array([100, 100, None], dtype="Int64")
+    ctx.record_review(gdf)
+    assert s.project.value.alert_sets["x"].n_groups == 1
+    gdf["review_group"] = pd.array([None] * 3, dtype="Int64")
+    ctx.record_review(gdf)
+    assert s.project.value.alert_sets["x"].n_groups == 0
 
 
 def test_add_raster_layer_creates_the_layer_with_its_visibility(monkeypatch):
@@ -843,4 +857,4 @@ def test_record_review_does_not_count_a_blank_status(monkeypatch):
     ctx = SetContext(SimpleNamespace())
     monkeypatch.setattr(ctx, "_update_set", lambda gdf, field, value, target=None: seen.append((field, value)))
     ctx.record_review(pd.DataFrame({"status": ["Confirmed", "", "Need revision", pd.NA]}))
-    assert seen == [("n_reviewed", 2)]
+    assert seen == [("n_reviewed", 2), ("n_groups", 0)]

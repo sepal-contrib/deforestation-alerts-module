@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import paths, review_groups
 from deforestation_alerts.project.models import AlertSet
 from deforestation_alerts.project.review_status import reviewed_mask
 from gui.scripts import set_store
@@ -123,10 +123,12 @@ class SetContext:
         self._update_set(self.app_state.alerts_gdf.value, "last_alert_index", max(0, int(index)))
 
     def record_review(self, gdf, target: Optional[SetTarget] = None) -> None:
-        """Keep a set's reviewed count (the Analysis badge) in step with its
-        saved store. ``target`` is the set the store was written for, pinned
-        when the Save started; without it, the active set."""
+        """Keep a set's reviewed count (the Analysis badge) and its group
+        count (the Evaluation step's lock) in step with its saved store.
+        ``target`` is the set the store was written for, pinned when the Save
+        started; without it, the active set."""
         if gdf is None or "status" not in gdf:
             return
         n = int(reviewed_mask(gdf).sum())
         self._update_set(gdf, "n_reviewed", n, target)
+        self._update_set(gdf, "n_groups", review_groups.n_groups(gdf), target)
