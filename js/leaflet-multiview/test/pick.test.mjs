@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {pick, shouldPick} from "../src/plugins/pick/index.js";
 import {createEmitter} from "../src/core/events.js";
+import {bind} from "../src/plugins/pick/widget.js";
 
 function fakeMap(zoom = 14, pm = undefined) {
   const handlers = {};
@@ -86,4 +87,22 @@ test("destroy removes the click listeners and silences the plugin", () => {
   assert.equal(maps.before.count() + maps.after.count(), 0);
   maps.before.click(0, 0);
   assert.equal(picks.length, 0);
+});
+
+test("the widget writes pick_event only while Python has set a pick_tag", () => {
+  // Grouping off never sets a tag: a click then sends nothing, as before picks.
+  const traits = {pick_tag: ""};
+  const writes = [];
+  const model = {
+    get: k => traits[k],
+    set: (k, v) => (traits[k] = v),
+    save_changes: () => writes.push(traits.pick_event),
+  };
+  const emitter = createEmitter();
+  bind({model, mv: {on: emitter.on}});
+  emitter.emit("pick", {view: "before", lat: 1, lng: 2, zoom: 13});
+  assert.deepEqual(writes, []);
+  traits.pick_tag = "7:1";
+  emitter.emit("pick", {view: "before", lat: 1, lng: 2, zoom: 13});
+  assert.deepEqual(writes, [{tag: "7:1", view: "before", lat: 1, lng: 2, zoom: 13, seq: 1}]);
 });

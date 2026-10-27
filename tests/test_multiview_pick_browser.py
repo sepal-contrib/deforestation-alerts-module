@@ -36,6 +36,14 @@ def test_a_click_writes_the_pick_event_with_tag_and_zoom(mv_page):
 
 def test_nothing_is_picked_in_edit_mode(mv_page):
     _mount(mv_page, draw_edit_mode=True)
+    py(mv_page, "pick_tag", "7:1")
+    _click_centre(mv_page, "after")
+    assert writes(mv_page, "pick_event") == []
+
+
+def test_nothing_is_sent_without_a_pick_tag(mv_page):
+    """Review M7: grouping off sets no tag, and a click then sends nothing."""
+    _mount(mv_page)
     _click_centre(mv_page, "after")
     assert writes(mv_page, "pick_event") == []
 
