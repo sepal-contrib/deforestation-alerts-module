@@ -249,7 +249,8 @@
         "many": "{n} de formes",
         "other": "{n} formes"
       },
-      "questions": "Questions"
+      "questions": "Questions",
+      "nearby": "Alertes à proximité"
     },
     "edition_labels": {
       "start_edit_button": "Commencer à dessiner",
@@ -370,7 +371,30 @@
     },
     "nearby": {
       "mixed_evaluators": "Ces alertes sont attribuées à des évaluateurs différents : un groupe n’en a qu’un.",
-      "foreign_rows": "Certaines de ces alertes ne vous sont pas attribuées."
+      "foreign_rows": "Certaines de ces alertes ne vous sont pas attribuées.",
+      "badge_selected": {
+        "one": "{n} sélectionnée",
+        "many": "{n} sélectionnées",
+        "other": "{n} sélectionnées"
+      },
+      "badge_within": {
+        "one": "{n} à moins de {radius} m",
+        "many": "{n} à moins de {radius} m",
+        "other": "{n} à moins de {radius} m"
+      },
+      "badge_none": "aucune à moins de {radius} m",
+      "select_all": "Tout sélectionner",
+      "clear": "Effacer",
+      "more": {
+        "one": "{n} autre dans le rayon, non listée",
+        "many": "{n} autres dans le rayon, non listées",
+        "other": "{n} autres dans le rayon, non listées"
+      },
+      "outside": "Certaines alertes sélectionnées sont hors de la zone d’image : choisissez une zone plus grande sur la frise.",
+      "in_group": "dans ce groupe",
+      "group_of_main": "groupe n° {n}",
+      "assigned_to": "attribuée à {name}",
+      "distance": "{m} m"
     }
   },
   "imagery": {

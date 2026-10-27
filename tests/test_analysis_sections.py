@@ -119,7 +119,7 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     from gui.tile.analysis.footer import footer_widgets
 
     panel = _controls(tmp_path, monkeypatch)
-    banner, block_a, block_b, questions, refine, earlier = panel.controls.children
+    banner, block_a, block_b, questions, refine, earlier, _nearby = panel.controls.children
     # the help, the set selector and the navigation went to the top bar
     assert panel.sections.topnav is not None
     assert earlier is panel.sections.earlier.root

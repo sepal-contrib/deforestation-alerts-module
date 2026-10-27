@@ -87,6 +87,7 @@ from gui.tile.analysis.earlier import (
     remove_earlier_layer,
     seed_switch,
 )
+from gui.tile.analysis import nearby
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
@@ -173,6 +174,7 @@ def _invalidate_alert_view(widgets, analysis) -> None:
             panes.clear("alert")
             panes.set_focus_bounds(None)
         remove_earlier_layer(widgets)
+        nearby.remove_layer(widgets)
         widgets.actual_bb = None
         widgets.actual_alert_grid = None
         widgets.actual_bb_geojson = None
@@ -264,6 +266,9 @@ def view_actual_alert(
     # --- a growth alert opens with its parents on the maps; any other on the
     # reviewer's last choice (spec §6.3) ---
     seed_switch(analysis, bool(analysis.links.value))
+    # --- a grouped alert opens with its stored group ticked (group review
+    # §6.3); not a change, like the seeding above ---
+    nearby.seed_selection(analysis, app_state)
 
     # --- remember the position on the alert set (auto-saved with the project) ---
     remember = getattr(app_tile_model, "remember_position", None)
@@ -293,8 +298,10 @@ def view_actual_alert(
         # raster, which a period delete is removing (500s from the tile server)
         panes.clear("alert")
         # the earlier-alerts overlay is the previous alert's neighbourhood:
-        # ``refresh_in_background`` below draws this alert's
+        # ``refresh_in_background`` below draws this alert's; the nearby
+        # outlines likewise
         remove_earlier_layer(widgets)
+        nearby.remove_layer(widgets)
 
         # center/zoom: one write, every view follows (``AlertViews``)
         panes.set_view((alerta.point.y, alerta.point.x), 16)
@@ -359,6 +366,11 @@ def view_actual_alert(
         refresh_in_background(widgets, analysis, app_state)
     except Exception:
         logger.exception("Analysis: the earlier-alerts section failed")
+    # the nearby alerts this one can be reviewed with (a no-op while grouping is off)
+    try:
+        nearby.refresh_in_background(widgets, analysis, app_state)
+    except Exception:
+        logger.exception("Analysis: the nearby-alerts section failed")
 
 
 def select_start_alert(app_state, app_tile_model):
@@ -485,7 +497,8 @@ _PANEL = "_defo_panel_sections"
 
 
 def panel_sections(controls):
-    """``SimpleNamespace(questions, refine, export, export_parts, footer)`` of
+    """``SimpleNamespace(questions, refine, export, export_parts, footer,
+    earlier, nearby, topnav)`` of
     a panel built by ``build_controls``: what ``build_questions_section``
     returned, the two ``section.build_section`` namespaces, what
     ``build_export`` returned and what ``footer.build_footer`` returned."""
@@ -509,7 +522,8 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     grid with its status chip; the queue and the navigation went to the top
     bar), **block B** (the verdict buttons), the collapsible *Questions* (one
     control per project question, the loss driver among them), *Refine
-    polygon* and *Earlier alerts* sections. These are ``controls``' children,
+    polygon*, *Earlier alerts* and *Nearby alerts* (shown while grouping is
+    effective) sections. These are ``controls``' children,
     the part that scrolls. The **dock** (``footer.build_footer``: the
     collapsible *Export this alert* list, *Save* / *Next* and the save-state
     line) is NOT one of them: ``build_screen`` puts it under the scrolling
@@ -567,6 +581,7 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     context = build_context(app_state, id_field, labels=labels, analysis=analysis, guard=footer.guard)
     topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
     earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels)
+    near = nearby.build_nearby_section(widgets, app_state, analysis, labels=labels)
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",
@@ -577,11 +592,12 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
             questions.root,
             refine.root,
             earlier.root,
+            near.root,
         ],
     )
     setattr(controls, _PANEL, SimpleNamespace(questions=questions, refine=refine, export=exports,
                                               export_parts=export_parts, footer=footer,
-                                              earlier=earlier, topnav=topnav))
+                                              earlier=earlier, nearby=near, topnav=topnav))
     return controls
 
 

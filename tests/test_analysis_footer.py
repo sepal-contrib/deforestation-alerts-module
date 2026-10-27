@@ -132,7 +132,7 @@ def test_the_panel_order_is_head_verdict_questions_refine_earlier(panel):
     from gui.tile.analysis import context, review_panel
 
     sections = analysis_tile.panel_sections(panel.controls)
-    _banner, block_a, block_b, questions, refine, earlier = panel.controls.children
+    _banner, block_a, block_b, questions, refine, earlier, _nearby = panel.controls.children
     context.facts_widgets(block_a)              # block A owns the facts...
     assert set(review_panel.verdict_widgets(block_b)) == {
         "Confirmed", "False Positive", "Need revision"}  # ...block B the verdict

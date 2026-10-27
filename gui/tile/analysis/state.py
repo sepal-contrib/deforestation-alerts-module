@@ -147,6 +147,15 @@ class AnalysisState:
     #: it. A tick goes through ``toggle_selection``, which marks the alert
     #: unsaved like a verdict change.
     selection: solara.Reactive = field(default_factory=lambda: solara.reactive(frozenset()))
+    #: the last *Nearby alerts* search around this alert
+    #: (``nearby.refresh_nearby``, a ``review_groups.NearbyResult``): the rows
+    #: the section lists and a map click can tick. None until one lands, and
+    #: while grouping is off. Per alert.
+    nearby_result: solara.Reactive = field(default_factory=_identity)
+    #: counts the nearby searches: a search that finishes after a newer one
+    #: started is dropped; with the alert token it is the map's pick tag
+    #: (``nearby.wire_pick``)
+    nearby_seq: int = field(default=0, repr=False)
     #: counts the overlay refreshes (``earlier.refresh_earlier``): a
     #: load that finishes after a newer refresh started is dropped
     earlier_seq: int = field(default=0, repr=False)
@@ -181,6 +190,7 @@ class AnalysisState:
             # the empty state the footer's save-state line reads.
             self.last_save_time.set(0.0)
             self.image_area.set("normal")
+            self.nearby_result.set(None)
             self.selection.set(frozenset())
 
     def is_current(self, token) -> bool:

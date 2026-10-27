@@ -394,3 +394,10 @@ def test_on_pick_calls_back_and_unsubscribes():
     off()
     panes.widget.set_state({"pick_event": {**event, "seq": 2}})
     assert seen == [event]
+
+
+def test_the_pick_unsubscribe_can_be_called_twice():
+    panes = make_panes()
+    off = panes.on_pick(lambda event: None)
+    off()
+    off()  # a second call does nothing (unobserve alone raises ValueError)

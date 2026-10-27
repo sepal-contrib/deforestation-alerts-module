@@ -249,7 +249,8 @@
         "many": "{n} de formas",
         "other": "{n} formas"
       },
-      "questions": "Preguntas"
+      "questions": "Preguntas",
+      "nearby": "Alertas cercanas"
     },
     "edition_labels": {
       "start_edit_button": "Empezar a dibujar",
@@ -370,7 +371,30 @@
     },
     "nearby": {
       "mixed_evaluators": "Estas alertas están asignadas a evaluadores distintos: un grupo necesita uno solo.",
-      "foreign_rows": "Algunas de estas alertas no te están asignadas."
+      "foreign_rows": "Algunas de estas alertas no te están asignadas.",
+      "badge_selected": {
+        "one": "{n} seleccionada",
+        "many": "{n} seleccionadas",
+        "other": "{n} seleccionadas"
+      },
+      "badge_within": {
+        "one": "{n} a menos de {radius} m",
+        "many": "{n} a menos de {radius} m",
+        "other": "{n} a menos de {radius} m"
+      },
+      "badge_none": "ninguna a menos de {radius} m",
+      "select_all": "Seleccionar todas",
+      "clear": "Borrar",
+      "more": {
+        "one": "{n} más en el radio, no listada",
+        "many": "{n} más en el radio, no listadas",
+        "other": "{n} más en el radio, no listadas"
+      },
+      "outside": "Algunas alertas seleccionadas quedan fuera del área de la imagen: elija un área mayor en la línea de tiempo.",
+      "in_group": "en este grupo",
+      "group_of_main": "grupo n.º {n}",
+      "assigned_to": "asignada a {name}",
+      "distance": "{m} m"
     }
   },
   "imagery": {

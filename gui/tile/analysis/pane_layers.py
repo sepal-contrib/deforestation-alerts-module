@@ -239,12 +239,20 @@ class PaneLayers:
 
     def on_pick(self, callback):
         """``callback(event)`` after each map click the frontend picked
-        (``{tag, view, lat, lng, zoom, seq}``). Returns the unsubscribe."""
+        (``{tag, view, lat, lng, zoom, seq}``). Returns the unsubscribe, which
+        may be called more than once (the later calls do nothing)."""
         def observer(change):
             callback(change["new"])
 
         self.widget.observe(observer, names="pick_event")
-        return lambda: self.widget.unobserve(observer, names="pick_event")
+        subscribed = [True]
+
+        def unsubscribe():
+            if subscribed[0]:
+                subscribed[0] = False
+                self.widget.unobserve(observer, names="pick_event")
+
+        return unsubscribe
 
     def layer_off(self, view, layer_id) -> bool:
         """True when the viewer switched ``layer_id`` off in ``view``'s layer menu."""

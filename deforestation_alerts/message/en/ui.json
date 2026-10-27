@@ -243,7 +243,8 @@
         "one": "{n} shape",
         "other": "{n} shapes"
       },
-      "questions": "Questions"
+      "questions": "Questions",
+      "nearby": "Nearby alerts"
     },
     "edition_labels": {
       "start_edit_button": "Start drawing",
@@ -362,7 +363,27 @@
     },
     "nearby": {
       "mixed_evaluators": "These alerts are assigned to different evaluators: a group needs one.",
-      "foreign_rows": "Some of these alerts are not assigned to you."
+      "foreign_rows": "Some of these alerts are not assigned to you.",
+      "badge_selected": {
+        "one": "{n} selected",
+        "other": "{n} selected"
+      },
+      "badge_within": {
+        "one": "{n} within {radius} m",
+        "other": "{n} within {radius} m"
+      },
+      "badge_none": "none within {radius} m",
+      "select_all": "Select all",
+      "clear": "Clear",
+      "more": {
+        "one": "{n} more in range not listed",
+        "other": "{n} more in range not listed"
+      },
+      "outside": "Some selected alerts are outside the image area: pick a larger area on the timeline.",
+      "in_group": "in this group",
+      "group_of_main": "group #{n}",
+      "assigned_to": "assigned to {name}",
+      "distance": "{m} m"
     }
   },
   "imagery": {
