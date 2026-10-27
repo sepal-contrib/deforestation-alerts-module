@@ -141,6 +141,17 @@ def test_a_member_opens_its_groups_main():
     assert rg.keep_plan(gdf, 1) == plan
 
 
+@pytest.mark.parametrize("opened, selected", [
+    (0, set()), (0, {1, 2}), (0, {3}), (0, {3, 4}), (0, {4}), (0, {3, 1}), (4, {3, 5}), (4, {5}), (1, {0}),
+])
+def test_plan_size_is_the_plans_size(opened, selected):
+    """Review M6: the footer's count, without building the plan, follows
+    ``plan_group``'s §4.5 expansion (another group's main brings it whole)."""
+    gdf = _alerts(6, statuses=["Confirmed"] * 2 + [NR] + ["Need revision"] * 3,
+                  groups=[100, 100, None, 103, 103, 103])
+    assert rg.plan_size(gdf, opened, selected) == rg.plan_group(gdf, opened, selected).size
+
+
 def test_remove_takes_a_member_out():
     gdf = _alerts(3, statuses=["Confirmed"] * 2 + [NR], groups=[100, 100, None])
     plan = rg.plan_remove(gdf, 1)

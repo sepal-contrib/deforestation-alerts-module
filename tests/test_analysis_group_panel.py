@@ -182,6 +182,25 @@ def test_the_footer_label_counts_the_group(tmp_path, monkeypatch):
     assert label_of(h.footer.save) == "Save"
 
 
+def test_the_footer_label_builds_no_plan(tmp_path, monkeypatch):
+    """Review M6: the label follows every selection change, which
+    ``reset_alert`` and the after-save reseed make inside ``_alert_lock``:
+    it counts from the selection, with no capture or plan built there. A
+    ticked main of another group still brings that whole group."""
+    alerts = _alerts(status=[NR, CONFIRMED, CONFIRMED, NR],
+                     review_group=pd.array([None, 11, 11, None], dtype="Int64"))
+    h = _panel(tmp_path, monkeypatch, alerts=alerts)
+    _open(h, 0)
+    plans = []
+    real = review_groups.plan_group
+    monkeypatch.setattr(review_groups, "plan_group", lambda *a, **k: plans.append(a) or real(*a, **k))
+    toggle_selection(h.analysis, 1)  # #2, the main of #2-#3
+    assert label_of(h.footer.save) == "Save for 3 alerts"
+    toggle_selection(h.analysis, 3)
+    assert label_of(h.footer.save) == "Save for 4 alerts"
+    assert plans == []
+
+
 # ---------------------------------------------------------------------------
 # The confirmation (§6.4)
 # ---------------------------------------------------------------------------

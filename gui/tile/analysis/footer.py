@@ -43,6 +43,7 @@ from gui.tile.analysis import alert_files
 from gui.tile.analysis.context import status_label_key
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE
+from gui.tile.analysis.state import save_size
 from gui.widget.buttons import btn, set_label
 
 FOOTER_STYLE = ("flex: 0 0 auto; padding: 0 16px 12px; "
@@ -234,15 +235,17 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         run_save(save, alert=alert)
 
     def _save_text():
-        """"Save", or "Save for N alerts" while the plan on screen holds N > 1."""
-        plan = None
+        """"Save", or "Save for N alerts" while the plan on screen holds N > 1.
+        Counted by ``state.save_size``, not a capture: this runs on every
+        selection change, some made inside ``_alert_lock``."""
+        size = 1
         if capture is not None:
             try:
-                plan = getattr(capture(), "plan", None)
+                size = save_size(analysis, app_state)
             except Exception:  # a table in transition: the plain word
-                plan = None
-        if plan is not None and plan.size > 1:
-            return tn("analysis_tile.export_labels.save_for", plan.size)
+                size = 1
+        if size > 1:
+            return tn("analysis_tile.export_labels.save_for", size)
         return t("analysis_tile.export_labels.save_btn")
 
     save.on_event("click", _on_save)

@@ -110,11 +110,16 @@ def group_of(gdf, position) -> tuple:
     """``(main, members)`` of the group ``position`` is in, members sorted and
     the main left out; ``(position, ())`` for a row in no group or in a group
     of one."""
-    values = group_values(gdf)
+    return _group_in(group_values(gdf), _positions_by_id(gdf), position)
+
+
+def _group_in(values, by_id, position) -> tuple:
+    """``group_of`` over the table's ``group_values`` and id map, made once
+    by a caller that asks for several rows."""
     value = values.iloc[position]
     if pd.isna(value):
         return position, ()
-    main = _positions_by_id(gdf).get(int(value))
+    main = by_id.get(int(value))
     if main is None:  # a store that breaks the invariant reads as no group
         return position, ()
     return main, tuple(p for p in _rows_of(values, value) if p != main)
@@ -139,17 +144,13 @@ def plan_group(gdf, opened, selected) -> GroupPlan:
     moves alone (MOVED; a group it leaves with only its main keeps that main
     as a group of one), a reviewed single is OVERWRITTEN, and rows of the
     main's group left unticked are detached (REMOVED)."""
-    main, current = group_of(gdf, opened)
-    chosen = {int(p) for p in selected} - {main}
-    groups = {p: group_of(gdf, p) for p in chosen}
+    main, current, chosen, groups = _choice(gdf, opened, selected)
     members, affected = set(), []
     # Other groups' mains first: their members are theirs, even when ticked too.
-    for p in sorted(chosen):
-        p_main, p_members = groups[p]
-        if p_main == p and p_members and p_main != main:
-            for q in (p_main, *p_members):
-                members.add(q)
-                affected.append(Affected(q, status_of(gdf, q), JOINED, p_main))
+    for p_main, rows in _joined(main, chosen, groups):
+        for q in rows:
+            members.add(q)
+            affected.append(Affected(q, status_of(gdf, q), JOINED, p_main))
     for p in sorted(chosen - members):
         p_main, p_members = groups[p]
         members.add(p)
@@ -164,6 +165,36 @@ def plan_group(gdf, opened, selected) -> GroupPlan:
     affected += [Affected(p, status_of(gdf, p), REMOVED, main) for p in detached]
     return GroupPlan(SAVE, main, tuple(sorted(members)), tuple(detached),
                      tuple(sorted(affected, key=lambda a: a.position)))
+
+
+def _choice(gdf, opened, selected) -> tuple:
+    """``(main, its current members, chosen rows, {row: group_of(row)})`` of
+    a save of ``opened`` with ``selected`` ticked; the table is read once."""
+    values, by_id = group_values(gdf), _positions_by_id(gdf)
+    main, current = _group_in(values, by_id, opened)
+    chosen = {int(p) for p in selected} - {main}
+    return main, current, chosen, {p: _group_in(values, by_id, p) for p in chosen}
+
+
+def _joined(main, chosen, groups) -> list:
+    """``(other main, its whole group)`` for every other group's main in
+    ``chosen``, in order: such a tick brings its whole group (§4.5)."""
+    out = []
+    for p in sorted(chosen):
+        p_main, p_members = groups[p]
+        if p_main == p and p_members and p_main != main:
+            out.append((p_main, (p_main, *p_members)))
+    return out
+
+
+def plan_size(gdf, opened, selected) -> int:
+    """``plan_group(gdf, opened, selected).size`` without building the plan
+    (no statuses read, no affected rows): what *Save for N alerts* counts."""
+    main, _current, chosen, groups = _choice(gdf, opened, selected)
+    members = set(chosen)
+    for _main, rows in _joined(main, chosen, groups):
+        members.update(rows)
+    return 1 + len(members)
 
 
 def keep_plan(gdf, position) -> GroupPlan:

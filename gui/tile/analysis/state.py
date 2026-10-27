@@ -268,6 +268,21 @@ def _group_plan(alerts, alert_id, grouping, selection, remove):
     return review_groups.plan_group(alerts, alert_id, selection)
 
 
+def save_size(analysis: AnalysisState, app_state) -> int:
+    """The alerts a Save of the alert on screen would write the review for
+    now: ``_group_plan(...).size`` read without a capture or a plan
+    (``review_groups.plan_size``), so the dock can re-label *Save* on every
+    selection change, also one made inside ``_alert_lock``. 1 while grouping
+    is off or there is no row."""
+    p = app_state.project.value
+    s = active_set(p) if p is not None else None
+    alerts, alert_id = app_state.alerts_gdf.value, app_state.actual_alert_id.value
+    if (grouping_rules.effective(p, s) is None or alerts is None or alert_id is None
+            or not 0 <= alert_id < len(alerts)):
+        return 1
+    return review_groups.plan_size(alerts, alert_id, frozenset(analysis.selection.value or ()))
+
+
 def capture_alert(analysis: AnalysisState, widgets, app_state, *, remove=False) -> SimpleNamespace:
     """``analysis.capture`` with the alert's row, the review widgets, the
     answers and the questions they answer: what a Save, a Download or a CNN
