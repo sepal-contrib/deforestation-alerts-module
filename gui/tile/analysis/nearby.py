@@ -134,6 +134,30 @@ def layer_spec(gdf, rows, selection) -> dict:
                         hide_while_editing=True, section="alerts")
 
 
+def _cell(gdf, column, p):
+    try:
+        value = float(gdf[column].iloc[p])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def listed_rows(gdf, result, selection) -> list:
+    """The rows on screen: the search's (those still in the table), then
+    every selected position the search does not list (a tick made while it
+    ran). Those read no distance (``distance_m`` NaN): every selected row is
+    listed (spec §6.1), and a Save never writes a row the reviewer cannot
+    see."""
+    if gdf is None:
+        return []
+    rows = [r for r in (result.rows if result is not None else ()) if 0 <= r.position < len(gdf)]
+    listed = {r.position for r in rows}
+    for p in sorted(int(p) for p in selection if 0 <= int(p) < len(gdf) and int(p) not in listed):
+        rows.append(review_groups.NearbyRow(p, math.nan, review_groups.status_of(gdf, p), None, False, "",
+                                            _cell(gdf, "area_ha", p) or 0.0, _cell(gdf, "alert_date_min", p)))
+    return rows
+
+
 def remove_layer(widgets) -> None:
     """Take the outlines off the views (a no-op without views or without them)."""
     panes = getattr(widgets, "panes", None)
@@ -149,10 +173,12 @@ def draw_layer(widgets, analysis, app_state) -> None:
         return
     result = analysis.nearby_result.value
     gdf = app_state.alerts_gdf.value
-    if result is None or gdf is None or not result.rows:
+    selection = frozenset(analysis.selection.value or ())
+    rows = listed_rows(gdf, result, selection) if result is not None else []
+    if not rows:
         panes.remove(NEARBY_ID)
         return
-    panes.add(layer_spec(gdf, result.rows, frozenset(analysis.selection.value or ())))
+    panes.add(layer_spec(gdf, rows, selection))
 
 
 def seed_selection(analysis, app_state) -> None:
@@ -267,7 +293,8 @@ def wire_pick(widgets, app_state, analysis):
             lat, lng, zoom = float(event["lat"]), float(event["lng"]), float(event["zoom"])
         except (KeyError, TypeError, ValueError):
             return
-        positions = [r.position for r in result.rows if not r.blocked and 0 <= r.position < len(gdf)]
+        rows = listed_rows(gdf, result, frozenset(analysis.selection.value or ()))
+        positions = [r.position for r in rows if not r.blocked]
         hit = hit_row(gdf, positions, lat, lng, zoom)
         if hit is not None:
             toggle_selection(analysis, hit)
@@ -290,6 +317,14 @@ def _date_text(julian) -> str:
 
 def _span(text, class_=TYPE_LABEL):
     return v.Html(tag="span", class_=class_, children=[text])
+
+
+def _close_tree(widget) -> None:
+    """Close ``widget`` and every widget under it."""
+    for child in list(getattr(widget, "children", None) or ()):
+        if not isinstance(child, str):
+            _close_tree(child)
+    widget.close()
 
 
 def _big_group_ids(gdf) -> frozenset:
@@ -362,7 +397,7 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
                     _span(f"{format_number(r.area_ha, 1)} ha", f"{TYPE_LABEL} dat-num")]
         if r.distance_m is None:
             children.append(_span(t("analysis_tile.nearby.in_group")))
-        else:
+        elif math.isfinite(r.distance_m):
             children.append(_span(t("analysis_tile.nearby.distance", m=format_number(round(r.distance_m)))))
             if r.group is not None and ids is not None and int(ids[r.group]) in big:
                 children.append(_span(t("analysis_tile.nearby.group_of_main", n=r.group + 1)))
@@ -384,7 +419,8 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
         elif selection:
             section.set_badge(tn("analysis_tile.nearby.badge_selected", len(selection)), color="primary")
         else:
-            n = sum(1 for r in result.rows if r.distance_m is not None) + result.more
+            n = sum(1 for r in result.rows if r.distance_m is not None and math.isfinite(r.distance_m)) \
+                + result.more
             radius = _radius_text(grouping.radius_m)
             section.set_badge(tn("analysis_tile.nearby.badge_within", n, radius=radius) if n
                               else t("analysis_tile.nearby.badge_none", radius=radius))
@@ -408,13 +444,16 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
         result = analysis.nearby_result.value
         gdf = app_state.alerts_gdf.value
         selection = _selection()
-        rows = [r for r in (result.rows if result is not None else ()) if _valid(gdf, r.position)]
+        rows = listed_rows(gdf, result, selection) if result is not None else []
         # selected first, in the search's order: a tick moves its row up
         # before the next search lists it there itself
         ordered = [r for r in rows if r.position in selection] + [r for r in rows if r.position not in selection]
         big, ids = _groups_of(result, gdf)
+        replaced = section.rows
         section.rows = [_row(r, r.position in selection, big, ids) for r in ordered]
         rows_box.children = [row.root for row in section.rows]
+        for row in replaced:
+            _close_tree(row.root)  # each row is a dozen comm models: free the old ones
         n_more = result.more if result is not None else 0
         more.children = [tn("analysis_tile.nearby.more", n_more)] if n_more else []
         more.style_ = "" if n_more else _HIDDEN

@@ -375,3 +375,44 @@ def test_the_section_sits_below_earlier_alerts(tmp_path, monkeypatch):
     assert sections.nearby.root.style_ == "display: none;"  # grouping is off by default
     assert sections.nearby.remove_btn.style_ == "display: none;"
     assert sections.nearby.banner.style_ == "display: none;"
+
+
+# ---- fix round 1 ----------------------------------------------------------------
+def test_a_row_ticked_while_a_search_runs_stays_listed(monkeypatch):
+    ctx = _section(monkeypatch, radius=300.0)  # lists #2, #3; #4 is ≈ 407 m away
+    real = rg.nearby
+
+    def ticked_meanwhile(*a, **kw):
+        result = real(*a, **kw)  # captured the empty selection
+        ctx.analysis.selection.set(frozenset({3}))  # a tick from a list that offered #4
+        return result
+
+    monkeypatch.setattr(nearby.review_groups, "nearby", ticked_meanwhile)
+    nearby.refresh_nearby(ctx.widgets, ctx.analysis, ctx.app_state)
+    assert _listed(ctx.section)[0] == "#4" and _row(ctx.section, "#4").box.v_model is True
+    assert _features(ctx)[3]["selected"] is True
+    assert ctx.section.badge.children == ["1 selected"]
+    # and a click on it unticks it
+    _pick(ctx, lng=-55.0 + 3 * 0.0015 + 0.00025)
+    assert ctx.analysis.selection.value == frozenset()
+
+
+def test_replaced_row_widgets_are_closed(monkeypatch):
+    ctx = _section(monkeypatch, radius=300.0)
+    old = _row(ctx.section, "#2")
+    _row(ctx.section, "#3").box.v_model = True
+    assert old.box.comm is None and old.root.comm is None and old.zoom.comm is None
+    assert all(row.box.comm is not None for row in ctx.section.rows)
+
+
+def test_a_result_for_another_set_is_dropped(monkeypatch):
+    ctx = _setup(monkeypatch)
+    real = rg.nearby
+
+    def switched(*a, **kw):
+        monkeypatch.setattr(nearby, "active_set", lambda p: SimpleNamespace(id="s2", split=None))
+        return real(*a, **kw)
+
+    monkeypatch.setattr(nearby.review_groups, "nearby", switched)
+    nearby.refresh_nearby(ctx.widgets, ctx.analysis, ctx.app_state)
+    assert ctx.analysis.nearby_result.value is None
