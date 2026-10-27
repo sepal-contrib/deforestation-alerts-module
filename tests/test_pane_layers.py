@@ -362,3 +362,35 @@ def test_earlier_alerts_draw_over_the_imagery_and_under_the_alert_box_and_polygo
     unsubscribe()
     imagery, overlay, polygon = (panes.spec(i)["z"] for i in ("after:tc", earlier.EARLIER_ID, DEFO_ID))
     assert imagery < overlay < ALERT_TOP_Z < polygon
+
+
+# ---- pick (group review) -----------------------------------------------------------
+
+def test_the_nearby_band_sits_between_earlier_alerts_and_the_alert_top():
+    assert Z_BASE["earlier"] < Z_BASE["nearby"] == 3_500_000 < Z_BASE["alert_top"]
+
+
+def test_layer_off_reads_the_layer_menu_toggles():
+    panes = make_panes()
+    panes.widget.layer_menu_toggles = {"before": {"analysis-nearby": False}}
+    assert panes.layer_off("before", "analysis-nearby") is True
+    assert panes.layer_off("after", "analysis-nearby") is False
+    assert panes.layer_off("before", "other") is False
+
+
+def test_set_pick_tag_writes_the_trait():
+    panes = make_panes()
+    panes.set_pick_tag("7:1")
+    assert panes.widget.pick_tag == "7:1"
+
+
+def test_on_pick_calls_back_and_unsubscribes():
+    panes = make_panes()
+    seen = []
+    off = panes.on_pick(seen.append)
+    event = {"tag": "7:1", "view": "after", "lat": 1.0, "lng": 2.0, "zoom": 14, "seq": 1}
+    panes.widget.set_state({"pick_event": event})
+    assert seen == [event]
+    off()
+    panes.widget.set_state({"pick_event": {**event, "seq": 2}})
+    assert seen == [event]

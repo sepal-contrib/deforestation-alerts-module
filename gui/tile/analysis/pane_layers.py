@@ -33,13 +33,14 @@ from gui.widget.multiview.draw_state import DrawState
 from gui.widget.multiview.layer_store import LayerStore
 
 #: Draw-order bands: alert imagery < visualization layers < earlier alerts <
-#: the current alert's box and reviewed polygon (spec 2026-10-20 §6.3).
+#: nearby alerts < the current alert's box and reviewed polygon (spec 2026-10-20 §6.3).
 #: Within a band, later adds draw on top (``PaneTarget`` counts up from it).
 #: ``alert_top`` names no group: the box and the polygon stay in the "alert"
 #: group (cleared with it) and carry ``z=ALERT_TOP_Z`` explicitly. GeoJSON
 #: layers share the overlay pane and are stacked by ``z`` in the browser
 #: (``layer_view.js``, bringToFront lowest first), above every tile layer.
-Z_BASE = {"alert": 1_000_000, "vis": 2_000_000, "earlier": 3_000_000, "alert_top": 4_000_000}
+Z_BASE = {"alert": 1_000_000, "vis": 2_000_000, "earlier": 3_000_000, "nearby": 3_500_000,
+          "alert_top": 4_000_000}
 ALERT_TOP_Z = Z_BASE["alert_top"]
 
 #: The layer menu's sections, in menu order: a spec's ``section``.
@@ -230,6 +231,24 @@ class PaneLayers:
     def relabel(self) -> None:
         """Re-read the labels in the current language."""
         self.widget.labels = pane_labels()
+
+    # ---- picking --------------------------------------------------------
+    def set_pick_tag(self, tag) -> None:
+        """Tag the next picks (``pick_event["tag"]``), e.g. with the open alert."""
+        self.widget.pick_tag = str(tag)
+
+    def on_pick(self, callback):
+        """``callback(event)`` after each map click the frontend picked
+        (``{tag, view, lat, lng, zoom, seq}``). Returns the unsubscribe."""
+        def observer(change):
+            callback(change["new"])
+
+        self.widget.observe(observer, names="pick_event")
+        return lambda: self.widget.unobserve(observer, names="pick_event")
+
+    def layer_off(self, view, layer_id) -> bool:
+        """True when the viewer switched ``layer_id`` off in ``view``'s layer menu."""
+        return (self.widget.layer_menu_toggles or {}).get(view, {}).get(layer_id) is False
 
     # ---- drawing --------------------------------------------------------
     def set_edit_mode(self, on) -> None:
