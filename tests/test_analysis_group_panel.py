@@ -20,7 +20,7 @@ from shapely.geometry import MultiPolygon, box
 
 from deforestation_alerts.project import review_groups
 from gui.i18n import t
-from gui.tile.analysis import analysis_tile, export, nearby
+from gui.tile.analysis import analysis_tile, export, nearby, original_alert
 from gui.tile.analysis.context import status_label_key
 from gui.tile.analysis.footer import affected_line, build_footer, footer_widgets, prompt_widgets
 from gui.tile.analysis.state import AnalysisState, capture_alert, toggle_selection
@@ -432,6 +432,9 @@ def test_a_group_save_reseeds_the_selection_and_looks_again(tmp_path, monkeypatc
     assert h.analysis.selection.value == frozenset({2}) and h.analysis.dirty.value is False
     assert len(h.nearby_runs) > runs[0] and len(h.earlier_runs) > runs[1]
     assert h.near.banner_text.children == ["Reviewed as a group of 2 (main alert #1)"]
+    # the Original alert outlines follow the saved group
+    spec = h.widgets.panes.spec(original_alert.ORIGINAL_ID)
+    assert [f["properties"]["position"] for f in spec["data"]["features"]] == [0, 2]
 
 
 def test_a_tick_during_the_save_survives_it(tmp_path, monkeypatch):

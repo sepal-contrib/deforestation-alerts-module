@@ -88,7 +88,7 @@ from gui.tile.analysis.earlier import (
     remove_earlier_layer,
     seed_switch,
 )
-from gui.tile.analysis import nearby
+from gui.tile.analysis import nearby, original_alert
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
@@ -320,6 +320,8 @@ def view_actual_alert(
         panes.add(geojson_spec(ALERT_BB_ID, "all", alerta_bb_geojson, name="Alert BB", group="alert",
                                style=_ALERT_BB_STYLE, hide_while_editing=True, section="alerts",
                                z=ALERT_TOP_Z))
+        # the alert's own polygons (its group's too), under the box
+        original_alert.draw_layer(widgets, app_state)
         # the after view's zoom-to-alert button goes back to this box
         panes.set_focus_bounds(alerta["bounding_box"].bounds)
 
@@ -437,6 +439,7 @@ def make_after_save(widgets, app_state, analysis):
                 analysis.selection.set(frozenset(plan.members))
                 if gdf is not None:
                     analysis.auto_links.set(group_auto_links(gdf, (plan.main, *plan.members)))
+                original_alert.draw_layer(widgets, app_state)  # the saved group is the alert's now
 
             if analysis.apply_if_current(alert.token, _reseed):
                 refresh_in_background(widgets, analysis, app_state)

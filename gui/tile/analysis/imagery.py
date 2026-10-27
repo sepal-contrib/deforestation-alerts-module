@@ -53,6 +53,7 @@ from gui.scripts import raster_map
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier
 from gui.scripts.solara_threads import spawn_in_context
+from gui.tile.analysis.pane_layers import ALL_ALERTS_KEY
 from gui.tile.analysis.state import IMAGE_AREAS
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
@@ -261,7 +262,7 @@ def image_slider_map_callback(
     selected_item, map_element, model_att, widgets, analysis, selected_alerts_model,
     token=None, fresh=None,
 ):
-    """Draw the chosen image's True/False-colour + original-alert layers.
+    """Draw the chosen image's True/False-colour + All alerts layers.
 
     ``selected_item`` is ``{"source": ..., "keys": [...]}``: the collection the
     timeline's pick belongs to and the granules it mosaics for this alert.
@@ -318,19 +319,21 @@ def image_slider_map_callback(
     with _gated(map_element, analysis, token, fresh):
         map_element.addLayer(img, vis1, "True Color", True)
         map_element.addLayer(img, vis2, "False Color", False)
-        # "Original Alert": the set's combined raster, band 3 (display), through
-        # localtileserver (spec §10). Starting the tile server blocks and can fail;
-        # a failure must not take the pane's own layers with it.
+        # "All alerts": the set's combined raster, band 3 (display), through
+        # localtileserver (spec §10): every alert of the set, where the
+        # "Original alert" outlines show the one on screen. Starting the tile
+        # server blocks and can fail; a failure must not take the pane's own
+        # layers with it.
         combined = getattr(selected_alerts_model, "combined_path", None)
         if combined is not None and combined.exists() and _wanted(analysis, token, fresh):
             try:
                 raster_map.add_raster_layer(
-                    map_element, combined, key="original-alert", name="Original Alert",
+                    map_element, combined, key=ALL_ALERTS_KEY, name="All alerts",
                     band=3, opacity=0.5,
                     visible=False,  # off by default, as before; the view's layer menu shows it
                 )
             except Exception:
-                logger.exception("Analysis imagery: failed to add the Original Alert layer")
+                logger.exception("Analysis imagery: failed to add the All alerts layer")
 
 
 def wire_panes(widgets, analysis, selected_alerts_model):

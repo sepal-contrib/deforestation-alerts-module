@@ -49,7 +49,7 @@ from ipywidgets import Widget
 from pysepal import sepalwidgets as sw
 
 from gui.i18n import t
-from gui.tile.analysis.pane_layers import PaneLayers
+from gui.tile.analysis.pane_layers import ALL_ALERTS_KEY, PaneLayers
 from gui.widget.alert_views import AlertViews
 
 
@@ -163,7 +163,7 @@ class AnalysisWidgets:
         self.panes = PaneLayers(self.panes_widget, gee_interface)
         # The imagery tiles report a failed load on their view (``meta.reportErrors``).
         # They are the menu's Imagery, except the alert raster, an Alerts layer.
-        panes_sections = {"section": "imagery", "sections": {"original-alert": "alerts"}}
+        panes_sections = {"section": "imagery", "sections": {ALL_ALERTS_KEY: "alerts"}}
         self.pane_before = self.panes.target("before", group="alert", report_errors=True, **panes_sections)
         self.pane_after = self.panes.target("after", group="alert", report_errors=True, **panes_sections)
         # The views follow the app's theme, and so does a SEPAL basemap

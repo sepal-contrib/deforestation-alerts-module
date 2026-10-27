@@ -535,7 +535,7 @@ def test_a_pin_is_the_active_set_as_it_was(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# "Original Alert" is the set's combined raster, band 3
+# "All alerts" is the set's combined raster, band 3
 # ---------------------------------------------------------------------------
 class _Map:
     """Records the Earth Engine layers the callback adds."""
@@ -574,7 +574,7 @@ def _combined(tmp_path):
     return path
 
 
-def test_original_alert_is_the_sets_combined_raster_band_3(tmp_path, monkeypatch, gee):
+def test_all_alerts_is_the_sets_combined_raster_band_3(tmp_path, monkeypatch, gee):
     ctx = SetContext(_state(tmp_path, monkeypatch))
     combined = _combined(tmp_path)
     calls = []
@@ -588,10 +588,10 @@ def test_original_alert_is_the_sets_combined_raster_band_3(tmp_path, monkeypatch
     assert map_.ee_layers == ["True Color", "False Color"]
     [(on_map, path, kw)] = calls
     assert on_map is map_ and path == combined
-    assert kw == {"key": "original-alert", "name": "Original Alert", "band": 3, "opacity": 0.5, "visible": False}
+    assert kw == {"key": "all-alerts", "name": "All alerts", "band": 3, "opacity": 0.5, "visible": False}
 
 
-def test_the_original_alert_layer_starts_hidden(tmp_path, monkeypatch, gee):
+def test_the_all_alerts_layer_starts_hidden(tmp_path, monkeypatch, gee):
     """Hidden from its creation: a layer added visible and hidden afterwards
     flashed on the map (its tiles were requested in between)."""
     ctx = SetContext(_state(tmp_path, monkeypatch))
@@ -608,7 +608,7 @@ def test_the_original_alert_layer_starts_hidden(tmp_path, monkeypatch, gee):
     assert layer.shown == [False] and layer.visible is False
 
 
-def test_no_original_alert_without_the_combined_raster(tmp_path, monkeypatch, gee):
+def test_no_all_alerts_layer_without_the_combined_raster(tmp_path, monkeypatch, gee):
     """A moved or deleted set folder, or a recipe-era model without a set."""
     calls = []
     for ctx in (SetContext(_state(tmp_path, monkeypatch)), SimpleNamespace(filtered_alert_raster=None)):
@@ -617,7 +617,7 @@ def test_no_original_alert_without_the_combined_raster(tmp_path, monkeypatch, ge
     assert calls == []
 
 
-def test_a_failed_original_alert_layer_keeps_the_panes_own_layers(tmp_path, monkeypatch, gee):
+def test_a_failed_all_alerts_layer_keeps_the_panes_own_layers(tmp_path, monkeypatch, gee):
     """Ruling #85: the tile server starts in the pick handler, after the pane's
     own two layers are added; a failure there must not take them with it (it
     used to also leave the retired image selectors disabled)."""

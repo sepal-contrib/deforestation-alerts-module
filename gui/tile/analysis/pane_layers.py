@@ -43,6 +43,10 @@ Z_BASE = {"alert": 1_000_000, "vis": 2_000_000, "earlier": 3_000_000, "nearby": 
           "alert_top": 4_000_000}
 ALERT_TOP_Z = Z_BASE["alert_top"]
 
+#: The pane key of the set's whole combined raster, in the menu's *Alerts*
+#: section (``imagery.image_slider_map_callback``).
+ALL_ALERTS_KEY = "all-alerts"
+
 #: The layer menu's sections, in menu order: a spec's ``section``.
 SECTIONS = ("imagery", "alerts", "optional")
 
