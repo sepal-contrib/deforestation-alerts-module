@@ -14,7 +14,10 @@ from typing import Optional
 
 import solara
 
+from deforestation_alerts.project import grouping as grouping_rules
+from deforestation_alerts.project import review_groups
 from gui.scripts.alert_filter import AlertFilter
+from gui.scripts.set_store import STORE_GENERATION
 from gui.store.workflow_steps import active_set
 
 
@@ -139,6 +142,11 @@ class AnalysisState:
     #: it on a project install and when another set's alerts arrive. Kept
     #: across alert changes, so ``reset_alert`` leaves it alone.
     alert_filter: solara.Reactive = field(default_factory=lambda: solara.reactive(None))
+    #: the positions ticked in the Nearby list for this alert's group save
+    #: (spec 2026-10-26 group review §5.1). Per alert: ``reset_alert`` empties
+    #: it. A tick goes through ``toggle_selection``, which marks the alert
+    #: unsaved like a verdict change.
+    selection: solara.Reactive = field(default_factory=lambda: solara.reactive(frozenset()))
     #: counts the overlay refreshes (``earlier.refresh_earlier``): a
     #: load that finishes after a newer refresh started is dropped
     earlier_seq: int = field(default=0, repr=False)
@@ -173,6 +181,7 @@ class AnalysisState:
             # the empty state the footer's save-state line reads.
             self.last_save_time.set(0.0)
             self.image_area.set("normal")
+            self.selection.set(frozenset())
 
     def is_current(self, token) -> bool:
         """Whether ``token`` (captured from ``alert_token``) is still the
@@ -237,21 +246,47 @@ def min_patch_ha(project) -> float:
     return float(s.params.min_size_ha) if s is not None else 0.0
 
 
-def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespace:
+def _group_plan(alerts, alert_id, grouping, selection, remove):
+    """The plan a Save (or *Remove from group*) of ``alert_id`` writes, made
+    from the table on hand (spec §5.1): None while grouping is off or there
+    is no row to save."""
+    if grouping is None or alerts is None or alert_id is None or not 0 <= alert_id < len(alerts):
+        return None
+    if remove:
+        return review_groups.plan_remove(alerts, alert_id)
+    return review_groups.plan_group(alerts, alert_id, selection)
+
+
+def capture_alert(analysis: AnalysisState, widgets, app_state, *, remove=False) -> SimpleNamespace:
     """``analysis.capture`` with the alert's row, the review widgets, the
     answers and the questions they answer: what a Save, a Download or a CNN
     run uses, read at the click (UI thread). The answers are copied, so an
     edit after the click is not in what the Save writes. ``area_crs`` and
     ``min_patch_ha`` are the project's, for the areas the Save stores and the
-    patches a CNN run offers."""
+    patches a CNN run offers.
+
+    Group review (spec 2026-10-26 §5.1): ``grouping`` is the set's effective
+    grouping (None: off), ``selection`` the ticked rows, ``plan`` the
+    ``review_groups.GroupPlan`` the save writes (None while grouping is off:
+    today's single save; a REMOVE plan with ``remove``, which raises
+    ``ValueError`` for a row that is not a group's member), ``evaluator`` the
+    review copy's evaluator (None outside a copy). ``set_id`` and
+    ``generation`` (the alerts' store generation) tell a later step whether
+    the save was made for another set or store."""
 
     def _read():
         p = app_state.project.value
+        s = active_set(p) if p is not None else None
+        alerts = app_state.alerts_gdf.value
+        alert_id = app_state.actual_alert_id.value
+        grouping = grouping_rules.effective(p, s)
+        selection = frozenset(analysis.selection.value or ())
+        rc = getattr(p, "review_copy", None) if p is not None else None
         return {
             "area_crs": area_crs(p),
             "min_patch_ha": min_patch_ha(p),
-            "alerts": app_state.alerts_gdf.value,
-            "alert_id": app_state.actual_alert_id.value,
+            "alerts": alerts,
+            "alert_id": alert_id,
             "grid": getattr(widgets, "actual_alert_grid", None),
             "bb": getattr(widgets, "actual_bb", None),
             "status": analysis.verdict.value,
@@ -261,9 +296,24 @@ def capture_alert(analysis: AnalysisState, widgets, app_state) -> SimpleNamespac
             "drawing_unapplied": analysis.drawing_unapplied.value,
             # What a save compares against when it lands: see ``touch``.
             "edit_rev": analysis.edit_rev.value,
+            "grouping": grouping,
+            "selection": selection,
+            "plan": _group_plan(alerts, alert_id, grouping, selection, remove),
+            "evaluator": rc.evaluator if rc is not None else None,
+            "set_id": s.id if s is not None else None,
+            "generation": (getattr(alerts, "attrs", None) or {}).get(STORE_GENERATION),
         }
 
     return analysis.capture(_read)
+
+
+def toggle_selection(analysis: AnalysisState, position: int) -> None:
+    """Tick or untick one Nearby row and mark the alert unsaved: a tick made
+    after a Save's click is not in what that save writes (``edit_rev``)."""
+    current = frozenset(analysis.selection.value or ())
+    position = int(position)
+    analysis.selection.set(current - {position} if position in current else current | {position})
+    touch(analysis)
 
 
 def touch(analysis: AnalysisState) -> None:

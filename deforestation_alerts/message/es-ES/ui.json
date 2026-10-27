@@ -367,6 +367,10 @@
       "chip": "{attribute}: {values}",
       "more": "{values} +{count}",
       "no_columns": "No hay ningún atributo por el que filtrar"
+    },
+    "nearby": {
+      "mixed_evaluators": "Estas alertas están asignadas a evaluadores distintos: un grupo necesita uno solo.",
+      "foreign_rows": "Algunas de estas alertas no te están asignadas."
     }
   },
   "imagery": {

@@ -13,13 +13,12 @@ import ee
 from deforestation_alerts.errors import KeyedError
 import pandas as pd
 
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import paths, review_groups
 from deforestation_alerts.project.growth import parse_link
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_status import FALSE_POSITIVE, VERDICTS
 from deforestation_alerts.project.store_schema import GROWS_FROM
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
-from deforestation_alerts.scripts.mosaics_helper import calculate_total_area
 from gui.scripts import growth_index, questions
 from gui.scripts import set_store
 
@@ -111,6 +110,51 @@ def _put_links(gdf, alert_id, links) -> None:
     gdf.at[alert_id, GROWS_FROM] = list(links)
 
 
+def _refuse_evaluators(gdf, plan, alert) -> None:
+    """A group belongs to one evaluator (spec §8.2): refuse a plan over rows
+    of several, and, in a review copy, one that touches rows not assigned
+    to the copy's evaluator."""
+    if review_groups.mixed_evaluators(gdf, plan):
+        raise SaveRefused(key="analysis_tile.nearby.mixed_evaluators")
+    evaluator = getattr(alert, "evaluator", None)
+    if evaluator and review_groups.foreign_rows(gdf, plan, evaluator):
+        raise SaveRefused(key="analysis_tile.nearby.foreign_rows")
+
+
+def _write_cells(gdf, updates) -> None:
+    """Write ``{position: {column: value}}`` into ``gdf`` in place;
+    ``grows_from`` goes through ``_put_links`` (a list cannot be set with
+    ``.at`` into an object column)."""
+    for position, cells in updates.items():
+        for column_name, value in cells.items():
+            if column_name == GROWS_FROM:
+                _put_links(gdf, position, value)
+            else:
+                gdf.at[position, column_name] = value
+
+
+def _write_plan(alertas_gdf, updates, answer_columns, app_tile_model, folder, target) -> None:
+    """The plan's cells into a private copy, ONE store write, then the same
+    cells into the live table (spec §5.2). ``review_group`` is made an
+    ``Int64`` column on both tables before any cell is set: a column born
+    from ``.at`` infers ``float``/``object``, and the next staged copy would
+    persist that."""
+    staged = alertas_gdf.copy()
+    review_groups.ensure_column(staged)
+    for column_name in answer_columns:
+        if column_name not in staged.columns:
+            staged[column_name] = ""  # a question added after this set was made
+    _write_cells(staged, updates)
+    write_store(staged, app_tile_model, folder=folder, target=target)
+
+    review_groups.ensure_column(alertas_gdf)
+    for column_name in answer_columns:
+        if column_name not in alertas_gdf.columns:
+            alertas_gdf[column_name] = ""
+    _write_cells(alertas_gdf, updates)
+    alertas_gdf.attrs.update(staged.attrs)
+
+
 def review_status(confirmation) -> str:
     """The status a Save stores (spec §10): one of the three, never a label.
 
@@ -146,7 +190,15 @@ def save_review(alert, app_tile_model):
     images, drawn polygon and questionnaire, read together at the click. An
     alert change while the lookups block leaves them alone; the row written
     is the clicked alert's, with its own values.
+
+    With grouping effective the capture carries a plan (``alert.plan``,
+    spec 2026-10-26 §5.2): the same refusals, one admin lookup over the
+    group's bounds, the evaluator refusals, then every row of the plan in
+    one store write (``_write_plan``). Without one this is the single save.
     """
+    plan = getattr(alert, "plan", None)
+    if plan is not None and plan.kind == review_groups.REMOVE:
+        return remove_from_group(alert, app_tile_model)
     folder, target = save_target(app_tile_model)
     alertas_gdf = alert.alerts
     actual_alert_id = alert.alert_id
@@ -211,8 +263,14 @@ def save_review(alert, app_tile_model):
     updates["after_img_info"] = None if after_info is None else after_info[1]
 
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
+    # A group save looks over the union bounds of its main and members, still
+    # in one lookup (spec §5.2).
     adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
-    selected_admin = adminL2.filterBounds(alert.bb.geometry())
+    if plan is None:
+        where = alert.bb.geometry()
+    else:
+        where = ee.Geometry.Rectangle(list(review_groups.bounds(alertas_gdf, (plan.main, *plan.members))))
+    selected_admin = adminL2.filterBounds(where)
     # Joined server-side: the OLD iterate appended ", " after every name and
     # sliced one character off, which left a trailing comma ("Paraguay,").
     names = ee.Dictionary({
@@ -231,15 +289,30 @@ def save_review(alert, app_tile_model):
     ):
         raise SaveRefused(key="analysis_tile.questionarie.false_positive_drawn")
 
+    drawing = None if defo_layer is None else defo_layer["geometry"].union_all()
+
+    if plan is not None:
+        # A group save (spec §4.3, §5.2): one evaluator per group, then every
+        # cell of the plan -- the main, its members, the rows it detaches --
+        # in one store write.
+        _refuse_evaluators(alertas_gdf, plan, alert)
+        cells = review_groups.plan_updates(alertas_gdf, plan, updates, drawing=drawing,
+                                           crs=alert.area_crs, links=links)
+        _write_plan(alertas_gdf, cells, answer_updates, app_tile_model, folder, target)
+        return True
+
     # alert_polygon + area_ha from the drawn defo layer (if any), measured in
-    # the project's grid CRS like Integrate's. With nothing drawn, area_ha
-    # keeps the alert's own area, which Integrate stored: the store feeds the
-    # exports, the map tiles and the report.
-    if defo_layer is None:
-        updates["alert_polygon"] = None
+    # the project's grid CRS like Integrate's: the area of the union that is
+    # stored, so overlapping features are not counted twice (spec §4.3). With
+    # nothing drawn, area_ha is the alert's Integrate area -- not what a save
+    # with a drawing left in the row. The store feeds the exports, the map
+    # tiles and the report.
+    updates["alert_polygon"] = drawing
+    if drawing is None:
+        updates["area_ha"] = review_groups.own_area(alertas_gdf, actual_alert_id, alert.area_crs)
     else:
-        updates["alert_polygon"] = defo_layer["geometry"].union_all()
-        updates["area_ha"] = calculate_total_area(defo_layer, alert.area_crs)
+        updates["area_ha"] = review_groups.polygon_area_ha(
+            drawing, alert.area_crs, source=defo_layer.crs or "EPSG:4326")
 
     # Persist the alert DB (OLD save_alerts_to_gdf) where the save started,
     # from a private copy carrying this review. Skip if there is no folder.
@@ -278,6 +351,27 @@ def save_review(alert, app_tile_model):
     # as "the store changed under us" and refuses.
     alertas_gdf.attrs.update(staged.attrs)
 
+    return True
+
+
+def remove_from_group(alert, app_tile_model) -> bool:
+    """*Remove from group* (spec §4.4, §5.4): write ``alert.plan`` (a REMOVE
+    plan, ``state.capture_alert(..., remove=True)``), which resets the
+    removed member to unreviewed and leaves the rest of its group as it is.
+    The refusals that apply -- another set, the set changed, the store
+    changed, the evaluators -- then one staged store write and the live
+    table. No Earth Engine call. Returns ``True`` once written."""
+    folder, target = save_target(app_tile_model)
+    alertas_gdf = alert.alerts
+    plan = getattr(alert, "plan", None)
+    if alertas_gdf is None or plan is None or plan.kind != review_groups.REMOVE:
+        return False
+    if not all(0 <= p < len(alertas_gdf) for p in plan.positions()):
+        return False
+    refuse_unless_current(alertas_gdf, app_tile_model, target)
+    _refuse_evaluators(alertas_gdf, plan, alert)
+    cells = review_groups.plan_updates(alertas_gdf, plan, crs=alert.area_crs)
+    _write_plan(alertas_gdf, cells, (), app_tile_model, folder, target)
     return True
 
 

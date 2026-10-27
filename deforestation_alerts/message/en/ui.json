@@ -359,6 +359,10 @@
       "chip": "{attribute}: {values}",
       "more": "{values} +{count}",
       "no_columns": "No attribute to filter by"
+    },
+    "nearby": {
+      "mixed_evaluators": "These alerts are assigned to different evaluators: a group needs one.",
+      "foreign_rows": "Some of these alerts are not assigned to you."
     }
   },
   "imagery": {

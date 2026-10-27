@@ -121,6 +121,7 @@ from types import SimpleNamespace
 
 import ipyvuetify as v
 
+from deforestation_alerts.project.review_groups import REMOVE
 from deforestation_alerts.project.review_status import CONFIRMED
 from gui.i18n import t, tn
 from gui.scripts.error_text import error_text
@@ -139,8 +140,12 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
 def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     """The save runner's body: ``review_save.save_review`` of ``alert``
-    (``state.capture_alert``; taken here when not given)."""
+    (``state.capture_alert``; taken here when not given), or
+    ``review_save.remove_from_group`` when its plan is a removal."""
     alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
+    plan = getattr(alert, "plan", None)
+    if plan is not None and plan.kind == REMOVE:
+        return review_save.remove_from_group(alert, app_tile_model)
     return review_save.save_review(alert, app_tile_model)
 
 
@@ -152,11 +157,14 @@ def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, t
                                          task=task, gif=gif)
 
 
-def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None, on_refused=None):
+def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None, on_refused=None,
+                     on_saved=None):
     """The review save, as a callable the footer's *Save* drives.
 
-    ``run_save(button, then=None)``: spin ``button`` (optional), capture the
-    alert on the UI thread, write the store on a worker, and run ``then`` only
+    ``run_save(button, then=None, *, alert=None)``: spin ``button``
+    (optional), capture the alert on the UI thread (or take ``alert``, a
+    ``state.capture_alert`` the caller made at the click: a confirmation
+    that showed its plan), write the store on a worker, and run ``then`` only
     after a save that actually wrote **and only while the alert that was saved
     is still the one on screen** — a ``then`` of ``go_next`` (the old *Save &
     next*) shows why: a refusal
@@ -173,6 +181,14 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
     the warning toast that explains it: the panel opens the Questions section
     for a required answer left empty (spec D5). A hook that raises is logged
     and changes nothing else -- the refusal has already been reported.
+
+    ``on_saved(alert, outpaced)`` runs on the worker after a save that wrote,
+    once its per-alert stamp is applied and before ``then``: ``alert`` is the
+    capture written, ``outpaced`` whether the reviewer changed that alert
+    while the save ran (False when another alert is on screen by then).
+    Every reactive write it makes must go through
+    ``analysis.apply_if_current(alert.token, ...)``. A hook that raises is
+    logged, like ``then``.
 
     One save runs at a time, whichever button starts it: ``run_save.guard``
     registers the buttons that share the runner (the footer's *Save*), so
@@ -221,7 +237,7 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
             return True
         return False
 
-    def run_save(button=None, then=None):
+    def run_save(button=None, then=None, *, alert=None):
         if saving["on"]:
             # A save of this runner is already writing the store and the row:
             # a second one would race it, and the row values of whichever
@@ -236,7 +252,17 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
             button.disabled = True
         # The alert saved and its values, read here on the UI thread: the
         # worker writes them whatever is shown by the time the lookups end.
-        alert = capture_alert(analysis, widgets, app_state)
+        # A capture that fails must not leave the runner held.
+        if alert is None:
+            try:
+                alert = capture_alert(analysis, widgets, app_state)
+            except Exception:
+                saving["on"] = False
+                _hold(False)
+                if button is not None:
+                    button.loading = False
+                    button.disabled = False
+                raise
         token = alert.token  # the alert this save is for
 
         outpaced = []  # the reviewer changed this alert while the save ran
@@ -299,6 +325,14 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
                 reason = t("analysis_tile.export_labels.save_outpaced")
                 notifier.warning(reason)
                 logger.info("Analysis: %s", reason)
+            # The panel's after-save step (a group save reloads or reseeds
+            # what it wrote), with the capture that was written. Guarded like
+            # ``then``: a failing hook is a log line, not a lost save.
+            if on_saved is not None:
+                try:
+                    on_saved(alert, any(outpaced))
+                except Exception:
+                    logger.exception("Analysis: the after-save hook failed")
             # Only now — a ``then`` that moves on must not move off an alert
             # whose review was refused. And only for the alert this save was
             # for: were ``then`` ``go_next``, a save that lands after the reviewer navigated
@@ -349,6 +383,7 @@ def build_export(
     on_refused=None,
     *,
     labels=None,
+    on_saved=None,
 ):
     """Build and return the Export section's body and the review save runner.
 
@@ -363,7 +398,8 @@ def build_export(
     ``tiles`` are the three ``FileTile`` (zip, docx and the GIF).
 
     ``on_refused`` goes to ``make_save_runner``: what the panel does with a
-    refused save once its warning is out.
+    refused save once its warning is out. ``on_saved`` too: what it does
+    after a save that wrote (``make_save_runner``).
 
     ``set_badge(text, color=None)`` is the section's badge setter (``None``
     before Task 10 wires one). It takes text that is ALREADY translated, so
@@ -674,7 +710,7 @@ def build_export(
     # ------------------------------------------------------------------
     run_save = make_save_runner(
         widgets, app_state, analysis, app_tile_model, apply_save=_apply_save,
-        on_refused=on_refused,
+        on_refused=on_refused, on_saved=on_saved,
     )
 
     # ------------------------------------------------------------------

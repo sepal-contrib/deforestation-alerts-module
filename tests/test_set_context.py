@@ -15,11 +15,11 @@ import pandas as pd
 import pytest
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project, default_questions
+from deforestation_alerts.scripts import mosaics_helper
 from gui.scripts import questions
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
-from gui.tile.analysis import review_save
 
 SET_DIR = ("periods", "per", "sets", "glad-l")
 
@@ -674,7 +674,7 @@ def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "alert_polygon"])
-    assert saved.loc[0, "area_ha"] == pytest.approx(review_save.calculate_total_area(drawn))
+    assert saved.loc[0, "area_ha"] == pytest.approx(mosaics_helper.calculate_total_area(drawn))
     assert saved.loc[0, "area_ha"] != pytest.approx(3.87)
     assert saved.loc[0, "alert_polygon"] is not None
     assert saved.loc[1, "area_ha"] == pytest.approx(1.25)
@@ -749,7 +749,7 @@ def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_p
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = gpd.read_parquet(_store(tmp_path, "d", "glad-l"))
-    assert saved.loc[0, "area_ha"] == pytest.approx(review_save.calculate_total_area(drawn_a))
+    assert saved.loc[0, "area_ha"] == pytest.approx(mosaics_helper.calculate_total_area(drawn_a))
 
 
 def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):
