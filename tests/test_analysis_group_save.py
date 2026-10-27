@@ -357,7 +357,7 @@ def test_capture_records_the_set_and_the_store_generation(tmp_path, monkeypatch)
     alert = capture_alert(_analysis(), WIDGETS, h.s)
     assert alert.set_id == "x"
     assert alert.generation == h.s.alerts_gdf.value.attrs[STORE_GENERATION] is not None
-    assert alert.evaluator == "ana" and alert.grouping.radius_m == 500.0
+    assert alert.evaluator == "ana" and alert.grouping.radius_m == 300.0
     assert alert.selection == frozenset()
 
 
