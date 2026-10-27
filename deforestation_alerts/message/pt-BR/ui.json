@@ -169,6 +169,12 @@
       "source": "Fonte",
       "detected": "Detectado",
       "status": "Status",
+      "group": "Grupo",
+      "group_of": {
+        "one": "grupo de {n}",
+        "many": "grupo de {n}",
+        "other": "grupo de {n}"
+      },
       "range": "{first} → {last}",
       "kind": "Tipo",
       "history": "Histórico",
@@ -286,6 +292,11 @@
     },
     "export_labels": {
       "save_btn": "Salvar",
+      "save_for": {
+        "one": "Salvar para {n} alerta",
+        "many": "Salvar para {n} de alertas",
+        "other": "Salvar para {n} alertas"
+      },
       "build_tile": "Gerar arquivos",
       "save_first": "Salve este alerta primeiro",
       "rebuild_tile": "Gerar arquivos novamente",
@@ -394,7 +405,21 @@
       "in_group": "neste grupo",
       "group_of_main": "grupo nº {n}",
       "assigned_to": "atribuído a {name}",
-      "distance": "{m} m"
+      "distance": "{m} m",
+      "banner": {
+        "one": "Revisado em um grupo de {n} (alerta principal #{main})",
+        "many": "Revisado em um grupo de {n} (alerta principal #{main})",
+        "other": "Revisado em um grupo de {n} (alerta principal #{main})"
+      },
+      "remove": "Remover do grupo",
+      "saved_with_group": "O alerta #{n} foi salvo como parte de um grupo",
+      "confirm_title": "Salvar este grupo?",
+      "confirm_overwritten": "#{n} ({status}): sua revisão é substituída",
+      "confirm_moved": "#{n} ({status}): sai do grupo nº {group}",
+      "confirm_joined": "#{n} ({status}): junta-se ao grupo nº {group}",
+      "confirm_removed": "#{n} ({status}): sai do grupo e volta a não revisado",
+      "confirm_ok": "Salvar",
+      "confirm_cancel": "Cancelar"
     }
   },
   "imagery": {

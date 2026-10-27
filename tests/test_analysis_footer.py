@@ -106,8 +106,10 @@ def test_the_dock_is_export_then_save_and_next_then_the_state_line(panel):
     # same key, which passes on the ``⟦key⟧`` placeholder too.
     assert label_of(save) == "Save" and label_of(nxt) == "Next"
     # The order inside the dock: Export, the two buttons, the (hidden)
-    # prompt, the state line.
-    assert footer.children == [sections.export.root, footer.children[1], prompt, state_line]
+    # prompt, the state line; then the group save's confirmation, a dialog
+    # that draws nothing in place.
+    assert footer.children == [sections.export.root, footer.children[1], prompt, state_line,
+                               sections.footer.confirm.dialog]
     assert footer.children[1].children == [save, nxt]
     assert "display: none" in prompt.style_
     # The background is an opaque surface: the panel content scrolls above it.

@@ -396,3 +396,26 @@ def test_kind_chip_colour_purple_for_growth_only(tmp_path, monkeypatch):
         colours[index] = chip.color
     assert colours[0] == colours[1] == context.GROWTH_PURPLE
     assert colours[2] != context.GROWTH_PURPLE and not (colours[2] or "").startswith("#")
+
+
+def test_the_facts_row_shows_group_of_n(tmp_path, monkeypatch):
+    """Group review §6.3: a row of a stored group of two or more reads
+    "group of N", after the status row and before the Kind row; a single row
+    and a group of one show no row."""
+    import pandas as pd
+
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    slots = getattr(card, context._SLOTS)
+    gdf = _alerts(["Confirmed", "Confirmed", "Confirmed", "Confirmed", "Not reviewed"])
+    gdf["review_group"] = pd.array([0, 0, 0, 3, None], dtype="Int64")
+    s.alerts_gdf.set(gdf)
+    for index, size in [(0, 3), (1, 3), (2, 3), (3, None), (4, None)]:
+        s.actual_alert_id.value = index
+        assert context.facts_of(gdf, index, s.project.value)["group"] == size
+        assert (slots["group_row"].style_ == "display: contents;") is (size is not None)
+        if size is not None:
+            assert slots["group"].children == [f"group of {size}"]
+    assert slots["group_row"].children[0].children == ["Group"]
+    rows = _walk(card)
+    assert rows.index(slots["group_row"]) < rows.index(slots["kind_row"])

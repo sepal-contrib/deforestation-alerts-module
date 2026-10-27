@@ -166,6 +166,11 @@
       "source": "Source",
       "detected": "Detected",
       "status": "Status",
+      "group": "Group",
+      "group_of": {
+        "one": "group of {n}",
+        "other": "group of {n}"
+      },
       "range": "{first} → {last}",
       "kind": "Kind",
       "history": "History",
@@ -279,6 +284,10 @@
     },
     "export_labels": {
       "save_btn": "Save",
+      "save_for": {
+        "one": "Save for {n} alerts",
+        "other": "Save for {n} alerts"
+      },
       "build_tile": "Build files",
       "save_first": "Save this alert first",
       "rebuild_tile": "Rebuild files",
@@ -383,7 +392,20 @@
       "in_group": "in this group",
       "group_of_main": "group #{n}",
       "assigned_to": "assigned to {name}",
-      "distance": "{m} m"
+      "distance": "{m} m",
+      "banner": {
+        "one": "Reviewed as a group of {n} (main alert #{main})",
+        "other": "Reviewed as a group of {n} (main alert #{main})"
+      },
+      "remove": "Remove from group",
+      "saved_with_group": "Alert #{n} was saved as part of a group",
+      "confirm_title": "Save this group?",
+      "confirm_overwritten": "#{n} ({status}): its review is replaced",
+      "confirm_moved": "#{n} ({status}): moves from group #{group}",
+      "confirm_joined": "#{n} ({status}): joins with group #{group}",
+      "confirm_removed": "#{n} ({status}): leaves the group and goes back to not reviewed",
+      "confirm_ok": "Save",
+      "confirm_cancel": "Cancel"
     }
   },
   "imagery": {

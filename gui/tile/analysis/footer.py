@@ -34,10 +34,12 @@ from types import SimpleNamespace
 
 import ipyvuetify as v
 
-from gui.i18n import t
+from deforestation_alerts.project import review_groups
+from gui.i18n import t, tn
 from gui.tile.analysis import alert_files
+from gui.tile.analysis.context import status_label_key
 from gui.tile.analysis.labels import Labels
-from gui.tile.analysis.section import TYPE_LABEL, TYPE_TITLE
+from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE
 from gui.widget.buttons import btn, set_label
 
 FOOTER_STYLE = ("flex: 0 0 auto; padding: 0 16px 12px; "
@@ -63,9 +65,74 @@ def prompt_widgets(root):
     return s["prompt"], s["discard"], s["stay"]
 
 
-def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
+#: what the confirmation says of each kind of row a group save changes
+_AFFECTED_KEYS = {
+    review_groups.OVERWRITTEN: "analysis_tile.nearby.confirm_overwritten",
+    review_groups.MOVED: "analysis_tile.nearby.confirm_moved",
+    review_groups.JOINED: "analysis_tile.nearby.confirm_joined",
+    review_groups.REMOVED: "analysis_tile.nearby.confirm_removed",
+}
+
+
+def affected_line(a, gdf) -> str:
+    """The confirmation's line for one ``review_groups.Affected`` row of the
+    plan ``gdf`` was planned on: its number, its stored status and what the
+    save does to it ("its review is replaced", "moves from group #K"...).
+    Alert and group numbers are 1-based, as the jump menu numbers them (the
+    group's is its main's). ``gdf`` is the table the plan was made from; the
+    status the plan recorded is the one shown."""
+    del gdf  # the plan carries what the line needs
+    group = a.group + 1 if a.group is not None else None
+    return t(_AFFECTED_KEYS[a.change], n=a.position + 1, status=t(status_label_key(a.status)), group=group)
+
+
+def _build_confirm(labels):
+    """The group save's confirmation: a raw ``v.Dialog``, like the *Stop
+    drawing* one in ``edit_tools`` (the panel never renders through reacton,
+    so the Solara ``ConfirmDialog`` cannot be used here). ``ask(lines,
+    on_ok)`` lists ``lines`` and opens it; *Save* closes it and runs
+    ``on_ok``, *Cancel* only closes it."""
+    ok = btn("primary", t("analysis_tile.nearby.confirm_ok"))
+    cancel = btn("tertiary", t("analysis_tile.nearby.confirm_cancel"))
+    title = v.CardTitle(style_="word-break: normal; font-size: 16px; font-weight: 600;",
+                        children=[t("analysis_tile.nearby.confirm_title")])
+    body = v.CardText(style_="font-size: 14px;", children=[])
+    dialog = v.Dialog(v_model=False, max_width="480px", children=[
+        v.Card(children=[title, body,
+                         v.CardActions(class_="flex-wrap justify-end pa-4 pt-0", children=[cancel, ok])]),
+    ])
+    pending = {"on_ok": None}
+
+    def ask(lines, on_ok):
+        pending["on_ok"] = on_ok
+        body.children = [v.Html(tag="div", class_=TYPE_BODY, children=[line]) for line in lines]
+        dialog.v_model = True
+
+    def _close():
+        dialog.v_model = False
+        pending["on_ok"] = None
+
+    def _ok(*_):
+        on_ok = pending["on_ok"]
+        _close()
+        if on_ok is not None:
+            on_ok()
+
+    ok.on_event("click", _ok)
+    cancel.on_event("click", lambda *_: _close())
+
+    def _label():
+        set_label(ok, t("analysis_tile.nearby.confirm_ok"))
+        set_label(cancel, t("analysis_tile.nearby.confirm_cancel"))
+        title.children = [t("analysis_tile.nearby.confirm_title")]
+
+    labels.add(_label)
+    return SimpleNamespace(dialog=dialog, ask=ask, ok=ok, cancel=cancel, body=body)
+
+
+def build_footer(run_save, export_root, app_state, analysis, *, labels=None, capture=None):
     """Build and return ``SimpleNamespace(root, save, next, state_line,
-    prompt, guard)``.
+    prompt, guard, confirm)``.
 
     ``run_save`` is the export section's runner (``export.make_save_runner``),
     ``export_root`` the Export section, placed first in the dock.
@@ -73,6 +140,14 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
     given): the buttons' words and the state line follow a language switch.
     ``guard(move)`` runs ``move`` (an alert change) at once, or after the
     reviewer's *Discard* when the alert has unsaved work.
+
+    ``capture()`` (group review, spec 2026-10-26 §6.4) returns the alert as
+    a Save writes it (``state.capture_alert``): with one, *Save* captures at
+    the click and, when the plan changes rows beyond a first review
+    (``plan.affected``), asks first in ``confirm`` (``_build_confirm``),
+    listing ``affected_line`` for each; the save then writes that capture.
+    It also words the button "Save for N alerts" while the plan holds more
+    than one alert. Without it *Save* runs ``run_save(save)`` as before.
     """
     labels = labels if labels is not None else Labels()
     # The screen's size (``small``), and halves of the row, as the verdict
@@ -125,7 +200,33 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
         if move is not None:
             move()
 
-    save.on_event("click", lambda *_: run_save(save))
+    confirm = _build_confirm(labels)
+
+    def _on_save(*_):
+        if capture is None:
+            run_save(save)
+            return
+        alert = capture()
+        plan = getattr(alert, "plan", None)
+        if plan is not None and plan.affected:
+            lines = [affected_line(a, alert.alerts) for a in plan.affected]
+            confirm.ask(lines, lambda: run_save(save, alert=alert))
+            return
+        run_save(save, alert=alert)
+
+    def _save_text():
+        """"Save", or "Save for N alerts" while the plan on screen holds N > 1."""
+        plan = None
+        if capture is not None:
+            try:
+                plan = getattr(capture(), "plan", None)
+            except Exception:  # a table in transition: the plain word
+                plan = None
+        if plan is not None and plan.size > 1:
+            return tn("analysis_tile.export_labels.save_for", plan.size)
+        return t("analysis_tile.export_labels.save_btn")
+
+    save.on_event("click", _on_save)
     nxt.on_event("click", lambda *_: guard(app_state.go_next))
     discard.on_event("click", _discard)
     stay.on_event("click", lambda *_: _show_prompt(False))
@@ -188,7 +289,7 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
 
     def _label():
         # text only: a save in flight keeps its button disabled and loading
-        set_label(save, t("analysis_tile.export_labels.save_btn"))
+        set_label(save, _save_text())
         set_label(nxt, t("analysis_tile.nav.next"))
         set_label(discard, t("analysis_tile.verdict.discard"))
         set_label(stay, t("analysis_tile.verdict.stay"))
@@ -196,13 +297,18 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None):
         prompt_hint.children = [t("analysis_tile.verdict.unsaved_hint")]
 
     labels.add(_label)
+    if capture is not None:
+        analysis.selection.subscribe(lambda *_: set_label(save, _save_text()))
 
     root = v.Html(tag="div", class_="defo-analysis-footer", style_=FOOTER_STYLE, children=[
         export_root,
         buttons,
         prompt,
         state_line,
+        # a dialog draws nothing in place
+        confirm.dialog,
     ])
     setattr(root, _SLOTS, {"save": save, "next": nxt, "state_line": state_line,
                            "prompt": prompt, "discard": discard, "stay": stay})
-    return SimpleNamespace(root=root, save=save, next=nxt, state_line=state_line, prompt=prompt, guard=guard)
+    return SimpleNamespace(root=root, save=save, next=nxt, state_line=state_line, prompt=prompt, guard=guard,
+                           confirm=confirm)

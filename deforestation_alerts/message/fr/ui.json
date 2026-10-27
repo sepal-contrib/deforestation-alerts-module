@@ -169,6 +169,12 @@
       "source": "Source",
       "detected": "Détectée",
       "status": "Statut",
+      "group": "Groupe",
+      "group_of": {
+        "one": "groupe de {n}",
+        "many": "groupe de {n}",
+        "other": "groupe de {n}"
+      },
       "range": "{first} → {last}",
       "kind": "Type",
       "history": "Historique",
@@ -286,6 +292,11 @@
     },
     "export_labels": {
       "save_btn": "Sauvegarder",
+      "save_for": {
+        "one": "Sauvegarder pour {n} alerte",
+        "many": "Sauvegarder pour {n} d’alertes",
+        "other": "Sauvegarder pour {n} alertes"
+      },
       "build_tile": "Générer les fichiers",
       "save_first": "Enregistrez d'abord cette alerte",
       "rebuild_tile": "Régénérer les fichiers",
@@ -394,7 +405,21 @@
       "in_group": "dans ce groupe",
       "group_of_main": "groupe n° {n}",
       "assigned_to": "attribuée à {name}",
-      "distance": "{m} m"
+      "distance": "{m} m",
+      "banner": {
+        "one": "Examinée en groupe de {n} (alerte principale #{main})",
+        "many": "Examinée en groupe de {n} (alerte principale #{main})",
+        "other": "Examinée en groupe de {n} (alerte principale #{main})"
+      },
+      "remove": "Retirer du groupe",
+      "saved_with_group": "L’alerte #{n} a été sauvegardée avec son groupe",
+      "confirm_title": "Sauvegarder ce groupe ?",
+      "confirm_overwritten": "#{n} ({status}) : son examen est remplacé",
+      "confirm_moved": "#{n} ({status}) : quitte le groupe n° {group}",
+      "confirm_joined": "#{n} ({status}) : rejoint le groupe n° {group}",
+      "confirm_removed": "#{n} ({status}) : quitte le groupe et redevient non examinée",
+      "confirm_ok": "Sauvegarder",
+      "confirm_cancel": "Annuler"
     }
   },
   "imagery": {

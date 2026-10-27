@@ -60,7 +60,7 @@ PICK_PX = 6
 _M_PER_PX_Z0 = 156_543.03392
 _M_PER_DEG = 111_320.0
 _HIDDEN = "display: none;"
-#: the banner while shown (T10 shows it on a grouped alert). Inline: Vuetify's
+#: the banner while shown (on any row of a group of two or more). Inline: Vuetify's
 #: ``d-flex`` is ``!important`` and would beat a ``display: none``.
 BANNER_SHOWN = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px;"
 _ACTIONS = "display: flex; gap: 8px; margin-top: 4px;"
@@ -181,19 +181,30 @@ def draw_layer(widgets, analysis, app_state) -> None:
     panes.add(layer_spec(gdf, rows, selection))
 
 
-def seed_selection(analysis, app_state) -> None:
+def open_group(app_state, position=None):
+    """``(main, members)`` of the stored group of two or more the alert at
+    ``position`` (the one on screen by default) is in, while grouping is
+    effective; None otherwise (grouping off, no alert, a single row)."""
+    gdf = app_state.alerts_gdf.value
+    position = app_state.actual_alert_id.value if position is None else position
+    grouping, _s = _current_grouping(app_state)
+    if grouping is None or not _valid(gdf, position):
+        return None
+    main, members = review_groups.group_of(gdf, position)
+    return (main, members) if members else None
+
+
+def seed_selection(analysis, app_state):
     """Tick the stored group of the alert on screen (spec §6.3): its rows
     other than the main, the opened member included. Called as an alert opens,
     after ``reset_alert``; not a change to the review, so ``dirty`` stays as
-    it is. Nothing while grouping is off or for an alert in no group."""
-    gdf = app_state.alerts_gdf.value
-    position = app_state.actual_alert_id.value
-    grouping, _s = _current_grouping(app_state)
-    if grouping is None or not _valid(gdf, position):
-        return
-    _main, members = review_groups.group_of(gdf, position)
-    if members:
-        analysis.selection.set(frozenset(members))
+    it is. Nothing while grouping is off or for an alert in no group.
+    Returns ``open_group``'s ``(main, members)``, or None: the alert's
+    review is seeded from that main (``analysis_tile.view_actual_alert``)."""
+    group = open_group(app_state)
+    if group is not None:
+        analysis.selection.set(frozenset(group[1]))
+    return group
 
 
 # ---- the search ------------------------------------------------------------
@@ -341,13 +352,15 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
     or what is in range. Returns the ``build_section`` namespace plus
     ``rows_box``, ``rows`` (the rows on screen), ``banner``, ``banner_text``,
     ``remove_btn``, ``select_all``, ``clear``, ``outside``, ``more``,
-    ``sync`` and ``run_remove`` (the *Remove from group* click; T10 fills it,
-    and shows the banner and the button). ``labels`` is the screen's
+    ``sync`` and ``run_remove`` (the *Remove from group* click, set by
+    ``analysis_tile.build_controls``). The banner reads "Reviewed as a group
+    of N (main alert #K)" on any row of a stored group of two or more;
+    *Remove from group* shows on its members only. ``labels`` is the screen's
     ``labels.Labels`` (a fresh one when none is given)."""
     labels = labels if labels is not None else Labels()
     section = build_section(t("analysis_tile.sections.nearby"), v.Html(tag="div"))
     banner_text = v.Html(tag="span", class_=TYPE_BODY, style_="flex: 1 1 auto;", children=[])
-    remove_btn = btn("secondary", "", style_=_HIDDEN)
+    remove_btn = btn("secondary", t("analysis_tile.nearby.remove"), style_=_HIDDEN)
     banner = v.Html(tag="div", style_=_HIDDEN, children=[banner_text, remove_btn])
     outside = v.Html(tag="div", class_=f"{TYPE_CAPTION} warning--text mt-2", style_=_HIDDEN, children=[])
     select_all = btn("tertiary", t("analysis_tile.nearby.select_all"))
@@ -485,6 +498,21 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
         if section.run_remove is not None:
             section.run_remove()
 
+    def _sync_banner(*_):
+        """The banner of the alert on screen's stored group, and *Remove from
+        group* on a member of it."""
+        position = app_state.actual_alert_id.value
+        group = open_group(app_state)
+        if group is None:
+            banner.style_ = _HIDDEN
+            banner_text.children = []
+            remove_btn.style_ = _HIDDEN
+            return
+        main, members = group
+        banner_text.children = [tn("analysis_tile.nearby.banner", 1 + len(members), main=main + 1)]
+        banner.style_ = BANNER_SHOWN
+        remove_btn.style_ = "" if position != main and position in members else _HIDDEN
+
     shown_style = section.root.style_
     last = {"key": object()}
 
@@ -493,6 +521,7 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
         the set or its grouping changed."""
         grouping, s = _current_grouping(app_state)
         section.root.style_ = shown_style if grouping is not None else _HIDDEN
+        _sync_banner()
         key = (s.id if s is not None else None, grouping)
         if key != last["key"]:
             last["key"] = key
@@ -507,6 +536,8 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
         section.set_title(t("analysis_tile.sections.nearby"))
         set_label(select_all, t("analysis_tile.nearby.select_all"))
         set_label(clear, t("analysis_tile.nearby.clear"))
+        set_label(remove_btn, t("analysis_tile.nearby.remove"))
+        _sync_banner()
         _render()
 
     select_all.on_event("click", _select_all)
@@ -520,11 +551,13 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
         ctx.subscribe(_sync_outside)
     app_state.project.subscribe(sync)
     app_state.alerts_gdf.subscribe(_on_alerts)
+    app_state.actual_alert_id.subscribe(_sync_banner)
 
     section.rows = []
     section.rows_box, section.banner, section.banner_text = rows_box, banner, banner_text
     section.remove_btn, section.select_all, section.clear = remove_btn, select_all, clear
     section.outside, section.more, section.sync = outside, more, sync
+    section.sync_banner = _sync_banner
     section.run_remove = run_remove
     section.unpick = wire_pick(widgets, app_state, analysis)
     # in place of a direct first ``_render()``: ``add`` runs it now

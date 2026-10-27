@@ -72,6 +72,7 @@ from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.review_groups import REMOVE
 from deforestation_alerts.project.review_status import LOSS_VERDICTS, is_reviewed
 from deforestation_alerts.project.store_schema import GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.mosaics_helper import (
@@ -93,10 +94,10 @@ from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
 from gui.tile.analysis.review_save import REQUIRED_MISSING
-from gui.tile.analysis.footer import build_footer
+from gui.tile.analysis.footer import affected_line, build_footer
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
-from gui.tile.analysis.state import IMAGE_AREAS
+from gui.tile.analysis.state import IMAGE_AREAS, capture_alert
 from gui.tile.analysis.pane_layers import ALERT_TOP_Z, geojson_spec
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
@@ -106,6 +107,7 @@ from gui.i18n import t
 from gui.scripts import alert_filter
 from gui.scripts import questions
 from gui.scripts import set_store
+from gui.scripts.notify_bridge import current_notifier
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
 from gui.widget.buttons import btn, set_label
@@ -244,10 +246,18 @@ def view_actual_alert(
     # chosen again by the imagery panes below) ---
     analysis.reset_alert()
 
+    # --- a grouped alert opens with its stored group ticked, and its review
+    # (verdict, answers, links, drawing) read from the group's main (group
+    # review §6.3): a member holds copies, the main the drawing. The images
+    # stay the row's own (members hold copies of them too). Not a change,
+    # like the seeding below. ---
+    group = nearby.seed_selection(analysis, app_state)
+    review_row = gdf.iloc[group[0]] if group is not None else alerta
+
     # --- a reviewed alert opens on its stored verdict; an unreviewed one on no
     # answer at all, so a default is never saved. After reset_alert, which
     # clears it; the seeding is not a change, so ``dirty`` stays False. ---
-    stored = alerta.get("status")
+    stored = review_row.get("status")
     analysis.verdict.set(stored if is_reviewed(stored) else None)
     # --- a reviewed alert opens on its stored answers (codes, read back; a
     # re-save stores them again as codes), an unreviewed one on none (spec
@@ -256,19 +266,18 @@ def view_actual_alert(
     # answer (``alerta.get`` gives None, ``codes`` of None is []). ---
     p = app_state.project.value
     reviewed = analysis.verdict.value is not None
-    analysis.answers.set({q.key: questions.codes(q, alerta.get(column(q))) for q in p.questions}
+    analysis.answers.set({q.key: questions.codes(q, review_row.get(column(q))) for q in p.questions}
                          if reviewed and p is not None else {})
     # --- the growth links the row stores, as the draft the reviewer edits and
-    # as what Integrate found; a set without the columns reads as none ---
-    analysis.links.set(tuple(links_of(alerta.get(GROWS_FROM))))
-    analysis.auto_links.set(tuple(links_of(alerta.get(GROWS_FROM_AUTO))))
+    # as what Integrate found (for a group: what Integrate found for any of
+    # its rows); a set without the columns reads as none ---
+    analysis.links.set(tuple(links_of(review_row.get(GROWS_FROM))))
+    analysis.auto_links.set(group_auto_links(gdf, (group[0], *group[1])) if group is not None
+                            else tuple(links_of(alerta.get(GROWS_FROM_AUTO))))
     analysis.dirty.set(False)
     # --- a growth alert opens with its parents on the maps; any other on the
     # reviewer's last choice (spec §6.3) ---
     seed_switch(analysis, bool(analysis.links.value))
-    # --- a grouped alert opens with its stored group ticked (group review
-    # §6.3); not a change, like the seeding above ---
-    nearby.seed_selection(analysis, app_state)
 
     # --- remember the position on the alert set (auto-saved with the project) ---
     remember = getattr(app_tile_model, "remember_position", None)
@@ -315,12 +324,13 @@ def view_actual_alert(
         panes.set_focus_bounds(alerta["bounding_box"].bounds)
 
         # re-add the saved defo polygon if this alert was already reviewed
+        # (a group's is its main's)
         if (
-            alerta["status"] in LOSS_VERDICTS
-            and alerta["alert_polygon"] is not None
+            review_row["status"] in LOSS_VERDICTS
+            and review_row["alert_polygon"] is not None
         ):
             analysis.defo_layer.set(multipolygon_to_geodataframe(
-                alerta["alert_polygon"]
+                review_row["alert_polygon"]
             ).set_crs(epsg="4326", allow_override=True, inplace=True))
 
         # ee bbox (buffer + bounds) + covering grid for downloads
@@ -371,6 +381,79 @@ def view_actual_alert(
         nearby.refresh_in_background(widgets, analysis, app_state)
     except Exception:
         logger.exception("Analysis: the nearby-alerts section failed")
+
+
+def group_auto_links(gdf, positions) -> tuple:
+    """The links Integrate found for any of the rows at ``positions``
+    (``grows_from_auto``), sorted, each once: a group's automatic links
+    (group review G12, a group is one patch)."""
+    if GROWS_FROM_AUTO not in gdf.columns:
+        return ()
+    found = set()
+    for p in positions:
+        found.update(links_of(gdf[GROWS_FROM_AUTO].iloc[p]))
+    return tuple(sorted(found))
+
+
+def make_after_save(widgets, app_state, analysis):
+    """The save runner's ``on_saved(alert, outpaced)`` (group review §5.3),
+    run on the worker after a save that wrote.
+
+    Nothing for a save without a plan (grouping off) or made in another set
+    than the active one. **Same visit** (the alert saved is still on
+    screen): a removal, or a save that detached the alert on screen, reloads
+    it from the store (``analysis.reload_alert``); otherwise the selection
+    becomes the saved group's members and the automatic links its union --
+    unless the reviewer changed the alert while the save ran (``outpaced``):
+    their later edits win. Then the Nearby and Earlier alerts look again.
+    **Another visit**: an alert on screen that the plan wrote is reloaded,
+    with a toast saying why; any other is left alone."""
+
+    def _active_set_id():
+        s = active_set(app_state.project.value)
+        return s.id if s is not None else None
+
+    def _reload():
+        analysis.reload_alert.set(analysis.reload_alert.value + 1)
+
+    def on_saved(alert, outpaced):
+        plan = getattr(alert, "plan", None)
+        if plan is None or _active_set_id() != getattr(alert, "set_id", None):
+            return
+        position = app_state.actual_alert_id.value
+        if analysis.alert_token.value == alert.token:
+            if plan.kind == REMOVE or position in plan.detached:
+                if not outpaced:
+                    analysis.apply_if_current(alert.token, _reload)
+                return
+
+            def _reseed():
+                if outpaced:
+                    return
+                gdf = app_state.alerts_gdf.value
+                analysis.selection.set(frozenset(plan.members))
+                if gdf is not None:
+                    analysis.auto_links.set(group_auto_links(gdf, (plan.main, *plan.members)))
+
+            if analysis.apply_if_current(alert.token, _reseed):
+                refresh_in_background(widgets, analysis, app_state)
+                nearby.refresh_in_background(widgets, analysis, app_state)
+            return
+        # Another alert is on screen: reload it if the plan wrote it. Checked
+        # and bumped under the lock, so a move made meanwhile is not reloaded.
+        token = analysis.alert_token.value
+        reloaded = []
+
+        def _reload_if_written():
+            if app_state.actual_alert_id.value in plan.positions():
+                reloaded.append(app_state.actual_alert_id.value)
+                _reload()
+
+        analysis.apply_if_current(token, _reload_if_written)
+        if reloaded:
+            current_notifier().info(t("analysis_tile.nearby.saved_with_group", n=reloaded[0] + 1))
+
+    return on_saved
 
 
 def select_start_alert(app_state, app_tile_model):
@@ -563,9 +646,11 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
         widgets=widgets, app_state=app_state, aux_model=aux_model, analysis=analysis,
         app_tile_model=app_tile_model, set_badge=exports.set_badge,
         on_refused=_open_questions_for(questions), labels=labels,
+        on_saved=make_after_save(widgets, app_state, analysis),
     )
     exports.body_box.children = [export_parts.body]
-    footer = build_footer(export_parts.run_save, exports.root, app_state, analysis, labels=labels)
+    footer = build_footer(export_parts.run_save, exports.root, app_state, analysis, labels=labels,
+                          capture=lambda: capture_alert(analysis, widgets, app_state))
     # The two titles this builder owns (their badges and bodies have their own hooks).
     labels.add(lambda: refine.set_title(t("analysis_tile.sections.refine")))
     labels.add(lambda: exports.set_title(t("analysis_tile.sections.export")))
@@ -582,6 +667,29 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
     earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels)
     near = nearby.build_nearby_section(widgets, app_state, analysis, labels=labels)
+    run_save = export_parts.run_save
+
+    def _remove_from_group():
+        # Only for a member of a group of two or more while grouping is
+        # effective (the button shows for nothing else); anything else here
+        # must not reach the runner, which would read a plan-less capture as
+        # a full save of the verdict on screen.
+        try:
+            alert = capture_alert(analysis, widgets, app_state, remove=True)
+        except ValueError:
+            logger.info("Analysis: Remove from group on an alert that is not a member, ignored")
+            return
+        if alert.plan is None:
+            logger.info("Analysis: Remove from group while grouping is off, ignored")
+            return
+        footer.confirm.ask([affected_line(a, alert.alerts) for a in alert.plan.affected],
+                           lambda: run_save(near.remove_btn, alert=alert))
+
+    near.run_remove = _remove_from_group
+    # ``getattr`` because a test may inject a plain callable.
+    run_guard = getattr(run_save, "guard", None)
+    if run_guard is not None:
+        run_guard(near.remove_btn)
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",

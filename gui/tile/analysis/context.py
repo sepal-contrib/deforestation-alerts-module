@@ -35,6 +35,7 @@ from deforestation_alerts.project.growth import (
     kind_of,
     links_of,
 )
+from deforestation_alerts.project import review_groups
 from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project.review_status import NOT_REVIEWED, reviewed_mask
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM
@@ -156,7 +157,9 @@ def status_color(status) -> str:
 
 
 def facts_of(gdf, alert_id, project):
-    """``{"source", "first", "last", "status", "kind"}`` of the selected alert, or
+    """``{"source", "first", "last", "status", "kind", "group"}`` of the
+    selected alert (``group``: the size of its review group, None outside a
+    group of two or more), or
     ``None`` when there is nothing to show: no table, no selection, an id out
     of range, or alerts of another set than the active one — Integrate records
     a new set before it publishes that set's alerts, and Overview skips them
@@ -175,7 +178,16 @@ def facts_of(gdf, alert_id, project):
         "status": status if isinstance(status, str) and status else NOT_REVIEWED,
         # an old set has neither column: kind_of(None, None) is "new"
         "kind": kind_of(links_of(row.get(GROWS_FROM)), row.get(BELOW_MIN)),
+        "group": _group_size(gdf, alert_id),
     }
+
+
+def _group_size(gdf, alert_id):
+    """The size of the review group the alert is in (group review §6.3), or
+    None for a row in no group or in a group of one."""
+    if review_groups.COLUMN not in gdf.columns or not review_groups.is_grouped(gdf, alert_id):
+        return None
+    return 1 + len(review_groups.group_of(gdf, alert_id)[1])
 
 
 #: the Kind chip's colour for the growth kinds (spec §6.1)
@@ -380,6 +392,8 @@ def _build_facts(labels):
     # `display: contents` keeps a row's label and value in the grid, `none`
     # drops both from it
     kind_row = v.Html(tag="div", style_=_ROW_HIDDEN, children=[])
+    group = v.Html(tag="span", class_=f"{TYPE_BODY} dat-num", children=[])
+    group_row = v.Html(tag="div", style_=_ROW_HIDDEN, children=[])
     history_row = v.Html(tag="div", style_=_ROW_HIDDEN, children=[])
 
     row_labels = []  # (span, key): the row names, written again on a switch
@@ -397,9 +411,10 @@ def _build_facts(labels):
             _label("analysis_tile.facts.source"), source,
             _label("analysis_tile.facts.detected"), detected,
             _label("analysis_tile.facts.status"), v.Html(tag="div", children=[chip]),
-            kind_row, history_row,
+            group_row, kind_row, history_row,
         ],
     )
+    group_row.children = [_label("analysis_tile.facts.group"), group]
     kind_row.children = [_label("analysis_tile.facts.kind"), kind_value]
     history_row.children = [_label("analysis_tile.facts.history"), history]
 
@@ -409,7 +424,7 @@ def _build_facts(labels):
 
     labels.add(_label_rows)
     return grid, {"source": source, "detected": detected, "chip": chip,
-                  "swatch": swatch, "kind_row": kind_row, "kind_chip": kind_chip,
+                  "swatch": swatch, "group_row": group_row, "group": group, "kind_row": kind_row, "kind_chip": kind_chip,
                   "history_row": history_row, "history": history}
 
 
@@ -440,6 +455,9 @@ def build_context(app_state, id_field, *, labels=None, analysis=None, guard=None
             color=status_color(facts["status"]))
         facts_slots["chip"].children = [facts_slots["swatch"],
                                         t(status_label_key(facts["status"]))]
+        size = facts.get("group")
+        facts_slots["group_row"].style_ = _ROW_HIDDEN if size is None else _ROW_SHOWN
+        facts_slots["group"].children = [] if size is None else [tn("analysis_tile.facts.group_of", size)]
         kind = facts["kind"]
         facts_slots["kind_row"].style_ = _ROW_HIDDEN if kind == KIND_NEW else _ROW_SHOWN
         # purple for the growth kinds only; a new alert under the minimum area
