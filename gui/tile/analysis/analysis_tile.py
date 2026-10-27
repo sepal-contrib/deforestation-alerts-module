@@ -688,7 +688,8 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
             logger.info("Analysis: Remove from group while grouping is off, ignored")
             return
         footer.confirm.ask([affected_line(a, alert.alerts) for a in alert.plan.affected],
-                           lambda: run_save(near.remove_btn, alert=alert))
+                           lambda: run_save(near.remove_btn, alert=alert),
+                           title="analysis_tile.nearby.remove", ok="analysis_tile.nearby.confirm_remove_ok")
 
     near.run_remove = _remove_from_group
     # ``getattr`` because a test may inject a plain callable.

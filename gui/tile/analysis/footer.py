@@ -91,25 +91,33 @@ def affected_line(a, gdf) -> str:
     return t(_AFFECTED_KEYS[a.change], n=a.position + 1, status=t(status_label_key(a.status)), group=group)
 
 
+_CONFIRM_TITLE, _CONFIRM_OK = "analysis_tile.nearby.confirm_title", "analysis_tile.nearby.confirm_ok"
+
+
 def _build_confirm(labels):
     """The group save's confirmation: a raw ``v.Dialog``, like the *Stop
     drawing* one in ``edit_tools`` (the panel never renders through reacton,
     so the Solara ``ConfirmDialog`` cannot be used here). ``ask(lines,
-    on_ok)`` lists ``lines`` and opens it; *Save* closes it and runs
-    ``on_ok``, *Cancel* only closes it."""
-    ok = btn("primary", t("analysis_tile.nearby.confirm_ok"))
+    on_ok, title=..., ok=...)`` lists ``lines`` under the ``title`` message
+    key and opens it; the ``ok`` key's button (*Save* by default) closes it
+    and runs ``on_ok``, *Cancel* only closes it. *Remove from group* asks
+    with its own title and *Remove*."""
+    ok = btn("primary", t(_CONFIRM_OK))
     cancel = btn("tertiary", t("analysis_tile.nearby.confirm_cancel"))
     title = v.CardTitle(style_="word-break: normal; font-size: 16px; font-weight: 600;",
-                        children=[t("analysis_tile.nearby.confirm_title")])
+                        children=[t(_CONFIRM_TITLE)])
     body = v.CardText(style_="font-size: 14px;", children=[])
     dialog = v.Dialog(v_model=False, max_width="480px", children=[
         v.Card(children=[title, body,
                          v.CardActions(class_="flex-wrap justify-end pa-4 pt-0", children=[cancel, ok])]),
     ])
     pending = {"on_ok": None}
+    keys = {"title": _CONFIRM_TITLE, "ok": _CONFIRM_OK}
 
-    def ask(lines, on_ok):
+    def ask(lines, on_ok, *, title=_CONFIRM_TITLE, ok=_CONFIRM_OK):
         pending["on_ok"] = on_ok
+        keys.update(title=title, ok=ok)
+        _label()
         body.children = [v.Html(tag="div", class_=TYPE_BODY, children=[line]) for line in lines]
         dialog.v_model = True
 
@@ -127,9 +135,9 @@ def _build_confirm(labels):
     cancel.on_event("click", lambda *_: _close())
 
     def _label():
-        set_label(ok, t("analysis_tile.nearby.confirm_ok"))
+        set_label(ok, t(keys["ok"]))
         set_label(cancel, t("analysis_tile.nearby.confirm_cancel"))
-        title.children = [t("analysis_tile.nearby.confirm_title")]
+        title.children = [t(keys["title"])]
 
     labels.add(_label)
     return SimpleNamespace(dialog=dialog, ask=ask, ok=ok, cancel=cancel, body=body)

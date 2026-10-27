@@ -277,6 +277,26 @@ def test_remove_from_group_asks_then_saves(tmp_path, monkeypatch):
     assert h.toasts == []
 
 
+def _dialog_labels(confirm):
+    return confirm.dialog.children[0].children[0].children, label_of(confirm.ok)
+
+
+def test_remove_from_group_asks_to_remove_not_to_save(tmp_path, monkeypatch):
+    """Review M2: the removal's dialog reads *Remove from group* / *Remove*,
+    and the save's own confirmation keeps its wording afterwards."""
+    h = _panel(tmp_path, monkeypatch, alerts=_grouped())
+    _open(h, 2)
+    confirm = h.footer.confirm
+    h.near.remove_btn.fire_event("click", None)
+    assert _dialog_labels(confirm) == (["Remove from group"], "Remove")
+    confirm.cancel.fire_event("click", None)
+    _open(h, 0)
+    toggle_selection(h.analysis, 1)  # #2 leaves the group: the save asks first
+    _press_save(h)
+    assert confirm.dialog.v_model is True
+    assert _dialog_labels(confirm) == ([t("analysis_tile.nearby.confirm_title")], t("analysis_tile.nearby.confirm_ok"))
+
+
 def test_the_runner_holds_remove_from_group_during_a_save(tmp_path, monkeypatch):
     h = _panel(tmp_path, monkeypatch, alerts=_grouped())
     _open(h, 2)

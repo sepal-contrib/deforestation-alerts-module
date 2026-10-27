@@ -420,6 +420,7 @@
       "confirm_joined": "#{n} ({status}): se une con el grupo n.º {group}",
       "confirm_removed": "#{n} ({status}): sale del grupo y vuelve a sin revisar",
       "confirm_ok": "Guardar",
+      "confirm_remove_ok": "Quitar",
       "confirm_cancel": "Cancelar"
     }
   },

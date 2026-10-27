@@ -1459,6 +1459,27 @@ def test_the_refine_badge_follows_the_drawn_polygon(tmp_path):
     assert "2" in seen[-1] and "ha" in seen[-1]
 
 
+def test_the_refine_badge_measures_the_union_the_save_stores():
+    """Review M1: two overlapping features count their shared part once, as
+    the save's ``area_ha`` does (spec 2026-10-26 §4.3)."""
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    from deforestation_alerts.project.review_groups import polygon_area_ha
+    from gui.i18n import format_number, tn
+    from gui.tile.analysis import edit_tools
+
+    analysis = AnalysisState()
+    seen = []
+    edit_tools.wire_refine_badge(analysis, lambda text, color=None: seen.append(text))
+    gdf = gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.02, 0.01), shapely_box(0.01, 0, 0.03, 0.01)],
+                           crs="EPSG:4326")
+    analysis.defo_layer.set(gdf)
+    union = polygon_area_ha(gdf.geometry.union_all())
+    assert seen[-1] == t("analysis_tile.sections.refine_summary",
+                         shapes=tn("analysis_tile.sections.shapes", 2), area=format_number(union, 1))
+
+
 def test_the_refine_badge_cannot_break_an_alert_change(tmp_path):
     """Ruling 32: this subscriber runs INSIDE ``defo_layer.set()``, so a value
     it cannot measure would raise through ``reset_alert`` and

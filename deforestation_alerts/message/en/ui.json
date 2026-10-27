@@ -406,6 +406,7 @@
       "confirm_joined": "#{n} ({status}): joins with group #{group}",
       "confirm_removed": "#{n} ({status}): leaves the group and goes back to not reviewed",
       "confirm_ok": "Save",
+      "confirm_remove_ok": "Remove",
       "confirm_cancel": "Cancel"
     }
   },

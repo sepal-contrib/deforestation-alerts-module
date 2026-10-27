@@ -420,6 +420,7 @@
       "confirm_joined": "#{n} ({status}) : rejoint le groupe n° {group}",
       "confirm_removed": "#{n} ({status}) : quitte le groupe et redevient non examinée",
       "confirm_ok": "Sauvegarder",
+      "confirm_remove_ok": "Retirer",
       "confirm_cancel": "Annuler"
     }
   },
