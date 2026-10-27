@@ -22,12 +22,14 @@ import logging
 from collections import OrderedDict
 from typing import Optional
 
+from deforestation_alerts.project import grouping, review_groups
 from deforestation_alerts.project.review_status import CONFIRMED, STATUS_CODES
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.scripts.set_summary import read_summary
 from gui.i18n import t
 from gui.scripts import charts, set_store
 from gui.scripts.legend_specs import STACK_ORDER, STATUS_CLASSES, status_colors
+from gui.scripts.split_service import area_crs
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview_data")
 
@@ -124,6 +126,22 @@ def history_of(project, *, split_of=None) -> tuple:
         except Exception:  # noqa: BLE001 - one unreadable store, not the whole history
             logger.exception("the Overview history skips set %s: its store could not be read", alert_set.id)
     return tuple(out)
+
+
+def nearby_radius(project, alert_set) -> float:
+    """The distance the *Nearby alerts* card chains ``alert_set``'s alerts
+    at: the grouping in force for it (its split's record once split), else
+    the project's setting, so that while grouping is off the card still says
+    what it would do."""
+    g = grouping.effective(project, alert_set)
+    return g.radius_m if g is not None else project.group_review.radius_m
+
+
+def nearby_of(project, alert_set, alerts):
+    """The *Nearby alerts* card's numbers for ``alerts`` (``alert_set``'s, as
+    loaded): ``review_groups.neighbourhood_counts`` at ``nearby_radius``, in
+    the grid CRS a split measures in. Blocking: call it from a worker thread."""
+    return review_groups.neighbourhood_counts(alerts, nearby_radius(project, alert_set), area_crs(project))
 
 
 def forget_summaries() -> None:

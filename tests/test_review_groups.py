@@ -501,3 +501,24 @@ def test_ineligible_rows_are_left_out():
     gdf = _spaced([100, 100])
     assert rg.neighbourhoods(gdf, 150, CRS, eligible=[0, 2]) == [(0,), (2,)]
     assert rg.neighbourhoods(gdf, 250, CRS, eligible=[0, 2]) == [(0, 2)]
+
+
+# ---- neighbourhood_counts (the Overview card) --------------------------------
+def test_neighbourhood_counts_sum_up_the_chains():
+    gdf = _spaced([100, 100, 900, 100, 900])
+    c = rg.neighbourhood_counts(gdf, 500, CRS)
+    assert (c.radius_m, c.n_alerts, c.n_units, c.n_alone, c.n_clustered, c.largest) == (500.0, 6, 3, 1, 2, 3)
+    assert (c.n_groups, c.n_grouped) == (0, 0)
+
+
+def test_neighbourhood_counts_count_saved_groups_of_two_rows_or_more():
+    gdf = _spaced([2000, 2000, 2000, 2000], statuses=["Confirmed"] + [NR] * 3 + ["Confirmed"],
+                  groups=[100, None, 101, None, 100])
+    c = rg.neighbourhood_counts(gdf, 100, CRS)
+    assert (c.n_units, c.n_alone, c.n_clustered, c.largest) == (4, 3, 1, 2)
+    assert (c.n_groups, c.n_grouped) == (1, 2)  # 101 holds one row: no group
+
+
+def test_neighbourhood_counts_without_alerts():
+    c = rg.neighbourhood_counts(_alerts(0), 300, CRS)
+    assert (c.n_alerts, c.n_units, c.largest, c.n_groups, c.n_grouped) == (0, 0, 0, 0, 0)

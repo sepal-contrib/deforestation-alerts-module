@@ -552,3 +552,30 @@ def neighbourhoods(gdf, radius_m, crs=None, *, eligible=None) -> list:
     for p in positions:
         components.setdefault(find(p), []).append(p)
     return sorted(tuple(c) for c in components.values())
+
+
+@dataclass(frozen=True)
+class NeighbourhoodCounts:
+    """What ``neighbourhood_counts`` finds: the Overview's *Nearby alerts*."""
+
+    radius_m: float
+    n_alerts: int
+    n_units: int  # the neighbourhoods, a lone alert counting as one
+    n_alone: int  # neighbourhoods of one alert
+    n_clustered: int  # neighbourhoods of two alerts or more
+    largest: int  # alerts in the largest neighbourhood (0 without alerts)
+    n_groups: int  # saved review groups of two rows or more
+    n_grouped: int  # the rows in them
+
+
+def neighbourhood_counts(gdf, radius_m, crs=None) -> NeighbourhoodCounts:
+    """How the alerts of ``gdf`` chain into neighbourhoods at ``radius_m``
+    (``neighbourhoods``, every row eligible), and the review groups saved."""
+    sizes = [len(u) for u in neighbourhoods(gdf, radius_m, crs)]
+    counts = group_values(gdf).dropna().value_counts()
+    held = counts[counts >= 2]
+    return NeighbourhoodCounts(
+        radius_m=float(radius_m), n_alerts=len(gdf), n_units=len(sizes),
+        n_alone=sum(1 for n in sizes if n == 1), n_clustered=sum(1 for n in sizes if n >= 2),
+        largest=max(sizes, default=0), n_groups=len(held), n_grouped=int(held.sum()),
+    )

@@ -41,6 +41,22 @@
     "growth_added": "Apport de cet ensemble (ha)",
     "growth_review": "Examiner",
     "growth_note": "Historiques qui comprennent une alerte de cet ensemble, la plus grande surface confirmée d'abord.",
+    "card_nearby": "Alertes proches",
+    "nearby_note": "Les alertes à moins de {radius} m les unes des autres, de bord à bord, s'enchaînent en un groupe d'alertes proches. Une répartition confie chaque groupe à un seul évaluateur.",
+    "nearby_headline": {
+      "one": "{n} groupe d'alertes proches",
+      "many": "{n} de groupes d'alertes proches",
+      "other": "{n} groupes d'alertes proches"
+    },
+    "nearby_headline_none": "Aucune alerte à moins de {radius} m d'une autre",
+    "nearby_split": "Dans un groupe : {grouped} alertes sur {alerts} · Seules : {alone} · Le plus grand : {largest} alertes",
+    "nearby_saved": {
+      "one": "{n} groupe enregistré dans Analyse ({alerts} alertes)",
+      "many": "{n} de groupes enregistrés dans Analyse ({alerts} alertes)",
+      "other": "{n} groupes enregistrés dans Analyse ({alerts} alertes)"
+    },
+    "nearby_saved_none": "Aucun groupe enregistré dans Analyse pour l'instant",
+    "nearby_off": "La révision groupée des alertes proches est désactivée : activez-la à l'étape Évaluation.",
     "history_one_period": "Ce projet n'a qu'une seule période de suivi. Ajoutez-en une seconde et sa tendance sera tracée ici.",
     "timing_note": "Par semaine de première détection. Les semaines en gris relèvent de la fenêtre antérieure : elles précèdent le début de cette période.",
     "answers_note": "Alertes examinées uniquement ({reviewed} sur {total}). Une alerte avec deux réponses est comptée sous chacune, donc la somme des barres peut dépasser le total examiné.",

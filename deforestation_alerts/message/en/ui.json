@@ -38,6 +38,20 @@
     "growth_added": "This set adds (ha)",
     "growth_review": "Review",
     "growth_note": "Histories that include an alert of this set, largest confirmed area first.",
+    "card_nearby": "Nearby alerts",
+    "nearby_note": "Alerts within {radius} m of each other, edge to edge, chain into one group of nearby alerts. A split gives each group to one evaluator.",
+    "nearby_headline": {
+      "one": "{n} group of nearby alerts",
+      "other": "{n} groups of nearby alerts"
+    },
+    "nearby_headline_none": "No alert within {radius} m of another",
+    "nearby_split": "In a group: {grouped} of {alerts} alerts · Alone: {alone} · Largest: {largest} alerts",
+    "nearby_saved": {
+      "one": "{n} group saved in Analysis ({alerts} alerts)",
+      "other": "{n} groups saved in Analysis ({alerts} alerts)"
+    },
+    "nearby_saved_none": "No group saved in Analysis yet",
+    "nearby_off": "Reviewing nearby alerts together is off: turn it on in the Evaluation step.",
     "history_one_period": "This project has one monitoring period. Add a second one and its trend is charted here.",
     "timing_note": "By the week an alert was first detected. Greyed weeks are look-back: they fall before this period started.",
     "answers_note": "Reviewed alerts only ({reviewed} of {total}). An alert with two answers is counted under each, so the bars can add up to more than the reviewed total.",

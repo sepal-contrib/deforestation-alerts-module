@@ -41,6 +41,22 @@
     "growth_added": "Aporta este conjunto (ha)",
     "growth_review": "Revisar",
     "growth_note": "Historiales que incluyen una alerta de este conjunto, primero el de mayor área confirmada.",
+    "card_nearby": "Alertas cercanas",
+    "nearby_note": "Las alertas a menos de {radius} m entre sí, de borde a borde, se encadenan en un grupo de alertas cercanas. Al repartir, cada grupo va a un solo evaluador.",
+    "nearby_headline": {
+      "one": "{n} grupo de alertas cercanas",
+      "many": "{n} de grupos de alertas cercanas",
+      "other": "{n} grupos de alertas cercanas"
+    },
+    "nearby_headline_none": "Ninguna alerta a menos de {radius} m de otra",
+    "nearby_split": "En un grupo: {grouped} de {alerts} alertas · Solas: {alone} · El mayor: {largest} alertas",
+    "nearby_saved": {
+      "one": "{n} grupo guardado en Análisis ({alerts} alertas)",
+      "many": "{n} de grupos guardados en Análisis ({alerts} alertas)",
+      "other": "{n} grupos guardados en Análisis ({alerts} alertas)"
+    },
+    "nearby_saved_none": "Aún no hay ningún grupo guardado en Análisis",
+    "nearby_off": "Revisar juntas las alertas cercanas está desactivado: actívalo en el paso Evaluación.",
     "history_one_period": "Este proyecto tiene un solo periodo de seguimiento. Añade otro y aquí se dibujará su tendencia.",
     "timing_note": "Por la semana en que se detectó cada alerta por primera vez. Las semanas en gris son del periodo retrospectivo: son anteriores al inicio de este periodo.",
     "answers_note": "Solo alertas revisadas ({reviewed} de {total}). Una alerta con dos respuestas se cuenta en cada una, por lo que las barras pueden sumar más que el total revisado.",

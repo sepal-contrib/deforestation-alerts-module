@@ -49,7 +49,7 @@ import solara
 from pysepal.i18n import current_locale
 
 from deforestation_alerts.engine.fingerprint import Status, set_status
-from deforestation_alerts.project import paths
+from deforestation_alerts.project import grouping, paths
 from deforestation_alerts.scripts.set_summary import UNATTRIBUTED
 from gui.i18n import format_date, format_number, t, tn
 from gui.scripts import alert_layers, charts, growth_index, overview_data, set_store
@@ -341,12 +341,40 @@ def _growth_card(growth, measure: str, periods, on_review, loaded: bool):
         ])
 
 
-def _right_column(summary, figures, measure: str, questions, growth, periods, on_review, loaded: bool):
+def _nearby_card(nearby, grouping_on: bool):
+    """How the set's alerts chain at the nearby distance (spec 2026-10-26
+    group review): the groups of nearby alerts a split gives whole to one
+    evaluator, and the groups saved in Analysis. Counts whatever the measure:
+    a chain has no area of its own. Shown while grouping is off too, at the
+    project's distance, with a line saying so."""
+    radius = format_number(nearby.radius_m, 0)
+    with _card(t("overview_tile.card_nearby"), t("overview_tile.nearby_note", radius=radius)):
+        if nearby.n_clustered:
+            solara.Text(tn("overview_tile.nearby_headline", nearby.n_clustered), style=_VALUE)
+            solara.Text(t("overview_tile.nearby_split",
+                          grouped=format_number(nearby.n_alerts - nearby.n_alone, 0),
+                          alerts=format_number(nearby.n_alerts, 0), alone=format_number(nearby.n_alone, 0),
+                          largest=format_number(nearby.largest, 0)), style=_NOTE)
+        else:
+            solara.Text(t("overview_tile.nearby_headline_none", radius=radius), style=_VALUE)
+        if nearby.n_groups:
+            solara.Text(tn("overview_tile.nearby_saved", nearby.n_groups,
+                           alerts=format_number(nearby.n_grouped, 0)), style=_NOTE)
+        else:
+            solara.Text(t("overview_tile.nearby_saved_none"), style=_NOTE)
+        if not grouping_on:
+            solara.Text(t("overview_tile.nearby_off"), style=_NOTE)
+
+
+def _right_column(summary, figures, measure: str, questions, growth, nearby, grouping_on: bool, periods,
+                  on_review, loaded: bool):
     with solara.Div(style=_COLUMN):
         with _card(t("overview_tile.card_numbers")):
             _numbers_table(summary, measure)
         if growth is not None and growth.n_growth + growth.n_growth_small:
             _growth_card(growth, measure, periods, on_review, loaded)
+        if nearby is not None and nearby.n_alerts:
+            _nearby_card(nearby, grouping_on)
         with _card(t("overview_tile.card_timing"), t("overview_tile.timing_note")):
             _figure_or_numbers(figures.get("timing"), [])
         # One card per question, in questionnaire order (spec D9); none
@@ -384,9 +412,10 @@ class _Runs:
         self.current = 0
 
 
-#: ``(summary key, summary, history, failure, growth)`` before the first read
-#: lands; ``growth`` is None when the History card could not be read.
-_NOTHING = (None, None, (), None, None)
+#: ``(summary key, summary, history, failure, growth, nearby)`` before the
+#: first read lands; ``growth`` is None when the History card could not be
+#: read, ``nearby`` when the Nearby alerts card could not.
+_NOTHING = (None, None, (), None, None, None)
 
 
 @solara.component
@@ -451,25 +480,34 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
             except Exception as exc:  # noqa: BLE001 - said in place, where the numbers would be
                 logger.exception("could not read the alerts of set %s", alert_set.id)
                 if runs.current == run:
-                    set_read((key, None, (), error_text(exc), None))
+                    set_read((key, None, (), error_text(exc), None, None))
                 return
-            # The History card reads the other sets' stores too; without it
-            # the dashboard is still whole, so a failure here is only logged.
-            growth = None
+            # The History and Nearby alerts cards read the alerts' polygons
+            # (History the other sets' stores too); without them the
+            # dashboard is still whole, so a failure here is only logged.
+            alerts = growth = nearby = None
             try:
                 alerts = set_store.load_set_alerts(project, alert_set)
                 if alerts is not None:
                     growth = growth_index.set_histories(project, alert_set.id, alerts)
             except Exception:  # noqa: BLE001 - one card, not the dashboard
                 logger.exception("could not read the history of set %s", alert_set.id)
+            try:
+                if alerts is not None:
+                    nearby = overview_data.nearby_of(project, alert_set, alerts)
+            except Exception:  # noqa: BLE001 - one card, not the dashboard
+                logger.exception("could not count the nearby alerts of set %s", alert_set.id)
             if runs.current == run:
-                set_read((key, summary, history, None, growth))
+                set_read((key, summary, history, None, growth, nearby))
 
         spawn_in_context(_work)
 
-    solara.use_effect(_start_read, [key, keys])
+    # The nearby distance is a dependency too: an edit in the Evaluation step
+    # recounts the chains.
+    radius = overview_data.nearby_radius(p, s) if p is not None and s is not None else None
+    solara.use_effect(_start_read, [key, keys, radius])
 
-    read_key, summary, history, failure, growth = read
+    read_key, summary, history, failure, growth, nearby = read
     fresh = summary is not None and read_key == key
     series = tuple((period_label(period), item, item.n_reviewed < item.n_alerts)
                    for period, _, item in history) if fresh else ()
@@ -591,8 +629,8 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
             _kpi_strip(summary, history, figures, measure)
             with solara.Row(style="gap: 10px; align-items: stretch; flex-wrap: wrap;"):
                 _left_column(summary, history, figures, measure, theme, admin_level, set_admin_level)
-                _right_column(summary, figures, measure, questions, growth, p.periods, _review_growth,
-                              has_alerts)
+                _right_column(summary, figures, measure, questions, growth, nearby,
+                              grouping.effective(p, s) is not None, p.periods, _review_growth, has_alerts)
         if export_card is not None:
             # A child of a reacton element, so the raw card is part of the
             # rendered tree itself.
