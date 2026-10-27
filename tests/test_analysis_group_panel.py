@@ -7,6 +7,7 @@ The harness is ``test_analysis_group_save``'s (a real active set, its store
 in ``tmp_path``, the FAO/GAUL lookups stood in for) under the panel
 ``analysis_tile.build_controls`` builds; the workers run inline."""
 
+import threading
 from types import SimpleNamespace
 
 import ipyvuetify as v
@@ -22,7 +23,7 @@ from gui.i18n import t
 from gui.tile.analysis import analysis_tile, export, nearby
 from gui.tile.analysis.context import status_label_key
 from gui.tile.analysis.footer import affected_line, build_footer, footer_widgets, prompt_widgets
-from gui.tile.analysis.state import AnalysisState, capture_alert, set_links, toggle_selection
+from gui.tile.analysis.state import AnalysisState, capture_alert, toggle_selection
 from gui.widget.buttons import label_of
 from tests._pane_helpers import make_panes
 from tests.test_analysis_group_save import _alerts as _store_alerts
@@ -414,9 +415,9 @@ def test_a_tick_during_the_save_survives_it(tmp_path, monkeypatch):
     assert label_of(h.footer.save) == "Save for 3 alerts"
 
 
-def test_reset_to_automatic_after_a_group_save_gives_the_union(tmp_path, monkeypatch):
-    """*Reset to automatic* puts the draft back to ``auto_links``: after a
-    group save, the union of what Integrate found for the group's rows."""
+def test_auto_links_after_a_group_save_are_the_union(tmp_path, monkeypatch):
+    """After a group save, ``auto_links`` is the union of what Integrate
+    found for the group's rows."""
     h = _panel(tmp_path, monkeypatch, alerts=_alerts(grows_from=_links([], [], [], []),
                                                      grows_from_auto=_links([L2], [L1], [L3], [])))
     _open(h, 0)
@@ -425,8 +426,6 @@ def test_reset_to_automatic_after_a_group_save_gives_the_union(tmp_path, monkeyp
     toggle_selection(h.analysis, 1)
     _press_save(h)
     assert h.analysis.auto_links.value == (L1, L2)
-    set_links(h.analysis, h.analysis.auto_links.value)  # Reset to automatic
-    assert h.analysis.links.value == (L1, L2)
 
 
 def test_a_tick_makes_next_ask_first(tmp_path, monkeypatch):
@@ -438,3 +437,80 @@ def test_a_tick_makes_next_ask_first(tmp_path, monkeypatch):
     prompt, _discard, _stay = prompt_widgets(h.footer.root)
     assert "display: none" not in prompt.style_
     assert h.s.actual_alert_id.value == 0
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1
+# ---------------------------------------------------------------------------
+def _lock_free_on_reload(h):
+    """Record, at every reload, whether another thread could take the alert
+    lock: the reload runs the whole per-alert orchestration, which must not
+    hold it."""
+    free = []
+
+    def _probe(*_):
+        got = []
+
+        def _try():
+            if h.analysis._alert_lock.acquire(timeout=1):
+                got.append(True)
+                h.analysis._alert_lock.release()
+
+        thread = threading.Thread(target=_try)
+        thread.start()
+        thread.join(5)
+        free.append(bool(got))
+
+    h.analysis.reload_alert.subscribe(_probe)
+    return free
+
+
+def test_the_reload_of_another_visit_runs_outside_the_alert_lock(tmp_path, monkeypatch):
+    h = _panel(tmp_path, monkeypatch, alerts=_alerts())
+    free = _lock_free_on_reload(h)
+    on_saved = analysis_tile.make_after_save(h.widgets, h.s, h.analysis)
+    alert = _captured(h, 0, {1})
+    h.s.actual_alert_id.set(1)
+    h.analysis.reset_alert()
+    on_saved(alert, False)
+    assert free == [True]
+
+
+def test_the_reload_after_a_removal_runs_outside_the_alert_lock(tmp_path, monkeypatch):
+    h = _panel(tmp_path, monkeypatch, alerts=_grouped())
+    _open(h, 2)
+    free = _lock_free_on_reload(h)
+    h.near.remove_btn.fire_event("click", None)
+    h.footer.confirm.ok.fire_event("click", None)
+    assert free == [True]
+
+
+def test_the_save_label_follows_a_new_table(tmp_path, monkeypatch):
+    """Ticking another group's main brings its whole group: when that group
+    changes with the selection unchanged, the label follows the table."""
+    h = _panel(tmp_path, monkeypatch, alerts=_alerts())
+    _open(h, 0)
+    toggle_selection(h.analysis, 2)
+    assert label_of(h.footer.save) == "Save for 2 alerts"
+    gdf = h.s.alerts_gdf.value.copy()
+    gdf["status"] = [NR, NR, CONFIRMED, CONFIRMED]
+    gdf["review_group"] = pd.array([None, None, 12, 12], dtype="Int64")
+    h.s.alerts_gdf.set(gdf)  # #3 is now the main of a group of two
+    assert label_of(h.footer.save) == "Save for 3 alerts"
+
+
+def test_a_capture_that_fails_toasts_and_does_not_save(tmp_path, monkeypatch):
+    from gui.tile.analysis import footer as footer_mod
+
+    errors = []
+    monkeypatch.setattr(footer_mod, "current_notifier", lambda: SimpleNamespace(error=errors.append))
+    calls = []
+
+    def _broken():
+        raise RuntimeError("no table")
+
+    footer = build_footer(lambda button=None, then=None, *, alert=None: calls.append(alert),
+                          v.Html(tag="div"), _setup(tmp_path, monkeypatch).s, AnalysisState(), capture=_broken)
+    footer.save.fire_event("click", None)
+    assert calls == [] and footer.confirm.dialog.v_model is False
+    assert errors == [t("analysis_tile.export_labels.save_capture_failed", error="no table")]

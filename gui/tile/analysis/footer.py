@@ -29,6 +29,7 @@ its fallback is what renders); the dark theme's is restated in the shell's
 stylesheet (``solara_app._AppShell``: ``.theme--dark .defo-analysis-footer``).
 """
 
+import logging
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -36,6 +37,8 @@ import ipyvuetify as v
 
 from deforestation_alerts.project import review_groups
 from gui.i18n import t, tn
+from gui.scripts.error_text import error_text
+from gui.scripts.notify_bridge import current_notifier
 from gui.tile.analysis import alert_files
 from gui.tile.analysis.context import status_label_key
 from gui.tile.analysis.labels import Labels
@@ -50,6 +53,8 @@ PROMPT_STYLE = ("border: 1px solid rgba(239, 138, 12, 0.55); background-color: r
                 "border-radius: 6px; padding: 8px 10px 10px;")
 _HIDDEN = "display: none;"
 _SLOTS = "_defo_footer_slots"
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
 
 def footer_widgets(root):
@@ -206,7 +211,13 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         if capture is None:
             run_save(save)
             return
-        alert = capture()
+        try:
+            alert = capture()
+        except Exception as exc:
+            # Said, not swallowed: the reviewer pressed Save and nothing ran.
+            logger.exception("Analysis: reading the alert for the save failed")
+            current_notifier().error(t("analysis_tile.export_labels.save_capture_failed", error=error_text(exc)))
+            return
         plan = getattr(alert, "plan", None)
         if plan is not None and plan.affected:
             lines = [affected_line(a, alert.alerts) for a in plan.affected]
@@ -298,7 +309,10 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
 
     labels.add(_label)
     if capture is not None:
+        # The selection, and the table: a ticked main of another group brings
+        # that whole group, which a new table may have changed.
         analysis.selection.subscribe(lambda *_: set_label(save, _save_text()))
+        app_state.alerts_gdf.subscribe(lambda *_: set_label(save, _save_text()))
 
     root = v.Html(tag="div", class_="defo-analysis-footer", style_=FOOTER_STYLE, children=[
         export_root,

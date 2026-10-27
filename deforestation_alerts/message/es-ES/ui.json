@@ -297,6 +297,7 @@
         "many": "Guardar para {n} de alertas",
         "other": "Guardar para {n} alertas"
       },
+      "save_capture_failed": "No se pudo leer la alerta para guardarla: {error}",
       "build_tile": "Generar archivos",
       "save_first": "Guarda primero esta alerta",
       "rebuild_tile": "Regenerar archivos",

@@ -297,6 +297,7 @@
         "many": "Sauvegarder pour {n} d’alertes",
         "other": "Sauvegarder pour {n} alertes"
       },
+      "save_capture_failed": "L’alerte n’a pas pu être lue pour la sauvegarde : {error}",
       "build_tile": "Générer les fichiers",
       "save_first": "Enregistrez d'abord cette alerte",
       "rebuild_tile": "Régénérer les fichiers",

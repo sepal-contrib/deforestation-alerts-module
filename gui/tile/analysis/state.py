@@ -74,8 +74,9 @@ class AnalysisState:
     #: draft a Save writes to ``grows_from``, seeded from the row. A change
     #: goes through ``set_links``, which marks the alert unsaved.
     links: solara.Reactive = field(default_factory=lambda: solara.reactive(()))
-    #: the links Integrate found for this alert (``grows_from_auto``), what
-    #: "Reset to automatic" returns the draft to
+    #: the links Integrate found for this alert (``grows_from_auto``; for a
+    #: grouped alert, for any row of its group): the Earlier alerts section
+    #: marks them as automatic links (``earlier.refresh_earlier``)
     auto_links: solara.Reactive = field(default_factory=lambda: solara.reactive(()))
     #: the History row's numbers for the draft links (None: no history); the
     #: Earlier alerts section fills it from a worker

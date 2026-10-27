@@ -423,8 +423,11 @@ def make_after_save(widgets, app_state, analysis):
         position = app_state.actual_alert_id.value
         if analysis.alert_token.value == alert.token:
             if plan.kind == REMOVE or position in plan.detached:
-                if not outpaced:
-                    analysis.apply_if_current(alert.token, _reload)
+                # Bumped outside the lock: the reload runs the whole per-alert
+                # orchestration (``reset_alert`` included), which must not
+                # hold it (as ``then`` in ``export.make_save_runner``).
+                if not outpaced and analysis.is_current(alert.token):
+                    _reload()
                 return
 
             def _reseed():
@@ -439,19 +442,21 @@ def make_after_save(widgets, app_state, analysis):
                 refresh_in_background(widgets, analysis, app_state)
                 nearby.refresh_in_background(widgets, analysis, app_state)
             return
-        # Another alert is on screen: reload it if the plan wrote it. Checked
-        # and bumped under the lock, so a move made meanwhile is not reloaded.
+        # Another alert is on screen: reload it if the plan wrote it. Decided
+        # under the lock, bumped outside it (the reload runs the per-alert
+        # orchestration, ``reset_alert`` included), and only while that alert
+        # is still the one on screen, so a move made meanwhile is not reloaded.
         token = analysis.alert_token.value
-        reloaded = []
+        written = []
 
-        def _reload_if_written():
+        def _decide():
             if app_state.actual_alert_id.value in plan.positions():
-                reloaded.append(app_state.actual_alert_id.value)
-                _reload()
+                written.append(app_state.actual_alert_id.value)
 
-        analysis.apply_if_current(token, _reload_if_written)
-        if reloaded:
-            current_notifier().info(t("analysis_tile.nearby.saved_with_group", n=reloaded[0] + 1))
+        analysis.apply_if_current(token, _decide)
+        if written and analysis.is_current(token):
+            _reload()
+            current_notifier().info(t("analysis_tile.nearby.saved_with_group", n=written[0] + 1))
 
     return on_saved
 
