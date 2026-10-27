@@ -775,8 +775,8 @@ class ReturnPreview:
 def _read_reviews(zf, evaluator: str, version: int = FORMAT_VERSION) -> pd.DataFrame:
     """``reviews.parquet``, checked (spec §7.1): unique integer ``alert_id``s,
     every ``evaluator`` the header's, every ``status`` a verdict (or
-    ``Not reviewed`` in a format-2 return, spec 2026-10-26 §8.3). Indexed by
-    ``alert_id``."""
+    ``Not reviewed`` in a format-2 return, spec 2026-10-26 §8.3), every
+    ``review_group`` missing or a whole number. Indexed by ``alert_id``."""
     try:
         rows = read_table(BytesIO(zf.read(REVIEWS_MEMBER)))
     except Exception as exc:  # noqa: BLE001 - any unreadable payload is the same refusal
@@ -790,7 +790,19 @@ def _read_reviews(zf, evaluator: str, version: int = FORMAT_VERSION) -> pd.DataF
     allowed = set(VERDICTS) | ({NOT_REVIEWED} if version >= RETURN_GROUPS_VERSION else set())
     if "status" not in rows.columns or not all(isinstance(v, str) and v in allowed for v in rows["status"]):
         raise ShareError("share.merge_err_payload")
+    if REVIEW_GROUP in rows.columns and not _whole_numbers(rows[REVIEW_GROUP]):
+        raise ShareError("share.merge_err_payload")
     return rows.set_index("alert_id")
+
+
+def _whole_numbers(column) -> bool:
+    """Every value of ``column`` missing or a whole number."""
+    raw = pd.Series(column.to_numpy(dtype=object))
+    values = pd.to_numeric(raw, errors="coerce")
+    if (values.isna() & raw.notna()).any():
+        return False
+    present = values.dropna().astype(float)
+    return bool(np.isfinite(present).all() and (present % 1 == 0).all())
 
 
 def _positions(gdf) -> dict[int, int]:

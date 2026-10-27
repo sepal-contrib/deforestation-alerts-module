@@ -37,12 +37,30 @@
     "merge_err_no_alerts": "Las alertas del conjunto activo no están cargadas.",
     "merge_err_changed": "El proyecto o su conjunto activo cambió desde la vista previa; vuelva a abrir la copia.",
     "merge_err_store_changed": "Las alertas se guardaron durante la fusión; no se fusionó nada, inténtelo de nuevo.",
-    "merge_err_groups": "La fusión rompería un grupo de revisión; no se fusionó nada.",
+    "merge_err_groups": "Esta revisión devuelta rompería un grupo de alertas, así que no se fusionó nada. Elija Conservar las mías o pida al evaluador que actualice la aplicación y vuelva a enviar la revisión.",
     "merge_summary": "{evaluator}: {new} revisiones nuevas, {conflicts} conflictos, {unchanged} sin cambios, {ignored} ignoradas",
-    "merge_summary_groups": {
-      "one": "{n} alertas ({groups} grupo)",
-      "many": "{n} alertas ({groups} de grupos)",
-      "other": "{n} alertas ({groups} grupos)"
+    "merge_summary_grouped": "{evaluator}: {new}, {conflicts}, {unchanged}, {ignored} ignoradas",
+    "merge_count": {
+      "new": {
+        "one": "{n} revisión nueva",
+        "many": "{n} de revisiones nuevas",
+        "other": "{n} revisiones nuevas"
+      },
+      "conflicts": {
+        "one": "{n} conflicto",
+        "many": "{n} de conflictos",
+        "other": "{n} conflictos"
+      },
+      "unchanged": {
+        "one": "{n} sin cambios",
+        "many": "{n} sin cambios",
+        "other": "{n} sin cambios"
+      },
+      "groups": {
+        "one": "({n} grupo)",
+        "many": "({n} de grupos)",
+        "other": "({n} grupos)"
+      }
     },
     "merge_questions_changed": "El cuestionario cambió desde que se crearon los paquetes; las respuestas se fusionan por clave de pregunta.",
     "merge_extra_columns": "Columnas ignoradas: {columns}",

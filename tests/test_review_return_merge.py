@@ -716,9 +716,43 @@ def test_a_format_one_merge_adds_no_group_column(tmp_path, monkeypatch):
 def test_the_preview_counts_groups(tmp_path, monkeypatch):
     _, preview = _one_conflict(tmp_path, monkeypatch)
     lines = merge_service.preview_lines(preview)
-    assert "3 alerts (1 group)" in lines[0]
-    assert lines[0] == t("share.merge_summary", evaluator="Ana", new=0,
-                         conflicts=t("share.merge_summary_groups", count=1, n=3, groups=1), unchanged=1, ignored=0)
+    assert lines[0] == "Ana: 0 new reviews, 3 conflicts (1 group), 1 unchanged, 0 ignored"
     plain = replace(preview, n_groups=0)
     assert merge_service.preview_lines(plain) == [
         t("share.merge_summary", evaluator="Ana", new=0, conflicts=3, unchanged=1, ignored=0)]
+
+
+def test_the_preview_counts_a_single_alert_and_several_groups(tmp_path, monkeypatch):
+    _, preview = _one_conflict(tmp_path, monkeypatch)
+    one = replace(preview, new=[5], conflicts=[0, 1], class_groups={"new": 1, "conflicts": 2, "unchanged": 0})
+    assert merge_service.preview_lines(one)[0] == "Ana: 1 new review (1 group), 2 conflicts (2 groups), 1 unchanged, 0 ignored"
+
+
+@pytest.mark.parametrize("bad", [pd.Series([0.0, 1.5, None, None], dtype=float),
+                                 pd.Series(["0", "x", None, None], dtype=object)])
+def test_a_return_with_an_unreadable_group_id_is_refused(tmp_path, monkeypatch, bad):
+    app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, ("Not reviewed",) * 4)
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA))
+    zp = _reviews(zp, tmp_path / "bad.zip", lambda r: r.assign(review_group=bad))
+    before = _disk(app_state)
+    assert _refused(lambda: _preview(app_state, zp)).key == "share.merge_err_payload"
+    after = _disk(app_state)
+    assert list(after.columns) == list(before.columns) and after["status"].tolist() == ["Not reviewed"] * 4
+
+
+def test_an_older_apps_return_that_changes_a_group_member_merges_only_as_mine(tmp_path, monkeypatch):
+    """A format-1 return (no ``review_group``) whose evaluator re-reviewed one member of a stored group."""
+    statuses = ("Confirmed",) * 3 + ("Not reviewed",)
+    p, pdir = make_copy(tmp_path / "copies", statuses=("Confirmed", "False Positive", "Confirmed", "Not reviewed"),
+                        assigned=ANA)
+    zp = share.build_return(p, pdir, tmp_path / "out", app_version=APP_VERSION)
+    app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, statuses, (0, 0, 0, NA))
+    preview = _preview(app_state, zp)
+    assert preview.header.format_version == 1 and _classes(preview) == ([], [0, 1, 2], [], [])
+    exc = _refused(lambda: merge_service.merge_return(app_state, ctx, analysis, preview, "theirs"))
+    assert exc.key == "share.merge_err_groups"
+    assert _disk(app_state)["status"].tolist() == list(statuses)
+    record = merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "mine")
+    assert (record.taken, record.conflicts, record.choice) == (0, 3, "mine")
+    disk = _disk(app_state)
+    assert disk["status"].tolist() == list(statuses) and _plain(disk["review_group"]) == [0, 0, 0, None]

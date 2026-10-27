@@ -37,12 +37,30 @@
     "merge_err_no_alerts": "Les alertes du jeu actif ne sont pas chargées.",
     "merge_err_changed": "Le projet ou son jeu actif a changé depuis l'aperçu ; rouvrez la copie.",
     "merge_err_store_changed": "Les alertes ont été enregistrées pendant la fusion ; rien n'a été fusionné, réessayez.",
-    "merge_err_groups": "La fusion casserait un groupe de révision ; rien n'a été fusionné.",
+    "merge_err_groups": "Ce retour casserait un groupe d'alertes : rien n'a été fusionné. Choisissez Garder les miennes, ou demandez à l'évaluateur de mettre à jour l'application et de renvoyer la révision.",
     "merge_summary": "{evaluator} : {new} nouvelles révisions, {conflicts} conflits, {unchanged} inchangées, {ignored} ignorées",
-    "merge_summary_groups": {
-      "one": "{n} alertes ({groups} groupe)",
-      "many": "{n} alertes ({groups} de groupes)",
-      "other": "{n} alertes ({groups} groupes)"
+    "merge_summary_grouped": "{evaluator} : {new}, {conflicts}, {unchanged}, {ignored} ignorées",
+    "merge_count": {
+      "new": {
+        "one": "{n} nouvelle révision",
+        "many": "{n} de nouvelles révisions",
+        "other": "{n} nouvelles révisions"
+      },
+      "conflicts": {
+        "one": "{n} conflit",
+        "many": "{n} de conflits",
+        "other": "{n} conflits"
+      },
+      "unchanged": {
+        "one": "{n} inchangée",
+        "many": "{n} d’inchangées",
+        "other": "{n} inchangées"
+      },
+      "groups": {
+        "one": "({n} groupe)",
+        "many": "({n} de groupes)",
+        "other": "({n} groupes)"
+      }
     },
     "merge_questions_changed": "Le questionnaire a changé depuis la création des paquets ; les réponses sont fusionnées par clé de question.",
     "merge_extra_columns": "Colonnes ignorées : {columns}",

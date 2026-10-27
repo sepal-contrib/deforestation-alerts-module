@@ -20,7 +20,7 @@ from deforestation_alerts.project.review_groups import n_groups
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.project.share import ReturnPreview, ShareError, apply_return, classify_return
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet, store_lock
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import set_store
 from gui.scripts.integrate_jobs import is_integrating
 from gui.store.project_writers import writing
@@ -128,15 +128,21 @@ def preview_lines(preview: ReturnPreview, selected: Optional[int] = None) -> lis
     """The preview dialog's text (spec §7.3, §7.1, §7.4): the counts, then
     the questionnaire warning, the ignored columns and the alert to reload.
     When groups are involved (``preview.n_groups``), a count whose rows touch
-    groups reads "N alerts (M groups)" (spec 2026-10-26 §8.4)."""
+    groups adds them: "3 conflicts (1 group)" (spec 2026-10-26 §8.4)."""
+    if preview.n_groups > 0:
 
-    def count(name: str):
-        n = len(getattr(preview, name))
-        groups = preview.class_groups.get(name, 0) if preview.n_groups > 0 else 0
-        return t("share.merge_summary_groups", count=groups, n=n, groups=groups) if groups else n
+        def count(name: str, key: str) -> str:
+            text = tn(key, len(getattr(preview, name)))
+            groups = preview.class_groups.get(name, 0)
+            return f"{text} {tn('share.merge_count.groups', groups)}" if groups else text
 
-    lines = [t("share.merge_summary", evaluator=preview.header.evaluator, new=count("new"),
-               conflicts=count("conflicts"), unchanged=count("unchanged"), ignored=len(preview.ignored))]
+        summary = t("share.merge_summary_grouped", evaluator=preview.header.evaluator, new=count("new", "share.merge_count.new"),
+                    conflicts=count("conflicts", "share.merge_count.conflicts"),
+                    unchanged=count("unchanged", "share.merge_count.unchanged"), ignored=len(preview.ignored))
+    else:
+        summary = t("share.merge_summary", evaluator=preview.header.evaluator, new=len(preview.new),
+                    conflicts=len(preview.conflicts), unchanged=len(preview.unchanged), ignored=len(preview.ignored))
+    lines = [summary]
     if preview.questions_changed:
         lines.append(t("share.merge_questions_changed"))
     if preview.extra_columns:
