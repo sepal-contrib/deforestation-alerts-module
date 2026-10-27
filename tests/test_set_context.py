@@ -850,6 +850,25 @@ def test_the_first_saved_group_turns_the_option_on(tmp_path, monkeypatch):
     assert s.project.value.group_review.enabled is True
 
 
+def test_a_review_copys_groups_publish_no_option_change(tmp_path, monkeypatch):
+    """Re-review N1: a copy keeps its setting, so its saves publish no project change for it."""
+    from gui.scripts import set_context
+
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    monkeypatch.setattr(set_context, "read_only", lambda p: True)
+    calls = []
+    monkeypatch.setattr(s, "update_project", lambda *a, **kw: calls.append(a))
+    gdf = _review_alerts(n=3)
+    gdf["alert_id"] = [100, 101, 102]
+    gdf["status"] = ["Confirmed", "Confirmed", "Not reviewed"]
+    gdf["review_group"] = pd.array([100, 100, None], dtype="Int64")
+    ctx.record_groups(gdf)
+    # the set's n_groups write may publish; the option write may not
+    assert [a for a in calls if "record_groups" in a[1].__qualname__] == []
+    assert s.project.value.group_review.enabled is False
+
+
 def test_add_raster_layer_creates_the_layer_with_its_visibility(monkeypatch):
     import localtileserver
 

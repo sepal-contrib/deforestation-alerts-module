@@ -136,7 +136,7 @@ class SetContext:
         if n == 0:
             return
         target, s = self._landing(gdf, target)
-        if s is None or self._project.group_review.enabled:
+        if s is None or read_only(self._project) or self._project.group_review.enabled:
             return
 
         def _apply(live):
