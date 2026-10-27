@@ -5,7 +5,7 @@ and parent candidates read from a store, the link graph and the area of a
 group's history. It imports nothing from the UI."""
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import NamedTuple, Optional
@@ -15,9 +15,10 @@ import pandas as pd
 import shapely
 from shapely.geometry.base import BaseGeometry
 
+from deforestation_alerts.project import review_groups
 from deforestation_alerts.project.models import AlertSet, Period
 from deforestation_alerts.project.review_status import FALSE_POSITIVE, LOSS_VERDICTS, NOT_REVIEWED
-from deforestation_alerts.project.store_schema import GROWS_FROM
+from deforestation_alerts.project.store_schema import GROWS_FROM, REVIEW_GROUP
 
 #: The column Integrate may write with an alert's kind.
 KIND_COLUMN = "kind"
@@ -135,10 +136,18 @@ class Node:
     date_max: Optional[float]
     shape: Optional[BaseGeometry]
     links: tuple[str, ...]
+    #: the row's ``review_group`` (its group's main id; None outside a group),
+    #: group review (spec 2026-10-26 §7)
+    review_group: Optional[int] = None
 
     @property
     def key(self) -> str:
         return node_key(self.set_id, self.alert_id)
+
+    @property
+    def is_member(self) -> bool:
+        """A group's member: in a group, not its main."""
+        return self.review_group is not None and self.review_group != self.alert_id
 
     def link_to(self, run_id: str) -> str:
         return format_link(LinkRef(self.set_id, self.alert_id, run_id))
@@ -177,6 +186,24 @@ def _status(value) -> str:
         return value
 
 
+def _groups_and_shapes(gdf, ids, drawn, own) -> tuple[list, list]:
+    """Each row's ``review_group`` (None outside a group) and parent shape:
+    the drawing, else the row's own, but none for a member of a group whose
+    main has a drawing (the drawing is the group's loss, spec 2026-10-26 §7.1)."""
+    n = len(gdf)
+    shapes = [d if d is not None else g for d, g in zip(drawn, own)]
+    if REVIEW_GROUP not in gdf.columns:
+        return [None] * n, shapes
+    values = review_groups.group_values(gdf)
+    groups = [None if pd.isna(v) else int(v) for v in values]
+    position = {int(i): p for p, i in enumerate(ids)}
+    for p, (aid, group) in enumerate(zip(ids, groups)):
+        main = position.get(group) if group is not None and group != int(aid) else None
+        if main is not None and drawn[main] is not None:
+            shapes[p] = None
+    return groups, shapes
+
+
 def nodes_of_set(s: AlertSet, period: Period, gdf) -> list[Node]:
     """Every row of ``gdf`` as a ``Node``. Column by column (``iterrows``
     builds a Series per row, a quarter of a second on 5,000 rows)."""
@@ -185,17 +212,19 @@ def nodes_of_set(s: AlertSet, period: Period, gdf) -> list[Node]:
     def col(name):
         return list(gdf[name]) if name in gdf.columns else [None] * n
 
+    ids = [int(aid) for aid in gdf["alert_id"]]
     drawn = [_geometry(v) for v in gdf["alert_polygon"]] if "alert_polygon" in gdf.columns else [None] * n
     own = [_geometry(v) for v in gdf["geometry"]] if "geometry" in gdf.columns else [None] * n
     links = [tuple(links_of(v)) for v in gdf[GROWS_FROM]] if GROWS_FROM in gdf.columns else [()] * n
+    groups, shapes = _groups_and_shapes(gdf, ids, drawn, own)
     return [
-        Node(set_id=s.id, alert_id=int(aid), period_id=period.id,
+        Node(set_id=s.id, alert_id=aid, period_id=period.id,
              period_start=period.start, period_end=period.end, status=_status(status),
              area_ha=_float(area) or 0.0, date_min=_float(dmin), date_max=_float(dmax),
-             shape=d if d is not None else g, links=lk)
-        for aid, status, area, dmin, dmax, d, g, lk in zip(
-            gdf["alert_id"], col("status"), col("area_ha"), col("alert_date_min"), col("alert_date_max"),
-            drawn, own, links)
+             shape=shape, links=lk, review_group=group)
+        for aid, status, area, dmin, dmax, shape, lk, group in zip(
+            ids, col("status"), col("area_ha"), col("alert_date_min"), col("alert_date_max"),
+            shapes, links, groups)
     ]
 
 
@@ -211,8 +240,36 @@ def rows_of_set(s: AlertSet, period: Period, gdf) -> list[Candidate]:
     return [Candidate(n, run_id) for n in nodes_of_set(s, period, gdf)]
 
 
+def group_candidates(nodes: Sequence[Node]) -> list[Node]:
+    """The parent candidates among ``nodes`` (``is_candidate``), each review
+    group folded into its main (spec 2026-10-26 §7.2): one node with the
+    main's key, status and links, the union of the group's shapes (a drawn
+    group's members have none, ``nodes_of_set``: there it is the drawing) and
+    the group's summed area. A row alone, a group of one and the members of a
+    main that is not among ``nodes`` stay as they are. Node order."""
+    folded: dict[str, list[Node]] = {}
+    for n in nodes:
+        if n.is_member:
+            folded.setdefault(node_key(n.set_id, n.review_group), []).append(n)
+    mains = {n.key for n in nodes if n.key in folded}
+    out = []
+    for n in nodes:
+        if n.is_member and node_key(n.set_id, n.review_group) in mains:
+            continue
+        members = folded.get(n.key) if n.key in mains else None
+        if members:
+            rows = [n, *members]
+            shapes = [m.shape for m in rows if m.shape is not None]
+            shape = None if not shapes else shapes[0] if len(shapes) == 1 else shapely.union_all(shapes)
+            n = replace(n, shape=shape, area_ha=float(sum(m.area_ha for m in rows)))
+        if is_candidate(n):
+            out.append(n)
+    return out
+
+
 def candidates_of_set(s: AlertSet, period: Period, gdf) -> list[Candidate]:
-    return [c for c in rows_of_set(s, period, gdf) if is_candidate(c.node)]
+    run_id = run_id_of(s)
+    return [Candidate(n, run_id) for n in group_candidates(nodes_of_set(s, period, gdf))]
 
 
 class LinkGraph:
@@ -227,6 +284,12 @@ class LinkGraph:
                 target = node_key(*parse_link(link)[:2])
                 self._adj[key].add(target)
                 self._adj[target].add(key)
+            if n.is_member:
+                # a group is one history, links or none (spec 2026-10-26 §7.1)
+                main = node_key(n.set_id, n.review_group)
+                if main in self._nodes:
+                    self._adj[key].add(main)
+                    self._adj[main].add(key)
 
     def node(self, key: str) -> Optional[Node]:
         return self._nodes.get(key)
@@ -296,7 +359,9 @@ def history_area(nodes: Iterable[Node], crs: str) -> HistoryArea:
 
 #: The snapshot's columns besides its geometry (the parent shape, EPSG:4326).
 SNAPSHOT_COLUMNS = ("set_id", "alert_id", "run_id", "period_id", "period_start", "period_end", "status",
-                    "area_ha", "date_min", "date_max", GROWS_FROM)
+                    "area_ha", "date_min", "date_max", GROWS_FROM, REVIEW_GROUP)
+#: the snapshot columns an older package may lack (read as their default)
+_SNAPSHOT_OPTIONAL = (REVIEW_GROUP,)
 
 
 def snapshot_rows(pool: Sequence[Candidate], seeds: Iterable[str]) -> list[Candidate]:
@@ -305,18 +370,39 @@ def snapshot_rows(pool: Sequence[Candidate], seeds: Iterable[str]) -> list[Candi
     link, followed from ``seeds`` (the shared set's links) and from the rows
     taken, whatever its status, so a copy resolves the links it holds as the
     creator's project does (a false positive shows broken, an unreviewed one
-    counts as unreviewed). Pool order within each part."""
+    counts as unreviewed). A row taken or named brings every row of its
+    review group (spec 2026-10-26 §7.2): a drawn group's members, which have
+    no shape, travel with their main, so the copy's graph is the creator's.
+    Pool order within each part."""
     by_key = {r.key: r for r in pool}
+    groups: dict[str, list[str]] = {}
+    for r in pool:
+        if r.node.review_group is not None:
+            groups.setdefault(node_key(r.node.set_id, r.node.review_group), []).append(r.key)
+
+    def _mates(r) -> list[str]:
+        if r.node.review_group is None:
+            return []
+        mates = groups.get(node_key(r.node.set_id, r.node.review_group), [])
+        return mates if len(mates) >= 2 else []
+
+    def _key(link) -> Optional[str]:
+        ref = parse_link(link)
+        return node_key(ref.set_id, ref.alert_id) if ref is not None else None
+
     taken = {r.key for r in pool if is_candidate(r.node)}
-    todo = [*seeds, *(lk for r in pool if r.key in taken for lk in r.node.links)]
+    todo = [_key(lk) for lk in seeds]
+    for r in pool:
+        if r.key in taken:
+            todo += [_key(lk) for lk in r.node.links] + _mates(r)
     named: set[str] = set()
     while todo:
-        ref = parse_link(todo.pop())
-        key = node_key(ref.set_id, ref.alert_id) if ref is not None else None
+        key = todo.pop()
         if key is None or key in taken or key in named or key not in by_key:
             continue
         named.add(key)
-        todo.extend(by_key[key].node.links)
+        r = by_key[key]
+        todo += [_key(lk) for lk in r.node.links] + _mates(r)
     return [r for r in pool if r.key in taken] + [r for r in pool if r.key in named]
 
 
@@ -336,6 +422,8 @@ def write_snapshot(rows: Sequence[Candidate], path: Path) -> Path:
         "status": [r.node.status for r in rows], "area_ha": _floats(r.node.area_ha for r in rows),
         "date_min": _floats(r.node.date_min for r in rows), "date_max": _floats(r.node.date_max for r in rows),
         GROWS_FROM: [";".join(r.node.links) for r in rows],
+        REVIEW_GROUP: pd.array([pd.NA if r.node.review_group is None else int(r.node.review_group)
+                                for r in rows], dtype="Int64"),
     }, geometry=gpd.GeoSeries([r.node.shape for r in rows], crs="EPSG:4326"))
     frame.to_parquet(path, index=False)
     return Path(path)
@@ -345,10 +433,14 @@ def read_snapshot(path) -> list[Candidate]:
     """The rows ``write_snapshot`` wrote, each a ``Candidate`` (its node and
     its set's run id) whatever its status: only those ``is_candidate`` accepts
     are offered to tick. Raises on a file that is not such a snapshot (a
-    missing column is a KeyError)."""
+    missing column is a KeyError); one without ``review_group`` (an older
+    package) reads as no groups."""
     import geopandas as gpd
 
     frame = gpd.read_parquet(path)
+    for name in _SNAPSHOT_OPTIONAL:
+        if name not in frame.columns:
+            frame[name] = pd.array([pd.NA] * len(frame), dtype="Int64")
     out = []
     for row, shape in zip(frame[list(SNAPSHOT_COLUMNS)].itertuples(index=False), frame.geometry):
         status = row.status if isinstance(row.status, str) and row.status else NOT_REVIEWED
@@ -358,6 +450,7 @@ def read_snapshot(path) -> list[Candidate]:
             period_end=date.fromisoformat(str(row.period_end)), status=status,
             area_ha=_float(row.area_ha) or 0.0, date_min=_float(row.date_min), date_max=_float(row.date_max),
             shape=_geometry(shape), links=tuple(links_of(row.grows_from)),
+            review_group=None if pd.isna(row.review_group) else int(row.review_group),
         )
         out.append(Candidate(node, str(row.run_id)))
     return out

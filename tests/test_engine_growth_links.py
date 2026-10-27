@@ -73,3 +73,21 @@ def test_burn_touch_mask_covers_the_ring_around_the_parent(tmp_path):
         assert str(src.dtypes[0]) == "int32"
     assert m[9:13, 9:13].all()  # the parent and its 8-neighbour ring
     assert int(m.sum()) == 16
+
+
+def test_a_later_cluster_links_to_the_main_only(monkeypatch):
+    """Group review (spec 2026-10-26 §7.2): an undrawn group is one candidate,
+    keyed to its main, shaped as the union of its rows."""
+    from dataclasses import replace
+
+    from deforestation_alerts.engine import growth_links
+
+    main = _candidate(_px(10, 10), alert_id=0)
+    member = _candidate(_px(10, 20), alert_id=1)
+    rows = [replace(main, node=replace(main.node, review_group=0)),
+            replace(member, node=replace(member.node, review_group=0))]
+    monkeypatch.setattr(growth_links, "project_rows", lambda p, pdir, period: rows)
+    cands = growth_links.project_candidates(None, None, None)
+    assert [c.link for c in cands] == ["dec#0@r1"]
+    out = link_parents(_clusters([_px(10, 21)], [False]), cands, GRID)  # touches the member only
+    assert list(out[GROWS_FROM_AUTO]) == [["dec#0@r1"]]

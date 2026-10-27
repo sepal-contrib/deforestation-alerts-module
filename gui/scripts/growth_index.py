@@ -24,6 +24,7 @@ import geopandas as gpd
 import shapely
 import shapely.ops
 from pyproj import Transformer
+from shapely.geometry.base import BaseGeometry
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.project import paths, review_copy
@@ -35,8 +36,8 @@ from deforestation_alerts.project.growth import (
     LinkGraph,
     Node,
     build_graph,
+    group_candidates,
     history_area,
-    is_candidate,
     kind_of,
     links_of,
     node_key,
@@ -78,13 +79,13 @@ def period_colors(period_ids_newest_first: Sequence[str]) -> dict[str, str]:
 
 class _Entry(NamedTuple):
     nodes: tuple            # every row of the set, as growth.Node
-    cands: tuple            # the loss-verdict rows with a shape, as growth.Candidate
+    cands: tuple            # the parent candidates (growth.group_candidates), as growth.Candidate
     metric: Optional[list]  # the candidates' shapes in the grid CRS (None without a grid)
 
 
 class _Snapshot(NamedTuple):
     rows: tuple             # every row of the package snapshot (growth.read_snapshot)
-    cands: tuple            # those offered to tick (growth.is_candidate)
+    cands: tuple            # those offered to tick (growth.group_candidates)
     metric: Optional[list]  # the candidates' shapes in the grid CRS (None without a grid)
 
 
@@ -123,7 +124,7 @@ def _build(p, s, gdf) -> _Entry:
     nodes = tuple(nodes_of_set(s, period, gdf))
     run_id = run_id_of(s)
     # growth.candidates_of_set's rule, from the nodes already read (one pass over the rows)
-    cands = tuple(Candidate(n, run_id) for n in nodes if is_candidate(n))
+    cands = tuple(Candidate(n, run_id) for n in group_candidates(nodes))
     epsg = _grid_epsg(p)
     return _Entry(nodes, cands, _to_crs([c.node.shape for c in cands], epsg) if epsg else None)
 
@@ -156,7 +157,8 @@ def _snapshot(p) -> _Snapshot:
         if hit is not None and hit[0] == key:
             return hit[1]
     rows = tuple(read_snapshot(path))
-    cands = tuple(c for c in rows if is_candidate(c.node))
+    run_ids = {c.node.set_id: c.run_id for c in rows}
+    cands = tuple(Candidate(n, run_ids[n.set_id]) for n in group_candidates([c.node for c in rows]))
     epsg = _grid_epsg(p)
     snap = _Snapshot(rows, cands, _to_crs([c.node.shape for c in cands], epsg) if epsg else None)
     with _lock:
@@ -274,6 +276,9 @@ class EarlierItem:
     color: str
     #: Integrate linked it (``grows_from_auto``): an untick still says *touches*
     touches: bool = False
+    #: the draft links that resolve to it: its own and, for a review group's
+    #: main, those to its members (spec 2026-10-26 §7.2); an untick drops them all
+    links: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -285,6 +290,31 @@ class EarlierView:
     #: the link graph the view was built from (the draft links in place):
     #: ``history_summary`` reuses it
     graph: Optional[LinkGraph] = field(default=None, compare=False, repr=False)
+
+
+def links_without(item: EarlierItem, links: Sequence[str]) -> list[str]:
+    """``links`` without every link that resolves to ``item`` (its untick)."""
+    gone = {item.cand.link, *item.links}
+    return [lk for lk in links if lk not in gone]
+
+
+def _shown_node(graph, link) -> Optional[Node]:
+    """The node ``link`` is listed as: the main of the review group its
+    target is a member of (a link made before the group existed), else the
+    target itself; None for a link that does not resolve (broken)."""
+    if graph.is_broken(link):
+        return None
+    ref = parse_link(link)
+    node = graph.node(node_key(ref.set_id, ref.alert_id))
+    if node is not None and node.is_member:
+        main = graph.node(node_key(node.set_id, node.review_group))
+        if main is not None:
+            return main
+    return node
+
+
+#: which state wins when several draft links resolve to one item
+_STATE_RANK = {"broken": 0, "linked": 1, "auto": 2}
 
 
 def _row_shape(gdf, alert_id):
@@ -328,23 +358,33 @@ def _via(graph, current: str, seeds: Sequence[str]) -> dict:
 
 
 def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str], auto: Sequence[str],
-                 radius_m: float, *, load=set_store.load_set_alerts) -> EarlierView:
+                 radius_m: float, *, load=set_store.load_set_alerts,
+                 shape: Optional[BaseGeometry] = None) -> EarlierView:
     """The "Earlier alerts" list of one alert (spec §6.2): candidates within
     ``radius_m`` of its shape, every alert named by ``links`` (the draft ticks)
     and the history members reached through another link, newest period first,
-    then nearest."""
+    then nearest. ``shape`` (EPSG:4326): what distances are measured from in
+    place of the alert's own (a review group's, spec 2026-10-26 §7.1). A link
+    to a member of an earlier review group is listed as the group's main."""
     links = links_of(list(links))
     auto = set(links_of(list(auto)))
     pairs = _candidate_pairs(p, set_id, load)
     cands = [c for c, _ in pairs]
     nodes, run_ids = _parts(p, set_id, gdf_current, load, alert_id, links)
     graph = build_graph(nodes, run_ids)
-    shape = _row_shape(gdf_current, alert_id)
+    if shape is None:
+        shape = _row_shape(gdf_current, alert_id)
     crs = _metric_crs(p, shape)
     dist = _distances(pairs, shape, crs)
     by_link = {c.link: c for c in cands}
 
+    def _item_link(link) -> str:
+        shown = _shown_node(graph, link)
+        return shown.link_to(parse_link(link).run_id) if shown is not None else link
+
+    auto_items = {_item_link(lk) for lk in auto if parse_link(lk) is not None} | auto
     items: dict[str, tuple] = {}  # link -> (candidate, state, via)
+    resolving: dict[str, list[str]] = {}  # item link -> the draft links that resolve to it
     valid: list[str] = []
     for link in links:
         ref = parse_link(link)
@@ -354,11 +394,16 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
         node = graph.node(key)
         if node is None:
             continue  # its set is gone: nothing to show
+        node = _shown_node(graph, link) or node
         broken = graph.is_broken(link) or node.status == FALSE_POSITIVE
-        cand = by_link.get(link) or Candidate(node, ref.run_id)
-        items[cand.link] = (cand, "broken" if broken else "auto" if link in auto else "linked", None)
+        cand = by_link.get(node.link_to(ref.run_id)) or Candidate(node, ref.run_id)
+        state = "broken" if broken else "auto" if link in auto else "linked"
+        held = items.get(cand.link)
+        if held is None or _STATE_RANK[state] > _STATE_RANK[held[1]]:
+            items[cand.link] = (cand, state, None)
+        resolving.setdefault(cand.link, []).append(link)
         if not broken:
-            valid.append(key)
+            valid.append(node.key)
 
     current = node_key(set_id, alert_id)
     members = graph.component(current)
@@ -373,7 +418,7 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
                 items[c.link] = (c, "via", hangs.get(c.key))
     for c in cands:
         # an automatic link the reviewer unticked stays listed, whatever the distance
-        if c.link not in items and (c.link in auto or dist.get(c.link, float("inf")) <= radius_m):
+        if c.link not in items and (c.link in auto_items or dist.get(c.link, float("inf")) <= radius_m):
             items[c.link] = (c, "none", None)
 
     # the palette order comes from the candidates only, so a period keeps its
@@ -387,7 +432,7 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
         if d is None and c.node.shape is not None and shape is not None and crs is not None:
             d = float(shapely.distance(*_to_crs([c.node.shape, shape], crs)))
         out.append(EarlierItem(c, float("inf") if d is None else d, state, via, colors.get(c.node.period_id, OLDER_GREY),
-                               touches=link in auto))
+                               touches=link in auto_items, links=tuple(resolving.get(link, ()))))
     out.sort(key=lambda it: (-it.cand.node.period_start.toordinal(), it.distance_m))
     return EarlierView(
         items=tuple(out),

@@ -66,7 +66,7 @@ def _setup(monkeypatch, *, project=None, view=_view):
 
     def fake_view(p, set_id, gdf, alert_id, links, auto, radius_m, **kw):
         calls.append({"set_id": set_id, "alert_id": alert_id, "links": tuple(links),
-                      "auto": tuple(auto), "radius_m": radius_m})
+                      "auto": tuple(auto), "radius_m": radius_m, "shape": kw.get("shape")})
         return view(links, auto)
 
     monkeypatch.setattr(earlier.growth_index, "earlier_view", fake_view)
@@ -478,3 +478,46 @@ def test_the_section_is_hidden_without_earlier_sets_and_switches_off(monkeypatch
     assert analysis.earlier_choice.value is True  # not the reviewer's flip: their choice stays
     earlier.seed_switch(analysis, False)  # the next New alert in a project with earlier sets
     assert analysis.show_earlier_reviews.value is True
+
+
+# ---- group review (spec 2026-10-26 §7) ------------------------------------------
+
+def test_a_grouped_alert_measures_from_its_group(monkeypatch):
+    import pandas as pd
+    import shapely
+
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    a, b, c = box(-55.0, -25.0, -54.999, -24.999), box(-54.99, -25.0, -54.989, -24.999), box(-54.9, -25.0, -54.899, -24.999)
+    gdf = gpd.GeoDataFrame({"alert_id": [0, 1, 2], "review_group": pd.array([0, 0, pd.NA], dtype="Int64")},
+                           geometry=[a, b, c], crs="EPSG:4326")
+    app_state.alerts_gdf.set(gdf)
+    on = {"value": None}
+    monkeypatch.setattr(earlier, "grouping_rules", SimpleNamespace(effective=lambda p, s: on["value"]))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["shape"] is None  # grouping off: the row's own
+    on["value"] = object()
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["shape"].equals(shapely.union_all([a, b]))  # row 1 is grouped
+    app_state.actual_alert_id.set(2)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["shape"] is None  # alone, nothing selected
+    analysis.selection.set(frozenset({0}))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["shape"].equals(shapely.union_all([c, a]))
+
+
+def test_unticking_a_groups_main_drops_its_member_links(monkeypatch):
+    member = "sep#16@" + RUN
+
+    def view(links, auto):
+        item = EarlierItem(SEP12, 0.0, "linked", None, COLORS[SEP.id], links=(member, SEP12.link))
+        return EarlierView(items=(item,), n_within=1, n_linked=1, periods=((SEP.id, SEP.start),))
+
+    widgets, analysis, app_state, calls = _setup(monkeypatch, view=view)
+    analysis.links.set((member, SEP12.link))
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert analysis.links.value == (member, SEP12.link)  # the member link is kept
+    rows = {r.key: r for g in section.groups for r in g.rows}
+    rows["sep#12"].box.v_model = False
+    assert analysis.links.value == ()

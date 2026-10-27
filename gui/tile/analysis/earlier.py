@@ -31,7 +31,8 @@ import ipyvuetify as v
 import shapely
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
-from deforestation_alerts.project import review_copy
+from deforestation_alerts.project import grouping as grouping_rules
+from deforestation_alerts.project import review_copy, review_groups
 from deforestation_alerts.project.review_status import CONFIRMED, FALSE_POSITIVE
 from gui.i18n import format_date, format_number, t, tn
 from gui.scripts import growth_index
@@ -149,8 +150,9 @@ def _kept_links(p, view, links) -> tuple:
     that cannot resolve at all (their set is gone). A link to a parent that has
     since become a false positive stays, greyed and out of the totals (spec
     §11.5). In a review copy whose package has no snapshot, nothing earlier
-    resolves: those links are kept as they are."""
-    items = {it.cand.link: it for it in view.items}
+    resolves: those links are kept as they are. A link to a member of an
+    earlier review group resolves to the group's main item (its ``links``)."""
+    items = {lk: it for it in view.items for lk in (it.cand.link, *it.links)}
     rc = getattr(p, "review_copy", None)
     drop_missing = rc is None or getattr(rc, "snapshot_at", None) is not None
 
@@ -161,6 +163,21 @@ def _kept_links(p, view, links) -> tuple:
         return item.state != "broken" or item.cand.node.status == FALSE_POSITIVE
 
     return tuple(lk for lk in links if _kept(lk))
+
+
+def search_shape(gdf, pos, p, s, selection):
+    """What the distances are measured from (spec 2026-10-26 §7.1): with
+    grouping effective, on a grouped row or one with a selection, the group's
+    shape (``review_groups.group_shape``) with the selected rows'; else None
+    (the row's own)."""
+    selected = [q for q in selection if 0 <= q < len(gdf)]
+    if not selected and not review_groups.is_grouped(gdf, pos):
+        return None
+    if grouping_rules.effective(p, s) is None:
+        return None
+    shapes = [review_groups.group_shape(gdf, pos), *(gdf.geometry.iloc[q] for q in selected)]
+    shapes = [g for g in shapes if g is not None and not g.is_empty]
+    return shapely.union_all(shapes) if shapes else None
 
 
 def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:
@@ -190,7 +207,8 @@ def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:
     auto = tuple(analysis.auto_links.value)
     km = analysis.earlier_radius_km.value
     alert_id = _alert_id(gdf, pos)
-    view = growth_index.earlier_view(p, s.id, gdf, alert_id, links, auto, km * 1000.0)
+    shape = search_shape(gdf, pos, p, s, frozenset(analysis.selection.value or ()))
+    view = growth_index.earlier_view(p, s.id, gdf, alert_id, links, auto, km * 1000.0, shape=shape)
     summary = growth_index.history_summary(p, s.id, gdf, alert_id, links, graph=view.graph)
     windows = growth_index.parent_windows(view)
     hidden = analysis.earlier_hidden_periods.value
@@ -306,9 +324,10 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
     def _refresh():
         _refresh_logged(widgets, analysis, app_state, on_result=_result)
 
-    def _on_tick(link, change):
+    def _on_tick(item, change):
         current = list(analysis.links.value)
-        set_links(analysis, current + [link] if change["new"] else [lk for lk in current if lk != link])
+        # an untick drops every link that resolves to the row (a group's main and its members)
+        set_links(analysis, current + [item.cand.link] if change["new"] else growth_index.links_without(item, current))
         spawn_in_context(_refresh)  # the view follows the draft (a cache hit)
 
     def _zoom(shape):
@@ -332,7 +351,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
             fp = it.state == "broken" and n.status == FALSE_POSITIVE
             box = v.Checkbox(v_model=it.state in _LINKED or fp, disabled=it.state == "broken" and not fp,
                              dense=True, hide_details=True, class_="ma-0 pa-0")
-            box.observe(lambda change, link=it.cand.link: _on_tick(link, change), names="v_model")
+            box.observe(lambda change, item=it: _on_tick(item, change), names="v_model")
             lead = box
         text = v.Html(tag="span", class_=f"{TYPE_BODY} dat-num", style_="cursor: pointer;",
                       children=[f"#{n.alert_id} · {format_number(n.area_ha, 1)} ha"])

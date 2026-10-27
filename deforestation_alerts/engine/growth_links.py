@@ -16,7 +16,7 @@ from shapely import STRtree
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.project import paths
-from deforestation_alerts.project.growth import Candidate, is_candidate, rows_of_set
+from deforestation_alerts.project.growth import Candidate, group_candidates, rows_of_set
 from deforestation_alerts.project.models import GridSpec, Period, Project
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
@@ -36,8 +36,12 @@ def project_rows(p: Project, pdir: Path, period: Period) -> list[Candidate]:
 
 def project_candidates(p: Project, pdir: Path, period: Period) -> list[Candidate]:
     """The parent candidates of ``period``: every earlier set's loss-verdict
-    alerts, as their stores hold them now. A set whose store is missing gives none."""
-    return [c for c in project_rows(p, pdir, period) if is_candidate(c.node)]
+    alerts, as their stores hold them now, a review group as one candidate
+    keyed to its main (``growth.group_candidates``). A set whose store is
+    missing gives none."""
+    rows = project_rows(p, pdir, period)
+    run_ids = {c.node.set_id: c.run_id for c in rows}
+    return [Candidate(n, run_ids[n.set_id]) for n in group_candidates([c.node for c in rows])]
 
 
 def _grid_shapes(cands: Sequence[Candidate], grid: GridSpec) -> gpd.GeoSeries:
