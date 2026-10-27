@@ -216,10 +216,18 @@ def test_a_bad_header_is_refused(tmp_path, header, key):
 
 
 def test_a_newer_format_names_both_versions(tmp_path):
-    path = _zip(tmp_path / "p.zip", _package_members(format_version=3))
+    path = _zip(tmp_path / "r.zip", _package_members(format_version=3, kind=share.KIND_RETURN))
     with pytest.raises(ShareError) as e:
         peek_header(path)
     assert e.value.params == {"found": 3, "expected": 2}
+
+
+def test_a_version_two_package_header_is_refused(tmp_path):
+    """Review M4: format 2 is a return's; packages stay 1."""
+    path = _zip(tmp_path / "p.zip", _package_members(format_version=2))
+    with pytest.raises(ShareError) as e:
+        peek_header(path)
+    assert e.value.key == "share.err.newer_format" and e.value.params == {"found": 2, "expected": 1}
 
 
 def test_a_version_two_return_header_is_read(tmp_path):

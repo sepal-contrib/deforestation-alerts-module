@@ -157,8 +157,8 @@ def open_checked(zip_path, required: frozenset, optional: frozenset = frozenset(
 
 def read_header(zf) -> ShareHeader:
     """The zip's ``share.json``: another format, a format version outside
-    ``READABLE_VERSIONS`` and an unreadable header are each refused with
-    their own message."""
+    ``READABLE_VERSIONS`` (a return) or ``FORMAT_VERSION`` (a package) and an
+    unreadable header are each refused with their own message."""
     try:
         info = zf.getinfo(HEADER_MEMBER)
     except KeyError:
@@ -175,8 +175,10 @@ def read_header(zf) -> ShareHeader:
         raise ShareError("share.err.bad_header") from exc
     if not isinstance(raw, dict) or raw.get("format") != FORMAT:
         raise ShareError("share.err.wrong_format")
-    if raw.get("format_version") not in READABLE_VERSIONS:
-        raise ShareError("share.err.newer_format", found=raw.get("format_version"), expected=max(READABLE_VERSIONS))
+    # format 2 is a grouping return's (spec 2026-10-26 §8.3); packages stay 1
+    readable = READABLE_VERSIONS if raw.get("kind") == KIND_RETURN else (FORMAT_VERSION,)
+    if raw.get("format_version") not in readable:
+        raise ShareError("share.err.newer_format", found=raw.get("format_version"), expected=max(readable))
     try:
         return ShareHeader.model_validate(raw)
     except ValidationError as exc:
@@ -1012,6 +1014,6 @@ def apply_return(store_gdf, preview: ReturnPreview, choice: Literal["mine", "the
     if REVIEW_GROUP in out.columns:
         try:
             review_groups.check_groups(out)
-        except AssertionError as exc:
+        except review_groups.GroupInvariantError as exc:
             raise ShareError("share.merge_err_groups") from exc
     return out

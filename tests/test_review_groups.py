@@ -153,14 +153,16 @@ def test_remove_takes_a_member_out():
 
 
 def test_check_groups_rejects_a_broken_store():
+    """Review M5: an explicit exception, not ``assert`` (gone under ``-O``)."""
+    assert issubclass(rg.GroupInvariantError, ValueError)
     rg.check_groups(_alerts(3))
-    with pytest.raises(AssertionError):  # a Not reviewed row in a group
+    with pytest.raises(rg.GroupInvariantError):  # a Not reviewed row in a group
         rg.check_groups(_alerts(2, statuses=["Confirmed", NR], groups=[100, 100]))
-    with pytest.raises(AssertionError):  # two statuses in a group
+    with pytest.raises(rg.GroupInvariantError):  # two statuses in a group
         rg.check_groups(_alerts(2, statuses=["Confirmed", "Need revision"], groups=[100, 100]))
-    with pytest.raises(AssertionError):  # its main is missing
+    with pytest.raises(rg.GroupInvariantError):  # its main is missing
         rg.check_groups(_alerts(2, statuses=["Confirmed"] * 2, groups=[105, 105]))
-    with pytest.raises(AssertionError):  # two evaluators in a group
+    with pytest.raises(rg.GroupInvariantError):  # two evaluators in a group
         rg.check_groups(_alerts(2, statuses=["Confirmed"] * 2, groups=[100, 100], evaluators=["ana", "bo"]))
 
 

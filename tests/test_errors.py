@@ -39,6 +39,8 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/project/models.py", "ValueError", "asked for at least one verdict"),
     # Analysis offers "Remove from group" only on a member of a group
     ("deforestation_alerts/project/review_groups.py", "ValueError", "is not a member of a group"),
+    # a broken group invariant: share.apply_return refuses it as share.merge_err_groups
+    ("deforestation_alerts/project/review_groups.py", "GroupInvariantError", "group {value}"),
     # the environment: geedim is a dependency
     ("deforestation_alerts/scripts/raster_export.py", "ImportError", "Install geedim"),
     ("deforestation_alerts/scripts/alert_export.py", "ValueError", "Unsupported export format"),

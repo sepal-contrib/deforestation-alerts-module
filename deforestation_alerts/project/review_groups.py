@@ -182,21 +182,35 @@ def plan_remove(gdf, position) -> GroupPlan:
                      (Affected(position, status_of(gdf, position), REMOVED, main),))
 
 
+class GroupInvariantError(ValueError):
+    """A table breaks the group invariant (§4.2). ``share.apply_return``
+    refuses a merge with it (``share.merge_err_groups``); anywhere else it
+    is a programmer error."""
+
+
+def _broken(value, why: str):
+    raise GroupInvariantError(f"group {value}: {why}")
+
+
 def check_groups(gdf) -> None:
-    """Assert the group invariant (§4.2): every value is the id of a row that
-    holds it, every group is of one reviewed status and, when the table has
-    an ``evaluator`` column, of one evaluator. Groups of one are valid."""
+    """Check the group invariant (§4.2), raising ``GroupInvariantError``:
+    every value is the id of a row that holds it, every group is of one
+    reviewed status and, when the table has an ``evaluator`` column, of one
+    evaluator. Groups of one are valid."""
     values = group_values(gdf)
     by_id = _positions_by_id(gdf)
     for value in pd.unique(values.dropna()):
         rows = _rows_of(values, value)
         main = by_id.get(int(value))
-        assert main is not None and main in rows, f"group {value}: its main is not in it"
+        if main is None or main not in rows:
+            _broken(value, "its main is not in it")
         statuses = {status_of(gdf, p) for p in rows}
-        assert len(statuses) == 1 and NOT_REVIEWED not in statuses, f"group {value}: statuses {statuses}"
+        if len(statuses) != 1 or NOT_REVIEWED in statuses:
+            _broken(value, f"statuses {statuses}")
         if store_schema.EVALUATOR in gdf.columns:
             evaluators = {_evaluator(gdf, p) for p in rows}
-            assert len(evaluators) == 1, f"group {value}: evaluators {evaluators}"
+            if len(evaluators) != 1:
+                _broken(value, f"evaluators {evaluators}")
 
 
 # ---- evaluators (§8.2) ----------------------------------------------------

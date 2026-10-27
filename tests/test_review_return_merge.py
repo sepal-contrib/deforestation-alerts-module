@@ -651,6 +651,18 @@ def test_one_conflicting_row_makes_its_whole_group_a_conflict(tmp_path, monkeypa
     assert preview.n_groups == 1
 
 
+def test_apply_return_refuses_a_broken_group_by_its_exception(tmp_path, monkeypatch):
+    """Review M5: the refusal hangs on ``GroupInvariantError``, which
+    ``python -O`` keeps, not on an ``assert``."""
+    gdf, preview = _one_conflict(tmp_path, monkeypatch)
+
+    def _broken(_gdf):
+        raise review_groups.GroupInvariantError("group 0: statuses")
+
+    monkeypatch.setattr(review_groups, "check_groups", _broken)
+    assert _refused(lambda: apply_return(gdf, preview, "theirs")).key == "share.merge_err_groups"
+
+
 def test_keep_mine_keeps_the_whole_group(tmp_path, monkeypatch):
     gdf, preview = _one_conflict(tmp_path, monkeypatch)
     mine = apply_return(gdf, preview, "mine")
