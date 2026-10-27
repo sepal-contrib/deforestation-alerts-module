@@ -36,7 +36,7 @@ _BADGE_TONES = {"primary": "dat-badge--done", "warning": "dat-badge--warning"}
 
 def badge_classes(color=None) -> str:
     """The classes of a section's badge: the workflow's filled chip (grey,
-    sentence case), tinted green for ``"primary"`` (what is done) and orange
+    sentence case), tinted the theme's primary for ``"primary"`` (what is done) and orange
     for ``"warning"`` (what blocks the save). The tint is the screen's CSS,
     not Vuetify's ``color``, whose solid fill carries white text on orange."""
     tone = _BADGE_TONES.get(color)

@@ -54,6 +54,9 @@ PROMPT_STYLE = ("border: 1px solid rgba(239, 138, 12, 0.55); background-color: r
                 "border-radius: 6px; padding: 8px 10px 10px;")
 _HIDDEN = "display: none;"
 _SLOTS = "_defo_footer_slots"
+#: The line under the buttons, on the right whatever it says. *Saved* wears
+#: the screen's done ink (``analysis_tile.SCREEN_CSS``), the theme's primary.
+_STATE_LINE = "dat-caption mt-2 text-right"
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -171,7 +174,7 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
     nxt = btn("secondary", t("analysis_tile.nav.next"), icon_right="mdi-arrow-right",
               class_="flex-grow-1", style_="flex-basis: 0;")
     buttons = v.Html(tag="div", class_="d-flex", style_="gap: 8px;", children=[save, nxt])
-    state_line = v.Html(tag="div", class_="dat-caption mt-2", children=[])
+    state_line = v.Html(tag="div", class_=_STATE_LINE, children=[])
 
     # The prompt, in place of the button row while it asks. *Stay* is the
     # filled one: the safe answer, and the one Enter would mean.
@@ -287,20 +290,20 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
             # it rather than leaving the refusal to the click. Ahead of
             # "Unsaved changes": applying is what clears both.
             state_line.children = [t("analysis_tile.edition_labels.unapplied_drawing")]
-            state_line.class_ = "dat-caption mt-2 warning--text"
+            state_line.class_ = f"{_STATE_LINE} warning--text"
             return
         if analysis.dirty.value:
             state_line.children = [t("analysis_tile.verdict.unsaved")]
-            state_line.class_ = "dat-caption mt-2 warning--text"
+            state_line.class_ = f"{_STATE_LINE} warning--text"
             return
         when = analysis.last_save_time.value
         if when:
             state_line.children = [t("analysis_tile.verdict.saved_at",
                                      time=datetime.fromtimestamp(when).strftime("%H:%M"))]
-            state_line.class_ = "dat-caption mt-2 success--text"
+            state_line.class_ = f"{_STATE_LINE} dat-done-ink"
         else:
             state_line.children = []
-            state_line.class_ = "dat-caption mt-2"
+            state_line.class_ = _STATE_LINE
 
     # Registered once: the panel is built once per session.
     analysis.dirty.subscribe(_sync_state_line)

@@ -296,6 +296,22 @@ def test_the_state_line_reads_unsaved_then_saved(tmp_path, monkeypatch):
     assert state_line.children == [t("analysis_tile.verdict.saved_at", time="14:32")]
 
 
+def test_the_state_line_sits_right_and_saved_wears_the_done_ink(tmp_path, monkeypatch):
+    """Under the dock's buttons, on the right whatever it says; *Saved* in the
+    screen's done ink (the theme's primary), not Vuetify's green success."""
+    footer, analysis, _ = _footer(monkeypatch, tmp_path)
+    *_, state_line = footer_widgets(footer.root)
+    assert "text-right" in state_line.class_.split()
+
+    analysis.dirty.set(True)
+    assert {"text-right", "warning--text"} <= set(state_line.class_.split())
+
+    analysis.dirty.set(False)
+    analysis.last_save_time.set(datetime(2026, 10, 3, 14, 32).timestamp())
+    classes = set(state_line.class_.split())
+    assert {"text-right", "dat-done-ink"} <= classes and "success--text" not in classes
+
+
 def test_an_alert_change_forgets_the_previous_alerts_save_time(tmp_path, monkeypatch):
     """Spec §4.4: *Saved HH:MM* means a save landed on **this** alert in this
     session, so an untouched alert must show the empty line and not inherit

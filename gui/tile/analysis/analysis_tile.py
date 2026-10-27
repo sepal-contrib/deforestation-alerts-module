@@ -846,15 +846,21 @@ SCREEN_CSS = (
     ".defo-analysis-screen .defo-tl-btn { text-transform: none; letter-spacing: normal; }\n"
     ".defo-analysis-screen .v-chip { letter-spacing: normal; }\n"
     # The status badges (``section.badge_classes``): the workflow's filled
-    # chips, grey for a state, light orange for what blocks the save, light
-    # green for what is done.
+    # chips, grey for a state, light orange for what blocks the save, a tint
+    # of the theme's primary for what is done. The done ink is the primary
+    # made readable as text: light's green (#5bb624) darkened, dark's gold
+    # (#76591e, too dark on the dark panel) as its ``primary_contrast``.
+    # The questions' checks and the dock's *Saved* line wear it too.
     ".defo-analysis-screen .v-chip.dat-badge { border: 0 !important; background: rgba(128, 128, 128, 0.2) !important; }\n"
     ".defo-analysis-screen .v-chip.dat-badge--warning { background: rgba(239, 138, 12, 0.16) !important;"
     " color: #b5650a !important; font-weight: 500; }\n"
     ".defo-analysis-screen.theme--dark .v-chip.dat-badge--warning { color: #ffb74d !important; }\n"
     ".defo-analysis-screen .v-chip.dat-badge--done { background: rgba(91, 182, 36, 0.16) !important;"
     " color: #3e8a14 !important; font-weight: 500; }\n"
-    ".defo-analysis-screen.theme--dark .v-chip.dat-badge--done { color: #8fd163 !important; }\n"
+    ".defo-analysis-screen.theme--dark .v-chip.dat-badge--done { background: rgba(191, 143, 45, 0.16) !important;"
+    " color: #bf8f2d !important; }\n"
+    ".defo-analysis-screen .dat-done-ink { color: #3e8a14 !important; }\n"
+    ".defo-analysis-screen.theme--dark .dat-done-ink { color: #bf8f2d !important; }\n"
     # The position counter (``context.build_context``), worn as the "5 / 8"
     # chip of the workflow's step header: the theme's primary (its
     # ``primary`` class, ``context.counter_chip_class``), grey while the
