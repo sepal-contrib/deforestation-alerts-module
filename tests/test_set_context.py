@@ -834,6 +834,22 @@ def test_record_review_keeps_the_group_count(tmp_path, monkeypatch):
     assert s.project.value.alert_sets["x"].n_groups == 0
 
 
+def test_the_first_saved_group_turns_the_option_on(tmp_path, monkeypatch):
+    """Review I1: saved groups hold grouping on, so the manifest says so."""
+    s = _state(tmp_path, monkeypatch)
+    ctx = SetContext(s)
+    assert s.project.value.group_review.enabled is False
+    gdf = _review_alerts(n=3)
+    gdf["alert_id"] = [100, 101, 102]
+    gdf["status"] = ["Confirmed", "Confirmed", "Not reviewed"]
+    gdf["review_group"] = pd.array([None, None, None], dtype="Int64")
+    ctx.record_review(gdf)
+    assert s.project.value.group_review.enabled is False  # no group: left as it is
+    gdf["review_group"] = pd.array([100, 100, None], dtype="Int64")
+    ctx.record_review(gdf)
+    assert s.project.value.group_review.enabled is True
+
+
 def test_add_raster_layer_creates_the_layer_with_its_visibility(monkeypatch):
     import localtileserver
 

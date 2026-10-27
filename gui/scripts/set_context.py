@@ -21,6 +21,7 @@ from typing import Optional
 
 from deforestation_alerts.project import paths, review_groups
 from deforestation_alerts.project.models import AlertSet
+from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.review_status import reviewed_mask
 from gui.scripts import set_store
 from gui.store.workflow_steps import active_set
@@ -103,18 +104,44 @@ class SetContext:
         set's, when that project is no longer the open one (set ids repeat
         across projects), or when the value is already there: every publish
         rewrites the manifest."""
-        target = target if target is not None else self.pin()
-        if target is None or not set_store.alerts_belong_to(alerts, target.alert_set):
-            return
-        p = self._project
-        sid = target.alert_set.id
-        s = p.alert_sets.get(sid) if p is not None and p.name == target.project else None
+        target, s = self._landing(alerts, target)
         if s is None or getattr(s, field) == value:
             return
+        sid = s.id
 
         def _apply(live):
             if sid in live.alert_sets:
                 setattr(live.alert_sets[sid], field, value)
+
+        self.app_state.update_project(target.project, _apply)
+
+    def _landing(self, alerts, target: Optional[SetTarget]):
+        """``(target, its set in the open project)`` for a write pinned to
+        ``target`` (the active set without one), the set None when the write
+        may not land (``_update_set``'s rules)."""
+        target = target if target is not None else self.pin()
+        if target is None or not set_store.alerts_belong_to(alerts, target.alert_set):
+            return target, None
+        p = self._project
+        s = p.alert_sets.get(target.alert_set.id) if p is not None and p.name == target.project else None
+        return target, s
+
+    def record_groups(self, gdf, target: Optional[SetTarget] = None) -> None:
+        """Keep ``target``'s group count. Saved groups hold grouping on
+        project-wide (spec 2026-10-26 §3.3), so the first one also turns the
+        option on in the manifest, which then agrees with what is in force.
+        A review copy's setting is left as it came (its split's record)."""
+        n = review_groups.n_groups(gdf)
+        self._update_set(gdf, "n_groups", n, target)
+        if n == 0:
+            return
+        target, s = self._landing(gdf, target)
+        if s is None or self._project.group_review.enabled:
+            return
+
+        def _apply(live):
+            if not read_only(live):
+                live.group_review = live.group_review.model_copy(update={"enabled": True})
 
         self.app_state.update_project(target.project, _apply)
 
@@ -131,4 +158,4 @@ class SetContext:
             return
         n = int(reviewed_mask(gdf).sum())
         self._update_set(gdf, "n_reviewed", n, target)
-        self._update_set(gdf, "n_groups", review_groups.n_groups(gdf), target)
+        self.record_groups(gdf, target)

@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 from shapely.geometry import box
 
-from deforestation_alerts.project import paths, review_groups, share
+from deforestation_alerts.project import grouping, paths, review_groups, share
 from deforestation_alerts.project.growth import links_of, run_id_of
 from deforestation_alerts.project.share import ShareError, apply_return, read_return
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, save_gdf_to_parquet
@@ -23,7 +23,7 @@ from gui.scripts import growth_index, integrate_jobs, merge_service, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
-from gui.tile.analysis import analysis_tile
+from gui.tile.analysis import analysis_tile, nearby
 from gui.tile.analysis.state import AnalysisState
 from tests._share_helpers import AOI_FC, APP_VERSION, CREATOR, SET1, SET2, make_copy, make_creator, rezip, zip_members
 
@@ -701,6 +701,43 @@ def test_merge_keeps_n_groups(tmp_path, monkeypatch):
     assert (s.n_reviewed, s.n_groups) == (3, 1)
     disk = _disk(app_state)
     assert str(disk["review_group"].dtype) == "Int64" and _plain(disk["review_group"]) == [0, 0, 0, None]
+
+
+def test_groups_merged_into_one_set_keep_grouping_on_after_its_split_goes(tmp_path, monkeypatch):
+    """Review I1, steps 1-4: A (SET1) split with grouping on; on B (SET2)
+    grouping is turned off; a format-2 return brings groups into A; A's
+    split is removed. A's grouping is on and its group is reachable."""
+    app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, ("Not reviewed",) * 4)
+    name = app_state.project.value.name
+
+    def _update(fn):
+        app_state.update_project(name, fn)
+
+    def _step1(live):
+        live.group_review.enabled = True
+        s = live.alert_sets[SET1]
+        s.split = s.split.model_copy(update={"group_radius_m": 500.0})
+
+    _update(_step1)
+
+    def _step2(live):
+        live.active_set = SET2
+        live.group_review = live.group_review.model_copy(update={"enabled": False})
+
+    _update(_step2)
+    _update(lambda live: setattr(live, "active_set", SET1))  # 3. merge into A
+    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "theirs")
+    p = app_state.project.value
+    assert p.alert_sets[SET1].n_groups == 1 and p.group_review.enabled is True  # the manifest agrees
+    lock = grouping.lock_state(p, p.alert_sets[SET2])
+    assert (lock.option, lock.reason) == (True, "groups")
+
+    _update(lambda live: setattr(live.alert_sets[SET1], "split", None))  # 4. Remove split
+    p = app_state.project.value
+    assert grouping.effective(p, p.alert_sets[SET1]) is not None
+    app_state.alerts_gdf.set(_disk(app_state))
+    assert nearby.open_group(app_state, 1) == (0, (1, 2))  # banner and Remove from group show
 
 
 def test_a_format_one_merge_adds_no_group_column(tmp_path, monkeypatch):

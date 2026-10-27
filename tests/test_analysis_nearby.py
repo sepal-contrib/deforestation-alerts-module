@@ -51,7 +51,7 @@ def _alerts(n=4, *, statuses=None, groups=None, evaluators=None, gap=0.001, gene
 
 def _project(enabled=True, radius=500.0, include=False):
     return SimpleNamespace(group_review=SimpleNamespace(enabled=enabled, radius_m=radius, include_reviewed=include),
-                           grid=None, review_copy=None, questions=[])
+                           grid=None, review_copy=None, questions=[], alert_sets={})
 
 
 def _setup(monkeypatch, gdf=None, position=0, **project):

@@ -864,7 +864,8 @@ def _GroupOption(app_state):
         include = eff.include_reviewed if eff is not None else False
     else:
         g = p.group_review
-        enabled, radius, include = g.enabled, g.radius_m, g.include_reviewed
+        # saved groups hold the option on (§3.3), whatever ``enabled`` holds
+        enabled, radius, include = g.enabled or lock.reason == "groups", g.radius_m, g.include_reviewed
 
     if copy:
         note = t("evaluators.group_copy_note")
@@ -877,6 +878,8 @@ def _GroupOption(app_state):
 
     def _write(**update):
         def _apply(live):
+            if update.get("enabled") is False and grouping.saved_groups(live) > 0:
+                update.pop("enabled")  # saved groups hold it on (§3.3)
             live.group_review = live.group_review.model_copy(update=update)
         update_setup(app_state, p.name, _apply)
 

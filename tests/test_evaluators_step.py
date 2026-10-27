@@ -1461,6 +1461,33 @@ def test_saved_groups_lock_the_option_on(data_root):
         rc.close()
 
 
+def test_saved_groups_show_the_option_ticked_when_it_was_left_off(data_root):
+    """Review I1: groups saved while ``enabled`` is False (another set's
+    merge) still hold the option on, ticked, with its distance."""
+    p = _project(multi=False)
+    p.alert_sets[SET_ID].n_groups = 2
+    _box, rc = _render(_state(p, _gdf(evaluators=("",) * 4)))
+    try:
+        assert _group_box(rc).widget.v_model is True and _group_box(rc).widget.disabled is True
+        assert _group_radius(rc).widget.v_model == "500" and _group_radius(rc).widget.disabled is True
+    finally:
+        rc.close()
+
+
+def test_saved_groups_refuse_storing_the_option_off(data_root):
+    p = _grouped(_project(multi=False))
+    p.alert_sets[SET_ID].n_groups = 2
+    s = _state(p, _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        _group_box(rc).widget.v_model = False
+        assert s.project.value.group_review.enabled is True
+        _group_include(rc).widget.v_model = True  # the free control still saves
+        assert s.project.value.group_review.include_reviewed is True
+    finally:
+        rc.close()
+
+
 @pytest.mark.parametrize("radius, note", [(None, "evaluators.group_locked_split_off"),
                                           (250.0, "evaluators.group_locked_split_on")])
 def test_a_split_locks_the_option_distance_and_include(data_root, radius, note):

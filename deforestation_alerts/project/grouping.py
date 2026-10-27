@@ -28,9 +28,16 @@ def _clamp(radius_m: float) -> float:
     return min(max(radius_m, MIN_RADIUS_M), MAX_RADIUS_M)
 
 
+def saved_groups(p) -> int:
+    """Groups of two or more saved across every set of ``p`` (spec §3.3:
+    they hold the option on project-wide)."""
+    return sum(x.n_groups for x in p.alert_sets.values()) if p is not None else 0
+
+
 def effective(p, s) -> Optional[Grouping]:
     """The grouping in force for set ``s``: its split record once split, else
-    the project's setting. ``None`` means grouping is off."""
+    the project's setting. ``None`` means grouping is off. Saved groups in
+    any set hold an unsplit set on (spec §3.3), whatever ``enabled`` says."""
     if p is None or s is None:
         return None
     if s.split is not None:
@@ -38,7 +45,7 @@ def effective(p, s) -> Optional[Grouping]:
             return None
         return Grouping(_clamp(s.split.group_radius_m), s.split.group_include_reviewed)
     g = p.group_review
-    if not g.enabled:
+    if not g.enabled and saved_groups(p) == 0:
         return None
     return Grouping(_clamp(g.radius_m), g.include_reviewed)
 
@@ -48,7 +55,7 @@ def lock_state(p, s) -> GroupLock:
     controls; saved groups in any set lock the option and the radius."""
     if s is not None and s.split is not None:
         return GroupLock(True, True, True, "split", s.n_groups)
-    n = sum(x.n_groups for x in p.alert_sets.values())
+    n = saved_groups(p)
     if n > 0:
         return GroupLock(True, True, False, "groups", n)
     return GroupLock(False, False, False, None, 0)

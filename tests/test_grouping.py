@@ -72,6 +72,34 @@ def test_effective_follows_the_split_record_once_split():
                      _set(split=_split(group_radius_m=800.0, group_include_reviewed=True))) == Grouping(800.0, True)
 
 
+def test_saved_groups_hold_an_unsplit_set_on_whatever_enabled_says():
+    """Spec §3.3: an unsplit set that holds groups is always effective-on,
+    also when ``enabled`` was left off (review I1)."""
+    sets = {"a": _set("a", n_groups=3), "b": _set("b")}
+    p = _project(enabled=False, radius=300.0, include=True, sets=sets, active="b")
+    assert effective(p, p.alert_sets["a"]) == Grouping(300.0, True)
+    assert effective(p, p.alert_sets["b"]) == Grouping(300.0, True)
+    # a split keeps reading its own record
+    assert effective(p, _set("c", split=_split(group_radius_m=None))) is None
+
+
+def test_two_sets_cannot_leave_groups_with_grouping_off():
+    """Review I1, steps 1-4: split A with grouping on, turn grouping off on
+    B, merge groups into A, remove A's split: A's grouping is on."""
+    p = _project(enabled=True, sets={"a": _set("a", split=_split(group_radius_m=500.0)), "b": _set("b")},
+                 active="a")
+    p.active_set = "b"  # 2. B is free: no set holds groups yet
+    assert lock_state(p, p.alert_sets["b"]).option is False
+    p.group_review = p.group_review.model_copy(update={"enabled": False})
+    p.alert_sets["a"].n_groups = 3  # 3. a format-2 merge into A
+    lock = lock_state(p, p.alert_sets["b"])
+    assert (lock.option, lock.reason) == (True, "groups")
+    assert effective(p, p.alert_sets["b"]) == Grouping(500.0, False)
+    p.active_set = "a"
+    p.alert_sets["a"].split = None  # 4. Remove split
+    assert effective(p, p.alert_sets["a"]) == Grouping(500.0, False)
+
+
 def test_nothing_is_locked_before_groups_or_a_split():
     assert lock_state(_project(enabled=True), _set()) == GroupLock(False, False, False, None, 0)
 

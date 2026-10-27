@@ -8,7 +8,8 @@ Save may have landed since the preview), builds the merged frame and writes
 it with a guard that refuses when the generation moved or an Integrate job of
 the set is running. Then the live alerts are republished (the next Save must
 carry the merged rows), ``n_reviewed`` and ``split.returns`` are published
-through ``SetContext._update_set`` (with ``n_groups``), and an alert open in Analysis whose row
+through ``SetContext._update_set`` (``n_groups`` through ``record_groups``), and an alert open
+in Analysis whose row
 was written is reloaded from the store (``AnalysisState.reload_alert``).
 """
 
@@ -16,7 +17,6 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from deforestation_alerts.project.models import EvaluatorReturn
-from deforestation_alerts.project.review_groups import n_groups
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.project.share import ReturnPreview, ShareError, apply_return, classify_return
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet, store_lock
@@ -104,7 +104,7 @@ def merge_return(app_state, app_tile_model, analysis, preview: ReturnPreview,
                              ignored=len(fresh.ignored))
     republished = written and _republish(app_state, target, merged)
     app_tile_model._update_set(merged, "n_reviewed", int(reviewed_mask(merged).sum()), target)
-    app_tile_model._update_set(merged, "n_groups", n_groups(merged), target)
+    app_tile_model.record_groups(merged, target)
     live = app_state.project.value
     s = live.alert_sets.get(target.alert_set.id) if live is not None and live.name == target.project else None
     if s is not None and s.split is not None and s.split.split_id == fresh.header.split_id:
