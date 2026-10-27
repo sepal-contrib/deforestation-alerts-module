@@ -521,7 +521,9 @@ def _AlertLayers(app_state, layers, map_):
         lines = [v.Html(tag="div", children=[summary])]
         if target.id != project.active_set:
             lines.append(v.Html(tag="div", children=[earlier_set_name(target)]))
-        popup = Popup(location=(lat, lon), child=v.Html(tag="div", children=[*lines, go]), close_button=True,
+        # ``defo-map-popup``: the bubble's theme (``_AppShell``'s style)
+        popup = Popup(location=(lat, lon), child=v.Html(tag="div", class_="defo-map-popup", children=[*lines, go]),
+                      close_button=True,
                       auto_close=True)
         # pysepal's key lookups read ``.key`` on every layer, and a Popup added
         # without one breaks them.
@@ -662,7 +664,21 @@ def _AppShell():
         "  left: var(--sepal-drawer-width, 0px) !important;\n"
         "  width: calc(100% - var(--sepal-drawer-width, 0px)) !important;\n"
         "}\n"
-        ".about-content { text-align: justify; }"
+        ".about-content { text-align: justify; }\n"
+        # The map's click popup (``_on_map``): its content is a widget, which
+        # ipyvuetify wraps in its own themed `.v-application`, so on the dark
+        # theme a dark box sat inside Leaflet's white bubble. The wrap goes
+        # transparent and the bubble, its tip and its close cross take the
+        # theme: pysepal's dark surfaces (the drawer's #1a1a1a, #f3f3f3 ink).
+        ".leaflet-popup-content .v-application:has(.defo-map-popup),\n"
+        ".leaflet-popup-content .v-application:has(.defo-map-popup) .v-application--wrap {"
+        " background: transparent !important; min-height: 0 !important; }\n"
+        ".theme--dark .leaflet-popup-content-wrapper, .theme--dark .leaflet-popup-tip,\n"
+        ".pysepal-map-theme-dark .leaflet-popup-content-wrapper, .pysepal-map-theme-dark .leaflet-popup-tip {"
+        " background: #1a1a1a; color: #f3f3f3; box-shadow: 0 3px 14px rgba(0, 0, 0, 0.6); }\n"
+        ".theme--dark .leaflet-container a.leaflet-popup-close-button,\n"
+        ".pysepal-map-theme-dark .leaflet-container a.leaflet-popup-close-button { color: #c5c6c9; }\n"
+        ".defo-map-popup .v-btn { margin-top: 6px; }"
     )
 
     gee_interface = get_current_gee_interface()
