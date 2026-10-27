@@ -355,6 +355,90 @@ def test_the_download_writes_the_links_joined_and_no_working_growth_columns(down
     assert "grows_from_auto" not in back.columns and "below_min" not in back.columns
 
 
+def _grouped(ctx, drawing=None):
+    """The context's store as three alerts, the first two reviewed with the
+    third into one group (main = alert 1); ``drawing`` is the main's."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    base = ctx.app_state.alerts_gdf.value
+    gdf = gpd.GeoDataFrame(pd.concat([base] * 3, ignore_index=True), geometry="geometry", crs="EPSG:4326")
+    gdf.geometry = [box(i * 2, 0, i * 2 + 1, 1) for i in range(3)]
+    gdf["bounding_box"] = gdf.geometry.envelope
+    gdf["alert_polygon"] = gpd.GeoSeries([drawing, None, None], crs="EPSG:4326")
+    gdf["status"] = "Confirmed"
+    gdf["review_group"] = pd.array([0, 0, 0], dtype="Int64")
+    ctx.app_state.alerts_gdf.value = gdf
+    return gdf
+
+
+def test_a_group_download_is_one_feature_with_the_group_outline(download_ctx):
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    ctx = download_ctx
+    drawing = box(0, 0, 5, 1)
+    _grouped(ctx, drawing)
+    ctx.app_state.actual_alert_id.value = 2  # a member is opened; the files keep its id
+
+    result = _run(ctx)
+
+    assert result["zip_path"] == f"{ctx.folder}/alert_2.zip"
+    back = gpd.read_file(ctx.folder / "alert_2.gpkg")
+    assert len(back) == 1 and back.crs.to_epsg() == 4326
+    assert back.iloc[0]["area_ha"] == pytest.approx(3.75)
+    assert back.iloc[0]["group_size"] == 3 and back.iloc[0]["group_alerts"] == "1, 2, 3"
+    assert back.geometry.iloc[0].equals(drawing)
+
+
+def test_a_group_download_without_a_drawing_is_the_union_of_its_alerts(download_ctx):
+    import geopandas as gpd
+
+    ctx = download_ctx
+    gdf = _grouped(ctx)
+    _run(ctx)
+    back = gpd.read_file(ctx.folder / "alert_0.gpkg")
+    assert back.geometry.iloc[0].equals(gdf.geometry.union_all())
+
+
+def test_a_single_download_is_unchanged_but_for_two_columns(download_ctx):
+    import geopandas as gpd
+
+    ctx = download_ctx
+    gdf = ctx.app_state.alerts_gdf.value.copy()
+    gdf["grows_from"] = pd.Series([["sep#4@20261002080000000000", "sep#9@20261002080000000000"]],
+                                  index=gdf.index, dtype="object")
+    ctx.app_state.alerts_gdf.value = gdf
+
+    _run(ctx)
+
+    back = gpd.read_file(ctx.folder / "alert_0.gpkg")
+    assert back.iloc[0]["grows_from"] == "sep#4@20261002080000000000;sep#9@20261002080000000000"
+    assert back.iloc[0]["group_size"] == 1 and back.iloc[0]["group_alerts"] == "1"
+    assert back.iloc[0]["area_ha"] == pytest.approx(1.25)
+    assert back.geometry.iloc[0].equals(gdf["bounding_box"].iloc[0])  # no drawing: the box, as before
+    assert sorted(set(back.columns) - {"group_size", "group_alerts"}) == sorted(
+        set(gpd.GeoDataFrame(gdf).drop(columns=["geometry", "grows_from_auto", "below_min"], errors="ignore").columns)
+        - {"bounding_box"} | {"geometry"})
+
+
+def test_the_report_fills_group_size_and_group_alerts(download_ctx):
+    import docx
+
+    ctx = download_ctx
+    _grouped(ctx)
+    template = ctx.folder.parent / "mine.docx"
+    doc = docx.Document(alert_files.DEFAULT_REPORT_TEMPLATE)
+    doc.add_paragraph("GROUP {group_size} / {group_alerts}")
+    doc.save(template)
+    ctx.aux_model.custom_report_template = str(template)
+
+    result = _run(ctx)
+
+    text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
+    assert "GROUP 3 / 1, 2, 3" in text
+
+
 # ---------------------------------------------------------------------------
 # The export section's list and summary badge (user, 2026-10-26: one list,
 # the build as its last row)

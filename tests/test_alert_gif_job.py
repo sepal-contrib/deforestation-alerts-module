@@ -91,6 +91,20 @@ def test_capture_takes_the_frames_the_outline_and_the_detection_date():
     assert job.outline.equals(drawn)
 
 
+def test_the_gif_outline_is_the_groups():
+    app_state, widgets, analysis = _ui()
+    alert = _alert(_info(S2, "2026-04-05"), _info(S2, "2026-09-05"))
+    boxes = [box(0.9, 0.9, 1.1, 1.1), box(1.2, 0.9, 1.4, 1.1)]
+    alerts = gpd.GeoDataFrame({"alert_polygon": [None, None], "status": ["Confirmed"] * 2,
+                               "review_group": pd.array([0, 0], dtype="Int64")}, geometry=boxes, crs="EPSG:4326")
+    alert.alerts, alert.alert_id = alerts, 1  # a member is opened
+    job = gif_mod.capture_gif(app_state, widgets, analysis, alert)
+    assert job.outline.equals(boxes[0].union(boxes[1]))  # undrawn: the union of the group
+    drawn = box(1.0, 1.0, 1.3, 1.05)
+    alerts.at[0, "alert_polygon"] = drawn
+    assert gif_mod.capture_gif(app_state, widgets, analysis, alert).outline.equals(drawn)
+
+
 @pytest.mark.parametrize("before,after,key", [
     (None, _info(S2, "2026-09-05"), "gif_no_images"),
     (_info(S2, "2026-01-01"), _info(S2, "2026-09-05"), "gif_no_images"),  # not in the index

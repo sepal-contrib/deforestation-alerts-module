@@ -13,6 +13,7 @@ import geopandas as gpd
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.review_groups import group_record
 from deforestation_alerts.project.review_status import CONFIRMED, VERDICT_LABEL_KEYS, is_reviewed
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts import local_files
@@ -176,11 +177,18 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
     template = report_template_path(template)
 
     # Single-row GeoDataFrame for the selected alert.
-    selected_element = alertas_gdf.iloc[actual_alert_id]
+    # A grouped alert is described as its group (spec §9): the main's row with
+    # the summed area, plus ``group_size`` / ``group_alerts``, and the group's
+    # outline as the one geometry. A single alert is its own row.
+    selected_element, outline = group_record(alertas_gdf, actual_alert_id)
+    grouped = selected_element["group_size"] > 1
+    if grouped:
+        selected_element["alert_polygon"] = outline
     # The answers in the language of the download (stored as codes); the
     # columns of deleted questions are left out.
     selected_gdf = questions.with_labels(
-        gpd.GeoDataFrame([selected_element], columns=alertas_gdf.columns), alert.questions or []
+        gpd.GeoDataFrame([selected_element], columns=[*alertas_gdf.columns, "group_size", "group_alerts"]),
+        alert.questions or [],
     )
     active = (
         "alert_polygon"
