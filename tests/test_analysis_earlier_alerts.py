@@ -98,7 +98,7 @@ def test_rows_grouped_by_period_with_states(monkeypatch):
     analysis.auto_links.set((SEP12.link,))
     section = earlier.build_earlier_controls(widgets, app_state, analysis)
     earlier.refresh_earlier(widgets, analysis, app_state)
-    assert calls[-1]["alert_id"] == 1 and calls[-1]["set_id"] == "oct" and calls[-1]["radius_m"] == 1000.0
+    assert calls[-1]["alert_id"] == 1 and calls[-1]["set_id"] == "oct" and calls[-1]["radius_m"] == 100.0
     groups = [(g.period_id, [r.key for r in g.rows]) for g in section.groups]
     assert groups == [(SEP.id, ["sep#12", "sep#15"]), (AUG.id, ["aug#4", "aug#7"])]
     rows = {r.key: r for g in section.groups for r in g.rows}
@@ -113,7 +113,7 @@ def test_rows_grouped_by_period_with_states(monkeypatch):
     assert rows["aug#7"].note.children == [earlier.t("analysis_tile.earlier.broken_rerun")]
     assert section.badge.children == [earlier.t("analysis_tile.earlier.badge_off")]  # the switch is off
     section.switch.v_model = True
-    assert section.badge.children == [earlier.tn("analysis_tile.earlier.badge_nearby", 3, km="1", linked=1)]
+    assert section.badge.children == [earlier.tn("analysis_tile.earlier.badge_nearby", 3, distance="100 m", linked=1)]
 
 
 def test_distance_and_broken_notes():
@@ -382,7 +382,7 @@ def test_an_older_load_does_not_overwrite_a_newer_one(monkeypatch):
     old = threading.Thread(target=earlier.refresh_earlier, args=(widgets, analysis, app_state))
     old.start()
     _wait_for(lambda: len(gates) == 1)
-    analysis.earlier_radius_km.set(5)
+    analysis.earlier_radius_m.set(5000.0)
     new = threading.Thread(target=earlier.refresh_earlier, args=(widgets, analysis, app_state))
     new.start()
     _wait_for(lambda: len(gates) == 2)
@@ -427,23 +427,22 @@ def test_bad_distance_shows_the_error_and_keeps_the_last_value(monkeypatch):
     widgets, analysis, app_state, _ = _setup(monkeypatch)
     controls = earlier.build_earlier_controls(widgets, app_state, analysis)
     field = controls.field
-    for bad in ("0", "abc", "51"):
+    assert field.v_model == "100" and field.suffix == "m"
+    for bad in ("0", "9.5", "abc", "50001", "inf"):
         field.v_model = bad
-        assert field.error_messages and analysis.earlier_radius_km.value == 1.0
-    field.v_model = "2,5"
-    assert not field.error_messages and analysis.earlier_radius_km.value == 2.5
+        assert field.error_messages and analysis.earlier_radius_m.value == 100.0
+    field.v_model = "2500,5"
+    assert not field.error_messages and analysis.earlier_radius_m.value == 2500.5
 
 
 def test_the_section_badge():
     view = _view((SEP12.link,))
-    assert earlier.badge_text(False, view, 1.0) == earlier.t("analysis_tile.earlier.badge_off")
-    assert earlier.badge_text(True, None, 1.0) == ""
+    assert earlier.badge_text(False, view, 100.0) == earlier.t("analysis_tile.earlier.badge_off")
+    assert earlier.badge_text(True, None, 100.0) == ""
     empty = EarlierView((), 0, 0, ())
-    assert earlier.badge_text(True, empty, 2.5) == earlier.t("analysis_tile.earlier.badge_none", km="2.5")
-    assert earlier.badge_text(True, view, 1.0) == earlier.tn("analysis_tile.earlier.badge_nearby", 3,
-                                                             km="1", linked=1)
+    assert earlier.badge_text(True, empty, 2500.0) == "none within 2.5 km"
+    assert earlier.badge_text(True, view, 100.0) == "3 within 100 m · 1 linked"
     assert earlier.t("analysis_tile.earlier.title") == "Earlier alerts"
-    assert earlier.tn("analysis_tile.earlier.badge_nearby", 4, km="1", linked=1) == "4 within 1 km · 1 linked"
 
 
 def test_has_earlier_sets(monkeypatch):

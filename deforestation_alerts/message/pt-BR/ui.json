@@ -342,14 +342,14 @@
     "earlier": {
       "show": "Mostrar nos mapas",
       "radius": "Num raio de",
-      "radius_error": "Entre 0,1 e 50 km",
+      "radius_error": "Entre 10 m e 50 km",
       "title": "Alertas anteriores",
       "badge_off": "desativado",
-      "badge_none": "nenhum a menos de {km} km",
+      "badge_none": "nenhum a menos de {distance}",
       "badge_nearby": {
-        "one": "{n} a menos de {km} km · vínculos: {linked}",
-        "many": "{n} a menos de {km} km · vínculos: {linked}",
-        "other": "{n} a menos de {km} km · vínculos: {linked}"
+        "one": "{n} a menos de {distance} · vínculos: {linked}",
+        "many": "{n} a menos de {distance} · vínculos: {linked}",
+        "other": "{n} a menos de {distance} · vínculos: {linked}"
       },
       "touches": "encosta",
       "touches_unlinked": "encosta · não vinculado",

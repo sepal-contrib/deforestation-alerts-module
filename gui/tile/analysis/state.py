@@ -132,7 +132,8 @@ class AnalysisState:
     #: the reviewer's own last flip of that switch: a growth alert turns the
     #: switch on for itself only (spec §6.3), the next other alert opens on this
     earlier_choice: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
-    earlier_radius_km: solara.Reactive = field(default_factory=lambda: solara.reactive(1.0))
+    #: the Earlier alerts section's distance, in metres
+    earlier_radius_m: solara.Reactive = field(default_factory=lambda: solara.reactive(100.0))
     #: the earlier periods the *Periods* menu hides (ids): session state, all
     #: shown by default, kept across alert changes like the switch
     earlier_hidden_periods: solara.Reactive = field(default_factory=lambda: solara.reactive(frozenset()))

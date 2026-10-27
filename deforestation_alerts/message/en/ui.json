@@ -333,13 +333,13 @@
     "earlier": {
       "show": "Show on the maps",
       "radius": "Within",
-      "radius_error": "Between 0.1 and 50 km",
+      "radius_error": "Between 10 m and 50 km",
       "title": "Earlier alerts",
       "badge_off": "off",
-      "badge_none": "none within {km} km",
+      "badge_none": "none within {distance}",
       "badge_nearby": {
-        "one": "{n} within {km} km · {linked} linked",
-        "other": "{n} within {km} km · {linked} linked"
+        "one": "{n} within {distance} · {linked} linked",
+        "other": "{n} within {distance} · {linked} linked"
       },
       "touches": "touches",
       "touches_unlinked": "touches · not linked",
