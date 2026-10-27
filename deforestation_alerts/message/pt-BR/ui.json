@@ -361,7 +361,11 @@
       "none_in_copy": "Nenhum alerta anterior nesta cópia",
       "legend_lines": "contínua: confirmado · tracejada: precisa de revisão · grossa: vinculado",
       "distance_m": "{m} m",
-      "distance_km": "{km} km"
+      "distance_km": "{km} km",
+      "unlink_title": "Desvincular do alerta anterior?",
+      "unlink_ok": "Desvincular",
+      "unlink_small": "O alerta #{n} tem {area} ha, abaixo do mínimo de {min} ha. Ele só é um alerta porque está vinculado a #{parent}.",
+      "unlink_small_after": "Sem o vínculo, ele continua no conjunto como Nova · abaixo da área mínima."
     },
     "filter": {
       "col_evaluator": "Avaliador",

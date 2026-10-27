@@ -18,7 +18,7 @@ from shapely.geometry.base import BaseGeometry
 from deforestation_alerts.project import review_groups
 from deforestation_alerts.project.models import AlertSet, Period
 from deforestation_alerts.project.review_status import FALSE_POSITIVE, LOSS_VERDICTS, NOT_REVIEWED
-from deforestation_alerts.project.store_schema import GROWS_FROM, REVIEW_GROUP
+from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, REVIEW_GROUP
 
 #: The column Integrate may write with an alert's kind.
 KIND_COLUMN = "kind"
@@ -96,6 +96,12 @@ def _flag(value) -> bool:
     except (TypeError, ValueError):
         pass
     return bool(value)
+
+
+def below_min_of(row) -> bool:
+    """Whether Integrate kept ``row`` only for its growth link: under the
+    set's minimum area (``below_min``). False without the column."""
+    return _flag(row.get(BELOW_MIN)) if hasattr(row, "get") else False
 
 
 def kind_of(links, below_min) -> str:

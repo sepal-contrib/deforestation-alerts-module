@@ -520,3 +520,67 @@ def test_unticking_a_groups_main_drops_its_member_links(monkeypatch):
     rows = {r.key: r for g in section.groups for r in g.rows}
     rows["sep#12"].box.v_model = False
     assert analysis.links.value == ()
+
+
+# ---- unlinking an alert Integrate kept only for its link -------------------------
+def _small_setup(monkeypatch, *, below_min=True):
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    monkeypatch.setattr(earlier, "active_set",
+                        lambda p: SimpleNamespace(id="oct", params=SimpleNamespace(min_size_ha=0.5)))
+    gdf = gpd.GeoDataFrame({"alert_id": [0, 1], "area_ha": [1.0, 0.3], "below_min": [False, below_min]},
+                           geometry=[SHAPE, SHAPE], crs="EPSG:4326")
+    app_state.alerts_gdf.set(gdf)
+    asked = []
+    section = earlier.build_earlier_controls(widgets, app_state, analysis,
+                                             ask=lambda lines, on_ok, **kw: asked.append((lines, on_ok, kw)))
+    analysis.links.set((SEP12.link,))
+    analysis.auto_links.set((SEP12.link,))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    return SimpleNamespace(section=section, analysis=analysis, app_state=app_state, asked=asked, calls=calls)
+
+
+def _rows(section):
+    return {r.key: r for g in section.groups for r in g.rows}
+
+
+def test_unlinking_the_last_link_of_a_small_alert_asks_first(monkeypatch):
+    h = _small_setup(monkeypatch)
+    _rows(h.section)["sep#12"].box.v_model = False
+    assert h.analysis.links.value == (SEP12.link,)  # nothing unlinked yet
+    assert _rows(h.section)["sep#12"].box.v_model is True
+    [(lines, on_ok, kw)] = h.asked
+    assert lines == ["Alert #2 is 0.30 ha, under the 0.50 ha minimum. It is an alert only because it is "
+                     "linked to #12.", "Without the link it stays in the set as New · under minimum area."]
+    assert kw == {"title": "analysis_tile.earlier.unlink_title", "ok": "analysis_tile.earlier.unlink_ok"}
+    on_ok()
+    assert h.analysis.links.value == () and h.calls[-1]["links"] == ()
+    assert _rows(h.section)["sep#12"].box.v_model is False
+
+
+def test_a_cancelled_unlink_keeps_the_link(monkeypatch):
+    h = _small_setup(monkeypatch)
+    _rows(h.section)["sep#12"].box.v_model = False
+    assert len(h.asked) == 1  # Cancel only closes the dialog: on_ok never runs
+    assert h.analysis.links.value == (SEP12.link,) and h.analysis.dirty.value is False
+
+
+def test_an_unlink_confirmed_after_the_alert_changed_does_nothing(monkeypatch):
+    h = _small_setup(monkeypatch)
+    _rows(h.section)["sep#12"].box.v_model = False
+    h.analysis.reset_alert()  # another alert opened (a new token), linked to #12 too
+    h.analysis.links.set((SEP12.link,))
+    h.asked[0][1]()
+    assert h.analysis.links.value == (SEP12.link,)
+
+
+def test_an_alert_over_the_minimum_unlinks_at_once(monkeypatch):
+    h = _small_setup(monkeypatch, below_min=False)
+    _rows(h.section)["sep#12"].box.v_model = False
+    assert h.asked == [] and h.analysis.links.value == ()
+
+
+def test_unlinking_one_of_two_links_does_not_ask(monkeypatch):
+    h = _small_setup(monkeypatch)
+    _rows(h.section)["sep#15"].box.v_model = True
+    _rows(h.section)["sep#12"].box.v_model = False
+    assert h.asked == [] and h.analysis.links.value == (SEP15.link,)

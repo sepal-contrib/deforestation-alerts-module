@@ -32,7 +32,7 @@ import shapely
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.project import grouping as grouping_rules
-from deforestation_alerts.project import review_copy, review_groups
+from deforestation_alerts.project import growth, review_copy, review_groups
 from deforestation_alerts.project.review_status import CONFIRMED, FALSE_POSITIVE
 from gui.i18n import format_date, format_number, t, tn
 from gui.scripts import growth_index
@@ -145,6 +145,31 @@ def remove_earlier_layer(widgets) -> None:
 def _alert_id(gdf, pos) -> int:
     """The ``alert_id`` of the row at position ``pos``."""
     return int(gdf.iloc[pos]["alert_id"]) if "alert_id" in gdf.columns else int(pos)
+
+
+def unlink_warning(app_state, item, remaining) -> list:
+    """The lines the reviewer confirms before an untick that leaves the alert
+    on screen with no link (``remaining`` empty) when Integrate kept it only
+    for its link: it is under the set's minimum area (``below_min``). Empty
+    when no warning is due."""
+    if remaining:
+        return []
+    gdf = app_state.alerts_gdf.value
+    pos = app_state.actual_alert_id.value
+    p = app_state.project.value
+    s = active_set(p) if p is not None else None
+    if gdf is None or s is None or pos is None or not 0 <= pos < len(gdf):
+        return []
+    row = gdf.iloc[pos]
+    if not growth.below_min_of(row):
+        return []
+    try:
+        area = format_number(float(row.get("area_ha")), 2)
+    except (TypeError, ValueError):
+        area = "?"
+    return [t("analysis_tile.earlier.unlink_small", n=pos + 1, area=area,
+              min=format_number(s.params.min_size_ha, 2), parent=item.cand.node.alert_id),
+            t("analysis_tile.earlier.unlink_small_after")]
 
 
 def _kept_links(p, view, links) -> tuple:
@@ -290,14 +315,16 @@ def _status_chip(status):
     return v.Chip(x_small=True, outlined=True, children=[swatch, t(status_label_key(status))])
 
 
-def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
+def build_earlier_controls(widgets, app_state, analysis, *, labels=None, ask=None):
     """The *Earlier alerts* section: the switch, the distance, the *Periods*
     menu, the list and the period legend, under a header whose badge says what
     was found. Returns the ``build_section`` namespace plus ``switch``,
     ``field``, ``periods`` (the menu), ``items`` (the list's container),
     ``groups`` (the rows on screen, by period) and ``copy_lines``. ``labels``
     is the screen's ``labels.Labels`` (a fresh one when none is given): the
-    section's words follow a language switch."""
+    section's words follow a language switch. ``ask(lines, on_ok, title=...,
+    ok=...)`` (the footer's confirmation) asks before an untick that
+    ``unlink_warning`` warns about; without it the untick unlinks at once."""
     labels = labels if labels is not None else Labels()
     section = build_section(t("analysis_tile.earlier.title"), v.Html(tag="div"))
     switch = v.Switch(v_model=bool(analysis.show_earlier_reviews.value), dense=True,
@@ -317,7 +344,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
     section.body_box.children = [v.Html(tag="div", children=[switch, distance, periods, copy_lines, items,
                                                              legend])]
     last = {"view": None, "token": None}
-    syncing = {"menu": False, "switch": False}
+    syncing = {"menu": False, "switch": False, "box": False}
 
     def _sync_badge():
         on = bool(analysis.show_earlier_reviews.value)
@@ -326,10 +353,35 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
     def _refresh():
         _refresh_logged(widgets, analysis, app_state, on_result=_result)
 
+    def _unlink(item, token):
+        if analysis.alert_token.value != token:
+            return  # the alert changed while the reviewer was asked
+        set_links(analysis, growth_index.links_without(item, list(analysis.links.value)))
+        spawn_in_context(_refresh)
+
     def _on_tick(item, change):
+        if syncing["box"]:
+            return
         current = list(analysis.links.value)
-        # an untick drops every link that resolves to the row (a group's main and its members)
-        set_links(analysis, current + [item.cand.link] if change["new"] else growth_index.links_without(item, current))
+        if change["new"]:
+            set_links(analysis, current + [item.cand.link])
+        else:
+            # an untick drops every link that resolves to the row (a group's main and its members)
+            remaining = growth_index.links_without(item, current)
+            lines = unlink_warning(app_state, item, remaining) if ask is not None else []
+            if lines:
+                # ticked again until the reviewer confirms: the refresh after
+                # the unlink draws it unticked
+                syncing["box"] = True
+                try:
+                    change["owner"].v_model = True
+                finally:
+                    syncing["box"] = False
+                token = analysis.alert_token.value
+                ask(lines, lambda: _unlink(item, token), title="analysis_tile.earlier.unlink_title",
+                    ok="analysis_tile.earlier.unlink_ok")
+                return
+            set_links(analysis, remaining)
         spawn_in_context(_refresh)  # the view follows the draft (a cache hit)
 
     def _zoom(shape):

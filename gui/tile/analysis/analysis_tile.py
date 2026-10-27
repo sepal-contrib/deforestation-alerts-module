@@ -673,7 +673,7 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # Next does: one prompt, in the dock.
     context = build_context(app_state, id_field, labels=labels, analysis=analysis, guard=footer.guard)
     topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
-    earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels)
+    earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels, ask=footer.confirm.ask)
     near = nearby.build_nearby_section(widgets, app_state, analysis, labels=labels)
     run_save = export_parts.run_save
 

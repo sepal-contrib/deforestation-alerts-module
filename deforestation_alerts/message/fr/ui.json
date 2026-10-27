@@ -361,7 +361,11 @@
       "none_in_copy": "Aucune alerte précédente dans cette copie",
       "legend_lines": "continu : confirmée · tirets : à réviser · épais : liée",
       "distance_m": "{m} m",
-      "distance_km": "{km} km"
+      "distance_km": "{km} km",
+      "unlink_title": "Délier de l'alerte antérieure ?",
+      "unlink_ok": "Délier",
+      "unlink_small": "L'alerte #{n} fait {area} ha, sous le minimum de {min} ha. Elle n'est une alerte que parce qu'elle est liée à #{parent}.",
+      "unlink_small_after": "Sans le lien, elle reste dans le jeu comme Nouvelle · sous la surface minimale."
     },
     "filter": {
       "col_evaluator": "Évaluateur",

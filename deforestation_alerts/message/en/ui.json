@@ -351,7 +351,11 @@
       "none_in_copy": "No earlier alerts in this copy",
       "legend_lines": "solid: confirmed · dashed: needs revision · thick: linked",
       "distance_m": "{m} m",
-      "distance_km": "{km} km"
+      "distance_km": "{km} km",
+      "unlink_title": "Unlink from the earlier alert?",
+      "unlink_ok": "Unlink",
+      "unlink_small": "Alert #{n} is {area} ha, under the {min} ha minimum. It is an alert only because it is linked to #{parent}.",
+      "unlink_small_after": "Without the link it stays in the set as New · under minimum area."
     },
     "filter": {
       "col_evaluator": "Evaluator",
