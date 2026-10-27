@@ -14,7 +14,7 @@ import stat
 import zipfile
 import zlib
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -29,22 +29,32 @@ from shapely.geometry.base import BaseGeometry
 
 from deforestation_alerts.engine.growth_links import project_rows
 from deforestation_alerts.errors import KeyedError
-from deforestation_alerts.project import growth
+from deforestation_alerts.project import grouping, growth, review_groups
 from deforestation_alerts.project import io as project_io
 from deforestation_alerts.project import models, paths
 from deforestation_alerts.project import split as split_mod
 from deforestation_alerts.project.models import SCHEMA_VERSION, AlertSet, Period, Project, ReviewCopy
-from deforestation_alerts.project.review_status import VERDICTS
-from deforestation_alerts.project.store_schema import GROWS_FROM, GROWS_FROM_AUTO, REVIEW_AFTER, REVIEW_BEFORE
+from deforestation_alerts.project.review_status import NOT_REVIEWED, VERDICTS, is_reviewed, reviewed_mask
+from deforestation_alerts.project.store_schema import (
+    GROWS_FROM,
+    GROWS_FROM_AUTO,
+    REVIEW_AFTER,
+    REVIEW_BEFORE,
+    REVIEW_GROUP,
+)
 from deforestation_alerts.project.questions import column, is_answer_column
 from deforestation_alerts.project.review_copy import refuse_if_read_only
-from deforestation_alerts.project.review_status import is_reviewed, reviewed_mask
 from deforestation_alerts.scripts import local_files, scene_index
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, store_generation, store_lock
 from deforestation_alerts.scripts.naming import safe_token
 
 FORMAT = "defo-alerts-share"
+#: The version a package, and a return made without grouping, is written with.
 FORMAT_VERSION = 1
+#: A return of a copy whose grouping is effective (spec 2026-10-26 §8.3): every
+#: row assigned to the evaluator, ``Not reviewed`` ones (detached members) too.
+RETURN_GROUPS_VERSION = 2
+READABLE_VERSIONS = (FORMAT_VERSION, RETURN_GROUPS_VERSION)
 KIND_PACKAGE = "review-package"
 KIND_RETURN = "review-return"
 
@@ -146,8 +156,9 @@ def open_checked(zip_path, required: frozenset, optional: frozenset = frozenset(
 
 
 def read_header(zf) -> ShareHeader:
-    """The zip's ``share.json``: another format, another format version and
-    an unreadable header are each refused with their own message."""
+    """The zip's ``share.json``: another format, a format version outside
+    ``READABLE_VERSIONS`` and an unreadable header are each refused with
+    their own message."""
     try:
         info = zf.getinfo(HEADER_MEMBER)
     except KeyError:
@@ -164,8 +175,8 @@ def read_header(zf) -> ShareHeader:
         raise ShareError("share.err.bad_header") from exc
     if not isinstance(raw, dict) or raw.get("format") != FORMAT:
         raise ShareError("share.err.wrong_format")
-    if raw.get("format_version") != FORMAT_VERSION:
-        raise ShareError("share.err.newer_format", found=raw.get("format_version"), expected=FORMAT_VERSION)
+    if raw.get("format_version") not in READABLE_VERSIONS:
+        raise ShareError("share.err.newer_format", found=raw.get("format_version"), expected=max(READABLE_VERSIONS))
     try:
         return ShareHeader.model_validate(raw)
     except ValidationError as exc:
@@ -437,11 +448,14 @@ def build_package(p: Project, pdir: Path, set_id: str, evaluator: str, aoi_geojs
         return local_files.copy_into(built, Path(out_dir) / built.name)
 
 
-def return_rows(gdf, evaluator: str, questions) -> pd.DataFrame:
+def return_rows(gdf, evaluator: str, questions, *, all_assigned: bool = False) -> pd.DataFrame:
     """What a reviewed copy returns (spec §6.4): the rows assigned to
-    ``evaluator`` and reviewed (``is_reviewed``); ``alert_id``, ``evaluator``
-    and the review columns the store has."""
-    mask = (split_mod.assignments(gdf).to_numpy() == evaluator) & reviewed_mask(gdf).to_numpy()
+    ``evaluator`` and reviewed (``is_reviewed``), or every row assigned to
+    it with ``all_assigned`` (a format-2 return, spec 2026-10-26 §8.3);
+    ``alert_id``, ``evaluator`` and the review columns the store has."""
+    mask = split_mod.assignments(gdf).to_numpy() == evaluator
+    if not all_assigned:
+        mask = mask & reviewed_mask(gdf).to_numpy()
     cols = ["alert_id", split_mod.EVALUATOR_COLUMN] + [c for c in review_columns(questions) if c in gdf.columns]
     return gdf.loc[mask, cols]
 
@@ -473,21 +487,28 @@ def build_return(p: Project, pdir: Path, out_dir: Path, *, app_version: str) -> 
     """The reviewed copy of a review copy (spec §6.4), at
     ``out_dir / return_filename(...)``: its header and ``reviews.parquet``.
     Allowed at any time; each holds the latest state. Blocking: call it off
-    the event loop. Raises ``ShareError``."""
+    the event loop. Raises ``ShareError``.
+
+    With the copy's grouping effective (its split's record, spec 2026-10-26
+    §8.3) the return is format 2 and carries every row assigned to the
+    evaluator, so a member detached in the copy comes back; otherwise it is
+    format 1, exactly as before grouping."""
     rc = p.review_copy
     if rc is None:
         raise ShareError("share.err.not_a_copy")
     s = p.alert_sets.get(rc.set_id)
     if s is None:
         raise ShareError("share.err.no_set", set_id=rc.set_id)
+    groups = grouping.effective(p, s) is not None
     now = datetime.now()
-    header = ShareHeader(format=FORMAT, format_version=FORMAT_VERSION, kind=KIND_RETURN, app_version=app_version,
+    header = ShareHeader(format=FORMAT, format_version=RETURN_GROUPS_VERSION if groups else FORMAT_VERSION,
+                         kind=KIND_RETURN, app_version=app_version,
                          origin_project=rc.origin_project, set_id=rc.set_id, set_fingerprint=rc.set_fingerprint,
                          split_id=rc.split_id, evaluator=rc.evaluator, evaluator_index=rc.evaluator_index,
                          questions_digest=split_mod.questions_digest(p.questions), created_at=now, returned_at=now)
     with local_files.scratch_dir() as tmp:
         store = _snapshot_store(paths.resolve(Path(pdir), s.store_rel_path), tmp / "alert_db.parquet", s.id)
-        rows = return_rows(load_gdf_from_parquet(store), rc.evaluator, p.questions)
+        rows = return_rows(load_gdf_from_parquet(store), rc.evaluator, p.questions, all_assigned=groups)
         reviews = _write_table(rows, tmp / REVIEWS_MEMBER)
         name = return_filename(rc.origin_project, rc.set_id, rc.evaluator_index, rc.evaluator)
         built = _write_zip(tmp / name, {HEADER_MEMBER: header.model_dump_json(indent=2)}, {REVIEWS_MEMBER: reviews})
@@ -733,7 +754,10 @@ def find_existing_copy(header: ShareHeader, root: Optional[Path] = None) -> Opti
 class ReturnPreview:
     """What merging one reviewed copy would do (spec §7.1-§7.3): its header,
     its rows indexed by ``alert_id``, the alert ids of each class, the review
-    columns it writes and the columns it carries that are ignored."""
+    columns it writes and the columns it carries that are ignored.
+    ``n_groups`` counts the groups (two rows or more, in the store or in the
+    return) its classified rows belong to; ``class_groups`` the same per
+    class (``"new"``, ``"conflicts"``, ``"unchanged"``)."""
 
     header: ShareHeader
     rows: pd.DataFrame
@@ -744,11 +768,14 @@ class ReturnPreview:
     columns: list[str]
     extra_columns: list[str]
     questions_changed: bool
+    n_groups: int = 0
+    class_groups: dict = field(default_factory=dict)
 
 
-def _read_reviews(zf, evaluator: str) -> pd.DataFrame:
+def _read_reviews(zf, evaluator: str, version: int = FORMAT_VERSION) -> pd.DataFrame:
     """``reviews.parquet``, checked (spec §7.1): unique integer ``alert_id``s,
-    every ``evaluator`` the header's, every ``status`` a verdict. Indexed by
+    every ``evaluator`` the header's, every ``status`` a verdict (or
+    ``Not reviewed`` in a format-2 return, spec 2026-10-26 §8.3). Indexed by
     ``alert_id``."""
     try:
         rows = read_table(BytesIO(zf.read(REVIEWS_MEMBER)))
@@ -760,7 +787,8 @@ def _read_reviews(zf, evaluator: str) -> pd.DataFrame:
     who = rows[split_mod.EVALUATOR_COLUMN] if split_mod.EVALUATOR_COLUMN in rows.columns else None
     if who is None or not all(isinstance(v, str) and v == evaluator for v in who):
         raise ShareError("share.merge_err_payload")
-    if "status" not in rows.columns or not all(isinstance(v, str) and v in VERDICTS for v in rows["status"]):
+    allowed = set(VERDICTS) | ({NOT_REVIEWED} if version >= RETURN_GROUPS_VERSION else set())
+    if "status" not in rows.columns or not all(isinstance(v, str) and v in allowed for v in rows["status"]):
         raise ShareError("share.merge_err_payload")
     return rows.set_index("alert_id")
 
@@ -776,27 +804,100 @@ def _cell(gdf, i: int, col: str):
     return gdf[col].iat[i] if col in gdf.columns else None
 
 
+def _return_groups(rows) -> Optional[pd.Series]:
+    """The return's ``review_group`` by ``alert_id`` as ``Int64``; None
+    without the column."""
+    if REVIEW_GROUP not in rows.columns:
+        return None
+    values = pd.to_numeric(pd.Series(rows[REVIEW_GROUP].to_numpy(dtype=object)), errors="coerce")
+    return pd.Series(values.astype("Int64").to_numpy(), index=rows.index, dtype="Int64")
+
+
+def _group_id(value, sizes) -> Optional[int]:
+    """``value`` as an id when it names a group of two rows or more."""
+    return None if pd.isna(value) or sizes.get(value, 0) < 2 else int(value)
+
+
+class _Components:
+    """Union-find over alert ids (spec 2026-10-26 §8.4)."""
+
+    def __init__(self):
+        self.parent: dict = {}
+
+    def find(self, a: int) -> int:
+        parent = self.parent
+        parent.setdefault(a, a)
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def union(self, a: int, b: int) -> None:
+        ra, rb = self.find(a), self.find(b)
+        if ra != rb:
+            self.parent[rb] = ra
+
+
 def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
     """``preview`` with its rows classified against ``store_gdf`` (spec §7.3):
     ignored (no such alert, or another evaluator's), unchanged (every review
     column equal, ``same_value``), conflict (the creator's row is reviewed and
     differs), new (otherwise). ``read_return`` classifies against the store it
-    is given; a merge classifies again against the store it writes."""
+    is given; a merge classifies again against the store it writes.
+
+    Groups (spec 2026-10-26 §8.3, §8.4): a returned ``Not reviewed`` row is
+    unchanged unless the store holds it in a group of two rows or more (it was
+    detached in the copy). Rows connected through ``review_group``, in the
+    store or in the return, among the evaluator's rows, are one component: a
+    conflict in it makes every non-ignored row of it a conflict."""
     who = split_mod.assignments(store_gdf).tolist()
     at = _positions(store_gdf)
     evaluator = preview.header.evaluator
-    out = {"new": [], "conflicts": [], "unchanged": [], "ignored": []}
-    for aid in preview.rows.index:
-        i = at.get(int(aid))
+    rows = preview.rows
+    store_groups = review_groups.group_values(store_gdf)
+    store_sizes = store_groups.value_counts().to_dict()
+    theirs = _return_groups(rows)
+    their_sizes = theirs.value_counts().to_dict() if theirs is not None else {}
+    statuses = rows["status"].tolist()
+    kind = {}
+    for k, aid in enumerate(rows.index):
+        aid, i = int(aid), at.get(int(aid))
         if i is None or who[i] != evaluator:
-            out["ignored"].append(int(aid))
-        elif all(same_value(_cell(store_gdf, i, c), preview.rows.at[aid, c]) for c in preview.columns):
-            out["unchanged"].append(int(aid))
+            kind[aid] = "ignored"
+        elif statuses[k] == NOT_REVIEWED and _group_id(store_groups.iat[i], store_sizes) is None:
+            kind[aid] = "unchanged"
+        elif all(same_value(_cell(store_gdf, i, c), rows.at[aid, c]) for c in preview.columns):
+            kind[aid] = "unchanged"
         elif is_reviewed(_cell(store_gdf, i, "status")):
-            out["conflicts"].append(int(aid))
+            kind[aid] = "conflicts"
         else:
-            out["new"].append(int(aid))
-    return replace(preview, **out)
+            kind[aid] = "new"
+    groups = {}  # alert id -> the ids of the groups (>= 2 rows) it is in
+    if store_sizes or their_sizes:
+        comps = _Components()
+        store_ids = review_groups.ids(store_gdf)
+        for i in np.flatnonzero(store_groups.notna().to_numpy()):
+            if who[i] == evaluator:
+                comps.union(int(store_ids[i]), int(store_groups.iat[i]))
+        for aid, value in (theirs.dropna().items() if theirs is not None else ()):
+            if kind[int(aid)] != "ignored":
+                comps.union(int(aid), int(value))
+        conflicted = {comps.find(aid) for aid, k in kind.items() if k == "conflicts"}
+        for aid, k in kind.items():
+            if k == "ignored":
+                continue
+            if k != "conflicts" and comps.find(aid) in conflicted:
+                kind[aid] = "conflicts"
+            i = at[aid]
+            ids = {_group_id(store_groups.iat[i], store_sizes),
+                   _group_id(theirs.at[aid], their_sizes) if theirs is not None else None} - {None}
+            if ids:
+                groups[aid] = ids
+    out = {"new": [], "conflicts": [], "unchanged": [], "ignored": []}
+    for aid, k in kind.items():
+        out[k].append(aid)
+    class_groups = {k: len(set().union(*(groups.get(a, ()) for a in out[k]))) for k in ("new", "conflicts", "unchanged")}
+    return replace(preview, **out, n_groups=len(set().union(*groups.values())), class_groups=class_groups)
 
 
 def read_return(zip_path, p: Project, store_gdf) -> ReturnPreview:
@@ -830,7 +931,7 @@ def read_return(zip_path, p: Project, store_gdf) -> ReturnPreview:
             raise ShareError("share.merge_err_old_split")
         if header.evaluator not in s.split.evaluators:
             raise ShareError("share.merge_err_evaluator", evaluator=header.evaluator)
-        rows = _read_reviews(zf, header.evaluator)
+        rows = _read_reviews(zf, header.evaluator, header.format_version)
     if store_gdf is None or "alert_id" not in store_gdf.columns:
         raise ShareError("share.merge_err_no_alerts")
     review = review_columns(p.questions)
@@ -867,19 +968,38 @@ def apply_return(store_gdf, preview: ReturnPreview, choice: Literal["mine", "the
     return's review columns. A creator question's column the store lacks is
     created first (``""``, as a Save does, spec §7.2); a column the return
     lacks is left as it is. ``preview`` must be classified against
-    ``store_gdf`` (``classify_return``)."""
+    ``store_gdf`` (``classify_return``).
+
+    ``review_group`` (spec 2026-10-26 §8.4) is written as ``Int64``; a
+    format-2 return creates it when the store lacks it, a format-1 return
+    never does. With the column there, the merged table must keep the group
+    invariant (``review_groups.check_groups``), else
+    ``ShareError("share.merge_err_groups")``."""
     if choice not in ("mine", "theirs"):
         raise ValueError(f"unknown merge choice {choice!r}")
     out = store_gdf.copy()
     ids = list(preview.new) + (list(preview.conflicts) if choice == "theirs" else [])
     if not ids:
         return out
-    for col in preview.columns:
-        if col not in out.columns:
+    columns = [c for c in preview.columns if c != REVIEW_GROUP or c in out.columns
+               or preview.header.format_version >= RETURN_GROUPS_VERSION]
+    for col in columns:
+        if col == REVIEW_GROUP:
+            out[col] = pd.array(review_groups.group_values(out), dtype="Int64")
+        elif col not in out.columns:
             out[col] = "" if is_answer_column(col) else None
     at = _positions(out)
     for aid in ids:
         label = out.index[at[aid]]
-        for col in preview.columns:
-            _put(out, label, col, preview.rows.at[aid, col])
+        for col in columns:
+            value = preview.rows.at[aid, col]
+            if col == REVIEW_GROUP:
+                out.at[label, col] = pd.NA if _missing(value) else int(value)
+            else:
+                _put(out, label, col, value)
+    if REVIEW_GROUP in out.columns:
+        try:
+            review_groups.check_groups(out)
+        except AssertionError as exc:
+            raise ShareError("share.merge_err_groups") from exc
     return out

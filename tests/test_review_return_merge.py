@@ -6,13 +6,15 @@ Analysis). The reviewed copies are real zips made by ``build_return``."""
 
 import json
 import math
+from dataclasses import replace
 from io import BytesIO
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 from shapely.geometry import box
 
-from deforestation_alerts.project import paths, share
+from deforestation_alerts.project import paths, review_groups, share
 from deforestation_alerts.project.growth import links_of, run_id_of
 from deforestation_alerts.project.share import ShareError, apply_return, read_return
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, save_gdf_to_parquet
@@ -521,3 +523,202 @@ def test_a_copy_link_survives_open_save_return_and_merge(tmp_path, monkeypatch):
     row = merged.loc[merged["alert_id"] == 0].iloc[0]
     assert row["status"] == "Confirmed" and links_of(row["grows_from"]) == [stored, ticked]
     growth_index.clear_cache()
+
+
+# ---- group review: returns carry detachments, merges are per group (spec 2026-10-26 §8.3, §8.4) ----
+
+NA = pd.NA
+ANA = ("Ana",) * 4
+
+
+def _groups(values):
+    return pd.array(list(values), dtype="Int64")
+
+
+def _plain(series) -> list:
+    """``review_group`` as ints and None (``<NA>`` does not compare)."""
+    return [None if pd.isna(v) else int(v) for v in series]
+
+
+def _grouped_creator(tmp_path, monkeypatch, statuses, groups=None):
+    """A creator whose store is all Ana's, ``groups`` its ``review_group`` (no column when None)."""
+    root = tmp_path / "data"
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(root))
+    p, pdir = make_creator(root, statuses=statuses, assigned=ANA)
+    if groups is not None:
+        _rewrite(pdir / "legacy" / "alert_db.parquet", {"review_group": _groups(groups)})
+    return p, pdir
+
+
+def _grouping_copy(tmp_path, statuses, groups, assigned=ANA):
+    """Ana's copy of a split made with grouping on (500 m)."""
+    p, pdir = make_copy(tmp_path / "copies", statuses=statuses, assigned=assigned,
+                        extra={"review_group": _groups(groups)})
+    s = p.alert_sets[SET1]
+    p.alert_sets[SET1] = s.model_copy(update={"split": s.split.model_copy(update={"group_radius_m": 500.0})})
+    return p, pdir
+
+
+def _grouping_return(tmp_path, statuses, groups, assigned=ANA):
+    p, pdir = _grouping_copy(tmp_path, statuses, groups, assigned)
+    return share.build_return(p, pdir, tmp_path / "out", app_version=APP_VERSION)
+
+
+def _grouped_session(tmp_path, monkeypatch, statuses, groups=None):
+    p, _ = _grouped_creator(tmp_path, monkeypatch, statuses, groups)
+    app_state = AppState()
+    app_state.new_project_state(p)
+    app_state.alerts_gdf.set(_store(p))
+    return app_state, SetContext(app_state), AnalysisState()
+
+
+def _classes(preview) -> tuple:
+    return preview.new, preview.conflicts, preview.unchanged, preview.ignored
+
+
+def test_a_return_without_grouping_is_format_one_as_before(tmp_path):
+    p, pdir = make_copy(tmp_path / "copies", statuses=("Confirmed", "Not reviewed", "False Positive", "Not reviewed"),
+                        assigned=COPY_ASSIGNED)
+    zp = share.build_return(p, pdir, tmp_path / "out", app_version=APP_VERSION)
+    members = zip_members(zp)
+    assert json.loads(members[share.HEADER_MEMBER])["format_version"] == 1
+    rows = share.read_table(BytesIO(members[share.REVIEWS_MEMBER]))
+    store = load_gdf_from_parquet(_copy_store(p, pdir))
+    assert list(rows.columns) == ["alert_id", "evaluator", *[c for c in share.review_columns(p.questions)
+                                                             if c in store.columns]]
+    assert "review_group" not in rows.columns
+    assert rows["alert_id"].tolist() == [0, 2]  # the reviewed rows only, as before
+
+
+def test_a_grouping_return_is_format_two_and_carries_a_detached_member(tmp_path, monkeypatch):
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA),
+                          assigned=("Ana", "Ana", "Ana", "Bo"))
+    members = zip_members(zp)
+    assert json.loads(members[share.HEADER_MEMBER])["format_version"] == share.RETURN_GROUPS_VERSION
+    rows = share.read_table(BytesIO(members[share.REVIEWS_MEMBER]))
+    assert rows["alert_id"].tolist() == [0, 1, 2]  # every row assigned to Ana, reviewed or not
+    assert rows["status"].tolist() == ["Confirmed", "Confirmed", "Not reviewed"]
+    assert _plain(rows["review_group"]) == [0, 0, None]
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    assert read_return(zp, p, _store(p)).header.format_version == 2  # a Not-reviewed row reads in format 2
+
+
+def test_a_format_one_return_still_refuses_a_not_reviewed_row(tmp_path, monkeypatch):
+    p, _ = _creator(tmp_path, monkeypatch)
+    zp = _reviews(_return(tmp_path), tmp_path / "nr.zip", lambda r: r.assign(status="Not reviewed"))
+    assert _refused(lambda: read_return(zp, p, _store(p))).key == "share.merge_err_payload"
+
+
+def test_a_detached_member_resets_the_creators_row(tmp_path, monkeypatch):
+    """Alert 2 was merged as a member of alert 0's group, then detached in the copy."""
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA))
+    gdf = _store(p)
+    preview = read_return(zp, p, gdf)
+    assert _classes(preview) == ([], [0, 1, 2], [3], [])  # the group is one conflict
+    assert preview.n_groups == 1
+    merged = apply_return(gdf, preview, "theirs")
+    assert merged["status"].tolist() == ["Confirmed", "Confirmed", "Not reviewed", "Not reviewed"]
+    assert _plain(merged["review_group"]) == [0, 0, None, None]
+    assert str(merged["review_group"].dtype) == "Int64"
+    review_groups.check_groups(merged)
+
+
+def test_a_not_reviewed_row_outside_a_group_is_unchanged(tmp_path, monkeypatch):
+    """Alert 3, reviewed by the creator alone, is left as it is by Ana's unreviewed row."""
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Not reviewed",) * 3 + ("False Positive",))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA))
+    gdf = _store(p)
+    preview = read_return(zp, p, gdf)
+    assert _classes(preview) == ([0, 1], [], [2, 3], [])
+    merged = apply_return(gdf, preview, "theirs")
+    assert merged["status"].tolist() == ["Confirmed", "Confirmed", "Not reviewed", "False Positive"]
+    assert str(merged["review_group"].dtype) == "Int64"  # created as Int64, not object
+    assert _plain(merged["review_group"]) == [0, 0, None, None]
+
+
+def _one_conflict(tmp_path, monkeypatch):
+    """Ana grouped 0, 1 and 2; the creator reviewed alert 0 otherwise."""
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("False Positive",) + ("Not reviewed",) * 3)
+    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    gdf = _store(p)
+    return gdf, read_return(zp, p, gdf)
+
+
+def test_one_conflicting_row_makes_its_whole_group_a_conflict(tmp_path, monkeypatch):
+    _, preview = _one_conflict(tmp_path, monkeypatch)
+    assert _classes(preview) == ([], [0, 1, 2], [3], [])
+    assert preview.n_groups == 1
+
+
+def test_keep_mine_keeps_the_whole_group(tmp_path, monkeypatch):
+    gdf, preview = _one_conflict(tmp_path, monkeypatch)
+    mine = apply_return(gdf, preview, "mine")
+    assert mine["status"].tolist() == ["False Positive"] + ["Not reviewed"] * 3  # no member without its main
+    assert "review_group" not in mine.columns
+
+
+def test_take_theirs_takes_the_whole_group(tmp_path, monkeypatch):
+    gdf, preview = _one_conflict(tmp_path, monkeypatch)
+    theirs = apply_return(gdf, preview, "theirs")
+    assert theirs["status"].tolist() == ["Confirmed"] * 3 + ["Not reviewed"]
+    assert _plain(theirs["review_group"]) == [0, 0, 0, None]
+    review_groups.check_groups(theirs)
+
+
+def test_a_merge_that_breaks_a_group_is_refused(tmp_path, monkeypatch):
+    app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, ("Not reviewed",) * 4)
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA))
+    # alert 1 names a main that is not in the return nor in the store
+    zp = _reviews(zp, tmp_path / "broken.zip", lambda r: r.assign(review_group=_groups((0, 99, NA, NA))))
+    before = _disk(app_state)
+    exc = _refused(lambda: merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "theirs"))
+    assert exc.key == "share.merge_err_groups"
+    assert error_text(exc) == t("share.merge_err_groups")
+    after = _disk(app_state)
+    assert list(after.columns) == list(before.columns) and after["status"].tolist() == ["Not reviewed"] * 4
+    assert app_state.project.value.alert_sets[SET1].split.returns == {}
+
+
+def test_an_older_format_one_zip_still_merges(tmp_path, monkeypatch):
+    """A format-1 return merges as before, also into a store that has the column."""
+    app_state, ctx, analysis, zp = _session(tmp_path, monkeypatch, columns={"review_group": _groups([NA] * 4)})
+    preview = _preview(app_state, zp)
+    assert preview.header.format_version == 1 and preview.n_groups == 0
+    record = merge_service.merge_return(app_state, ctx, analysis, preview, "theirs")
+    assert (record.taken, record.unchanged, record.conflicts, record.ignored) == (2, 1, 1, 1)
+    disk = _disk(app_state)
+    assert disk["status"].tolist() == ["Confirmed", "Not reviewed", "False Positive", "Confirmed"]
+    assert _plain(disk["review_group"]) == [None] * 4
+
+
+def test_merge_keeps_n_groups(tmp_path, monkeypatch):
+    app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, ("Not reviewed",) * 4)
+    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    record = merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "theirs")
+    assert record.taken == 3
+    s = app_state.project.value.alert_sets[SET1]
+    assert (s.n_reviewed, s.n_groups) == (3, 1)
+    disk = _disk(app_state)
+    assert str(disk["review_group"].dtype) == "Int64" and _plain(disk["review_group"]) == [0, 0, 0, None]
+
+
+def test_a_format_one_merge_adds_no_group_column(tmp_path, monkeypatch):
+    app_state, ctx, analysis, zp = _session(tmp_path, monkeypatch)
+    before = _disk(app_state)
+    merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "theirs")
+    after = _disk(app_state)
+    assert list(after.columns) == list(before.columns) and "review_group" not in after.columns
+    assert after.dtypes.astype(str).tolist() == before.dtypes.astype(str).tolist()
+    assert app_state.project.value.alert_sets[SET1].n_groups == 0
+
+
+def test_the_preview_counts_groups(tmp_path, monkeypatch):
+    _, preview = _one_conflict(tmp_path, monkeypatch)
+    lines = merge_service.preview_lines(preview)
+    assert "3 alerts (1 group)" in lines[0]
+    assert lines[0] == t("share.merge_summary", evaluator="Ana", new=0,
+                         conflicts=t("share.merge_summary_groups", count=1, n=3, groups=1), unchanged=1, ignored=0)
+    plain = replace(preview, n_groups=0)
+    assert merge_service.preview_lines(plain) == [
+        t("share.merge_summary", evaluator="Ana", new=0, conflicts=3, unchanged=1, ignored=0)]

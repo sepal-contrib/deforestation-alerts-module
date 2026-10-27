@@ -93,6 +93,21 @@ def test_an_imported_package_is_a_review_copy(package, evaluator_root):
     assert aoi["features"][0]["geometry"] == AOI_FC["features"][0]["geometry"]
 
 
+def test_the_package_keeps_the_split_grouping_record(data_root, tmp_path, evaluator_root):
+    """Spec 2026-10-26 §3.3: a copy's effective grouping is its split's record."""
+    from deforestation_alerts.project import grouping
+
+    p, pdir = make_creator(data_root)
+    s = p.alert_sets[SET1]
+    p.alert_sets[SET1] = s.model_copy(update={"split": s.split.model_copy(
+        update={"group_radius_m": 750.0, "group_include_reviewed": True})})
+    copy = import_package(build_package(p, pdir, SET1, "Ana", AOI_FC, tmp_path / "out", app_version=APP_VERSION),
+                          evaluator_root)
+    sp = copy.alert_sets[SET1].split
+    assert (sp.group_radius_m, sp.group_include_reviewed) == (750.0, True)
+    assert grouping.effective(copy, copy.alert_sets[SET1]) == grouping.Grouping(750.0, True)
+
+
 def test_the_default_root_is_the_data_directory(package, data_root):
     p = import_package(package)
     assert (data_root / p.name / "project.json").is_file()

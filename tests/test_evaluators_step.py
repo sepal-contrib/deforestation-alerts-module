@@ -189,7 +189,7 @@ async def _settle(done, what, timeout=10.0):
 def _preview(evaluator="Bo"):
     return SimpleNamespace(header=SimpleNamespace(evaluator=evaluator), rows=None, new=[12], conflicts=[13],
                            unchanged=[], ignored=[99], columns=["status"], extra_columns=["junk"],
-                           questions_changed=True)
+                           questions_changed=True, n_groups=0, class_groups={})
 
 
 def _clouds(rc):

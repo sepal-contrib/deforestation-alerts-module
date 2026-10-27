@@ -37,7 +37,13 @@
     "merge_err_no_alerts": "Las alertas del conjunto activo no están cargadas.",
     "merge_err_changed": "El proyecto o su conjunto activo cambió desde la vista previa; vuelva a abrir la copia.",
     "merge_err_store_changed": "Las alertas se guardaron durante la fusión; no se fusionó nada, inténtelo de nuevo.",
+    "merge_err_groups": "La fusión rompería un grupo de revisión; no se fusionó nada.",
     "merge_summary": "{evaluator}: {new} revisiones nuevas, {conflicts} conflictos, {unchanged} sin cambios, {ignored} ignoradas",
+    "merge_summary_groups": {
+      "one": "{n} alertas ({groups} grupo)",
+      "many": "{n} alertas ({groups} de grupos)",
+      "other": "{n} alertas ({groups} grupos)"
+    },
     "merge_questions_changed": "El cuestionario cambió desde que se crearon los paquetes; las respuestas se fusionan por clave de pregunta.",
     "merge_extra_columns": "Columnas ignoradas: {columns}",
     "merge_selected_reload": "La alerta {n}, abierta en Análisis, se volverá a cargar."

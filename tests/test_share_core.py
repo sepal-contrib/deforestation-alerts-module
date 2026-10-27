@@ -204,7 +204,7 @@ def test_a_package_header_has_no_return_time(tmp_path):
 @pytest.mark.parametrize("header, key", [
     ({**_header(), "format": "something-else"}, "share.err.wrong_format"),
     ([1, 2], "share.err.wrong_format"),
-    ({**_header(), "format_version": 2}, "share.err.newer_format"),
+    ({**_header(), "format_version": 3}, "share.err.newer_format"),
     ({k: v for k, v in _header().items() if k != "split_id"}, "share.err.bad_header"),
     ({**_header(), "evaluator_index": "first"}, "share.err.bad_header"),
 ])
@@ -216,10 +216,18 @@ def test_a_bad_header_is_refused(tmp_path, header, key):
 
 
 def test_a_newer_format_names_both_versions(tmp_path):
-    path = _zip(tmp_path / "p.zip", _package_members(format_version=2))
+    path = _zip(tmp_path / "p.zip", _package_members(format_version=3))
     with pytest.raises(ShareError) as e:
         peek_header(path)
-    assert e.value.params == {"found": 2, "expected": 1}
+    assert e.value.params == {"found": 3, "expected": 2}
+
+
+def test_a_version_two_return_header_is_read(tmp_path):
+    """Spec 2026-10-26 §8.3: a grouping return is format 2; packages stay 1."""
+    path = _zip(tmp_path / "r.zip", _package_members(format_version=2, kind=share.KIND_RETURN))
+    assert peek_header(path).format_version == 2
+    assert share.READABLE_VERSIONS == (1, 2) and share.RETURN_GROUPS_VERSION == 2
+    assert share.FORMAT_VERSION == 1
 
 
 def test_a_header_that_is_not_json_is_refused(tmp_path):

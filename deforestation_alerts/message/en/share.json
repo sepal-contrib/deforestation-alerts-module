@@ -37,7 +37,12 @@
     "merge_err_no_alerts": "The alerts of the active set are not loaded.",
     "merge_err_changed": "The project or its active set changed since the preview; open the copy again.",
     "merge_err_store_changed": "The alerts were saved while merging; nothing was merged, try again.",
+    "merge_err_groups": "The merge would break a review group; nothing was merged.",
     "merge_summary": "{evaluator}: {new} new reviews, {conflicts} conflicts, {unchanged} unchanged, {ignored} ignored",
+    "merge_summary_groups": {
+      "one": "{n} alerts ({groups} group)",
+      "other": "{n} alerts ({groups} groups)"
+    },
     "merge_questions_changed": "The questionnaire changed since the packages were made; answers are merged by question key.",
     "merge_extra_columns": "Ignored columns: {columns}",
     "merge_selected_reload": "Alert {n}, open in Analysis, will be reloaded."

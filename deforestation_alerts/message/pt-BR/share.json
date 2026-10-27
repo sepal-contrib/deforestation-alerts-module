@@ -37,7 +37,13 @@
     "merge_err_no_alerts": "Os alertas do conjunto ativo não estão carregados.",
     "merge_err_changed": "O projeto ou seu conjunto ativo mudou desde a prévia; abra a cópia novamente.",
     "merge_err_store_changed": "Os alertas foram salvos durante a mesclagem; nada foi mesclado, tente novamente.",
+    "merge_err_groups": "A mesclagem quebraria um grupo de revisão; nada foi mesclado.",
     "merge_summary": "{evaluator}: {new} revisões novas, {conflicts} conflitos, {unchanged} sem alteração, {ignored} ignoradas",
+    "merge_summary_groups": {
+      "one": "{n} alertas ({groups} grupo)",
+      "many": "{n} alertas ({groups} de grupos)",
+      "other": "{n} alertas ({groups} grupos)"
+    },
     "merge_questions_changed": "O questionário mudou desde a criação dos pacotes; as respostas são mescladas pela chave da pergunta.",
     "merge_extra_columns": "Colunas ignoradas: {columns}",
     "merge_selected_reload": "O alerta {n}, aberto em Análise, será recarregado."

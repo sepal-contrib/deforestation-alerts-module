@@ -37,7 +37,13 @@
     "merge_err_no_alerts": "Les alertes du jeu actif ne sont pas chargées.",
     "merge_err_changed": "Le projet ou son jeu actif a changé depuis l'aperçu ; rouvrez la copie.",
     "merge_err_store_changed": "Les alertes ont été enregistrées pendant la fusion ; rien n'a été fusionné, réessayez.",
+    "merge_err_groups": "La fusion casserait un groupe de révision ; rien n'a été fusionné.",
     "merge_summary": "{evaluator} : {new} nouvelles révisions, {conflicts} conflits, {unchanged} inchangées, {ignored} ignorées",
+    "merge_summary_groups": {
+      "one": "{n} alertes ({groups} groupe)",
+      "many": "{n} alertes ({groups} de groupes)",
+      "other": "{n} alertes ({groups} groupes)"
+    },
     "merge_questions_changed": "Le questionnaire a changé depuis la création des paquets ; les réponses sont fusionnées par clé de question.",
     "merge_extra_columns": "Colonnes ignorées : {columns}",
     "merge_selected_reload": "L'alerte {n}, ouverte dans Analyse, sera rechargée."
