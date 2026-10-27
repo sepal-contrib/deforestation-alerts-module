@@ -37,6 +37,7 @@ from typing import Optional
 import pandas as pd
 
 from deforestation_alerts.engine import pmtiles as pmt
+from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.engine.integrate import run_integration
 from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project import io, paths
@@ -97,14 +98,15 @@ def max_alerts_error(text) -> Optional[str]:
     return None if s.isascii() and s.isdigit() and int(s) >= 1 else "steps.integrate.error_max_alerts"
 
 
-def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_only=()):
+def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_only=(), keep_small_growth=True):
     """The form's values as ``(AlertSetParams, None)``, or ``(None, message key)``.
 
     ``max_alerts``: the limit as typed, or None for no limit (stored as 0).
     ``attribute_layers``: the attribute-layer configs in order (None: none). A
     new set writes them as ``attribute_layers``, never as the legacy
     ``attribute_config`` (spec D3). ``confirmed_only``: sources whose probable
-    alerts are left out. The area is always the whole AOI.
+    alerts are left out. ``keep_small_growth``: clusters under the minimum
+    that touch earlier loss stay. The area is always the whole AOI.
     """
     try:
         ha = float(str(min_size).strip())
@@ -122,6 +124,7 @@ def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_
         attribute_config=None,
         attribute_layers=list(attribute_layers or []),
         confirmed_only=list(confirmed_only or []),
+        keep_small_growth=bool(keep_small_growth),
     ), None
 
 
@@ -165,6 +168,18 @@ def changed_since(job, project) -> Optional[str]:
 class _ProjectChanged(Exception):
     """Raised inside the ``update_project`` callback: nothing is recorded or
     published (``update_project`` publishes only when the callback returns)."""
+
+
+def small_growth_note(project, period) -> Optional[str]:
+    """Why a run of ``period`` can link nothing to earlier loss, as a message
+    key: no earlier period has a set, or none of their alerts is reviewed.
+    None when some is, and a link is possible. Reads the manifest only."""
+    earlier = earlier_sets(project, period)
+    if not earlier:
+        return "steps.integrate.small_growth_no_earlier"
+    if not any(s.n_reviewed for s in earlier):
+        return "steps.integrate.small_growth_no_reviewed"
+    return None
 
 
 def reviewed_in(project, set_id: str) -> int:

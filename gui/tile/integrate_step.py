@@ -42,6 +42,7 @@ from gui.scripts.integrate_jobs import (
     reviewed_in,
     reviewed_lines,
     run_integration_job,
+    small_growth_note,
 )
 from gui.scripts.setup_guard import refuse_setup
 from gui.scripts.solara_threads import spawn_in_context
@@ -132,6 +133,7 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
         last=active.params if active is not None else None,
         has_set=active is not None, has_states=alert_layers.has_states(p, active),
         has_earlier=bool(alert_layers.earlier_of(p, active)),
+        growth_note=small_growth_note(p, period),
         active_label=f"{active.period_id} · {' + '.join(active.sources)}" if active is not None else None,
         active_status=status.value if status in (Status.STALE, Status.MISSING) else None,
     ).key(f"integrate-{app_state.project_loaded_signal.value}-{p.name}-{period.id}")
@@ -139,13 +141,15 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
 
 @solara.component
 def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, choices, resolution, last,
-                   has_set=False, has_states=False, has_earlier=False, active_label=None, active_status=None):
+                   has_set=False, has_states=False, has_earlier=False, growth_note=None, active_label=None,
+                   active_status=None):
     notifications = use_notifications()
     ready = [c["source"] for c in choices if c["enabled"]]
     left_out = {c["source"]: c["note"] for c in choices if not c["enabled"]}
     picked, set_picked = solara.use_state(None)  # None: every ready source
     min_size, set_min_size = solara.use_state(str(last.min_size_ha if last else 0.5))
     probable_off, set_probable_off = solara.use_state(set(last.confirmed_only) if last else set())
+    keep_small_growth, set_keep_small_growth = solara.use_state(last.keep_small_growth if last else True)
     sorting, set_sorting = solara.use_state(last.sorting if last else 1)
     # Off keeps every alert (stored as 0); the number typed survives an untick.
     limit_on, set_limit_on = solara.use_state(bool(last and last.max_alerts > 0))
@@ -204,7 +208,8 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         if refuse_setup(app_state, notifications):
             return
         params, err = params_from_form(min_size, sorting, max_alerts if limit_on else None, attr_layers,
-                                       confirmed_only=sorted(x for x in probable_off if x in chosen))
+                                       confirmed_only=sorted(x for x in probable_off if x in chosen),
+                                       keep_small_growth=keep_small_growth)
         if err:
             notifications.error(t(err))
             return
@@ -268,6 +273,14 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         rv.TextField(label=t("steps.integrate.min_size"), v_model=min_size, on_v_model=set_min_size, type="number",
                      suffix="ha", dense=True, outlined=True, hint=t("steps.integrate.min_size_hint", px=min_px),
                      persistent_hint=True)
+        # Growth under the minimum area (on: today's behaviour); the line says
+        # when this run has nothing earlier to link to.
+        with solara.Column(style="gap:4px;"):
+            rv.Checkbox(label=t("steps.integrate.small_growth"), v_model=keep_small_growth,
+                        on_v_model=set_keep_small_growth, dense=True, hide_details=True, class_="mt-0")
+            hint = t("steps.integrate.small_growth_hint")
+            solara.Text(f"{hint} {t(growth_note)}" if growth_note else hint,
+                        style="display:block;" + MUTED + "font-size:0.75rem;", classes=["ml-8"])
         rv.Select(label=t("steps.integrate.sorting"), v_model=sorting, on_v_model=set_sorting, dense=True,
                   outlined=True, items=[{"text": t(f"steps.integrate.sorting_{k}"), "value": k} for k in SORTINGS])
         with solara.Column(style="gap:0;"):

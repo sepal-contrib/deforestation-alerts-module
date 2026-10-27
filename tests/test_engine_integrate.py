@@ -1058,6 +1058,19 @@ def test_small_growth_cluster_kept_next_to_confirmed_parent(tmp_path):
 
 
 @_LONLAT_CENTROID
+def test_small_growth_cluster_dropped_when_not_kept(tmp_path):
+    """Unticked at Integrate: a small cluster touching confirmed loss is too small like any other."""
+    p, jan, dec_set = _december_reviewed(tmp_path, "Confirmed")
+    _january(p, tmp_path, jan)
+    res = _run(p, tmp_path, jan, AlertSetParams(min_size_ha=0.1, keep_small_growth=False))
+    assert len(gpd.read_parquet(tmp_path / res.alert_set.store_rel_path)) == 0
+    assert res.n_growth == 0 and res.n_growth_small == 0
+    st, _, _ = _state(tmp_path, res.alert_set)
+    assert (st[15, 10:12] == integrate.STATE_TOO_SMALL).all()
+    assert _leftovers(tmp_path) == []
+
+
+@_LONLAT_CENTROID
 def test_false_positive_parent_is_ignored(tmp_path):
     p, jan, dec_set = _december_reviewed(tmp_path, "False Positive")
     _january(p, tmp_path, jan)

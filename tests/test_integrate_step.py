@@ -66,6 +66,8 @@ def test_params_from_form():
     params, err = integrate_jobs.params_from_form("1", 3, "25", None, confirmed_only=("RADD",))
     assert err is None and params.sorting == 3 and params.max_alerts == 25 and params.confirmed_only == ["RADD"]
     assert integrate_jobs.params_from_form("1", 3, " 7 ", None)[0].max_alerts == 7
+    assert params.keep_small_growth is True
+    assert integrate_jobs.params_from_form("1", 3, None, None, keep_small_growth=False)[0].keep_small_growth is False
 
 
 @pytest.mark.parametrize("min_size, max_alerts, key", [
@@ -115,6 +117,21 @@ def _set(sid, reviewed, sources=("GLAD-L",), params=None):
                     params=params or AlertSetParams(), store_rel_path=f"{SET_DIR}/alert_db.parquet",
                     combined_rel_path=f"{SET_DIR}/c.tif", footprint_rel_path=f"{SET_DIR}/footprint.tif",
                     n_reviewed=reviewed, fingerprint="f", created_at=datetime.now())
+
+
+DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025, 12, 31))
+
+
+def test_small_growth_note_says_when_nothing_can_link():
+    p = _bare()
+    assert integrate_jobs.small_growth_note(p, JAN) == "steps.integrate.small_growth_no_earlier"
+    p.alert_sets["same"] = _set("same", 3)  # January's own set is not earlier
+    assert integrate_jobs.small_growth_note(p, JAN) == "steps.integrate.small_growth_no_earlier"
+    p.periods[DEC.id] = DEC
+    p.alert_sets["dec"] = _set("dec", 0).model_copy(update={"period_id": DEC.id})
+    assert integrate_jobs.small_growth_note(p, JAN) == "steps.integrate.small_growth_no_reviewed"
+    p.alert_sets["dec"] = p.alert_sets["dec"].model_copy(update={"n_reviewed": 2})
+    assert integrate_jobs.small_growth_note(p, JAN) is None
 
 
 def test_reviewed_in():
@@ -842,6 +859,28 @@ def test_unticking_the_limit_keeps_every_alert_and_remembers_the_number(step):
         assert job.params.max_alerts == 0
         _checkbox(rc, t("steps.integrate.limit_alerts")).v_model = True
         assert _field(rc, t("steps.integrate.max_alerts")).v_model == "40"
+    finally:
+        rc.close()
+
+
+def test_small_growth_is_kept_until_unticked_and_reopens_as_run(step):
+    label = t("steps.integrate.small_growth")
+    map_, rc = _render(_state(_project("d", "GLAD-L")))
+    try:
+        assert _checkbox(rc, label).v_model is True
+        hint = f"{t('steps.integrate.small_growth_hint')} {t('steps.integrate.small_growth_no_earlier')}"
+        assert hint in _texts(rc)  # no earlier period: the hint says nothing links
+        _checkbox(rc, label).v_model = False
+        _run(rc)
+        step.run_jobs()
+        [job] = step.runs
+        assert job.params.keep_small_growth is False
+    finally:
+        rc.close()
+    last = AlertSetParams(keep_small_growth=False)
+    map_, rc = _render(_state(_project("d", "GLAD-L", sets=[_set("x", 0, params=last)])))
+    try:
+        assert _checkbox(rc, label).v_model is False
     finally:
         rc.close()
 

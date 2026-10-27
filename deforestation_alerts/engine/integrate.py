@@ -412,7 +412,8 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
                 confirmed_only={p.sources[s].digit for s in job.params.confirmed_only if s in sources})
 
         step("steps.integrate.step_vectorize")
-        mask = burn_touch_mask(cands, p.grid, touch)
+        # Unticked at Integrate, no small cluster is kept for touching earlier loss.
+        mask = burn_touch_mask(cands, p.grid, touch) if job.params.keep_small_growth else None
         eligible = vectorize_alerts(
             base, min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution), touch_mask=mask
         )

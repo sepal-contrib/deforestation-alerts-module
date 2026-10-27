@@ -245,17 +245,23 @@ class AlertSetParams(BaseModel):
     attribute_layers: list[dict] = Field(default_factory=list)
     #: sources whose probable (unconfirmed) pixels are left out (spec §5)
     confirmed_only: list[str] = Field(default_factory=list)
+    #: clusters under ``min_size_ha`` that touch earlier loss stay, as growth
+    #: under the minimum area; off, they are dropped like any small cluster
+    keep_small_growth: bool = True
 
     @model_serializer(mode="wrap")
     def _without_empty_layers(self, handler):
-        """Leave ``attribute_layers`` and ``confirmed_only`` out while empty. A set's
-        fingerprint hashes this dump (``fingerprint.set_inputs``), so every
-        set made before the list keeps its own, byte for byte."""
+        """Leave ``attribute_layers`` and ``confirmed_only`` out while empty, and
+        ``keep_small_growth`` while on. A set's fingerprint hashes this dump
+        (``fingerprint.set_inputs``), so every set made before them keeps its
+        own, byte for byte."""
         data = handler(self)
         if not data.get("attribute_layers"):
             data.pop("attribute_layers", None)
         if not data.get("confirmed_only"):
             data.pop("confirmed_only", None)
+        if data.get("keep_small_growth", True):
+            data.pop("keep_small_growth", None)
         return data
 
     def attribute_list(self) -> list[dict]:

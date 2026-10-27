@@ -326,3 +326,10 @@ def test_old_manifest_keeps_every_status(tmp_path):
 def test_empty_confirmed_only_keeps_the_params_dump_unchanged():
     assert "confirmed_only" not in AlertSetParams().model_dump(mode="json")
     assert AlertSetParams(confirmed_only=["RADD"]).model_dump(mode="json")["confirmed_only"] == ["RADD"]
+
+
+def test_keeping_small_growth_keeps_the_params_dump_unchanged():
+    assert "keep_small_growth" not in AlertSetParams().model_dump(mode="json")
+    off = AlertSetParams(keep_small_growth=False)
+    assert off.model_dump(mode="json")["keep_small_growth"] is False
+    assert AlertSetParams.model_validate_json(off.model_dump_json()).keep_small_growth is False
