@@ -50,7 +50,7 @@ def _manifest_without(key):
 def test_an_old_manifest_reads_grouping_off():
     p = Project.model_validate(_manifest_without("group_review"))
     assert p.group_review == GroupReview() and not p.group_review.enabled
-    assert p.group_review.radius_m == 500.0 and p.group_review.include_reviewed is False
+    assert p.group_review.radius_m == 300.0 and p.group_review.include_reviewed is False
 
 
 def test_effective_follows_the_project_without_a_split():

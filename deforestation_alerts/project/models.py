@@ -404,7 +404,7 @@ class GroupReview(BaseModel):
     ``radius_m`` is not range-validated here; ``grouping.effective`` clamps it."""
 
     enabled: bool = False
-    radius_m: float = 500.0
+    radius_m: float = 300.0
     include_reviewed: bool = False
 
 

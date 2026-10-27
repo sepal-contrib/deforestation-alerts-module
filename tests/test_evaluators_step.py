@@ -1412,7 +1412,7 @@ def test_the_group_option_is_off_by_default_and_saves_when_ticked(data_root, mul
         assert _group_note(rc) == t("evaluators.group_note")
         _group_box(rc).widget.v_model = True
         assert s.project.value.group_review.enabled is True
-        assert _group_radius(rc).widget.v_model == "500" and _group_radius(rc).widget.suffix == "m"
+        assert _group_radius(rc).widget.v_model == "300" and _group_radius(rc).widget.suffix == "m"
         assert _group_include(rc).widget.v_model is False
         assert t("evaluators.group_include_reviewed_hint") in _strings(rc.container)
         _group_include(rc).widget.v_model = True
@@ -1469,7 +1469,7 @@ def test_saved_groups_show_the_option_ticked_when_it_was_left_off(data_root):
     _box, rc = _render(_state(p, _gdf(evaluators=("",) * 4)))
     try:
         assert _group_box(rc).widget.v_model is True and _group_box(rc).widget.disabled is True
-        assert _group_radius(rc).widget.v_model == "500" and _group_radius(rc).widget.disabled is True
+        assert _group_radius(rc).widget.v_model == "300" and _group_radius(rc).widget.disabled is True
     finally:
         rc.close()
 
