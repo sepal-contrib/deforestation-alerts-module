@@ -417,6 +417,18 @@ def test_nearby_measures_edge_to_edge_and_lists_the_nearest_first():
     assert [r.position for r in rg.nearby(gdf, 0, 300, CRS).rows] == [1, 2]
 
 
+def test_nearby_reads_statuses_for_the_listed_rows_only(monkeypatch):
+    """Review M8: the unreviewed mask is one vector read, not a
+    ``status_of`` call per row of the store."""
+    gdf = _alerts(40, statuses=["Confirmed", NR] * 20)
+    calls = []
+    real = rg.status_of
+    monkeypatch.setattr(rg, "status_of", lambda g, p: calls.append(p) or real(g, p))
+    res = rg.nearby(gdf, 0, 250, CRS)
+    assert [r.position for r in res.rows] == [1]  # #3 (reviewed, single) is not offered
+    assert len(calls) <= 2 * len(res.rows)
+
+
 def test_the_radius_is_edge_to_edge_at_ten_metres():
     assert [r.position for r in rg.nearby(_spaced([8.0]), 0, 10, CRS).rows] == [1]
     assert rg.nearby(_spaced([12.0]), 0, 10, CRS).rows == ()

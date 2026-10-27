@@ -492,7 +492,7 @@ def nearby(gdf, main, radius_m, crs=None, *, include=(), offer_reviewed=False, e
     source = shapely.union_all(geoms[origin])
     radius = max(float(radius_m), 0.0)
     selected = sorted({int(p) for p in include} - {main} - set(own_rows))
-    unreviewed = np.array([status_of(gdf, p) == NOT_REVIEWED for p in range(len(gdf))], dtype=bool)
+    unreviewed = ~review_status.reviewed_mask(gdf).to_numpy(dtype=bool)
     grouped = values.notna().to_numpy()
     offered = unreviewed | grouped | offer_reviewed
     near = shapely.STRtree(geoms).query(source, predicate="dwithin", distance=radius)
