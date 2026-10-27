@@ -376,6 +376,14 @@ def n_groups(gdf) -> int:
     return int((counts >= 2).sum())
 
 
+def grouped_mask(gdf) -> np.ndarray:
+    """Per position, whether the row is in a group with members (its
+    ``review_group`` value held by two rows or more)."""
+    values = group_values(gdf)
+    sizes = values.dropna().value_counts().to_dict()
+    return np.array([not pd.isna(v) and sizes.get(v, 0) >= 2 for v in values], dtype=bool)
+
+
 # ---- what the outputs read (§9) -------------------------------------------
 def group_shape(gdf, p) -> Optional[BaseGeometry]:
     """The group's outline: its main's drawing, else the union of the

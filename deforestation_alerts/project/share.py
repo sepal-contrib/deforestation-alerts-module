@@ -69,6 +69,10 @@ TILES_MEMBER = "imagery/tiles.parquet"
 INDEX_MEMBER = "imagery/index.json"
 TEMPLATE_MEMBER = "template/report.docx"
 REVIEWS_MEMBER = "reviews.parquet"
+#: A format-2 return's flag (spec 2026-10-26 §8.3): the row was in a group of
+#: two or more when packaged and is not in the copy. Only a copy that recorded
+#: its packaged groups (``ReviewCopy.grouped_at_packaging``) writes it.
+DETACHED = "detached"
 #: The earlier sets' alerts a copy links against (spec 2026-10-20 §6.6). An
 #: older app refuses a package with it as ``share.err.unexpected_member``.
 EARLIER_MEMBER = paths.EARLIER_SNAPSHOT
@@ -450,16 +454,23 @@ def build_package(p: Project, pdir: Path, set_id: str, evaluator: str, aoi_geojs
         return local_files.copy_into(built, Path(out_dir) / built.name)
 
 
-def return_rows(gdf, evaluator: str, questions, *, all_assigned: bool = False) -> pd.DataFrame:
+def return_rows(gdf, evaluator: str, questions, *, all_assigned: bool = False,
+                packaged: Optional[list[int]] = None) -> pd.DataFrame:
     """What a reviewed copy returns (spec §6.4): the rows assigned to
     ``evaluator`` and reviewed (``is_reviewed``), or every row assigned to
     it with ``all_assigned`` (a format-2 return, spec 2026-10-26 §8.3);
-    ``alert_id``, ``evaluator`` and the review columns the store has."""
+    ``alert_id``, ``evaluator`` and the review columns the store has. With
+    ``packaged`` (the copy's ``grouped_at_packaging``), a ``DETACHED`` column
+    too: the row's id is in ``packaged`` and the row is not in a group now."""
     mask = split_mod.assignments(gdf).to_numpy() == evaluator
     if not all_assigned:
         mask = mask & reviewed_mask(gdf).to_numpy()
     cols = ["alert_id", split_mod.EVALUATOR_COLUMN] + [c for c in review_columns(questions) if c in gdf.columns]
-    return gdf.loc[mask, cols]
+    rows = gdf.loc[mask, cols]
+    if packaged is not None:
+        detached = np.isin(review_groups.ids(gdf), packaged) & ~review_groups.grouped_mask(gdf)
+        rows = rows.assign(**{DETACHED: detached[mask]})
+    return rows
 
 
 def _write_table(frame, dest: Path) -> Path:
@@ -494,7 +505,8 @@ def build_return(p: Project, pdir: Path, out_dir: Path, *, app_version: str) -> 
     With the copy's grouping effective (its split's record, spec 2026-10-26
     §8.3) the return is format 2 and carries every row assigned to the
     evaluator, so a member detached in the copy comes back; otherwise it is
-    format 1, exactly as before grouping."""
+    format 1, exactly as before grouping. A format-2 return of a copy that
+    recorded its packaged groups flags the rows detached since (``DETACHED``)."""
     rc = p.review_copy
     if rc is None:
         raise ShareError("share.err.not_a_copy")
@@ -510,7 +522,8 @@ def build_return(p: Project, pdir: Path, out_dir: Path, *, app_version: str) -> 
                          questions_digest=split_mod.questions_digest(p.questions), created_at=now, returned_at=now)
     with local_files.scratch_dir() as tmp:
         store = _snapshot_store(paths.resolve(Path(pdir), s.store_rel_path), tmp / "alert_db.parquet", s.id)
-        rows = return_rows(load_gdf_from_parquet(store), rc.evaluator, p.questions, all_assigned=groups)
+        rows = return_rows(load_gdf_from_parquet(store), rc.evaluator, p.questions, all_assigned=groups,
+                           packaged=rc.grouped_at_packaging if groups else None)
         reviews = _write_table(rows, tmp / REVIEWS_MEMBER)
         name = return_filename(rc.origin_project, rc.set_id, rc.evaluator_index, rc.evaluator)
         built = _write_zip(tmp / name, {HEADER_MEMBER: header.model_dump_json(indent=2)}, {REVIEWS_MEMBER: reviews})
@@ -581,9 +594,9 @@ def _package_aoi(zf) -> dict:
     return _aoi_collection(data, "share.err.bad_aoi")
 
 
-def _check_store(path: Path, header: ShareHeader) -> None:
-    """The store reads, has ``alert_id`` (unique integers), ``status`` and
-    ``evaluator``, and holds the header's set only."""
+def _check_store(path: Path, header: ShareHeader) -> gpd.GeoDataFrame:
+    """The store, refused unless it reads, has ``alert_id`` (unique
+    integers), ``status`` and ``evaluator``, and holds the header's set only."""
     try:
         gdf = load_gdf_from_parquet(path)
     except Exception as exc:  # noqa: BLE001 -- any unreadable store is refused the same way
@@ -596,6 +609,14 @@ def _check_store(path: Path, header: ShareHeader) -> None:
         raise ShareError("share.err.bad_store", error="alert_id is not a unique integer id")
     if "set_id" in gdf.columns and not (gdf["set_id"] == header.set_id).all():
         raise ShareError("share.err.bad_store", error="rows of another set")
+    return gdf
+
+
+def _grouped_ids(gdf, evaluator: str) -> list[int]:
+    """The ``alert_id``s of ``evaluator``'s rows in a group of two rows or
+    more: what a copy records when imported (``grouped_at_packaging``)."""
+    mine = split_mod.assignments(gdf).to_numpy() == evaluator
+    return sorted(int(a) for a in review_groups.ids(gdf)[mine & review_groups.grouped_mask(gdf)])
 
 
 def _package_imagery(zf, tmp: Path) -> dict:
@@ -650,9 +671,11 @@ def _package_earlier(zf, tmp: Path) -> Optional[Path]:
 
 
 def _write_copy(folder: Path, base: Path, header: ShareHeader, manifest: Project, aoi: dict, store: Path,
-                imagery: dict, template: Optional[Path], earlier: Optional[Path] = None) -> None:
+                imagery: dict, template: Optional[Path], earlier: Optional[Path] = None,
+                grouped: Optional[list[int]] = None) -> None:
     """Every file to the destination the importer derives, then the manifest.
-    The copy has a ``snapshot_at`` exactly when it has the earlier alerts."""
+    The copy has a ``snapshot_at`` exactly when it has the earlier alerts,
+    and records ``grouped`` as its ``grouped_at_packaging``."""
     s = manifest.alert_sets[header.set_id]
     period = manifest.periods[s.period_id]
     canonical = canonical_set_paths(s, period)
@@ -687,7 +710,8 @@ def _write_copy(folder: Path, base: Path, header: ShareHeader, manifest: Project
                                   set_id=header.set_id, split_id=header.split_id,
                                   set_fingerprint=header.set_fingerprint, origin_project=header.origin_project,
                                   imported_at=datetime.now(),
-                                  snapshot_at=header.created_at if earlier is not None else None),
+                                  snapshot_at=header.created_at if earlier is not None else None,
+                                  grouped_at_packaging=grouped),
     })
     project_io.save_project(copy, base)
 
@@ -705,13 +729,13 @@ def _import(zip_path, base: Path) -> str:
         manifest = _package_manifest(zf, header)
         aoi = _package_aoi(zf)
         store = _extract(zf, STORE_MEMBER, tmp / "alert_db.parquet")
-        _check_store(store, header)
+        grouped = _grouped_ids(_check_store(store, header), header.evaluator)
         imagery = _package_imagery(zf, tmp)
         template = _extract(zf, TEMPLATE_MEMBER, tmp / "report.docx") if TEMPLATE_MEMBER in zf.namelist() else None
         earlier = _package_earlier(zf, tmp)
         folder = _claim_folder(base, header)
         try:
-            _write_copy(folder, base, header, manifest, aoi, store, imagery, template, earlier)
+            _write_copy(folder, base, header, manifest, aoi, store, imagery, template, earlier, grouped)
         except BaseException:
             shutil.rmtree(folder, ignore_errors=True)
             raise
@@ -778,7 +802,8 @@ def _read_reviews(zf, evaluator: str, version: int = FORMAT_VERSION) -> pd.DataF
     """``reviews.parquet``, checked (spec §7.1): unique integer ``alert_id``s,
     every ``evaluator`` the header's, every ``status`` a verdict (or
     ``Not reviewed`` in a format-2 return, spec 2026-10-26 §8.3), every
-    ``review_group`` missing or a whole number. Indexed by ``alert_id``."""
+    ``review_group`` missing or a whole number, ``DETACHED`` (when there)
+    a boolean column. Indexed by ``alert_id``."""
     try:
         rows = read_table(BytesIO(zf.read(REVIEWS_MEMBER)))
     except Exception as exc:  # noqa: BLE001 - any unreadable payload is the same refusal
@@ -793,6 +818,8 @@ def _read_reviews(zf, evaluator: str, version: int = FORMAT_VERSION) -> pd.DataF
     if "status" not in rows.columns or not all(isinstance(v, str) and v in allowed for v in rows["status"]):
         raise ShareError("share.merge_err_payload")
     if REVIEW_GROUP in rows.columns and not _whole_numbers(rows[REVIEW_GROUP]):
+        raise ShareError("share.merge_err_payload")
+    if DETACHED in rows.columns and not pd.api.types.is_bool_dtype(rows[DETACHED]):
         raise ShareError("share.merge_err_payload")
     return rows.set_index("alert_id")
 
@@ -860,10 +887,12 @@ def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
     is given; a merge classifies again against the store it writes.
 
     Groups (spec 2026-10-26 §8.3, §8.4): a returned ``Not reviewed`` row is
-    unchanged unless the store holds it in a group of two rows or more (it was
-    detached in the copy). Rows connected through ``review_group``, in the
-    store or in the return, among the evaluator's rows, are one component: a
-    conflict in it makes every non-ignored row of it a conflict."""
+    unchanged unless the evaluator detached it in the copy (its ``DETACHED``
+    flag; any row of a return without the column) and the store still holds
+    it in a group of two rows or more. Rows connected through
+    ``review_group``, in the store or in the return, among the evaluator's
+    rows, are one component: a conflict in it makes every non-ignored row of
+    it a conflict."""
     who = split_mod.assignments(store_gdf).tolist()
     at = _positions(store_gdf)
     evaluator = preview.header.evaluator
@@ -873,12 +902,14 @@ def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
     theirs = _return_groups(rows)
     their_sizes = theirs.value_counts().to_dict() if theirs is not None else {}
     statuses = rows["status"].tolist()
+    detached = rows[DETACHED].tolist() if DETACHED in rows.columns else [True] * len(rows)
     kind = {}
     for k, aid in enumerate(rows.index):
         aid, i = int(aid), at.get(int(aid))
         if i is None or who[i] != evaluator:
             kind[aid] = "ignored"
-        elif statuses[k] == NOT_REVIEWED and _group_id(store_groups.iat[i], store_sizes) is None:
+        elif statuses[k] == NOT_REVIEWED and (not detached[k]
+                                              or _group_id(store_groups.iat[i], store_sizes) is None):
             kind[aid] = "unchanged"
         elif all(same_value(_cell(store_gdf, i, c), rows.at[aid, c]) for c in preview.columns):
             kind[aid] = "unchanged"
@@ -952,7 +983,7 @@ def read_return(zip_path, p: Project, store_gdf) -> ReturnPreview:
     preview = ReturnPreview(
         header=header, rows=rows, new=[], conflicts=[], unchanged=[], ignored=[],
         columns=[c for c in review if c in rows.columns],
-        extra_columns=[c for c in rows.columns if c not in review and c != split_mod.EVALUATOR_COLUMN],
+        extra_columns=[c for c in rows.columns if c not in review and c not in (split_mod.EVALUATOR_COLUMN, DETACHED)],
         questions_changed=header.questions_digest != split_mod.questions_digest(p.questions),
     )
     return classify_return(preview, store_gdf)

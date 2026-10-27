@@ -314,6 +314,10 @@ class ReviewCopy(BaseModel):
     #: when the package's earlier-alerts snapshot was taken (spec 2026-10-20
     #: §6.6); None for a package from before the snapshot
     snapshot_at: Optional[datetime] = None
+    #: the evaluator's alert ids in a group of two or more when packaged, so a
+    #: return can say which it detached (spec 2026-10-26 §8.3); None for a copy
+    #: imported before the record
+    grouped_at_packaging: Optional[list[int]] = None
 
 
 class AlertSet(BaseModel):

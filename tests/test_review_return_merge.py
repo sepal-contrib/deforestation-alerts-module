@@ -550,17 +550,19 @@ def _grouped_creator(tmp_path, monkeypatch, statuses, groups=None):
     return p, pdir
 
 
-def _grouping_copy(tmp_path, statuses, groups, assigned=ANA):
-    """Ana's copy of a split made with grouping on (500 m)."""
+def _grouping_copy(tmp_path, statuses, groups, assigned=ANA, packaged=None):
+    """Ana's copy of a split made with grouping on (500 m); ``packaged`` its
+    ``grouped_at_packaging`` (None: a copy imported before the record)."""
     p, pdir = make_copy(tmp_path / "copies", statuses=statuses, assigned=assigned,
                         extra={"review_group": _groups(groups)})
     s = p.alert_sets[SET1]
     p.alert_sets[SET1] = s.model_copy(update={"split": s.split.model_copy(update={"group_radius_m": 500.0})})
+    p.review_copy = p.review_copy.model_copy(update={"grouped_at_packaging": packaged})
     return p, pdir
 
 
-def _grouping_return(tmp_path, statuses, groups, assigned=ANA):
-    p, pdir = _grouping_copy(tmp_path, statuses, groups, assigned)
+def _grouping_return(tmp_path, statuses, groups, assigned=ANA, packaged=None):
+    p, pdir = _grouping_copy(tmp_path, statuses, groups, assigned, packaged)
     return share.build_return(p, pdir, tmp_path / "out", app_version=APP_VERSION)
 
 
@@ -599,8 +601,49 @@ def test_a_grouping_return_is_format_two_and_carries_a_detached_member(tmp_path,
     assert rows["alert_id"].tolist() == [0, 1, 2]  # every row assigned to Ana, reviewed or not
     assert rows["status"].tolist() == ["Confirmed", "Confirmed", "Not reviewed"]
     assert _plain(rows["review_group"]) == [0, 0, None]
+    assert share.DETACHED not in rows.columns  # a copy imported before the record says nothing
     p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
     assert read_return(zp, p, _store(p)).header.format_version == 2  # a Not-reviewed row reads in format 2
+
+
+def test_a_grouping_return_flags_the_rows_detached_since_packaging(tmp_path):
+    """Packaged as one group of all four; in the copy 2 left it and 3 was
+    saved alone (a group of one)."""
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Confirmed"), (0, 0, NA, 3),
+                          packaged=[0, 1, 2, 3])
+    rows = share.read_table(BytesIO(zip_members(zp)[share.REVIEWS_MEMBER]))
+    assert rows["alert_id"].tolist() == [0, 1, 2, 3]
+    assert rows[share.DETACHED].tolist() == [False, False, True, True]
+    assert rows[share.DETACHED].dtype == bool
+
+
+def test_a_return_without_grouping_carries_no_detached_flag(tmp_path):
+    p, pdir = make_copy(tmp_path / "copies", statuses=("Confirmed",) * 4, assigned=ANA)
+    p.review_copy = p.review_copy.model_copy(update={"grouped_at_packaging": [0, 1]})
+    members = zip_members(share.build_return(p, pdir, tmp_path / "out", app_version=APP_VERSION))
+    assert json.loads(members[share.HEADER_MEMBER])["format_version"] == 1
+    assert share.DETACHED not in share.read_table(BytesIO(members[share.REVIEWS_MEMBER])).columns
+
+
+def test_rows_the_creator_grouped_after_packaging_keep_the_creators_review(tmp_path, monkeypatch):
+    """Review M3: nothing was grouped when packaged. Ana grouped 0 and 1;
+    the creator grouped 2 and 3 meanwhile and reviewed them, which Ana's
+    unreviewed rows leave alone, even with Take theirs."""
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Not reviewed",) * 2 + ("False Positive",) * 2, (NA, NA, 2, 2))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA),
+                          packaged=[])
+    gdf = _store(p)
+    preview = read_return(zp, p, gdf)
+    assert _classes(preview) == ([0, 1], [], [2, 3], [])
+    assert preview.extra_columns == [] and share.DETACHED not in preview.columns
+    merged = apply_return(gdf, preview, "theirs")
+    assert merged["status"].tolist() == ["Confirmed", "Confirmed", "False Positive", "False Positive"]
+    assert _plain(merged["review_group"]) == [0, 0, 2, 2]
+    assert share.DETACHED not in merged.columns
+    review_groups.check_groups(merged)
+    # Without the flag (a copy imported before the record) the same rows read as detached.
+    old = _reviews(zp, tmp_path / "old.zip", lambda r: r.drop(columns=share.DETACHED))
+    assert _classes(read_return(old, p, gdf)) == ([0, 1], [2, 3], [], [])
 
 
 def test_a_format_one_return_still_refuses_a_not_reviewed_row(tmp_path, monkeypatch):
@@ -609,10 +652,12 @@ def test_a_format_one_return_still_refuses_a_not_reviewed_row(tmp_path, monkeypa
     assert _refused(lambda: read_return(zp, p, _store(p))).key == "share.merge_err_payload"
 
 
-def test_a_detached_member_resets_the_creators_row(tmp_path, monkeypatch):
+@pytest.mark.parametrize("packaged", [None, [0, 1, 2]], ids=["no-record", "flagged"])
+def test_a_detached_member_resets_the_creators_row(tmp_path, monkeypatch, packaged):
     """Alert 2 was merged as a member of alert 0's group, then detached in the copy."""
     p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA),
+                          packaged=packaged)
     gdf = _store(p)
     preview = read_return(zp, p, gdf)
     assert _classes(preview) == ([], [0, 1, 2], [3], [])  # the group is one conflict
@@ -787,6 +832,16 @@ def test_a_return_with_an_unreadable_group_id_is_refused(tmp_path, monkeypatch, 
     assert _refused(lambda: _preview(app_state, zp)).key == "share.merge_err_payload"
     after = _disk(app_state)
     assert list(after.columns) == list(before.columns) and after["status"].tolist() == ["Not reviewed"] * 4
+
+
+@pytest.mark.parametrize("bad", [pd.Series(["no", "yes", None, None], dtype=object),
+                                 pd.Series([0, 1, 0, 0], dtype="int64")])
+def test_a_return_with_an_unreadable_detached_flag_is_refused(tmp_path, monkeypatch, bad):
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA),
+                          packaged=[0, 1, 2])
+    zp = _reviews(zp, tmp_path / "bad.zip", lambda r: r.assign(**{share.DETACHED: bad}))
+    assert _refused(lambda: read_return(zp, p, _store(p))).key == "share.merge_err_payload"
 
 
 def test_an_older_apps_return_that_changes_a_group_member_merges_only_as_mine(tmp_path, monkeypatch):

@@ -5,6 +5,7 @@ earlier copy of the same split and evaluator."""
 
 import json
 
+import pandas as pd
 import pytest
 
 from deforestation_alerts.project import paths, share
@@ -82,6 +83,7 @@ def test_an_imported_package_is_a_review_copy(package, evaluator_root):
     rc = p.review_copy
     assert (rc.evaluator, rc.evaluator_index, rc.set_id, rc.split_id) == ("Ana", 1, SET1, SPLIT_ID)
     assert (rc.set_fingerprint, rc.origin_project) == (f"fp-{SET1}", CREATOR)
+    assert rc.grouped_at_packaging == []  # a store without groups
     assert list(p.alert_sets) == [SET1] and p.active_set == SET1
     assert list(p.periods) == [P1.id] and p.active_period == P1.id
     assert p.artifacts == {} and p.coverage == {} and set(p.vis_layers) == {"gee"}
@@ -106,6 +108,19 @@ def test_the_package_keeps_the_split_grouping_record(data_root, tmp_path, evalua
     sp = copy.alert_sets[SET1].split
     assert (sp.group_radius_m, sp.group_include_reviewed) == (750.0, True)
     assert grouping.effective(copy, copy.alert_sets[SET1]) == grouping.Grouping(750.0, True)
+
+
+def test_the_copy_records_the_evaluators_grouped_alerts(data_root, tmp_path, evaluator_root):
+    """Spec 2026-10-26 §8.3: Ana's 0 and 2 are one group; Bo's 1 and 3 are
+    groups of one, and Bo's rows are not Ana's to record."""
+    p, pdir = make_creator(data_root)
+    store = pdir / "legacy" / "alert_db.parquet"
+    gdf = load_gdf_from_parquet(store)
+    gdf["review_group"] = pd.array([0, 1, 0, 3], dtype="Int64")
+    save_gdf_to_parquet(gdf, store)
+    copy = import_package(build_package(p, pdir, SET1, "Ana", AOI_FC, tmp_path / "out", app_version=APP_VERSION),
+                          evaluator_root)
+    assert copy.review_copy.grouped_at_packaging == [0, 2]
 
 
 def test_the_default_root_is_the_data_directory(package, data_root):

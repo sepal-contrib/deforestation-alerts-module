@@ -362,6 +362,12 @@ def test_n_groups_counts_groups_of_two_or_more():
     assert rg.n_groups(_alerts(2)) == 0
 
 
+def test_grouped_mask_marks_the_rows_of_groups_of_two_or_more():
+    gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[100, 100, 102, None])
+    assert rg.grouped_mask(gdf).tolist() == [True, True, False, False]
+    assert rg.grouped_mask(_alerts(2)).tolist() == [False, False]  # no column
+
+
 # ---- what the outputs read ---------------------------------------------------
 def test_group_shape_is_the_drawing_else_the_union():
     gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[101] * 3 + [None])
