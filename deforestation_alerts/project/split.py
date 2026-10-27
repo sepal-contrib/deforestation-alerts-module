@@ -55,21 +55,42 @@ def count_names(n: int, prefix: str) -> list[str]:
     return [f"{prefix} {i}" for i in range(1, n + 1)]
 
 
-def deal(statuses: Sequence, evaluators: list[str], include_reviewed: bool) -> list[str]:
+def deal(statuses: Sequence, evaluators: list[str], include_reviewed: bool, *, units=None) -> list[str]:
     """Each row's evaluator, in store row order (the set's sort order): the
     eligible rows (all of them, or only the unreviewed ones without
     ``include_reviewed``) get the names round-robin, eligible row ``k``
-    ``evaluators[k % N]``; every other row ``""``."""
+    ``evaluators[k % N]``; every other row ``""``.
+
+    With ``units`` (position tuples covering exactly the eligible rows, the
+    neighbourhoods of a grouping split) each unit in turn goes whole to the
+    evaluator with the fewest alerts so far (ties: list order)."""
     if not evaluators:
         raise SplitError("evaluators.err.no_names")
-    out, k = [], 0
-    for status in statuses:
+    out = [""] * len(statuses)
+    if units is not None:
+        load = [0] * len(evaluators)
+        for unit in units:
+            i = load.index(min(load))
+            for pos in unit:
+                out[pos] = evaluators[i]
+            load[i] += len(unit)
+        return out
+    k = 0
+    for pos, status in enumerate(statuses):
         if include_reviewed or not is_reviewed(status):
-            out.append(evaluators[k % len(evaluators)])
+            out[pos] = evaluators[k % len(evaluators)]
             k += 1
-        else:
-            out.append("")
     return out
+
+
+def oversized(units, n_evaluators: int) -> int:
+    """The size of the largest unit when it exceeds an even share
+    (``ceil(total / n)``) of the dealt alerts, else 0."""
+    sizes = [len(u) for u in units]
+    if not sizes or n_evaluators < 1:
+        return 0
+    biggest = max(sizes)
+    return biggest if biggest > -(-sum(sizes) // n_evaluators) else 0
 
 
 def assignments(gdf) -> "pd.Series":

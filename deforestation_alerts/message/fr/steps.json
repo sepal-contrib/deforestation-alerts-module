@@ -814,6 +814,11 @@
       "many": "Alertes réparties entre {n} d'évaluateurs.",
       "other": "Alertes réparties entre {n} évaluateurs."
     },
+    "split_oversized": {
+      "one": "Un groupe d'alertes proches contient {n} alerte, plus qu'une part équitable.",
+      "many": "Un groupe d'alertes proches contient {n} d'alertes, plus qu'une part équitable.",
+      "other": "Un groupe d'alertes proches contient {n} alertes, plus qu'une part équitable."
+    },
     "removed": "Répartition supprimée.",
     "remove_unrecorded": "La répartition de {project} n'a pas été supprimée : un autre projet a été ouvert, ou ses alertes n'étaient pas encore chargées. Ouvrez {project} et supprimez la répartition à nouveau.",
     "orphan": "Les alertes de cet ensemble portent des attributions d'évaluateurs, mais le projet n'a aucune répartition enregistrée. Supprimez la répartition pour recommencer.",

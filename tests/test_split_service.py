@@ -269,3 +269,51 @@ def test_remove_split_without_a_column_only_drops_the_record(tmp_path, monkeypat
     split_service.remove_split(state, ctx)
     assert set_store.store_generation(store) == generation
     assert state.project.value.alert_sets["x"].split is None
+
+
+def _pairs():
+    """Four boxes: two pairs ~50 m apart, the pairs ~2 km apart (near -70, -10)."""
+    def b(x):
+        return box(-70 + x, -10, -70 + x + 0.0009, -10 + 0.0009)
+
+    boxes = [b(0), b(0.0014), b(0.018), b(0.0194)]
+    return gpd.GeoDataFrame({"alert_id": [0, 1, 2, 3], "status": ["Not reviewed"] * 4, "set_id": ["x"] * 4},
+                            geometry=boxes, crs="EPSG:4326")
+
+
+def test_a_grouping_split_keeps_neighbours_together(tmp_path, monkeypatch):
+    from deforestation_alerts.project.models import GroupReview
+
+    state, ctx, store = _open(tmp_path, monkeypatch)
+    save_gdf_to_parquet(_pairs(), str(store))
+    state.alerts_gdf.set(set_store.load_active_alerts(state.project.value))
+    p = state.project.value
+    p.group_review = GroupReview(enabled=True, radius_m=500.0)
+    state.project.set(p)
+
+    split = split_service.apply_split(state, ctx, ["A", "B"], include_reviewed=False)
+
+    col = _column(store)
+    assert col[0] == col[1] and col[2] == col[3] and col[0] != col[2]
+    assert split.group_radius_m == 500.0 and split.group_include_reviewed is False
+    assert split_service.largest_unit(state, 2) == 0
+
+
+def test_a_split_without_grouping_records_no_radius(tmp_path, monkeypatch):
+    state, ctx, store = _open(tmp_path, monkeypatch)
+    split = split_service.apply_split(state, ctx, ["A", "B"], include_reviewed=False)
+    assert split.group_radius_m is None and split.group_include_reviewed is False
+    assert split_service.largest_unit(state, 2) == 0
+
+
+def test_largest_unit_reports_a_neighbourhood_above_an_even_share(tmp_path, monkeypatch):
+    from deforestation_alerts.project.models import GroupReview
+
+    state, ctx, store = _open(tmp_path, monkeypatch)
+    save_gdf_to_parquet(_pairs(), str(store))
+    state.alerts_gdf.set(set_store.load_active_alerts(state.project.value))
+    p = state.project.value
+    p.group_review = GroupReview(enabled=True, radius_m=5000.0)  # all four in one unit
+    state.project.set(p)
+    split_service.apply_split(state, ctx, ["A", "B"], include_reviewed=False)
+    assert split_service.largest_unit(state, 2) == 4

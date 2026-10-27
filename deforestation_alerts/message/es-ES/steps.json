@@ -814,6 +814,11 @@
       "many": "Alertas repartidas entre {n} de evaluadores.",
       "other": "Alertas repartidas entre {n} evaluadores."
     },
+    "split_oversized": {
+      "one": "Un grupo de alertas cercanas contiene {n} alerta, más de una parte equitativa.",
+      "many": "Un grupo de alertas cercanas contiene {n} de alertas, más de una parte equitativa.",
+      "other": "Un grupo de alertas cercanas contiene {n} alertas, más de una parte equitativa."
+    },
     "removed": "Reparto quitado.",
     "remove_unrecorded": "No se quitó el reparto de {project}: se abrió otro proyecto o sus alertas aún no estaban cargadas. Abre {project} y quita el reparto de nuevo.",
     "orphan": "Las alertas de este conjunto tienen evaluadores asignados, pero el proyecto no guarda ningún reparto. Quita el reparto para empezar de nuevo.",

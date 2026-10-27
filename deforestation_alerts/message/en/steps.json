@@ -778,6 +778,10 @@
       "one": "Alerts split between {n} evaluator.",
       "other": "Alerts split between {n} evaluators."
     },
+    "split_oversized": {
+      "one": "One group of nearby alerts holds {n} alert, more than an even share.",
+      "other": "One group of nearby alerts holds {n} alerts, more than an even share."
+    },
     "removed": "Split removed.",
     "remove_unrecorded": "The split of {project} was not removed: another project was opened, or its alerts were not loaded yet. Open {project} and remove the split again.",
     "orphan": "This set's alerts carry evaluator assignments but the project has no split record. Remove the split to start again.",

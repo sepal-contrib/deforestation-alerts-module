@@ -509,6 +509,9 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             return
         if target is not None and split_recorded(app_state, live.name, target.id, made):
             current_notifier().success(tn("evaluators.split_done", len(made.evaluators)))
+            biggest = await to_thread_in_context(split_service.largest_unit, app_state, len(made.evaluators))
+            if biggest > 0:
+                current_notifier().warning(tn("evaluators.split_oversized", biggest))
         else:  # the store holds the split, the project lost the record: an orphan
             current_notifier().warning(t("evaluators.split_unrecorded", project=live.name if live else ""))
 

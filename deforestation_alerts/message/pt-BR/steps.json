@@ -814,6 +814,11 @@
       "many": "Alertas divididos entre {n} de avaliadores.",
       "other": "Alertas divididos entre {n} avaliadores."
     },
+    "split_oversized": {
+      "one": "Um grupo de alertas próximos contém {n} alerta, mais do que uma parte igual.",
+      "many": "Um grupo de alertas próximos contém {n} de alertas, mais do que uma parte igual.",
+      "other": "Um grupo de alertas próximos contém {n} alertas, mais do que uma parte igual."
+    },
     "removed": "Divisão removida.",
     "remove_unrecorded": "A divisão de {project} não foi removida: outro projeto foi aberto, ou seus alertas ainda não estavam carregados. Abra {project} e remova a divisão novamente.",
     "orphan": "Os alertas deste conjunto têm avaliadores atribuídos, mas o projeto não tem registro de divisão. Remova a divisão para recomeçar.",
