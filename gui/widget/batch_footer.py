@@ -1,8 +1,9 @@
 """The footer under the Download & harmonize table (spec "Footer").
 
 Idle, it is a primary split button on the right: the main part runs every
-pending row (``Run {n} pending``), and its caret opens a menu upward with the
-other batch actions; with no menu item there is no caret. While the scope has
+pending row (``Run {n} pending``), and its caret shows the other batch actions
+as buttons like it, stacked under it at its width; with no menu item there is
+no caret. While the scope has
 a job, the left side says how many of its rows run and wait
 (``{running} running · {queued} queued``), with a thin bar and
 ``{done} of {total} done`` while a batch is counted, and the main part turns
@@ -19,14 +20,16 @@ from typing import Callable, Optional
 
 import reacton.ipyvuetify as rv
 import solara
-from reacton import ipyvue
 
 from gui.i18n import format_number, t
 
 _WRAP = "defo-batch-split"
-# The two halves of the split button touch: square inner corners, a thin gap.
+# The two halves of the split button touch: square inner corners, a thin gap;
+# the caret's items stack under it at the width of the widest.
 _CSS = (
-    f".{_WRAP} {{ display: inline-flex; align-items: stretch; }}"
+    f".{_WRAP} {{ display: inline-flex; flex-direction: column; gap: 4px; }}"
+    f" .{_WRAP} > .defo-split-row {{ display: flex; }}"
+    f" .{_WRAP} .v-btn.defo-split-main {{ flex: 1 1 auto; }}"
     f" .{_WRAP} .v-btn.defo-split-main {{ border-top-right-radius: 0; border-bottom-right-radius: 0; }}"
     f" .{_WRAP} .v-btn.defo-split-caret {{ border-top-left-radius: 0; border-bottom-left-radius: 0;"
     " min-width: 28px !important; padding: 0 4px !important; margin-left: 1px; }"
@@ -47,25 +50,24 @@ def footer_counts(mine_rows: set, stages: dict, batch: Optional[tuple]) -> dict:
     return {"running": running, "queued": len(mine_rows) - running, "done": done, "total": total}
 
 
-@solara.component
-def _MenuItem(item: dict):
-    row = rv.ListItem(dense=True, disabled=item.get("disabled", False),
-                      children=[rv.ListItemTitle(children=[item["label"]])])
-    # ``rv.ListItem`` has no on_click under reacton: the click comes through its event
-    ipyvue.use_event(row, "click", lambda *_: item["on_click"]())
+def _caret(open_: bool, on_click: Callable[[], None]):
+    label = t("steps.prepare.footer_more")
+    solara.Button(icon_name="mdi-menu-up" if open_ else "mdi-menu-down", color="primary", small=True,
+                  classes=["defo-split-caret"], on_click=on_click,
+                  attributes={"title": label, "aria-label": label, "aria-expanded": str(open_).lower()})
+
+
+def _item(item: dict, on_done: Callable[[], None]):
+    """A caret item: a button like Run (the caret closes once it is clicked)."""
     tip = item.get("title", "")
-    return rv.Html(tag="div", attributes={"title": tip} if tip else {}, children=[row])
 
+    def click():
+        on_done()
+        item["on_click"]()
 
-def _up_menu(menu: list, label: str):
-    """The caret, opening ``menu`` upward (Vuetify's ``top``)."""
-    caret = rv.Btn(v_on="menu.on", small=True, color="primary", class_="defo-split-caret",
-                   attributes={"title": label, "aria-label": label},
-                   children=[rv.Icon(children=["mdi-menu-up"], small=True)])
-    with rv.Menu(top=True, offset_y=True, v_slots=[{"name": "activator", "variable": "menu", "children": caret}]):
-        with rv.List(dense=True):
-            for item in menu:
-                _MenuItem(item)
+    with rv.Html(tag="span", attributes={"title": tip} if tip else {}, style_=_TIP):
+        solara.Button(item["label"], icon_name=item.get("icon"), color="primary", small=True,
+                      disabled=item.get("disabled", False), on_click=click, style="flex: 1 1 auto;")
 
 
 @solara.component
@@ -76,12 +78,13 @@ def BatchFooter(pending: int, run_label: str, on_run: Callable[[], None], on_sto
     ``pending``: the rows Run would start (none: the main part is
     disabled); ``run_label``: its counted label; ``on_run`` / ``on_stop``: the
     main part's clicks, idle and busy; ``menu``: the caret's items,
-    ``{"label", "on_click", "disabled"?, "title"?}`` (``title``: the tooltip,
+    ``{"label", "on_click", "icon"?, "disabled"?, "title"?}`` (``title``: the tooltip,
     kept while disabled); ``counts``: ``footer_counts``; ``disabled``: Run
     cannot start anything (a review copy); ``stopping``: Stop was clicked
     and the job has not ended yet.
     """
     busy = counts["running"] + counts["queued"] > 0
+    open_, set_open = solara.use_state(False)
     solara.Style(_CSS)
     with solara.Row(style="align-items: center; justify-content: space-between; gap: 12px;"):
         if busy:
@@ -106,8 +109,12 @@ def BatchFooter(pending: int, run_label: str, on_run: Callable[[], None], on_sto
                         solara.Button(t("steps.prepare.footer_stop"), icon_name="mdi-stop", color="primary",
                                       small=True, outlined=True, on_click=on_stop)
             else:
-                solara.Button(run_label, icon_name="mdi-play", color="primary", small=True,
-                              disabled=disabled or not pending, on_click=on_run,
-                              classes=["defo-split-main"] if menu else [])
-                if menu:
-                    _up_menu(menu, t("steps.prepare.footer_more"))
+                with rv.Html(tag="div", class_="defo-split-row"):
+                    solara.Button(run_label, icon_name="mdi-play", color="primary", small=True,
+                                  disabled=disabled or not pending, on_click=on_run,
+                                  classes=["defo-split-main"] if menu else [])
+                    if menu:
+                        _caret(open_, lambda: set_open(not open_))
+                if menu and open_:
+                    for item in menu:
+                        _item(item, lambda: set_open(False))

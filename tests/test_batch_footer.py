@@ -89,10 +89,13 @@ def test_footer_idle_shows_run_and_caret():
     rc, calls = _render(IDLE, menu=[{"label": "Download all again (3)", "on_click": lambda: calls.append("again")}])
     try:
         _btn(rc, "Run 2 pending").click()
-        [item] = [w for w in _all(rc) if isinstance(w, v.ListItem)]
-        item.fire_event("click", None)
+        assert "mdi-menu-down" in _texts(rc) and "Download all again (3)" not in _texts(rc)
+        caret = next(w for w in _all(rc) if isinstance(w, v.Btn) and "defo-split-caret" in (w.class_ or ""))
+        caret.click()
+        assert "mdi-menu-up" in _texts(rc)
+        _btn(rc, "Download all again (3)").click()
         assert calls == ["run", "again"]
-        assert "mdi-menu-up" in _texts(rc) and "Download all again (3)" in _texts(rc)
+        assert "Download all again (3)" not in _texts(rc)  # an item click closes the stack
         assert "mdi-stop" not in _texts(rc) and not any("running" in s for s in _texts(rc))
     finally:
         rc.close()
@@ -101,7 +104,7 @@ def test_footer_idle_shows_run_and_caret():
 def test_footer_idle_without_a_menu_has_no_caret_and_nothing_pending_disables_run():
     rc, _ = _render(IDLE, pending=0)
     try:
-        assert "mdi-menu-up" not in _texts(rc)
+        assert "mdi-menu-down" not in _texts(rc)
         assert _btn(rc, "Run 2 pending").disabled
     finally:
         rc.close()
@@ -138,7 +141,8 @@ def test_a_disabled_menu_item_keeps_its_tooltip():
     rc, _ = _render(IDLE, menu=[{"label": "Download all again (3)", "on_click": lambda: clicked.append(1),
                                  "disabled": True, "title": "Run the pending masks first"}])
     try:
-        [item] = [w for w in _all(rc) if isinstance(w, v.ListItem)]
+        next(w for w in _all(rc) if isinstance(w, v.Btn) and "defo-split-caret" in (w.class_ or "")).click()
+        item = _btn(rc, "Download all again (3)")
         assert item.disabled
         tips = [w.attributes.get("title") for w in _all(rc) if isinstance(w, v.Html)]
         assert "Run the pending masks first" in tips

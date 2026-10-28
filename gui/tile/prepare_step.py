@@ -541,6 +541,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
 
     masks_pend = any(kind == "mask" for kind, _ in pending)
     menu = [{"label": tn("steps.prepare.redownload_all", len(redownload)),
+             "icon": "mdi-download",
              "on_click": lambda: set_pending_refresh("*"),  # asks first
              "disabled": masks_pend or read_only(p),
              "title": t("steps.prepare.redownload_all_masks") if masks_pend else ""}] if redownload else []

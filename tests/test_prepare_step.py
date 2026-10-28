@@ -1443,20 +1443,18 @@ def test_a_source_run_runs_its_stale_masks_first(step, monkeypatch):
 
 
 def _footer_item(rc):
-    """The footer menu's one item (Download all again), and the tooltip
-    around it; the Masks card's ⋮ menus hold list items too."""
+    """The footer caret's one item (Download all again), opened, and the
+    tooltip around it."""
     def walk(w):
         yield w
         for c in getattr(w, "children", None) or []:
             if not isinstance(c, str):
                 yield from walk(c)
 
-    def label(w):
-        return " ".join(c for x in walk(w) if isinstance(x, v.ListItemTitle) for c in x.children)
-
-    masks_menu = {t("steps.prepare.action_download_again"), t("widgets.product_table.action_edit"),
-                  t("steps.prepare.mask_delete_action")}
-    [item] = [w for w in rc.find(v.ListItem).widgets if label(w) not in masks_menu]
+    [caret] = [b for b in rc.find(v.Btn).widgets if "defo-split-caret" in (b.class_ or "")]
+    caret.click()
+    label = tn("steps.prepare.redownload_all", 1)
+    [item] = [b for b in rc.find(v.Btn).widgets if any(str(c).startswith(label.split(" (")[0]) for c in b.children)]
     tips = [w.attributes.get("title") for root in rc.find(v.Html).widgets for w in walk(root)
             if isinstance(w, v.Html) and item in (w.children or [])]
     return item, tips[0] if tips else None
@@ -1469,8 +1467,7 @@ def test_download_all_again_is_disabled_while_masks_pend(step, monkeypatch):
     box, rc = _render(state)
     try:
         item, tip = _footer_item(rc)
-        assert tn("steps.prepare.redownload_all", 1) in [c for w in rc.find(v.ListItemTitle).widgets
-                                                         for c in w.children]
+        assert tn("steps.prepare.redownload_all", 1) in item.children
         assert item.disabled and tip == t("steps.prepare.redownload_all_masks")
     finally:
         rc.close()
