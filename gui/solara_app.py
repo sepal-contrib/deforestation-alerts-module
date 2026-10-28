@@ -667,6 +667,11 @@ def _AppShell():
         "  width: calc(100% - var(--sepal-drawer-width, 0px)) !important;\n"
         "}\n"
         ".about-content { text-align: justify; }\n"
+        # Markdown `code` came out light-grey on light-grey on the dark theme
+        # (About, info buttons): a translucent box with the text's own colour
+        # reads on both themes.
+        ".about-content code, .defo-markdown code {"
+        " background: rgba(127, 127, 127, 0.2) !important; color: inherit !important; }\n"
         # The map's click popup (``_on_map``): its content is a widget, which
         # ipyvuetify wraps in its own themed `.v-application`, so on the dark
         # theme a dark box sat inside Leaflet's white bubble. The wrap goes

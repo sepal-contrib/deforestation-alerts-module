@@ -90,7 +90,7 @@ def info_button(description: str, header: str, md: str) -> v.Html:
     rewrites the three texts and *Close* (a language switch)."""
     close = v.Btn(text=True, small=True, children=[t("common.close")])
     card_title = v.CardTitle(children=[header])
-    card_text = v.CardText(children=[sw.Markdown(md)])
+    card_text = v.CardText(class_="defo-markdown", children=[sw.Markdown(md)])
     dialog = v.Dialog(
         v_model=False,
         max_width="640px",

@@ -49,7 +49,7 @@ def InfoButton(title: str, markdown: str, icon: str = "mdi-information-outline")
             with rv.CardTitle(style_="gap:8px;"):
                 rv.Icon(children=[icon])
                 solara.Text(title)
-            with rv.CardText():
+            with rv.CardText(class_="defo-markdown"):
                 solara.Markdown(markdown)
             with rv.CardActions(style_="justify-content: flex-end;"):
                 solara.Button(
