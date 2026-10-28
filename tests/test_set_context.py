@@ -318,7 +318,7 @@ def _rerun(s, store, alerts):
     """What a re-run of the same set does: swap its store in (run_integration),
     record the new set (apply_result) and publish its alerts."""
     from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
-    from gui.scripts.integrate_jobs import _publish_alerts, apply_result
+    from gui.scripts.integrate_jobs import apply_result
     from gui.scripts import set_store
 
     save_gdf_to_parquet(alerts, str(store))
@@ -326,7 +326,7 @@ def _rerun(s, store, alerts):
     new_set = _alert_set("x", "glad-l").model_copy(update={"n_alerts": len(alerts), "n_reviewed": 0})
     result = SimpleNamespace(artifacts={}, alert_set=new_set, alerts=alerts)
     assert s.update_project("d", lambda p: apply_result(p, result))
-    return result, lambda: _publish_alerts(s, "d", result)
+    return result, lambda: set_store.publish_set_alerts(s, "d", new_set, alerts)
 
 
 @pytest.mark.parametrize("published", [False, True], ids=["recorded", "recorded-and-published"])

@@ -672,6 +672,15 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # The top bar's alert changes ask first over unsaved work, as the dock's
     # Next does: one prompt, in the dock.
     context = build_context(app_state, id_field, labels=labels, analysis=analysis, guard=footer.guard)
+
+    def _guard(move):
+        # The set selector, the filter, Overview's and the map popup's Go ask
+        # too. The prompt is in the dock: a Go from another screen shows it.
+        if analysis.dirty.value:
+            app_state.current_page_view.value = "analysis_tile"
+        footer.guard(move)
+
+    app_state.guard = _guard
     topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
     earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels, ask=footer.confirm.ask)
     near = nearby.build_nearby_section(widgets, app_state, analysis, labels=labels)

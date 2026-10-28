@@ -77,7 +77,7 @@ from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from gui.i18n import t
 from gui.scripts import detached, legend_specs, map_layers, set_store
 from gui.scripts.detached import render_detached
-from gui.scripts.integrate_jobs import _publish_alerts, apply_result
+from gui.scripts.integrate_jobs import apply_result
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.solara_threads import spawn_in_context
@@ -354,7 +354,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
 
         def integrate():
             assert state.update_project(NAME, lambda live: apply_result(live, result))
-            assert _publish_alerts(state, NAME, result)
+            assert set_store.publish_set_alerts(state, NAME, result.alert_set, result.alerts)
             state.current_page_view.value = "analysis_tile"
 
         await _wait(_publish(integrate, errors))
@@ -365,7 +365,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         assert state.screen.value == "analysis"
         assert shell.tiles["layout"].shown[-1] is True
         assert state.active_step.value == 0, "entering the analysis screen moved the workflow"
-        assert state.alerts_gdf.value is result.alerts and state.actual_alert_id.value == -1
+        assert state.alerts_gdf.value is result.alerts and state.actual_alert_id.value == 0  # its start
 
         # A review Save: commit under the project's writer mark (record_review)
         def save():

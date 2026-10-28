@@ -1,3 +1,5 @@
+import math
+
 from docx import Document
 from docx.shared import Pt
 import pandas as pd
@@ -6,20 +8,13 @@ import rasterio
 import matplotlib.pyplot as plt
 from matplotlib_scalebar.scalebar import ScaleBar
 import cartopy.crs as ccrs
+from pyproj import Transformer
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from datetime import datetime
 from pathlib import Path
 # The code decoding moved to alert_codes (no report libraries); kept importable from here.
 from deforestation_alerts.scripts.alert_codes import format_list, get_unique_alerts, parse_formatted_string  # noqa: F401
 from deforestation_alerts.scripts import local_files
-
-def ensure_list(input_data):
-    if isinstance(input_data, str):
-        return [input_data]  # Convert string to list
-    elif isinstance(input_data, list):
-        return input_data  # Return the list as is
-    else:
-        raise ValueError("Input must be a string or a list")  # Handle invalid input
 
 
 def plot_tiff_with_overlay(
@@ -83,15 +78,17 @@ def plot_tiff_with_overlay(
         ),
     )
 
-    # Add scale bar
-    # scale_length_km = 5  # scale length in km (customize as needed)
-    # scale_length_deg = scale_length_km / 111  # approximate conversion to degrees
-    # x0, y0 = ax.get_xlim()[0] + scale_length_deg * 1, ax.get_ylim()[0] + scale_length_deg * 1
-    # ax.plot([x0, x0 + scale_length_deg], [y0, y0], color='black', lw=3)
-    # ax.text(x0 + scale_length_deg / 2, y0, f'{scale_length_km} km', ha='center', va='bottom')
+    # Add scale bar: the extent is in CRS metres, so one data unit is one metre,
+    # except Web Mercator, which stretches ground distances by 1/cos(latitude).
+    dx = 1.0
+    if src.crs.to_epsg() == 3857:
+        _, lat = Transformer.from_crs(3857, 4326, always_xy=True).transform(
+            (img_extent[0] + img_extent[1]) / 2, (img_extent[2] + img_extent[3]) / 2
+        )
+        dx = math.cos(math.radians(lat))
     ax.add_artist(
         ScaleBar(
-            4.77,
+            dx,
             location="lower left",
             label_loc="bottom",
             scale_loc="top",

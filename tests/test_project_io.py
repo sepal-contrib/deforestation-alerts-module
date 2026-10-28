@@ -124,6 +124,18 @@ def test_duplicate_keeps_setup_drops_results():
     assert q.periods == {} and q.alert_sets == {} and q.artifacts == {} and q.locked is False
 
 
+def test_duplicate_keeps_the_questionnaire_and_group_review():
+    from deforestation_alerts.project.models import GroupReview, Question
+
+    p = _project()
+    p.questions = [Question(key="road", label="Near a road?")]
+    p.group_review = GroupReview(enabled=True, radius_m=500.0)
+    q = io.duplicate_project(p, "copy")
+    assert q.questions == p.questions and q.group_review == p.group_review
+    q.questions[0].label = "changed"
+    assert p.questions[0].label == "Near a road?"  # a deep copy, not shared
+
+
 def test_paths_encode_source_and_dates(tmp_path):
     raw = paths.raw_path(tmp_path, "2026-02-01_2026-02-28", "GLAD-L", date(2025, 11, 3), date(2026, 2, 28))
     assert raw == tmp_path / "periods" / "2026-02-01_2026-02-28" / "raw" / "raw_glad-l_2025-11-03_2026-02-28.tif"

@@ -126,7 +126,7 @@ class FileTile(custom_sw.DownloadBtn):
         leads it in the theme's warning colour (a file older than what it was
         made from).
 
-        Raises ``ValueError`` (``local_files.home_relative``) for a path the
+        Raises ``ValueError`` (``local_files.served_relative``) for a path the
         sandbox cannot serve, before anything on the tile changes: the export
         worker reports it as a FAILED build, and the tile stays as it was.
         """
@@ -140,7 +140,7 @@ class FileTile(custom_sw.DownloadBtn):
             self._draw_meta()
             self._icon.children = ["mdi-download"]
             return self.set_url()
-        url_path = local_files.home_relative(path)
+        url_path = local_files.served_relative(path)
         self._action = None
         if detail is not None:
             self._detail = detail

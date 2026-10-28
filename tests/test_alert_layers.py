@@ -335,7 +335,7 @@ def test_a_new_active_set_waits_for_its_own_alerts(ov, tmp_path):
         _click(map_, 1.005, 1.005)  # on one of A's alerts
         assert _popups(map_) == []
 
-        state.alerts_gdf.set(_alerts(set_id=b))  # _publish_alerts
+        state.alerts_gdf.set(_alerts(set_id=b))  # Integrate's publish
         assert layers.is_on(KEY)
         ov.run_jobs()
         [(_, sid)] = ov.ensured[1:]

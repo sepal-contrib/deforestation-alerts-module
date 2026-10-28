@@ -120,6 +120,7 @@
       "name_token_na": "Use at least one letter or digit (A–Z, 0–9).",
       "name_token_taken": "This name would share its file names with another source; choose another.",
       "name_set_collision": "With this name two different source combinations would share one alert set; choose another.",
+      "name_separator": "Don't use \", \" or the separate word \"and\": they join source names in lists.",
       "edit_used": "An alert set already uses this source: add a new one instead.",
       "cap_reached": "All 6 custom source slots are in use.",
       "err_unreadable": "The file cannot be read as a GeoTIFF.",

@@ -143,7 +143,10 @@ def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
     def _on_apply(*_):
         column, chosen = attribute.v_model, frozenset(values.v_model or [])
         # An attribute with no value picked is no filter: Apply clears.
-        app_state.set_alert_filter(AlertFilter(column, chosen) if column and chosen else None)
+        f = AlertFilter(column, chosen) if column and chosen else None
+        # A new filter moves to its start (``follow_filter``): it asks first
+        # over unsaved work. *Stay* leaves the filter as it was.
+        app_state.guard(lambda: app_state.set_alert_filter(f))
         menu.v_model = False
 
     def _on_clear(*_):

@@ -577,3 +577,76 @@ def test_the_top_bar_navigation_asks_first_over_unsaved_work(panel):
     prev.fire_event("click", None)
     assert not _prompt_shown(footer)
     assert panel.app_state.actual_alert_id.value == 1
+
+
+def test_the_filter_apply_asks_first_over_unsaved_work(panel):
+    from gui.scripts.alert_filter import AlertFilter
+    from gui.tile.analysis import context
+
+    _three_alerts(panel.app_state)
+    footer = analysis_tile.panel_sections(panel.controls).footer.root
+    _prompt, discard, stay = prompt_widgets(footer)
+    control = context.filter_control(panel.controls.children[1])
+    wanted = AlertFilter("status", frozenset({"Confirmed"}))
+
+    def apply():
+        control.attribute.v_model = "status"
+        control.values.v_model = ["Confirmed"]
+        control.apply.fire_event("click", None)
+
+    panel.analysis.dirty.set(True)
+    apply()
+    assert _prompt_shown(footer) and panel.analysis.alert_filter.value is None
+    stay.fire_event("click", None)
+    assert panel.analysis.alert_filter.value is None  # Stay: the filter as it was
+    apply()
+    discard.fire_event("click", None)
+    assert panel.analysis.alert_filter.value == wanted
+
+
+def test_a_go_from_elsewhere_asks_on_the_analysis_screen(panel):
+    """``app_state.guard`` is the dock's once the panel is built: Overview's
+    and the map popup's Go ask too, and the prompt's screen is shown."""
+    _three_alerts(panel.app_state)
+    footer = analysis_tile.panel_sections(panel.controls).footer.root
+    _prompt, discard, _stay = prompt_widgets(footer)
+    panel.app_state.current_page_view.value = "overview_tile"
+    panel.analysis.dirty.set(True)
+    panel.app_state.guard(lambda: panel.app_state.go_to(2))
+    assert _prompt_shown(footer) and panel.app_state.actual_alert_id.value == 0
+    assert panel.app_state.current_page_view.value == "analysis_tile"
+    discard.fire_event("click", None)
+    assert panel.app_state.actual_alert_id.value == 2
+
+
+def test_a_guard_without_analysis_moves_at_once():
+    moved = []
+    AppState().guard(lambda: moved.append(True))
+    assert moved == [True]
+
+
+def test_discard_on_a_move_that_stays_reloads_the_alert(tmp_path, monkeypatch):
+    """Next on the last alert clamps to it: no alert change re-seeds the
+    review, so Discard asks for the reload (``reload_alert``)."""
+    footer, analysis, app_state = _footer(monkeypatch, tmp_path)
+    # stand-ins for ``wire_alert_navigation``'s re-seed of the alert
+    app_state.actual_alert_id.subscribe(lambda *_: analysis.reset_alert())
+    analysis.reload_alert.subscribe(lambda *_: analysis.reset_alert())
+    _save, nxt, _ = footer_widgets(footer.root)
+    _prompt, discard, _stay = prompt_widgets(footer.root)
+
+    app_state.actual_alert_id.value = 2
+    analysis.dirty.set(True)
+    nxt.fire_event("click", None)
+    assert _prompt_shown(footer.root)
+    discard.fire_event("click", None)
+    assert app_state.actual_alert_id.value == 2
+    assert analysis.reload_alert.value == 1 and analysis.dirty.value is False
+    assert not _prompt_shown(footer.root)
+
+    # a move that changes the alert re-seeds by itself: no reload on top
+    app_state.actual_alert_id.value = 0
+    analysis.dirty.set(True)
+    nxt.fire_event("click", None)
+    discard.fire_event("click", None)
+    assert app_state.actual_alert_id.value == 1 and analysis.reload_alert.value == 1

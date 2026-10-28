@@ -308,91 +308,21 @@ def test_a_manifest_from_a_future_version_reads_as_no_index(data_root):
     assert scene_cache.read_index(pdir) == (None, None)
 
 
-# ------------------------------------------- the chunk record (final fix wave)
-
-def test_a_manifest_written_before_chunks_existed_still_reads(data_root):
-    """``SceneManifest.chunks`` has to be optional on disk, not only in the
-    model: every ``index.json`` already cached was written before the field
-    existed, and a required field here would turn every one of them into an
-    unreadable index and a full refetch of the whole period."""
+def test_a_manifest_with_the_retired_chunks_record_still_reads(data_root):
+    """Manifests cached before the ``chunks`` record was dropped still carry
+    it; refusing them would mean a full refetch of every cached project."""
     pdir = paths.project_dir("p")
     scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
     manifest_path = paths.scene_manifest_path(pdir)
     raw = json.loads(manifest_path.read_text())
-    assert raw.pop("chunks")  # it is there, and this is a manifest from before it was
+    raw["chunks"] = [{"start": "2026-05-01", "end": "2026-05-31",
+                      "fetched_at": "2026-06-01T00:00:00Z", "ok": False}]
     manifest_path.write_text(json.dumps(raw))
 
     tables, manifest = scene_cache.read_index(pdir)
     assert tables is not None and manifest is not None
-    assert manifest.chunks == []
     assert manifest.covered == scene_index.Coverage(start=date(2026, 5, 1), end=date(2026, 5, 31))
-    # and the next chunk records itself onto the empty list rather than failing
+    # and the next chunk rewrites the manifest without it
     later = _tables([(S2, pd.Timestamp("2026-06-04"), 8.0, "W", "k3")])
-    _, manifest = scene_cache.store_chunk(pdir, later, (date(2026, 5, 31), date(2026, 6, 30)), "d1", now=NOW)
-    assert [(c.start, c.end) for c in manifest.chunks] == [(date(2026, 5, 31), date(2026, 6, 30))]
-
-
-def test_every_stored_chunk_is_recorded_and_a_refetched_window_replaces_its_entry(data_root):
-    pdir = paths.project_dir("p")
-    june = _tables([(S2, pd.Timestamp("2026-06-04"), 8.0, "W", "k3")])
-    _, manifest = scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
-    assert [(c.start, c.end, c.ok) for c in manifest.chunks] == [
-        (date(2026, 5, 1), date(2026, 5, 31), True)]
-    _, manifest = scene_cache.store_chunk(pdir, june, (date(2026, 5, 31), date(2026, 6, 30)), "d1", now=NOW)
-    assert len(manifest.chunks) == 2
-
-    # the 24h tail refetches a window already recorded: one entry, not two
-    later = NOW + timedelta(hours=30)
-    _, manifest = scene_cache.store_chunk(pdir, june, (date(2026, 5, 31), date(2026, 6, 30)), "d1", now=later)
-    assert [(c.start, c.end) for c in manifest.chunks] == [
-        (date(2026, 5, 1), date(2026, 5, 31)), (date(2026, 5, 31), date(2026, 6, 30))]
-    assert manifest.chunks[-1].fetched_at == later
-
-
-def test_a_rebuild_starts_the_chunk_list_over(data_root):
-    """The discarded index's chunks describe months that are no longer in
-    ``scenes.parquet``; keeping them would claim coverage for them."""
-    pdir = paths.project_dir("p")
-    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
-    june = _tables([(S2, pd.Timestamp("2026-06-04"), 8.0, "W", "k3")])
-    _, manifest = scene_cache.store_chunk(
-        pdir, june, (date(2026, 6, 1), date(2026, 6, 30)), "d1", now=NOW, replace=True)
-    assert [(c.start, c.end) for c in manifest.chunks] == [(date(2026, 6, 1), date(2026, 6, 30))]
-    # and the same for an index built for another AOI, replace or not
-    _, manifest = scene_cache.store_chunk(pdir, june, (date(2026, 7, 1), date(2026, 7, 31)), "d2", now=NOW)
-    assert [(c.start, c.end) for c in manifest.chunks] == [(date(2026, 7, 1), date(2026, 7, 31))]
-
-
-def test_a_chunk_that_did_not_land_is_recorded_without_widening_the_coverage(data_root):
-    """Spec §9: ``chunks`` records per-chunk success, so a partial failure
-    leaves a usable index *and* says which months are missing from it -- the
-    difference between "no images there" and "never successfully asked"."""
-    pdir = paths.project_dir("p")
-    _, before = scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
-    manifest = scene_cache.note_failed_chunk(pdir, (date(2026, 4, 1), date(2026, 5, 1)), "d1", now=NOW)
-    assert manifest is not None
-    assert [(c.start, c.end, c.ok) for c in manifest.chunks] == [
-        (date(2026, 5, 1), date(2026, 5, 31), True), (date(2026, 4, 1), date(2026, 5, 1), False)]
-    # the coverage does not grow over a window that failed, and the rows are untouched
-    assert manifest.covered == before.covered
-    tables, on_disk = scene_cache.read_index(pdir)
-    assert len(tables.scenes) == 2 and on_disk.chunks == manifest.chunks
-
-    # a retry that lands replaces the failed entry rather than adding to it
-    april = _tables([(S2, pd.Timestamp("2026-04-20"), 4.0, "W", "k9")])
-    _, manifest = scene_cache.store_chunk(pdir, april, (date(2026, 4, 1), date(2026, 5, 1)), "d1", now=NOW)
-    assert [(c.start, c.end, c.ok) for c in manifest.chunks] == [
-        (date(2026, 5, 1), date(2026, 5, 31), True), (date(2026, 4, 1), date(2026, 5, 1), True)]
-
-
-def test_there_is_nothing_to_record_a_failed_chunk_on_without_an_index(data_root):
-    """The first chunk of a rebuild failing leaves no partial index, so there
-    is no manifest to write the failure into and the caller's error message is
-    the whole story. It must not create one."""
-    pdir = paths.project_dir("p")
-    assert scene_cache.note_failed_chunk(pdir, (date(2026, 4, 1), date(2026, 5, 1)), "d1", now=NOW) is None
-    assert not paths.scene_manifest_path(pdir).exists()
-    # nor onto an index built for another AOI
-    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "OTHER", now=NOW)
-    assert scene_cache.note_failed_chunk(pdir, (date(2026, 4, 1), date(2026, 5, 1)), "d1", now=NOW) is None
-    assert scene_cache.read_index(pdir)[1].chunks[-1].ok is True
+    scene_cache.store_chunk(pdir, later, (date(2026, 5, 31), date(2026, 6, 30)), "d1", now=NOW)
+    assert "chunks" not in json.loads(manifest_path.read_text())

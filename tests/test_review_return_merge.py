@@ -154,6 +154,7 @@ def test_a_changed_questionnaire_warns_and_extra_columns_are_named(tmp_path, mon
     ("evaluator", "share.merge_err_evaluator"),
     ("junk", "share.merge_err_payload"),
     ("dup_ids", "share.merge_err_payload"),
+    ("na_ids", "share.merge_err_payload"),
     ("other_evaluator", "share.merge_err_payload"),
     ("not_a_verdict", "share.merge_err_payload"),
     ("no_alerts", "share.merge_err_no_alerts"),
@@ -183,6 +184,8 @@ def test_read_return_refusals(tmp_path, monkeypatch, case, key):
         zp = rezip(zp, dst, replace={share.REVIEWS_MEMBER: b"not parquet"})
     elif case == "dup_ids":
         zp = _reviews(zp, dst, lambda r: r.assign(alert_id=0))
+    elif case == "na_ids":
+        zp = _reviews(zp, dst, lambda r: r.assign(alert_id=r["alert_id"].astype("Int64").where(r.index > 0)))
     elif case == "other_evaluator":
         zp = _reviews(zp, dst, lambda r: r.assign(evaluator="Bo"))
     elif case == "not_a_verdict":

@@ -10,7 +10,7 @@ A test that is not marked ``ee`` and still reaches Earth Engine fails (the
 
 The app reads and writes plain files on the local sandbox disk (spec D14).
 The ``data_root`` fixture below points the data directory into ``tmp_path``
-(with ``HOME`` pinned there too, so ``local_files.home_relative`` -- which
+(with ``HOME`` pinned there too, so ``local_files.served_relative`` -- which
 resolves against ``Path.home()`` -- stays inside it).
 """
 

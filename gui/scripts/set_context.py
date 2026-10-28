@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from deforestation_alerts.project import paths, review_groups
+from deforestation_alerts.project import io, paths, review_groups
 from deforestation_alerts.project.models import AlertSet
 from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.review_status import reviewed_mask
@@ -68,7 +68,7 @@ class SetContext:
     @property
     def custom_report_template(self) -> Optional[str]:
         p = self._project
-        return p.report_template if p is not None else None
+        return io.template_path(p) if p is not None else None
 
     @property
     def combined_path(self) -> Optional[Path]:

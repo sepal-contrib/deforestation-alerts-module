@@ -8,6 +8,7 @@ from pathlib import Path
 import reacton.ipyvuetify as rv
 import solara
 
+from deforestation_alerts.project import io
 from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, attribute_columns, column
 from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.review_status import VERDICT_LABEL_KEYS
@@ -96,7 +97,7 @@ def _TemplateCard(app_state, questions):
     cleared. Whether it is open is this card's own state, never the project's."""
     p = app_state.project.value
     expanded, set_expanded = solara.use_state(False)
-    state = template_state(p.report_template)
+    state = template_state(io.template_path(p))
     shown = expanded or state == "missing"
     name = Path(p.report_template).name if p.report_template else t("steps.questionnaire.template_default")
     chip_key, chip_color = _TEMPLATE_CHIPS[state]

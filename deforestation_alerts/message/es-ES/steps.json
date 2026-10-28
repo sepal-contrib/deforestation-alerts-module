@@ -127,6 +127,7 @@
       "name_token_na": "Usa al menos una letra o dígito (A–Z, 0–9).",
       "name_token_taken": "Este nombre compartiría nombres de archivo con otra fuente; elige otro.",
       "name_set_collision": "Con este nombre, dos combinaciones de fuentes distintas compartirían un conjunto de alertas; elige otro.",
+      "name_separator": "No uses \", \" ni la palabra suelta \"and\": unen los nombres de fuentes en las listas.",
       "edit_used": "Un conjunto de alertas ya usa esta fuente: añade una nueva en su lugar.",
       "cap_reached": "Las 6 fuentes personalizadas ya están en uso.",
       "err_unreadable": "El archivo no se puede leer como GeoTIFF.",

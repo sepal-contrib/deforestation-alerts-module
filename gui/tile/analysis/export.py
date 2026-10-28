@@ -681,7 +681,7 @@ def build_export(
         if rev != built["rev"]:
             return False
         # The zip/report live in the set folder, so the rows link paths
-        # relative to the served root: ``set_file`` -> ``local_files.home_relative``
+        # relative to the served root: ``set_file`` -> ``local_files.served_relative``
         # -> ``custom_sw.DownloadBtn.set_url`` prefixes the download base. A path
         # outside the served root raises here, inside the tracked block: a
         # FAILED task.
@@ -772,7 +772,7 @@ def build_export(
                     return t("analysis_tile.export_labels.download_no_alert")
                 return t("analysis_tile.export_labels.download_no_images")
             result.update(built_paths)
-            # Inside the tracked block: ``local_files.home_relative`` raises
+            # Inside the tracked block: ``local_files.served_relative`` raises
             # ValueError for a path outside $HOME, and that must be a FAILED
             # task + one error toast, not a green pill with download buttons
             # that never show.

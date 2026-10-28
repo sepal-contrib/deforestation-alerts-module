@@ -79,5 +79,5 @@ class ShareBtn(v.Btn, SepalWidget):
 # ``.exists()``, ``.iterdir()``, a local ``zipfile.ZipFile``, and a ``set_url``
 # with a container-absolute path). If exporting a folder as a zip is wanted
 # again, build the zip in a ``local_files.scratch_dir()``, ``local_files.copy_into``
-# the set folder, then ``set_url(local_files.home_relative(...))`` — the same
+# the set folder, then ``set_url(local_files.served_relative(...))`` — the same
 # shape as ``gui/tile/analysis/export.py::_download_data`` (inventory row a36).

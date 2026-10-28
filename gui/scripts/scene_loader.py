@@ -15,8 +15,7 @@ A single ``getInfo`` over a two-year project asks Earth Engine for the whole
 span at once and has no partial result, so a payload too large would leave no
 index at all and "Try again" would repeat the same oversized call (spec §5.5,
 §9 and §11). Chunked, every chunk that landed is on disk and published, and
-the manifest's ``chunks`` records which window did not -- so an empty month
-reads as "never successfully asked" rather than "no images there".
+the coverage never grows over a window that did not.
 
 The index on disk is published **before** any fetch is attempted. That is what
 makes a stale index whose refresh fails degrade to "slightly old" instead of to
@@ -365,8 +364,7 @@ def SceneIndexLoader(app_state, gee_interface):
         Sentinel-2 and Landsat metadata across the whole AOI, and it has no
         partial result: either it returns or the index never builds and "Try
         again" repeats the same oversized call. Chunked, every chunk that did
-        land is on disk, published and visible, and the manifest records the
-        window that failed.
+        land is on disk, published and visible.
 
         One loop for both callers, which is what the review asked for: the
         foreground walks it from the recent end of a rebuild, the background
@@ -387,23 +385,13 @@ def SceneIndexLoader(app_state, gee_interface):
             window = fetch_window(manifest, want, mode, step_months=CHUNK_MONTHS)
             if window[1] <= window[0]:
                 return manifest  # defensive: ``refresh_window`` returns no empty side
-            try:
-                # The manifest for the next round is the one this chunk
-                # landed, never a snapshot taken before the await: the
-                # widener and a reviewer's "one more month" both write while
-                # this runs.
-                landed = await _fetch(window, mode)
-            except Exception:
-                # Whatever landed before this chunk stays on disk and stays
-                # published. The failed window is recorded so ``ok`` is a
-                # fact rather than a constant, and so an empty month reads as
-                # "never successfully asked" rather than "no images there".
-                # The message belongs to the caller, which knows whether this
-                # was the foreground or the buffer, so the exception goes on.
-                await to_thread_in_context(
-                    scene_cache.note_failed_chunk, paths.project_dir(name), window, digest,
-                    now=datetime.now(timezone.utc))
-                raise
+            # The manifest for the next round is the one this chunk landed,
+            # never a snapshot taken before the await: the widener and a
+            # reviewer's "one more month" both write while this runs. On a
+            # failure whatever landed before stays on disk and published; the
+            # message belongs to the caller, which knows whether this was the
+            # foreground or the buffer, so the exception goes on.
+            landed = await _fetch(window, mode)
             if landed is None:
                 return None  # another project opened while this was in flight
             manifest = landed

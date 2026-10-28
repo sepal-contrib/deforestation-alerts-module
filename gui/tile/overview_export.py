@@ -254,7 +254,7 @@ class ExportCard(v.Card):
                                          self._sources, self._start, self._end, scope=scope)
             # A file the server cannot offer is a failed export, said in the
             # task, not a tile that links nowhere (NotDownloadable).
-            local_files.home_relative(path)
+            local_files.served_relative(path)
             return None
 
         def _done(notifier):
@@ -279,7 +279,7 @@ def _shown_folder(folder):
     """The set folder as the download root sees it, or its absolute path when
     the server does not offer it (the copy still helps a terminal user)."""
     try:
-        return local_files.home_relative(folder)
+        return local_files.served_relative(folder)
     except ValueError:
         return str(folder)
 

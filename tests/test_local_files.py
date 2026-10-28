@@ -51,12 +51,12 @@ def test_scratch_dir_is_private_and_removed(monkeypatch, tmp_path):
     assert not d1.exists() and not d2.exists()
 
 
-def test_home_relative(monkeypatch, tmp_path):
+def test_served_relative(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     f = tmp_path / "module_results" / "x.zip"
-    assert local_files.home_relative(f) == "module_results/x.zip"
+    assert local_files.served_relative(f) == "module_results/x.zip"
     with pytest.raises(ValueError):
-        local_files.home_relative(Path("/var/tmp/x.zip"))
+        local_files.served_relative(Path("/var/tmp/x.zip"))
 
 
 def test_download_url_defaults_to_the_sepal_route_relative_to_the_host(monkeypatch, tmp_path):
@@ -107,7 +107,7 @@ def test_a_path_outside_the_served_root_is_refused_with_a_readable_message(monke
     root.mkdir()
     monkeypatch.setenv(local_files.DOWNLOAD_ROOT_ENV, str(root))
     with pytest.raises(NotDownloadable) as err:
-        local_files.home_relative(tmp_path / "elsewhere" / "alerts.csv")
+        local_files.served_relative(tmp_path / "elsewhere" / "alerts.csv")
     text = error_text(err.value)
     assert "cannot be offered for download" in text and str(root) in text
     assert "subpath" not in text

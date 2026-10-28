@@ -107,12 +107,13 @@ def test_a_stored_scale_reaches_the_download_estimate_in_metres():
 
 
 def test_publish_alerts_refuses_once_another_set_is_active():
-    state = SimpleNamespace(_lock=threading.RLock(),  # _publish_alerts publishes under AppState's lock
+    from gui.scripts import set_store
+
+    state = SimpleNamespace(_lock=threading.RLock(),  # Integrate publishes under AppState's lock
                             project=SimpleNamespace(value=SimpleNamespace(name="i", active_set="other")),
                             actual_alert_id=SimpleNamespace(set=lambda v: None),
                             alerts_gdf=SimpleNamespace(set=lambda v: None))
-    result = SimpleNamespace(alert_set=SimpleNamespace(id="mine"), alerts=None)
-    assert integrate_jobs._publish_alerts(state, "i", result) is False
+    assert set_store.publish_set_alerts(state, "i", SimpleNamespace(id="mine"), None) is False
 
 
 def test_outcome_lines_say_when_probable_alerts_were_left_out():

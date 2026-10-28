@@ -4,10 +4,12 @@ folder name and its collisions, the Planet reset, rollback, and finding an
 earlier copy of the same split and evaluator."""
 
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from deforestation_alerts.project import io as project_io
 from deforestation_alerts.project import paths, share
 from deforestation_alerts.project.share import (
     ShareError,
@@ -17,8 +19,9 @@ from deforestation_alerts.project.share import (
     import_package,
     peek_header,
 )
-from deforestation_alerts.scripts import scene_index
+from deforestation_alerts.scripts import scene_index, scene_query
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, save_gdf_to_parquet
+from gui.tile.analysis import alert_files
 from tests._share_helpers import (
     AOI_FC,
     APP_VERSION,
@@ -131,7 +134,24 @@ def test_the_default_root_is_the_data_directory(package, data_root):
 def test_the_template_is_imported_into_the_copy(package, evaluator_root):
     p = import_package(package, evaluator_root)
     template = evaluator_root / p.name / "template" / "report.docx"
-    assert p.report_template == str(template.resolve()) and template.read_bytes() == b"not really a docx"
+    assert p.report_template == share.TEMPLATE_REL and template.read_bytes() == b"not really a docx"
+    assert project_io.template_path(p, evaluator_root) == str(template)
+
+
+def test_a_renamed_copy_folder_still_finds_its_template(package, evaluator_root):
+    p = import_package(package, evaluator_root)
+    (evaluator_root / p.name).rename(evaluator_root / "renamed")
+    q = project_io.load_project("renamed", evaluator_root)
+    template = project_io.template_path(q, evaluator_root)
+    assert template == str(evaluator_root / "renamed" / "template" / "report.docx")
+    assert alert_files.report_template_path(template).read_bytes() == b"not really a docx"
+
+
+def test_a_duplicate_of_a_copy_keeps_its_template_absolute(package, evaluator_root):
+    p = import_package(package, evaluator_root)
+    q = project_io.duplicate_project(p, "dup")
+    assert q.report_template == project_io.template_path(p)
+    assert Path(q.report_template).is_absolute()
 
 
 def test_a_package_without_template_or_imagery_imports_without_them(data_root, tmp_path, evaluator_root):
@@ -148,7 +168,12 @@ def test_the_scene_index_is_reused_with_planet_access_reset(package, data_root, 
     original = scene_index.SceneManifest.model_validate_json(paths.scene_manifest_path(creator_dir).read_text())
     copied = scene_index.SceneManifest.model_validate_json(paths.scene_manifest_path(folder).read_text())
     assert original.planet.access is True and copied.planet == scene_index.PlanetState()
-    assert copied.model_copy(update={"planet": original.planet}) == original
+    assert copied.model_copy(update={"planet": original.planet, "refreshed": original.refreshed}) == original
+    # Planet access is learnt only by a fetch, so the copy's index is aged into
+    # a (TAIL_DAYS) tail refresh even when opened the moment it was built.
+    want = (original.covered.start, original.covered.end)
+    assert scene_query.needs_refresh(original, want, digest=original.aoi_digest, now=original.refreshed) == ""
+    assert scene_query.needs_refresh(copied, want, digest=original.aoi_digest, now=original.refreshed) == "tail"
     assert paths.scenes_path(folder).read_bytes() == paths.scenes_path(creator_dir).read_bytes()
     assert paths.tiles_path(folder).read_bytes() == paths.tiles_path(creator_dir).read_bytes()
 
@@ -165,7 +190,7 @@ def test_manifest_paths_are_never_trusted(package, tmp_path, evaluator_root):
 
     p = import_package(_with_manifest(package, tmp_path / "bad.zip", escape), evaluator_root)
     assert p.alert_sets[SET1].store_rel_path == CANON and (evaluator_root / p.name / CANON).is_file()
-    assert p.report_template == str((evaluator_root / p.name / "template" / "report.docx").resolve())
+    assert p.report_template == share.TEMPLATE_REL
     assert not (tmp_path / "stolen.parquet").exists()
 
 
@@ -286,6 +311,8 @@ STORES = {
     "no evaluator column": lambda: alerts_frame(["Not reviewed"] * 2),
     "no status column": lambda: alerts_frame(["Not reviewed"] * 2, ["Ana", "Bo"]).drop(columns="status"),
     "duplicate ids": lambda: alerts_frame(["Not reviewed"] * 2, ["Ana", "Bo"]).assign(alert_id=[1, 1]),
+    "missing ids": lambda: alerts_frame(["Not reviewed"] * 2, ["Ana", "Bo"]).assign(
+        alert_id=pd.array([1, pd.NA], dtype="Int64")),
     "text ids": lambda: alerts_frame(["Not reviewed"] * 2, ["Ana", "Bo"]).assign(alert_id=["a", "b"]),
     "another set": lambda: alerts_frame(["Not reviewed"] * 2, ["Ana", "Bo"], sid="another-set"),
 }

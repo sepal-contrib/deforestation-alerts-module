@@ -631,7 +631,7 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
     export_card, monkeypatch
 ):
     """The post-download apply step runs inside the tracked job: a download path
-    ``local_files.home_relative`` rejects (outside ``$HOME``) must be a FAILED
+    ``local_files.served_relative`` rejects (outside ``$HOME``) must be a FAILED
     task + one error toast, not a green pill with buttons that never show."""
     export, card, _app_state, _app_tile_model = export_card
     feedback = _record_feedback(monkeypatch, export)
@@ -647,7 +647,7 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
     def _reject(path):
         raise ValueError(f"not under the SEPAL home: {path}")
 
-    monkeypatch.setattr(local_files, "home_relative", _reject)
+    monkeypatch.setattr(local_files, "served_relative", _reject)
 
     zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(

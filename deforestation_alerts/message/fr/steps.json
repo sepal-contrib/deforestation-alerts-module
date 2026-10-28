@@ -127,6 +127,7 @@
       "name_token_na": "Utilisez au moins une lettre ou un chiffre (A–Z, 0–9).",
       "name_token_taken": "Ce nom partagerait ses noms de fichiers avec une autre source ; choisissez-en un autre.",
       "name_set_collision": "Avec ce nom, deux combinaisons de sources différentes partageraient un seul jeu d'alertes ; choisissez-en un autre.",
+      "name_separator": "N'utilisez pas « , » ni le mot isolé « and » : ils relient les noms de sources dans les listes.",
       "edit_used": "Un jeu d'alertes utilise déjà cette source : ajoutez-en une nouvelle à la place.",
       "cap_reached": "Les 6 emplacements de sources personnalisées sont tous utilisés.",
       "err_unreadable": "Le fichier ne peut pas être lu comme un GeoTIFF.",

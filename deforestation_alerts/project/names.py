@@ -83,6 +83,9 @@ def validate_source_name(name, project: Project, *, current: Optional[str] = Non
         return "steps.alerts.name_empty"
     if len(text) > MAX_NAME:
         return "steps.alerts.name_too_long"
+    # alert_codes.format_list joins names with ", " and " and "; parse_formatted_string splits them back
+    if ", " in text or " and " in f" {text} ":
+        return "steps.alerts.name_separator"
     if _key(text) in {k.casefold() for k in PREDEFINED_KEYS}:
         return "steps.alerts.name_reserved"
     others = [n for n in project.sources if n != current]

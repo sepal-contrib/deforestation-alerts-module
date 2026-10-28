@@ -224,8 +224,14 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         _show_prompt(False)
         # Nothing to undo by hand: the alert change re-seeds the review from
         # the store (``reset_alert`` and the per-alert load).
-        if move is not None:
-            move()
+        if move is None:
+            return
+        token = analysis.alert_token.value
+        move()
+        if analysis.alert_token.value == token:
+            # The move stayed (Next on the last alert, Go to the one on
+            # screen): the same re-seed, asked for.
+            analysis.reload_alert.set(analysis.reload_alert.value + 1)
 
     confirm = _build_confirm(labels)
 

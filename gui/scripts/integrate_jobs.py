@@ -307,23 +307,6 @@ def _record_in_own_project(job, result) -> None:
     delete_orphans(job.pdir, orphans)
 
 
-def _publish_alerts(app_state, name: str, result) -> bool:
-    """Hand the new set's alerts to Analysis while it is still the open, active set.
-
-    ``actual_alert_id`` goes to -1 first, so Analysis's auto-select picks the
-    first alert as a real change even when alert 0 of the replaced set was
-    showing (ruling #76). Under ``AppState``'s lock, as the shell loader's
-    publish of the same set (``set_store.publish_set_alerts``).
-    """
-    with app_state._lock:
-        live = app_state.project.value
-        if live is None or live.name != name or live.active_set != result.alert_set.id:
-            return False  # switched or closed right after the record
-        app_state.actual_alert_id.set(-1)
-        app_state.alerts_gdf.set(result.alerts)
-        return True
-
-
 def outcome_lines(outcomes: dict, left_out: dict, confirmed_only=()) -> list:
     """What each source gave an empty set (spec §7.4), by source name, then
     the sources left out of the run (not covered, or no data for the period).
@@ -425,7 +408,9 @@ def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = 
             if notifier is not None:
                 notifier.warning(t("steps.integrate.project_changed"))
             return
-        if not _publish_alerts(app_state, name, result):
+        # The new set goes to Analysis while it is still the open, active set
+        # (else the project was switched or closed right after the record).
+        if not set_store.publish_set_alerts(app_state, name, result.alert_set, result.alerts):
             return
         if notifier is not None:
             if n:

@@ -209,6 +209,12 @@ def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:
         # every refresh, the switch-off included, supersedes the ones in flight
         analysis.earlier_seq += 1
         seq = analysis.earlier_seq
+        # Read with the token, before the position: the token moves after
+        # ``actual_alert_id`` does (``reset_alert``), so a position read later
+        # is this token's alert or a newer one, whose result is then dropped.
+        token = analysis.alert_token.value
+        links = tuple(analysis.links.value)
+        auto = tuple(analysis.auto_links.value)
     if on_result:
         on_result(None)  # the previous alert's / distance's list is stale
     if not analysis.show_earlier_reviews.value:
@@ -220,9 +226,6 @@ def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:
     if gdf is None or pos is None or not 0 <= pos < len(gdf) or s is None:
         remove_earlier_layer(widgets)
         return
-    token = analysis.alert_token.value
-    links = tuple(analysis.links.value)
-    auto = tuple(analysis.auto_links.value)
     radius_m = analysis.earlier_radius_m.value
     alert_id = _alert_id(gdf, pos)
     shape = search_shape(gdf, pos, p, s, frozenset(analysis.selection.value or ()))

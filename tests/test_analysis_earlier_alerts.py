@@ -340,6 +340,29 @@ def test_a_stale_result_is_dropped(monkeypatch):
     assert analysis.history.value is None
 
 
+def test_a_move_after_the_token_is_read_does_not_drop_the_new_alerts_links(monkeypatch):
+    """The token is read with the links, before the position: a move made
+    between those reads leaves this refresh stale; the new alert's draft (here
+    with a link the fake view calls broken) is not trimmed by it."""
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    moved = []
+
+    class _MovesOnRead:
+        @property
+        def value(self):
+            if not moved:  # A -> B, as ``view_actual_alert`` does it
+                moved.append(True)
+                analysis.reset_alert()
+                analysis.links.set((SEP12.link, AUG7.link))
+            return 1
+
+    app_state.actual_alert_id = _MovesOnRead()
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert moved
+    assert analysis.links.value == (SEP12.link, AUG7.link)
+    assert analysis.history.value is None
+
+
 def test_an_older_load_does_not_overwrite_a_newer_one(monkeypatch):
     widgets, analysis, app_state, _ = _setup(monkeypatch)
     gates, radii = [], []

@@ -15,7 +15,7 @@ import zipfile
 import zlib
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterator, Literal, Optional
@@ -44,7 +44,7 @@ from deforestation_alerts.project.store_schema import (
 )
 from deforestation_alerts.project.questions import column, is_answer_column
 from deforestation_alerts.project.review_copy import refuse_if_read_only
-from deforestation_alerts.scripts import local_files, scene_index
+from deforestation_alerts.scripts import local_files, scene_index, scene_query
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, store_generation, store_lock
 from deforestation_alerts.scripts.naming import safe_token
 
@@ -605,7 +605,7 @@ def _check_store(path: Path, header: ShareHeader) -> gpd.GeoDataFrame:
     if missing:
         raise ShareError("share.err.bad_store", error=f"missing columns {missing}")
     ids = gdf["alert_id"]
-    if not pd.api.types.is_integer_dtype(ids) or not ids.is_unique:
+    if not pd.api.types.is_integer_dtype(ids) or not ids.is_unique or ids.isna().any():
         raise ShareError("share.err.bad_store", error="alert_id is not a unique integer id")
     if "set_id" in gdf.columns and not (gdf["set_id"] == header.set_id).all():
         raise ShareError("share.err.bad_store", error="rows of another set")
@@ -632,8 +632,12 @@ def _package_imagery(zf, tmp: Path) -> dict:
         manifest = scene_index.SceneManifest.model_validate_json(staged[INDEX_MEMBER].read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+    # Aged past the TTL so the first open runs a tail fetch (TAIL_DAYS only),
+    # which is the only request that asks NICFI and so learns the access.
+    stale = manifest.refreshed - timedelta(hours=scene_query.TTL_HOURS + 1)
     staged[INDEX_MEMBER].write_text(
-        manifest.model_copy(update={"planet": scene_index.PlanetState()}).model_dump_json(indent=2),
+        manifest.model_copy(update={"planet": scene_index.PlanetState(), "refreshed": stale}
+                            ).model_dump_json(indent=2),
         encoding="utf-8")
     return staged
 
@@ -705,7 +709,8 @@ def _write_copy(folder: Path, base: Path, header: ShareHeader, manifest: Project
         "coverage": {},
         "vis_layers": {k: v for k, v in manifest.vis_layers.items() if v.kind != "file"},
         "aoi": manifest.aoi.model_copy(update={"geometry_file": paths.AOI_SIDECAR}),
-        "report_template": str(template_dest) if template_dest is not None else None,
+        # Relative, so a renamed copy folder still finds it (resolved by readers).
+        "report_template": TEMPLATE_REL if template_dest is not None else None,
         "review_copy": ReviewCopy(evaluator=header.evaluator, evaluator_index=header.evaluator_index,
                                   set_id=header.set_id, split_id=header.split_id,
                                   set_fingerprint=header.set_fingerprint, origin_project=header.origin_project,
@@ -809,7 +814,7 @@ def _read_reviews(zf, evaluator: str, version: int = FORMAT_VERSION) -> pd.DataF
     except Exception as exc:  # noqa: BLE001 - any unreadable payload is the same refusal
         raise ShareError("share.merge_err_payload") from exc
     ids = rows["alert_id"] if "alert_id" in rows.columns else None
-    if ids is None or not pd.api.types.is_integer_dtype(ids) or not ids.is_unique:
+    if ids is None or not pd.api.types.is_integer_dtype(ids) or not ids.is_unique or ids.isna().any():
         raise ShareError("share.merge_err_payload")
     who = rows[split_mod.EVALUATOR_COLUMN] if split_mod.EVALUATOR_COLUMN in rows.columns else None
     if who is None or not all(isinstance(v, str) and v == evaluator for v in who):

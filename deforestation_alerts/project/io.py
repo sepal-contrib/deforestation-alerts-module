@@ -178,7 +178,8 @@ def validate_project_name(name: str, existing: list[str]) -> Optional[str]:
 
 
 def duplicate_project(p: Project, new_name: str) -> Project:
-    """Same AOI, sources, layers, grid and look-back; no periods, files or sets.
+    """Same AOI, sources, layers, grid, look-back, questionnaire, report
+    template and group review; no periods, files or sets.
 
     Does not copy the ``aoi.geojson`` sidecar -- Task 14's Duplicate action
     copies it with ``shutil.copy2`` when ``p.aoi.geometry_file`` is set.
@@ -194,6 +195,19 @@ def duplicate_project(p: Project, new_name: str) -> Project:
         vis_layers={k: v.model_copy(deep=True) for k, v in p.vis_layers.items()},
         grid=p.grid.model_copy() if p.grid else None,
         look_back_days=p.look_back_days,
-        report_template=p.report_template,
+        # absolute: a review copy's relative template lives in *its* folder
+        report_template=template_path(p),
+        # the template's {key} fields name these questions
+        questions=[q.model_copy(deep=True) for q in p.questions],
         questions_expanded=p.questions_expanded,
+        group_review=p.group_review.model_copy(),
     )
+
+
+def template_path(p: Project, root: Optional[Path] = None) -> Optional[str]:
+    """``p.report_template`` as an absolute path, or None for the default
+    template. A review copy stores it relative to its project folder, so a
+    renamed folder still finds it; a user's pick is already absolute."""
+    if not p.report_template:
+        return None
+    return str(paths.project_dir(p.name, root) / p.report_template)

@@ -308,7 +308,7 @@ def test_a_package_lands_in_the_set_folder(data_root, monkeypatch):
     assert seen == {"pdir": paths.project_dir("c"), "set_id": SET_ID, "evaluator": "Ana", "aoi": FC,
                     "out_dir": folder, "app_version": es.app_version()}
     entry = es.link_entry(path)
-    assert entry["file"] == path.name and entry["url"].endswith("/" + local_files.home_relative(path))
+    assert entry["file"] == path.name and entry["url"].endswith("/" + local_files.served_relative(path))
 
 
 def test_a_failure_reads_as_its_keyed_text_or_names_the_file():
@@ -684,7 +684,7 @@ def test_generate_builds_every_evaluators_package_and_the_clouds_download_them(d
         assert built == ["Ana", "Bo"]
         ana, bo = _clouds(rc)
         path = _set_folder() / share.package_filename("c", SET_ID, 1, "Ana")
-        assert ana.attributes["href"].endswith("/" + local_files.home_relative(path))
+        assert ana.attributes["href"].endswith("/" + local_files.served_relative(path))
         assert ana.attributes["download"] == path.name
         assert ana.attributes["title"] == t("evaluators.package_download", evaluator="Ana")
         split = s.project.value.alert_sets[SET_ID].split

@@ -515,7 +515,9 @@ def _AlertLayers(app_state, layers, map_):
         row = alerts.iloc[i]
         alert_id = int(row.get("alert_id", i))
         go = v.Btn(small=True, color="primary", children=[t("steps.integrate.go")])
-        go.on_event("click", lambda *_: set_store.go_to_alert(app_state, project.name, target.id, alert_id, i))
+        # an alert change: it asks first over unsaved work in Analysis
+        go.on_event("click", lambda *_: app_state.guard(
+            lambda: set_store.go_to_alert(app_state, project.name, target.id, alert_id, i)))
         summary = t("steps.integrate.popup", id=alert_id, status=row.get("status", ""),
                     area=format_number(float(row.get("area_ha", 0)), 2))
         lines = [v.Html(tag="div", children=[summary])]
