@@ -546,7 +546,7 @@ def test_the_top_bar_navigation_asks_first_over_unsaved_work(panel):
     footer = analysis_tile.panel_sections(panel.controls).footer.root
     _prompt, discard, stay = prompt_widgets(footer)
     _banner, card, *_ = panel.controls.children
-    prev, nxt, _jump, _menu, go, unreviewed = context.nav_widgets(card)
+    prev, nxt, _jump, _menu, go = context.nav_widgets(card)
     skip = context.next_unreviewed_widget(card)
     panel.analysis.dirty.set(True)
 
@@ -563,7 +563,6 @@ def test_the_top_bar_navigation_asks_first_over_unsaved_work(panel):
     assert asks(lambda: nxt.fire_event("click", None)) == (True, 1)
     panel.id_field.v_model = "3"
     assert asks(lambda: go.fire_event("click", None)) == (True, 1)
-    assert asks(lambda: unreviewed.fire_event("click", None)) == (True, 1)
     assert asks(lambda: skip.fire_event("click", None)) == (True, 1)
 
     # Discard runs the move the prompt held: here, Go to alert 3.

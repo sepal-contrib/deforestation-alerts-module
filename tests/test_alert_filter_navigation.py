@@ -271,13 +271,14 @@ def test_the_counter_counts_the_matches_with_the_total_as_a_hint(tmp_path, monke
 
 def test_no_match_says_so_and_disables_the_navigation(tmp_path, monkeypatch):
     s, analysis, card, _ = _block_a(tmp_path, monkeypatch)
-    prev, nxt, *_, unreviewed = context.nav_widgets(card)
+    prev, nxt, *_ = context.nav_widgets(card)
+    skip = context.next_unreviewed_widget(card)
     counter, tally, _ = context.queue_widgets(card)
     s.actual_alert_id.set(1)
     analysis.alert_filter.set(AlertFilter("evaluator", frozenset({"Carla"})))
     assert counter.children == ["No alerts match this filter"]
     assert tally.children == ["filtered · 6 total"]
-    assert prev.disabled and nxt.disabled and unreviewed.disabled
+    assert prev.disabled and nxt.disabled and skip.disabled
     assert s.actual_alert_id.value == 1
     analysis.alert_filter.set(None)
     assert not prev.disabled and not nxt.disabled
@@ -296,7 +297,7 @@ def test_the_nav_buttons_follow_the_filter(tmp_path, monkeypatch):
 
 def test_the_jump_refuses_a_number_outside_the_filter(tmp_path, monkeypatch):
     s, analysis, card, field = _block_a(tmp_path, monkeypatch)
-    _, _, _, menu, go, _ = context.nav_widgets(card)
+    _, _, _, menu, go = context.nav_widgets(card)
     refusal = context.jump_refusal(card)
     s.actual_alert_id.set(0)
     analysis.alert_filter.set(ANA)
@@ -326,7 +327,7 @@ def test_a_refusal_on_screen_follows_the_language(tmp_path, monkeypatch):
     field, labels = v.TextField(v_model=None), Labels()
     card = context.build_context(s, field, labels=labels)
     s.alerts_gdf.set(_six())
-    _, _, _, menu, go, _ = context.nav_widgets(card)
+    _, _, _, menu, go = context.nav_widgets(card)
     refusal = context.jump_refusal(card)
     s.actual_alert_id.set(0)
     analysis.alert_filter.set(ANA)
@@ -346,16 +347,15 @@ def test_a_refusal_on_screen_follows_the_language(tmp_path, monkeypatch):
 
 def test_next_unreviewed_keeps_to_the_matches(tmp_path, monkeypatch):
     s, analysis, card, _ = _block_a(tmp_path, monkeypatch)
-    *_, menu, _, unreviewed = context.nav_widgets(card)
+    skip = context.next_unreviewed_widget(card)
     s.actual_alert_id.set(2)
     analysis.alert_filter.set(ANA)
-    menu.v_model = True
-    unreviewed.fire_event("click", None)
+    skip.fire_event("click", None)
     assert s.actual_alert_id.value == 4      # not Bruno's 3
-    unreviewed.fire_event("click", None)
+    skip.fire_event("click", None)
     assert s.actual_alert_id.value == 2      # wraps round, past the reviewed 0
     s.alerts_gdf.set(_six().assign(status=["Confirmed", "", "Not reviewed", "", "Confirmed", ""]))
-    assert unreviewed.disabled, "Ana has nothing else left to review"
+    assert skip.disabled, "Ana has nothing else left to review"
 
 
 # ---- the dock: Next ---------------------------------------------------------------------

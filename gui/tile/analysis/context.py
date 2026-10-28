@@ -222,12 +222,11 @@ def next_unreviewed_widget(card):
 
 
 def nav_widgets(card):
-    """``(prev, next, jump, menu, go, unreviewed)`` of a card built by
-    ``build_context``: ``jump`` is the counter's button, which opens ``menu``
-    (the number field with ``go``, and the next-unreviewed link)."""
+    """``(prev, next, jump, menu, go)`` of a card built by ``build_context``:
+    ``jump`` is the counter's button, which opens ``menu`` (the number field
+    with ``go``)."""
     slots = getattr(card, _SLOTS)
-    return (slots["prev"], slots["next"], slots["jump"], slots["menu"], slots["go"],
-            slots["unreviewed"])
+    return slots["prev"], slots["next"], slots["jump"], slots["menu"], slots["go"]
 
 
 def jump_refusal(card):
@@ -268,7 +267,7 @@ _SKIP_STYLE = "min-width: 0; padding: 0 6px;"
 def _build_nav(app_state, id_field, counter, labels, guard=None):
     """Previous / Next, an icon-only "Next unreviewed alert" beside Next
     (``skip``), and the counter as a button that opens a small menu: "Go to
-    alert number" (``id_field`` and ``go``) and "Next unreviewed alert" again.
+    alert number" (``id_field`` and ``go``).
     The menu floats over the panel, so opening it moves nothing.
 
     The field takes the 1-based number the counter shows, so ``go_to`` takes
@@ -285,8 +284,8 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
     nxt = btn("secondary", icon_right="mdi-chevron-right", style_=_NAV_WIDTH)
     prev.on_event("click", lambda *_: guard(app_state.go_prev))
     nxt.on_event("click", lambda *_: guard(app_state.go_next))
-    # The jump menu's "Next unreviewed alert" one click away (user,
-    # 2026-10-27, option B); the dock's Next has its own.
+    # "Next unreviewed alert" one click away (user, 2026-10-27, option B);
+    # the dock's Next has its own.
     skip = icon_btn("secondary", "mdi-skip-next", style_=_SKIP_STYLE)
     skip.on_event("click", lambda *_: guard(app_state.go_next_unreviewed))
 
@@ -295,7 +294,6 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
                  style_="height: 36px; padding: 0 6px 0 10px; text-transform: none; letter-spacing: normal;",
                  children=[counter, v.Icon(small=True, children=["mdi-menu-down"])])
     go = btn("primary", icon_right="mdi-arrow-right")
-    unreviewed = btn("tertiary", color="primary", x_small=True, small=False, class_="px-1 align-self-start")
     label = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[])
     # "Alert 12 is not in the current filter": a number the filter hides is
     # not jumped to (spec §8.3). Hidden until then; opening the menu hides it.
@@ -306,8 +304,6 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
                       v.Html(tag="div", style_="display: flex; gap: 8px; align-items: center;",
                              children=[id_field, go]),
                       refusal,
-                      v.Divider(),
-                      unreviewed,
                   ])
     menu = v.Menu(v_model=False, offset_y=True, nudge_bottom=4, close_on_content_click=False,
                   v_slots=[{"name": "activator", "variable": "menu", "children": jump}],
@@ -349,21 +345,12 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
     go.on_event("click", _on_go)
     id_field.on_event("keydown.enter", _on_go)
 
-    def _on_unreviewed(*_):
-        # Among the filter's matches (every alert without one), wrapping.
-        if app_state.next_unreviewed() is not None:
-            guard(app_state.go_next_unreviewed)
-        menu.v_model = False
-
-    unreviewed.on_event("click", _on_unreviewed)
-
     def _label():
         set_label(prev, t("analysis_tile.nav.previous"))
         set_label(nxt, t("analysis_tile.nav.next"))
         jump.attributes = {**jump.attributes, "aria-label": t("analysis_tile.nav.jump"),
                            "title": t("analysis_tile.nav.jump")}
         set_label(go, t("analysis_tile.nav.go"))
-        set_label(unreviewed, t("analysis_tile.nav.next_unreviewed"))
         set_tip(skip, t("analysis_tile.nav.next_unreviewed"))
         label.children = [t("analysis_tile.nav.jump")]
         if refused[0] is not None:
@@ -374,7 +361,7 @@ def _build_nav(app_state, id_field, counter, labels, guard=None):
     labels.add(_label)
 
     return {"prev": prev, "next": nxt, "skip": skip, "jump": jump, "menu": menu, "go": go,
-            "unreviewed": unreviewed, "refusal": refusal}
+            "refusal": refusal}
 
 
 def _build_facts(labels):
@@ -507,8 +494,7 @@ def build_context(app_state, id_field, *, labels=None, analysis=None, guard=None
         stuck = filtered and not mask.any()
         nav_slots["prev"].disabled = stuck
         nav_slots["next"].disabled = stuck
-        nav_slots["skip"].disabled = nav_slots["unreviewed"].disabled = (
-            next_unreviewed_match(gdf, mask, index) is None)
+        nav_slots["skip"].disabled = next_unreviewed_match(gdf, mask, index) is None
         id_field.placeholder = f"1 – {format_number(total)}" if total else ""
 
         # The queue line refreshes before this guard returns: another set's
