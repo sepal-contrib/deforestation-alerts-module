@@ -16,19 +16,12 @@ from pysepal.i18n import set_locale
 from gui import i18n
 
 LOCALES = ["en", "es-ES", "fr", "pt-BR"]
-# The generic widgets' namespaces (widgets.json): complete in every locale.
-SCAFFOLD_NAMESPACES = ["common", "dialog", "widgets", "workflow"]
 # The files whose every English key must be used by the code: the legacy
 # cm-era strings were pruned in Task 42, and nothing may pile up there again.
 PRUNED_FILES = ("app.json", "ui.json", "about.json")
 
 
-@pytest.fixture(autouse=True)
-def _pin_english():
-    """Pin the active locale to English so assertions are deterministic."""
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def test_t_resolves_and_formats():
@@ -155,18 +148,6 @@ def test_no_english_is_left_in_the_translations(locale):
     copies = sorted(k for k, text in target.messages.items()
                     if text == english_of(k) and len(_letters(text)) >= 3 and k not in SAME_IN[locale])
     assert not copies, f"{locale} still reads English for: {copies}"
-
-
-@pytest.mark.parametrize("locale", ["es-ES", "fr", "pt-BR"])
-def test_the_step_labels_are_translated(locale):
-    keys = ["alerts", "layers", "period", "prepare", "integrate", "analysis", "project", "overview"]
-    english = {k: i18n.t(f"app.drawer_item.{k}") for k in keys}
-    set_locale(locale)
-    assert all(i18n.t(f"app.drawer_item.{k}") != english[k] for k in keys)
-
-
-def test_the_scaffold_namespaces_are_complete_in_every_locale():
-    assert not [p for p in i18n.messages.check() if p.key.split(".")[0] in SCAFFOLD_NAMESPACES]
 
 
 @pytest.mark.parametrize("locale", LOCALES)

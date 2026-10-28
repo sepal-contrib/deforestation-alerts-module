@@ -16,11 +16,7 @@ ROAD = Question(key="road_access", label="Road access",
                 options=[QuestionOption(code="yes", label="Yes"), QuestionOption(code="no", label="No")])
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def test_labels_follow_the_locale_for_built_ins_and_stay_as_typed_otherwise():

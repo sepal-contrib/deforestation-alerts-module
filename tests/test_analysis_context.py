@@ -18,11 +18,7 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import context
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _state(tmp_path, monkeypatch):
@@ -386,7 +382,7 @@ def test_old_set_has_the_new_kind(tmp_path, monkeypatch):
 def test_history_row_shows_summary(tmp_path, monkeypatch):
     from datetime import date
 
-    from gui.scripts.growth_index import HistorySummary
+    from deforestation_alerts.project.growth import HistoryArea
     from gui.tile.analysis.state import AnalysisState
 
     s = _state(tmp_path, monkeypatch)
@@ -394,10 +390,10 @@ def test_history_row_shows_summary(tmp_path, monkeypatch):
     card = context.build_context(s, v.TextField(v_model=None), analysis=analysis)
     slots = getattr(card, context._SLOTS)
     assert slots["history_row"].style_ == "display: none;"
-    analysis.history.set(HistorySummary(3, 12.4, 0.0, date(2026, 8, 1)))
+    analysis.history.set(HistoryArea(3, 12.4, 0.0, date(2026, 8, 1)))
     assert slots["history_row"].style_ == "display: contents;"
     assert "3 alerts · 12.4 ha confirmed since Aug 2026" in slots["history"].children[0]
-    analysis.history.set(HistorySummary(3, 12.4, 1.5, date(2026, 8, 1)))
+    analysis.history.set(HistoryArea(3, 12.4, 1.5, date(2026, 8, 1)))
     assert slots["history"].children[0].endswith("(+1.5 ha not reviewed)")
     analysis.history.set(None)
     assert slots["history_row"].style_ == "display: none;"

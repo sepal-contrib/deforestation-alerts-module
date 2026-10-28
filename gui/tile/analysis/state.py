@@ -17,7 +17,6 @@ import solara
 from deforestation_alerts.project import grouping as grouping_rules
 from deforestation_alerts.project import review_groups
 from gui.scripts.alert_filter import AlertFilter
-from gui.scripts.set_store import STORE_GENERATION
 from gui.store.workflow_steps import active_set
 
 
@@ -292,14 +291,13 @@ def capture_alert(analysis: AnalysisState, widgets, app_state, *, remove=False) 
     ``min_patch_ha`` are the project's, for the areas the Save stores and the
     patches a CNN run offers.
 
-    Group review (spec 2026-10-26 §5.1): ``grouping`` is the set's effective
-    grouping (None: off), ``selection`` the ticked rows, ``plan`` the
-    ``review_groups.GroupPlan`` the save writes (None while grouping is off:
-    today's single save; a REMOVE plan with ``remove``, which raises
-    ``ValueError`` for a row that is not a group's member), ``evaluator`` the
-    review copy's evaluator (None outside a copy). ``set_id`` and
-    ``generation`` (the alerts' store generation) tell a later step whether
-    the save was made for another set or store."""
+    Group review (spec 2026-10-26 §5.1): ``plan`` is the
+    ``review_groups.GroupPlan`` the save writes for the ticked rows (None
+    while grouping is off: today's single save; a REMOVE plan with
+    ``remove``, which raises ``ValueError`` for a row that is not a group's
+    member), ``evaluator`` the review copy's evaluator (None outside a copy)
+    and ``set_id`` tells a later step whether the save was made for another
+    set."""
 
     def _read():
         p = app_state.project.value
@@ -323,12 +321,9 @@ def capture_alert(analysis: AnalysisState, widgets, app_state, *, remove=False) 
             "drawing_unapplied": analysis.drawing_unapplied.value,
             # What a save compares against when it lands: see ``touch``.
             "edit_rev": analysis.edit_rev.value,
-            "grouping": grouping,
-            "selection": selection,
             "plan": _group_plan(alerts, alert_id, grouping, selection, remove),
             "evaluator": rc.evaluator if rc is not None else None,
             "set_id": s.id if s is not None else None,
-            "generation": (getattr(alerts, "attrs", None) or {}).get(STORE_GENERATION),
         }
 
     return analysis.capture(_read)

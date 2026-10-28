@@ -690,7 +690,7 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
         if alert.plan is None:
             logger.info("Analysis: Remove from group while grouping is off, ignored")
             return
-        footer.confirm.ask([affected_line(a, alert.alerts) for a in alert.plan.affected],
+        footer.confirm.ask([affected_line(a) for a in alert.plan.affected],
                            lambda: run_save(near.remove_btn, alert=alert),
                            title="analysis_tile.nearby.remove", ok="analysis_tile.nearby.confirm_remove_ok")
 

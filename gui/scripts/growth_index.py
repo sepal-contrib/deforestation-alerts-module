@@ -35,7 +35,6 @@ from deforestation_alerts.project.growth import (
     HistoryArea,
     LinkGraph,
     Node,
-    build_graph,
     group_candidates,
     history_area,
     kind_of,
@@ -123,7 +122,6 @@ def _build(p, s, gdf) -> _Entry:
         return _Entry((), (), [] if _grid_epsg(p) else None)
     nodes = tuple(nodes_of_set(s, period, gdf))
     run_id = run_id_of(s)
-    # growth.candidates_of_set's rule, from the nodes already read (one pass over the rows)
     cands = tuple(Candidate(n, run_id) for n in group_candidates(nodes))
     epsg = _grid_epsg(p)
     return _Entry(nodes, cands, _to_crs([c.node.shape for c in cands], epsg) if epsg else None)
@@ -164,19 +162,6 @@ def _snapshot(p) -> _Snapshot:
     with _lock:
         _snapshots[p.name] = (key, snap)
     return snap
-
-
-def snapshot_rows(p) -> list[Candidate]:
-    """Every row of a review copy's package snapshot, each with its set's run
-    id at packaging time, whatever its status: the earlier nodes of the copy's
-    link graph. ``[]`` without a snapshot."""
-    return list(_snapshot(p).rows)
-
-
-def snapshot_candidates(p) -> list[Candidate]:
-    """A review copy's parent candidates, from its package snapshot (spec
-    §6.6); ``[]`` without one (a package from before the snapshot)."""
-    return list(_snapshot(p).cands)
 
 
 def _earlier(p, set_id: str) -> list:
@@ -257,7 +242,7 @@ def _parts(p, set_id, gdf_current, load, alert_id=None, links=None) -> tuple[lis
 
 
 def _graph(p, set_id, gdf_current, load, alert_id=None, links=None) -> LinkGraph:
-    return build_graph(*_parts(p, set_id, gdf_current, load, alert_id, links))
+    return LinkGraph(*_parts(p, set_id, gdf_current, load, alert_id, links))
 
 
 def graph_for(p, set_id: str, gdf_current, *, load=set_store.load_set_alerts) -> LinkGraph:
@@ -371,7 +356,7 @@ def earlier_view(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str
     pairs = _candidate_pairs(p, set_id, load)
     cands = [c for c, _ in pairs]
     nodes, run_ids = _parts(p, set_id, gdf_current, load, alert_id, links)
-    graph = build_graph(nodes, run_ids)
+    graph = LinkGraph(nodes, run_ids)
     if shape is None:
         shape = _row_shape(gdf_current, alert_id)
     crs = _metric_crs(p, shape)
@@ -451,16 +436,8 @@ def _area_of(p, nodes) -> HistoryArea:
     return history_area(nodes, crs)
 
 
-@dataclass(frozen=True)
-class HistorySummary:
-    n: int
-    confirmed_ha: float
-    unreviewed_ha: float
-    since: Optional[date]
-
-
 def history_summary(p, set_id: str, gdf_current, alert_id: int, links: Sequence[str], *,
-                    load=set_store.load_set_alerts, graph: Optional[LinkGraph] = None) -> Optional[HistorySummary]:
+                    load=set_store.load_set_alerts, graph: Optional[LinkGraph] = None) -> Optional[HistoryArea]:
     """The History row (spec §6.1) of one alert, with ``links`` (the draft
     ticks) in place of its stored ones; None when it has no history.
     ``graph``: one already built for these links (``EarlierView.graph``)."""
@@ -470,8 +447,7 @@ def history_summary(p, set_id: str, gdf_current, alert_id: int, links: Sequence[
     nodes = [graph.node(k) for k in members if graph.node(k) is not None]
     if len(nodes) < 2:
         return None
-    area = _area_of(p, nodes)
-    return HistorySummary(area.n, area.confirmed_ha, area.unreviewed_ha, area.first_period_start)
+    return _area_of(p, nodes)
 
 
 def _links_and_small(gdf):

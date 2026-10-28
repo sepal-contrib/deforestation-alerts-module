@@ -10,6 +10,7 @@ from shapely.geometry import Polygon, box
 
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
 from gui.tile.analysis.review_save import write_store as _save_alerts_to_gdf
+from tests._review_helpers import stub_admin_lookups
 
 
 def _gdf():
@@ -51,10 +52,10 @@ def _save_with_links(tmp_path, monkeypatch, s, alerts, links):
     from gui.scripts.set_context import SetContext
     from gui.tile.analysis import export
     from gui.tile.analysis.state import AnalysisState
-    from tests.test_set_context import _AdminLookups, _store
+    from tests.test_set_context import _store
 
     s.alerts_gdf.set(alerts)
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
     analysis.links.set(tuple(links))

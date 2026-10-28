@@ -5,7 +5,7 @@ import numpy as np
 from shapely.geometry import box
 
 from deforestation_alerts.project.growth import (
-    LinkRef, build_graph, candidates_of_set, format_link, history_area, kind_of, links_of,
+    Candidate, LinkGraph, LinkRef, format_link, group_candidates, history_area, kind_of, links_of,
     node_key, nodes_of_set, parse_link, run_id_of)
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Period
 from deforestation_alerts.project.review_status import CONFIRMED, FALSE_POSITIVE, NEED_REVISION, NOT_REVIEWED
@@ -27,6 +27,12 @@ def _gdf(rows):
 
 def _sq(x, y=-1.0, d=0.001):
     return box(x, y, x + d, y + d)
+
+
+def _candidates(g, s=None):
+    """The parent candidates of one set's rows, as Integrate pairs them."""
+    s = s or _set()
+    return [Candidate(n, run_id_of(s)) for n in group_candidates(nodes_of_set(s, _period(), g))]
 
 
 def _node(sid, aid, status=NOT_REVIEWED, links=(), shape=None, start=date(2026, 8, 1)):
@@ -68,7 +74,7 @@ def test_candidates_keep_only_loss_verdicts_and_prefer_drawn_shape():
     g = _gdf({"alert_id": [1, 2, 3], "status": [CONFIRMED, NEED_REVISION, FALSE_POSITIVE],
               "area_ha": [1.0] * 3, "geometry": [_sq(-57), _sq(-56.9), _sq(-56.8)],
               "alert_polygon": [drawn, None, None]})
-    cands = candidates_of_set(_set(), _period(), g)
+    cands = _candidates(g)
     assert [c.node.alert_id for c in cands] == [1, 2]
     assert cands[0].node.shape.equals(drawn)
     assert cands[1].node.shape.equals(_sq(-56.9))
@@ -87,7 +93,7 @@ RUNS = {"A": "rA", "B": "rB", "C": "rC"}
 
 def test_graph_components_follow_links_both_ways():
     a, b, c = _chain()
-    g = build_graph([a, b, c], RUNS)
+    g = LinkGraph([a, b, c], RUNS)
     full = frozenset({a.key, b.key, c.key})
     assert g.component(c.key) == full
     assert g.component(a.key) == full
@@ -95,7 +101,7 @@ def test_graph_components_follow_links_both_ways():
 
 def test_false_positive_neither_joins_nor_bridges():
     a, b, c = _chain(FALSE_POSITIVE)
-    g = build_graph([a, b, c], RUNS)
+    g = LinkGraph([a, b, c], RUNS)
     assert g.component(c.key) == {c.key}
     assert g.component(a.key) == {a.key}
     assert g.component(b.key) == frozenset()
@@ -103,7 +109,7 @@ def test_false_positive_neither_joins_nor_bridges():
 
 def test_run_mismatch_breaks_link():
     a, b, c = _chain()
-    g = build_graph([a, b, c], {**RUNS, "A": "other"})
+    g = LinkGraph([a, b, c], {**RUNS, "A": "other"})
     assert g.is_broken("A#1@rA")
     assert not g.is_broken("B#1@rB")
     assert a.key not in g.component(c.key)
@@ -164,32 +170,7 @@ def test_snapshot_rows_hold_the_candidates_and_every_linked_row():
     assert {r.key: r.node.status for r in got}["B#1"] == FALSE_POSITIVE
 
 
-def _nodes_by_rows(s, period, gdf):
-    """``nodes_of_set`` as it was, row by row (``iterrows``): the column-wise
-    one must give exactly the same nodes."""
-    import pandas as pd
-
-    from deforestation_alerts.project.growth import Node, _float, parent_shape
-
-    def _number(row, name):
-        return _float(row[name]) if name in row else None
-
-    has_links = "grows_from" in gdf.columns
-    out = []
-    for _, row in gdf.iterrows():
-        status = row["status"] if "status" in row else None
-        out.append(Node(
-            set_id=s.id, alert_id=int(row["alert_id"]), period_id=period.id,
-            period_start=period.start, period_end=period.end,
-            status=NOT_REVIEWED if status is None or status is pd.NA or pd.isna(status) or status == "" else status,
-            area_ha=_number(row, "area_ha") or 0.0,
-            date_min=_number(row, "alert_date_min"), date_max=_number(row, "alert_date_max"),
-            shape=parent_shape(row),
-            links=tuple(links_of(row["grows_from"])) if has_links else ()))
-    return out
-
-
-def test_nodes_of_set_column_wise_matches_row_by_row():
+def test_nodes_of_set_reads_every_cell_shape():
     from shapely.geometry import Polygon
 
     link = "s0#1@20260101000000000000"
@@ -203,9 +184,21 @@ def test_nodes_of_set_column_wise_matches_row_by_row():
         "grows_from": [[link], None, f"{link};{link}", np.array([link], dtype=object), []],
         "geometry": [_sq(0), _sq(1), _sq(2), None, _sq(4)],
     })
-    bare = _gdf({"alert_id": [7, 8], "geometry": [_sq(0), None]})
-    for g in (full, bare, full.iloc[0:0]):
-        assert nodes_of_set(_set(), _period(), g) == _nodes_by_rows(_set(), _period(), g)
+    NR, FP = NOT_REVIEWED, FALSE_POSITIVE
+    got = [(n.alert_id, n.status, n.area_ha, n.date_min, n.date_max, n.links)
+           for n in nodes_of_set(_set(), _period(), full)]
+    assert got == [(0, CONFIRMED, 1.5, 2026.1, 2026.2, (link,)),
+                   (1, NR, 0.0, None, 2026.3, ()),
+                   (2, NR, 0.0, 2026.2, None, (link,)),
+                   (3, NR, 2.0, 2026.3, 2026.4, (link,)),
+                   (4, FP, 3.0, 2026.4, 2026.5, ())]
+    # the drawing (a WKB one too) else the row's own; an empty drawing is none
+    shapes = [n.shape for n in nodes_of_set(_set(), _period(), full)]
+    assert [s.equals(e) for s, e in zip(shapes, (_sq(5), _sq(1), _sq(2), _sq(6), _sq(4)))] == [True] * 5
+    bare = nodes_of_set(_set(), _period(), _gdf({"alert_id": [7, 8], "geometry": [_sq(0), None]}))
+    assert [(n.status, n.area_ha, n.date_min, n.links, n.review_group) for n in bare] == [(NR, 0.0, None, (), None)] * 2
+    assert bare[0].shape.equals(_sq(0)) and bare[1].shape is None
+    assert nodes_of_set(_set(), _period(), full.iloc[0:0]) == []
 
 
 # ---- group review (spec 2026-10-26 §7): a group is one patch -------------------
@@ -241,7 +234,7 @@ def test_a_store_without_review_group_has_no_groups():
 
 def test_group_members_are_one_history():
     nodes = nodes_of_set(_set(), _period(), _grouped(_sq(-57, d=0.003)))
-    graph = build_graph(nodes, {"s1": run_id_of(_set())})
+    graph = LinkGraph(nodes, {"s1": run_id_of(_set())})
     assert graph.component("s1#0") == {"s1#0", "s1#1", "s1#2"}
     assert graph.component("s1#2") == {"s1#0", "s1#1", "s1#2"}
     assert graph.component("s1#3") == {"s1#3"}
@@ -263,10 +256,9 @@ def test_group_candidates_fold_members_into_the_main():
     drawn = _sq(-57, d=0.003)
     got = group_candidates(nodes_of_set(_set(), _period(), _grouped(drawn)))
     assert [n.key for n in got] == ["s1#0", "s1#3"] and got[0].shape.equals(drawn) and got[0].area_ha == 6.0
-    # candidates_of_set folds too; a false-positive group is no candidate
-    assert [c.key for c in candidates_of_set(_set(), _period(), _grouped(drawn))] == ["s1#0", "s1#3"]
+    # a false-positive group is no candidate
     fp = _grouped(statuses=(FALSE_POSITIVE,) * 3 + (CONFIRMED,))
-    assert [c.key for c in candidates_of_set(_set(), _period(), fp)] == ["s1#3"]
+    assert [c.key for c in _candidates(fp)] == ["s1#3"]
 
 
 def test_the_snapshot_keeps_a_drawn_groups_members(tmp_path):
@@ -277,6 +269,6 @@ def test_the_snapshot_keeps_a_drawn_groups_members(tmp_path):
     got = snapshot_rows(pool, [])
     assert [r.key for r in got] == ["s1#0", "s1#1", "s1#2"]
     run_ids = {"s1": run_id_of(s)}
-    creator = build_graph([r.node for r in pool], run_ids)
-    copy = build_graph([r.node for r in read_snapshot(write_snapshot(got, tmp_path / "snap.parquet"))], run_ids)
+    creator = LinkGraph([r.node for r in pool], run_ids)
+    copy = LinkGraph([r.node for r in read_snapshot(write_snapshot(got, tmp_path / "snap.parquet"))], run_ids)
     assert copy.component("s1#0") == creator.component("s1#0") == {"s1#0", "s1#1", "s1#2"}

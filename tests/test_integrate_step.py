@@ -49,6 +49,7 @@ from gui.store.state_manager import AppState
 from gui.store.workflow_steps import step_index
 from gui.tile import integrate_step
 from gui.widget import attribute_form, raster_input
+from tests._render_helpers import run_rendered
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 SET_DIR = f"periods/{JAN.id}/sets/glad-l"
@@ -1387,108 +1388,88 @@ ASSET = {"asset_id": "users/me/landcover", "type": "IMAGE", "column": "ALL", "va
 def test_attribute_form_order(pickers):
     """Layer name, Source, then the picker; the Layer name shows on the empty form."""
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=[]), handle_error=False)
-        try:
-            column = rc.find(v.Html, style_=attribute_form._COLUMN).widget
-            name, source = _name_field(rc), _source(rc)
-            picker = next(w for w in column.children
-                          if isinstance(w, v.Html) and any(getattr(c, "class_", None) == "dv-stub-picker"
-                                                           for c in w.children))
-            order = column.children
-            assert order.index(name) < order.index(source) < order.index(picker)
-            assert (name.hint, name.persistent_hint) == (t("steps.integrate.attr_name_hint"), True)
-            assert (source.hint, source.persistent_hint) == (t("steps.raster_input.source_hint"), True)
-            assert _source(rc).v_model == "gee"
-            assert _bands_or_none(rc) is None and _stats(rc) == []
-            assert [w.label for w in rc.find(v.Select).widgets].count(t("steps.raster_input.field_source")) == 1
-        finally:
-            rc.close()
+    async def main(rc):
+        column = rc.find(v.Html, style_=attribute_form._COLUMN).widget
+        name, source = _name_field(rc), _source(rc)
+        picker = next(w for w in column.children
+                      if isinstance(w, v.Html) and any(getattr(c, "class_", None) == "dv-stub-picker"
+                                                       for c in w.children))
+        order = column.children
+        assert order.index(name) < order.index(source) < order.index(picker)
+        assert (name.hint, name.persistent_hint) == (t("steps.integrate.attr_name_hint"), True)
+        assert (source.hint, source.persistent_hint) == (t("steps.raster_input.source_hint"), True)
+        assert _source(rc).v_model == "gee"
+        assert _bands_or_none(rc) is None and _stats(rc) == []
+        assert [w.label for w in rc.find(v.Select).widgets].count(t("steps.raster_input.field_source")) == 1
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=[]), handle_error=False), main)
 
 
 def test_attribute_form_has_no_load_button(pickers, tmp_path):
     tif = _geotiff(tmp_path / "lc.tif", ["lc", "count"])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            assert rc.find(v.Btn).widgets == []
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen)
-            assert rc.find(v.Btn).widgets == []
-        finally:
-            rc.close()
+    async def main(rc):
+        assert rc.find(v.Btn).widgets == []
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen)
+        assert rc.find(v.Btn).widgets == []
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_attribute_bands_are_read_on_pick(pickers, tmp_path):
     tif = _geotiff(tmp_path / "landcover.tif", ["lc", "count"])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen and seen[-1].get("name"))
-            assert _items(_bands_or_none(rc)) == [("lc", "lc"), ("count", "count")]
-            assert seen[-1] == {"source": str(tif), "kind": "local", "name": "landcover",
-                                "bands": [{"band": "lc", "stat": "majority", "column": "landcover_lc"}]}
-            assert t("steps.raster_input.bands_loading") not in _texts(rc)
-            # the Bands of {source} line is gone: the picker shows the raster
-            assert not any(str(tif) in s for s in _texts(rc))
+    async def main(rc):
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen and seen[-1].get("name"))
+        assert _items(_bands_or_none(rc)) == [("lc", "lc"), ("count", "count")]
+        assert seen[-1] == {"source": str(tif), "kind": "local", "name": "landcover",
+                            "bands": [{"band": "lc", "stat": "majority", "column": "landcover_lc"}]}
+        assert t("steps.raster_input.bands_loading") not in _texts(rc)
+        # the Bands of {source} line is gone: the picker shows the raster
+        assert not any(str(tif) in s for s in _texts(rc))
 
-            _bands_or_none(rc).v_model = ["lc", "count"]
-            assert [b["column"] for b in seen[-1]["bands"]] == ["landcover_lc", "landcover_count"]
-            _bands_or_none(rc).v_model = ["lc"]
-            _stats(rc)[0].v_model = "mean"
-            _name_field(rc).v_model = "Land cover"
-            assert seen[-1] == {"source": str(tif), "kind": "local", "name": "Land cover",
-                                "bands": [{"band": "lc", "stat": "mean", "column": "land_cover_lc"}]}
-        finally:
-            rc.close()
+        _bands_or_none(rc).v_model = ["lc", "count"]
+        assert [b["column"] for b in seen[-1]["bands"]] == ["landcover_lc", "landcover_count"]
+        _bands_or_none(rc).v_model = ["lc"]
+        _stats(rc)[0].v_model = "mean"
+        _name_field(rc).v_model = "Land cover"
+        assert seen[-1] == {"source": str(tif), "kind": "local", "name": "Land cover",
+                            "bands": [{"band": "lc", "stat": "mean", "column": "land_cover_lc"}]}
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_a_new_raster_selects_its_first_band(pickers, monkeypatch):
     _ee_requests(monkeypatch)
     gee, seen = _fake_gee(["classification", "elevation"], {}), []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=gee, initial=None, seen=seen), handle_error=False)
-        try:
-            pickers.asset.set(ASSET)
-            await _settle(lambda: seen and seen[-1] and seen[-1].get("name"))
-            assert _bands_or_none(rc).v_model == ["classification"]
-            assert [b["band"] for b in seen[-1]["bands"]] == ["classification"]
-        finally:
-            rc.close()
+    async def main(rc):
+        pickers.asset.set(ASSET)
+        await _settle(lambda: seen and seen[-1] and seen[-1].get("name"))
+        assert _bands_or_none(rc).v_model == ["classification"]
+        assert [b["band"] for b in seen[-1]["bands"]] == ["classification"]
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=gee, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_one_band_attribute_shows_a_line_and_its_row(pickers, tmp_path):
     tif = _geotiff(tmp_path / "dem.tif", ["elevation"])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen)
-            assert _bands_or_none(rc) is None
-            assert t("steps.integrate.attr_band_one", name="elevation") in _texts(rc)
-            assert [w.v_model for w in _stats(rc)] == ["mean"]
-            assert seen[-1]["bands"] == [{"band": "elevation", "stat": "mean", "column": "dem_elevation"}]
-            assert "dem_elevation" in _texts(rc)
-        finally:
-            rc.close()
+    async def main(rc):
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen)
+        assert _bands_or_none(rc) is None
+        assert t("steps.integrate.attr_band_one", name="elevation") in _texts(rc)
+        assert [w.v_model for w in _stats(rc)] == ["mean"]
+        assert seen[-1]["bands"] == [{"band": "elevation", "stat": "mean", "column": "dem_elevation"}]
+        assert "dem_elevation" in _texts(rc)
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_statistic_defaults_to_majority_for_an_earth_engine_band_of_classes(pickers, monkeypatch):
@@ -1496,82 +1477,66 @@ def test_statistic_defaults_to_majority_for_an_earth_engine_band_of_classes(pick
     _ee_requests(monkeypatch)
     gee, seen = _fake_gee(["Map"], {"Map": {"crs": "EPSG:4326", "scale": 10, "classes": True}}), []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=gee, initial=None, seen=seen), handle_error=False)
-        try:
-            pickers.asset.set(ASSET)
-            await _settle(lambda: seen and seen[-1] and seen[-1].get("bands"))
-            assert [w.v_model for w in _stats(rc)] == ["majority"]
-            majority = t("steps.layers.suggested", text=t("steps.integrate.attr_stat_majority"))
-            assert _items(_stats(rc)[0])[0] == (majority, "majority")
-            assert "classes" not in seen[-1]["bands"][0]  # read, not saved
-        finally:
-            rc.close()
+    async def main(rc):
+        pickers.asset.set(ASSET)
+        await _settle(lambda: seen and seen[-1] and seen[-1].get("bands"))
+        assert [w.v_model for w in _stats(rc)] == ["majority"]
+        majority = t("steps.layers.suggested", text=t("steps.integrate.attr_stat_majority"))
+        assert _items(_stats(rc)[0])[0] == (majority, "majority")
+        assert "classes" not in seen[-1]["bands"][0]  # read, not saved
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=gee, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_statistic_defaults_to_majority_for_a_geotiff_band_with_a_colour_table(pickers, tmp_path):
     tif = _geotiff(tmp_path / "lc.tif", ["Map", "elevation"], colormaps=(1,))
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen)
-            _bands_or_none(rc).v_model = ["Map", "elevation"]
-            assert [b["stat"] for b in seen[-1]["bands"]] == ["majority", "mean"]
-        finally:
-            rc.close()
+    async def main(rc):
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen)
+        _bands_or_none(rc).v_model = ["Map", "elevation"]
+        assert [b["stat"] for b in seen[-1]["bands"]] == ["majority", "mean"]
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_statistic_defaults_by_band_name(pickers, tmp_path):
     tif = _geotiff(tmp_path / "x.tif", ["classification", "elevation"])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen)
-            _bands_or_none(rc).v_model = ["classification", "elevation"]
-            assert [b["stat"] for b in seen[-1]["bands"]] == ["majority", "mean"]
-            categorical, continuous = _stats(rc)
-            assert categorical.v_model == "majority" and continuous.v_model == "mean"
-            majority = t("steps.layers.suggested", text=t("steps.integrate.attr_stat_majority"))
-            mean = t("steps.layers.suggested", text=t("steps.integrate.attr_stat_mean"))
-            assert _items(categorical)[0] == (majority, "majority")
-            assert (t("steps.integrate.attr_stat_mean"), "mean") in _items(categorical)
-            assert (mean, "mean") in _items(continuous)
-            assert (t("steps.integrate.attr_stat_majority"), "majority") in _items(continuous)
-            assert all(w.outlined and w.dense for w in _stats(rc))
-        finally:
-            rc.close()
+    async def main(rc):
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen)
+        _bands_or_none(rc).v_model = ["classification", "elevation"]
+        assert [b["stat"] for b in seen[-1]["bands"]] == ["majority", "mean"]
+        categorical, continuous = _stats(rc)
+        assert categorical.v_model == "majority" and continuous.v_model == "mean"
+        majority = t("steps.layers.suggested", text=t("steps.integrate.attr_stat_majority"))
+        mean = t("steps.layers.suggested", text=t("steps.integrate.attr_stat_mean"))
+        assert _items(categorical)[0] == (majority, "majority")
+        assert (t("steps.integrate.attr_stat_mean"), "mean") in _items(categorical)
+        assert (mean, "mean") in _items(continuous)
+        assert (t("steps.integrate.attr_stat_majority"), "majority") in _items(continuous)
+        assert all(w.outlined and w.dense for w in _stats(rc))
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_geotiff_attribute_bands_show_band_n_but_keep_band_n_columns(pickers, tmp_path):
     tif = _geotiff(tmp_path / "plain.tif", [None, None])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen)
-            bands = _bands_or_none(rc)
-            assert _items(bands) == [("Band 1", "band_1"), ("Band 2", "band_2")]
-            assert bands.v_model == ["band_1"] and not bands.chips
-            assert seen[-1]["bands"] == [{"band": "band_1", "stat": "mean", "column": "plain_band_1"}]
-            assert "Band 1" in _texts(rc) and "band_1" not in _texts(rc)
-        finally:
-            rc.close()
+    async def main(rc):
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen)
+        bands = _bands_or_none(rc)
+        assert _items(bands) == [("Band 1", "band_1"), ("Band 2", "band_2")]
+        assert bands.v_model == ["band_1"] and not bands.chips
+        assert seen[-1]["bands"] == [{"band": "band_1", "stat": "mean", "column": "plain_band_1"}]
+        assert "Band 1" in _texts(rc) and "band_1" not in _texts(rc)
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_picking_another_raster_emits_none_until_its_bands_arrive(pickers, monkeypatch, tmp_path):
@@ -1694,53 +1659,41 @@ def test_an_edit_of_a_home_relative_geotiff_keeps_its_selection(pickers, monkeyp
            "bands": [{"band": "wider", "stat": "median", "column": "lc_wider"}]}
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
-        try:
-            await _settle(lambda: seen and seen[-1])
-            await asyncio.sleep(0.05)
-            assert _bands_or_none(rc).v_model == ["wider"]
-            assert [w.v_model for w in _stats(rc)] == ["median"]
-            assert [b["band"] for b in seen[-1]["bands"]] == ["wider"] and seen[-1]["bands"][0]["stat"] == "median"
-        finally:
-            rc.close()
+    async def main(rc):
+        await _settle(lambda: seen and seen[-1])
+        await asyncio.sleep(0.05)
+        assert _bands_or_none(rc).v_model == ["wider"]
+        assert [w.v_model for w in _stats(rc)] == ["median"]
+        assert [b["band"] for b in seen[-1]["bands"]] == ["wider"] and seen[-1]["bands"][0]["stat"] == "median"
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False), main)
 
 
 def test_a_failed_read_leaves_no_config(pickers, tmp_path):
     tif = _geotiff(tmp_path / "a.tif", ["x"])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen)
-            pickers.path.set(str(tmp_path / "missing.tif"))
-            await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
-            assert seen[-1] is None and _stats(rc) == [] and _bands_or_none(rc) is None
-            [error] = [s for s in _texts(rc) if "missing.tif" in s]
-            assert error.startswith(t("steps.raster_input.bands_failed", error=""))
-        finally:
-            rc.close()
+    async def main(rc):
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen)
+        pickers.path.set(str(tmp_path / "missing.tif"))
+        await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
+        assert seen[-1] is None and _stats(rc) == [] and _bands_or_none(rc) is None
+        [error] = [s for s in _texts(rc) if "missing.tif" in s]
+        assert error.startswith(t("steps.raster_input.bands_failed", error=""))
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_a_failed_first_read_emits_nothing(pickers, tmp_path):
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tmp_path / "missing.tif")
-            await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
-            assert seen == []
-        finally:
-            rc.close()
+    async def main(rc):
+        _pick_file(rc, pickers, tmp_path / "missing.tif")
+        await _settle(lambda: any("missing.tif" in s for s in _texts(rc)))
+        assert seen == []
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_reloading_the_same_raster_keeps_selection_and_statistics(pickers, tmp_path):
@@ -1752,22 +1705,18 @@ def test_reloading_the_same_raster_keeps_selection_and_statistics(pickers, tmp_p
            "bands": [{"band": "lc", "stat": "median", "column": "lc_lc"}]}
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
-        try:
-            assert _source(rc).v_model == "file" and pickers.path.value == str(tif)
-            assert _name_field(rc).v_model == "LC"
-            assert _stats(rc) == [] and _bands_or_none(rc) is None  # nothing before the read
-            await _settle(lambda: seen)
-            assert _items(_bands_or_none(rc)) == [("lc", "lc"), ("wider", "wider")]
-            assert _bands_or_none(rc).v_model == ["lc"]
-            assert [w.v_model for w in _stats(rc)] == ["median"]
-            assert seen[-1] == cfg
-            assert "lc_lc" in _texts(rc)  # the written column, read-only
-        finally:
-            rc.close()
+    async def main(rc):
+        assert _source(rc).v_model == "file" and pickers.path.value == str(tif)
+        assert _name_field(rc).v_model == "LC"
+        assert _stats(rc) == [] and _bands_or_none(rc) is None  # nothing before the read
+        await _settle(lambda: seen)
+        assert _items(_bands_or_none(rc)) == [("lc", "lc"), ("wider", "wider")]
+        assert _bands_or_none(rc).v_model == ["lc"]
+        assert [w.v_model for w in _stats(rc)] == ["median"]
+        assert seen[-1] == cfg
+        assert "lc_lc" in _texts(rc)  # the written column, read-only
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False), main)
 
 
 def test_earth_engine_read_keeps_crs_and_scale(pickers, monkeypatch):
@@ -1776,16 +1725,12 @@ def test_earth_engine_read_keeps_crs_and_scale(pickers, monkeypatch):
                    "elevation": {"crs": "EPSG:4326", "scale": 92.5}}
     gee, seen = _fake_gee(["landcover", "elevation"], projections), []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=gee, initial=None, seen=seen), handle_error=False)
-        try:
-            pickers.asset.set(ASSET)
-            await _settle(lambda: seen and seen[-1] and seen[-1].get("name"))
-            _bands_or_none(rc).v_model = ["landcover", "elevation"]
-        finally:
-            rc.close()
+    async def main(rc):
+        pickers.asset.set(ASSET)
+        await _settle(lambda: seen and seen[-1] and seen[-1].get("name"))
+        _bands_or_none(rc).v_model = ["landcover", "elevation"]
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=gee, initial=None, seen=seen), handle_error=False), main)
     assert gee.asked == [("BANDS", "users/me/landcover", "IMAGE"),
                          ("PROJECTIONS", "users/me/landcover", ("landcover", "elevation"))]
     assert seen[-1]["bands"] == [
@@ -1800,21 +1745,17 @@ def test_no_band_selected_shows_the_error_once(pickers, tmp_path):
     tif = _geotiff(tmp_path / "lc.tif", ["lc", "count"])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen)
-            bands = _bands_or_none(rc)
-            assert (bands.hint, bands.persistent_hint) == (t("steps.integrate.attr_bands_pick", count=2), True)
-            assert not bands.error_messages
-            bands.v_model = []
-            assert _bands_or_none(rc).error_messages == [t("steps.integrate.attr_err_no_bands")]
-            assert seen[-1]["bands"] == []
-        finally:
-            rc.close()
+    async def main(rc):
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen)
+        bands = _bands_or_none(rc)
+        assert (bands.hint, bands.persistent_hint) == (t("steps.integrate.attr_bands_pick", count=2), True)
+        assert not bands.error_messages
+        bands.v_model = []
+        assert _bands_or_none(rc).error_messages == [t("steps.integrate.attr_err_no_bands")]
+        assert seen[-1]["bands"] == []
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_the_default_attribute_layer_name_is_unique_among_the_other_layers(pickers, tmp_path):
@@ -1908,20 +1849,16 @@ def test_a_name_typed_by_the_user_survives_reading_another_raster(pickers, tmp_p
     a, b = _geotiff(tmp_path / "a.tif", ["x"]), _geotiff(tmp_path / "b.tif", ["y"])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, a)
-            await _settle(lambda: seen and seen[-1] and seen[-1].get("name") == "a")
-            _name_field(rc).v_model = "Mine"
-            pickers.path.set(str(b))
-            await _settle(lambda: seen[-1] and seen[-1]["source"] == str(b))
-            await asyncio.sleep(0.1)
-            assert _name_field(rc).v_model == "Mine" and seen[-1]["name"] == "Mine"
-        finally:
-            rc.close()
+    async def main(rc):
+        _pick_file(rc, pickers, a)
+        await _settle(lambda: seen and seen[-1] and seen[-1].get("name") == "a")
+        _name_field(rc).v_model = "Mine"
+        pickers.path.set(str(b))
+        await _settle(lambda: seen[-1] and seen[-1]["source"] == str(b))
+        await asyncio.sleep(0.1)
+        assert _name_field(rc).v_model == "Mine" and seen[-1]["name"] == "Mine"
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_attribute_form_keeps_a_nameless_saved_layer_as_it_was(pickers, tmp_path):
@@ -1931,20 +1868,16 @@ def test_attribute_form_keeps_a_nameless_saved_layer_as_it_was(pickers, tmp_path
     cfg = {"source": str(tif), "kind": "local", "bands": [{"band": "lc", "stat": "median", "column": "mine"}]}
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False)
-        try:
-            await _settle(lambda: seen)
-            assert seen[-1] == cfg and _name_field(rc).v_model == ""
-            rc.find(v.Select, v_model="median").widget.v_model = "mean"
-            assert seen[-1] == {"source": str(tif), "kind": "local",
-                                "bands": [{"band": "lc", "stat": "mean", "column": "mine"}]}
-            _name_field(rc).v_model = "LC"
-            assert seen[-1]["bands"][0]["column"] == "lc_lc" and seen[-1]["name"] == "LC"
-        finally:
-            rc.close()
+    async def main(rc):
+        await _settle(lambda: seen)
+        assert seen[-1] == cfg and _name_field(rc).v_model == ""
+        rc.find(v.Select, v_model="median").widget.v_model = "mean"
+        assert seen[-1] == {"source": str(tif), "kind": "local",
+                            "bands": [{"band": "lc", "stat": "mean", "column": "mine"}]}
+        _name_field(rc).v_model = "LC"
+        assert seen[-1]["bands"][0]["column"] == "lc_lc" and seen[-1]["name"] == "LC"
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=cfg, seen=seen), handle_error=False), main)
 
 
 def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
@@ -1952,23 +1885,19 @@ def test_attribute_form_shows_the_column_that_is_written(pickers, tmp_path):
     tif = _geotiff(tmp_path / "lc.tif", ["lc", "count"])
     seen = []
 
-    async def main():
-        _box, rc = reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False)
-        try:
-            _pick_file(rc, pickers, tif)
-            await _settle(lambda: seen and seen[-1].get("name"))
-            assert _name_field(rc).v_model == "lc"
-            _bands_or_none(rc).v_model = ["lc", "count"]
-            assert [b["column"] for b in seen[-1]["bands"]] == ["lc_lc", "lc_count"]
-            assert "lc_lc" in _texts(rc) and "lc_count" in _texts(rc)
+    async def main(rc):
+        _pick_file(rc, pickers, tif)
+        await _settle(lambda: seen and seen[-1].get("name"))
+        assert _name_field(rc).v_model == "lc"
+        _bands_or_none(rc).v_model = ["lc", "count"]
+        assert [b["column"] for b in seen[-1]["bands"]] == ["lc_lc", "lc_count"]
+        assert "lc_lc" in _texts(rc) and "lc_count" in _texts(rc)
 
-            _name_field(rc).v_model = "Land Cover "
-            assert [b["column"] for b in seen[-1]["bands"]] == ["land_cover_lc", "land_cover_count"]
-            assert seen[-1]["name"] == "Land Cover"
-        finally:
-            rc.close()
+        _name_field(rc).v_model = "Land Cover "
+        assert [b["column"] for b in seen[-1]["bands"]] == ["land_cover_lc", "land_cover_count"]
+        assert seen[-1]["name"] == "Land Cover"
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_AttrHarness(gee_interface=None, initial=None, seen=seen), handle_error=False), main)
 
 
 def test_attribute_form_never_writes_another_layers_or_an_alert_column(pickers, tmp_path):

@@ -25,11 +25,7 @@ from gui.scripts.alert_filter import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 QS = default_questions() + [Question(key="road", label="Road nearby?", options=[

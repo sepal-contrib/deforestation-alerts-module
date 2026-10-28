@@ -68,6 +68,18 @@ def _no_live_ee(request, monkeypatch):
 
 
 @pytest.fixture()
+def english_locale():
+    """English for the test and after it (a test may switch the language).
+    A module that asserts English copy opts in with
+    ``pytestmark = pytest.mark.usefixtures("english_locale")``."""
+    from pysepal.i18n import set_locale
+
+    set_locale("en")
+    yield
+    set_locale("en")
+
+
+@pytest.fixture()
 def data_root(monkeypatch, tmp_path):
     """The data directory of a test: ``<tmp>/module_results/deforestation_alerts``.
 

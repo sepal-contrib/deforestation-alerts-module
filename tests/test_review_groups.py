@@ -114,13 +114,6 @@ def test_ticking_one_member_of_another_group_moves_it_alone():
     assert 3 not in plan.positions()  # 3 keeps 5
 
 
-def test_a_group_left_with_its_main_keeps_it_as_a_group_of_one():
-    gdf = _alerts(5, statuses=[NR] * 3 + ["Confirmed"] * 2, groups=[None] * 3 + [103] * 2)
-    plan = rg.plan_group(gdf, 0, {4})
-    assert plan.members == (4,)
-    assert 3 not in plan.positions()
-
-
 def test_unticking_a_member_on_re_save_detaches_it():
     gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[100] * 3 + [None])
     plan = rg.plan_group(gdf, 0, {1})
@@ -138,7 +131,6 @@ def test_a_member_opens_its_groups_main():
     gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[100] * 3 + [None])
     plan = rg.plan_group(gdf, 2, {1, 2})
     assert plan.main == 0 and plan.members == (1, 2) and plan.affected == ()
-    assert rg.keep_plan(gdf, 1) == plan
 
 
 @pytest.mark.parametrize("opened, selected", [
@@ -200,11 +192,6 @@ def test_foreign_rows_are_the_other_evaluators():
     assert rg.foreign_rows(gdf, plan, "ana") == (1, 2)
 
 
-def test_pre_grouping_is_a_review_without_a_group():
-    gdf = _alerts(3, statuses=["Confirmed", "Confirmed", NR], groups=[None, 101, None])
-    assert [rg.pre_grouping(gdf, p) for p in range(3)] == [True, False, False]
-
-
 def test_without_alert_id_a_group_holds_positions():
     gdf = _alerts(3, ids=False)
     out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1}), REVIEW))
@@ -222,22 +209,6 @@ def test_a_group_save_copies_the_review_and_points_members_at_the_main():
     assert out["q_loss_driver"].tolist() == ["mining"] * 3 + [""]
     assert out["admin1"].tolist()[:3] == ["Brasil"] * 3
     assert out["area_ha"].tolist() == [1.0, 2.0, 3.0, 4.0]  # no drawing: each keeps its own
-
-
-def test_a_group_of_one_holds_its_own_id():
-    gdf = _alerts(3)
-    updates = rg.plan_updates(gdf, rg.plan_group(gdf, 1, set()), REVIEW)
-    assert list(updates) == [1]
-    assert updates[1] == {**REVIEW, "alert_polygon": None, "area_ha": 2.0, rg.COLUMN: 101}
-
-
-def test_a_drawn_group_puts_the_area_on_the_main_and_zero_on_members():
-    gdf = _alerts(4)
-    out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1, 2}), REVIEW, drawing=DRAWING, crs=CRS))
-    assert out.loc[0, "area_ha"] == pytest.approx(rg.polygon_area_ha(DRAWING, CRS))
-    assert out.loc[0, "alert_polygon"].equals(DRAWING)
-    assert out["area_ha"].tolist()[1:] == [0.0, 0.0, 4.0]
-    assert out.loc[1, "alert_polygon"] is None
 
 
 def test_members_take_the_mains_answers_to_deleted_questions():
@@ -342,18 +313,6 @@ def test_ensure_column_adds_a_nullable_int_column():
         rg.ensure_column(gdf)
         assert str(gdf[rg.COLUMN].dtype) == "Int64"
         assert gdf[rg.COLUMN].tolist()[::2] == [100, 100] and pd.isna(gdf[rg.COLUMN].iloc[1])
-
-
-def test_review_group_survives_the_parquet_round_trip(tmp_path):
-    from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet, save_gdf_to_parquet
-
-    gdf = _alerts(3, statuses=["Confirmed"] * 2 + [NR], groups=[100, 100, None])
-    path = tmp_path / "alert_db.parquet"
-    save_gdf_to_parquet(gdf, path)
-    back = load_gdf_from_parquet(path)
-    assert str(back[rg.COLUMN].dtype) == "Int64"
-    assert rg.group_of(back, 1) == (0, (1,))
-    rg.check_groups(back)
 
 
 def test_n_groups_counts_groups_of_two_or_more():

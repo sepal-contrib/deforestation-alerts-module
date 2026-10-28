@@ -121,14 +121,6 @@ def _geometry(value) -> Optional[BaseGeometry]:
     return value
 
 
-def parent_shape(row) -> Optional[BaseGeometry]:
-    """The reviewer's drawn polygon if there is one, else the alert's own."""
-    drawn = _geometry(row["alert_polygon"]) if "alert_polygon" in row else None
-    if drawn is not None:
-        return drawn
-    return _geometry(row["geometry"]) if "geometry" in row else None
-
-
 @dataclass(frozen=True)
 class Node:
     set_id: str
@@ -273,11 +265,6 @@ def group_candidates(nodes: Sequence[Node]) -> list[Node]:
     return out
 
 
-def candidates_of_set(s: AlertSet, period: Period, gdf) -> list[Candidate]:
-    run_id = run_id_of(s)
-    return [Candidate(n, run_id) for n in group_candidates(nodes_of_set(s, period, gdf))]
-
-
 class LinkGraph:
     def __init__(self, nodes: Iterable[Node], run_ids: Mapping[str, str]):
         self._nodes = {n.key: n for n in nodes}
@@ -324,10 +311,6 @@ class LinkGraph:
                     seen.add(nxt)
                     todo.append(nxt)
         return frozenset(seen)
-
-
-def build_graph(nodes: Iterable[Node], run_ids: Mapping[str, str]) -> LinkGraph:
-    return LinkGraph(nodes, run_ids)
 
 
 @dataclass(frozen=True)

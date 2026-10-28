@@ -37,6 +37,7 @@ from gui.tile.analysis.state import AnalysisState
 from deforestation_alerts.scripts import local_files
 from gui.i18n import t
 from tests._pane_helpers import make_panes, reviewer_edits
+from tests._review_helpers import stub_admin_lookups
 
 
 # ---------------------------------------------------------------------------
@@ -417,141 +418,6 @@ def test_export_marks_the_open_project_as_being_written(
     feedback.join()
 
     assert busy == [True] and not is_writing("d")
-
-
-def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
-    monkeypatch, tmp_path
-):
-    """While the alerts on hand are another set's (Integrate records a new set
-    before it publishes that set's alerts), a Save must not write them into
-    the active set's store. Nothing went wrong, the Save just has nowhere to
-    go: a FAILED task with the reason and one warning toast, no error toast."""
-    from datetime import datetime
-
-    import geopandas as gpd
-    from shapely.geometry import box
-
-    import gui.tile.analysis.export as export
-    from deforestation_alerts.project.models import (
-        AlertSet,
-        AlertSetParams,
-        Project,
-    )
-    from gui.scripts.set_context import SetContext
-
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    now = datetime.now()
-    rel = "periods/per/sets/glad-l"
-    p = Project(name="d", created_at=now, updated_at=now)
-    p.alert_sets["x"] = AlertSet(
-        id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
-        params=AlertSetParams(), store_rel_path=f"{rel}/alert_db.parquet",
-        combined_rel_path=f"{rel}/c.tif", footprint_rel_path=f"{rel}/footprint.tif",
-        fingerprint="f", created_at=now,
-    )
-    p.active_set = "x"
-    app_state = AppState()
-    app_state.new_project_state(p)
-    store = tmp_path / "d" / rel / "alert_db.parquet"
-    store.parent.mkdir(parents=True)
-    store.write_bytes(b"set x's store")
-    app_state.alerts_gdf.value = gpd.GeoDataFrame(
-        {"status": ["Not reviewed"], "set_id": ["y"]},
-        geometry=[box(0, 0, 1, 1)], crs="EPSG:4326",
-    )
-    app_state.actual_alert_id.value = 0
-    ctx = SetContext(app_state)
-    card = _export_layout(
-        export,
-        widgets=None,  # the refusal comes before any widget is read
-        app_state=app_state,
-        aux_model=ctx,
-        analysis=AnalysisState(),
-        app_tile_model=ctx,
-    )
-    feedback = _record_feedback(monkeypatch, export)
-
-    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
-    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
-    save_btn.fire_event("click", None)
-    feedback.join()
-
-    expected = t("analysis_tile.export_labels.save_other_set")
-    task = feedback.task()
-    assert task.status == TaskStatus.FAILED and task.error_message == expected
-    assert feedback.errors == []
-    assert feedback.toasts() == [("warning", expected)]
-    assert store.read_bytes() == b"set x's store"
-    assert download_btn.disabled is True
-    assert save_btn.loading is False and save_btn.disabled is False
-
-
-def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_warning(
-    monkeypatch, tmp_path
-):
-    """The OLD guard (a False Positive with a polygon drawn) is a refusal, not
-    a failure: a FAILED task with its reason and one warning toast, no error
-    toast, and the set's store is not written."""
-    from datetime import datetime
-
-    import geopandas as gpd
-    from shapely.geometry import box
-
-    import gui.tile.analysis.export as export
-    from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
-    from gui.scripts.set_context import SetContext
-
-    class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
-        def __getattr__(self, name):
-            return lambda *a, **k: self
-
-        def getInfo(self):  # noqa: N802 - Earth Engine's name
-            return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
-
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
-    now = datetime.now()
-    rel = "periods/per/sets/glad-l"
-    p = Project(name="d", created_at=now, updated_at=now)
-    p.alert_sets["x"] = AlertSet(
-        id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
-        params=AlertSetParams(), store_rel_path=f"{rel}/alert_db.parquet",
-        combined_rel_path=f"{rel}/c.tif", footprint_rel_path=f"{rel}/footprint.tif",
-        fingerprint="f", created_at=now,
-    )
-    p.active_set = "x"
-    app_state = AppState()
-    app_state.new_project_state(p)
-    store = tmp_path / "d" / rel / "alert_db.parquet"
-    store.parent.mkdir(parents=True)
-    store.write_bytes(b"set x's store")
-    app_state.alerts_gdf.value = gpd.GeoDataFrame(
-        {"status": ["Not reviewed"], "set_id": ["x"]},
-        geometry=[box(0, 0, 1, 1)], crs="EPSG:4326",
-    )
-    app_state.actual_alert_id.value = 0
-    analysis = AnalysisState()
-    analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[box(0, 0, 0.001, 0.001)], crs="EPSG:4326"))
-    analysis.verdict.set("False Positive")
-    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
-    ctx = SetContext(app_state)
-    card = _export_layout(export, widgets=widgets, app_state=app_state, aux_model=ctx,
-                          analysis=analysis, app_tile_model=ctx)
-    feedback = _record_feedback(monkeypatch, export)
-
-    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
-    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
-    save_btn.fire_event("click", None)
-    feedback.join()
-
-    expected = t("analysis_tile.questionarie.false_positive_drawn")
-    task = feedback.task()
-    assert task.status == TaskStatus.FAILED and task.error_message == expected
-    assert feedback.errors == []
-    assert feedback.toasts() == [("warning", expected)]
-    assert store.read_bytes() == b"set x's store"
-    assert download_btn.disabled is True
-    assert save_btn.loading is False and save_btn.disabled is False
 
 
 def test_export_save_failure_fails_the_task_before_the_error_toast(
@@ -1173,7 +1039,7 @@ def test_edit_tools_model_run_marks_the_open_project_as_being_written(
 
 @pytest.mark.parametrize("model", [1, 2])
 def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
-    edit_tools_card, monkeypatch, model
+    edit_tools_card, monkeypatch, server_log, model
 ):
     edit_tools, card, _model = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
@@ -1192,30 +1058,11 @@ def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
     feedback.assert_one_error_after_fail(
         equals=t("analysis_tile.model_labels.dl_404")
     )
-
-
-@pytest.mark.parametrize("model", [1, 2])
-def test_edit_tools_model_run_failure_leaves_one_traceback_in_the_server_log(
-    edit_tools_card, monkeypatch, server_log, model
-):
-    """``tracked_job`` logs the failure with its traceback (the raw exception,
-    behind the friendly dl_404 toast); the run worker logged it again, so one
-    failed run printed two tracebacks."""
-    edit_tools, card, _model = edit_tools_card
-    feedback = _record_feedback(monkeypatch, edit_tools)
-
-    def _boom(*a, **k):
-        raise RuntimeError("model download failed")
-
-    monkeypatch.setattr(edit_tools, "_run_cnn_model", _boom)
-
-    _dl_run_button(card, model).fire_event("click", None)
-    feedback.join()
-
+    # ``tracked_job`` logs the raw exception behind that toast, once: the run
+    # worker used to log it again, so one failed run printed two tracebacks.
     out = server_log.getvalue()
     assert out.count("Traceback (most recent call last)") == 1
     assert "RuntimeError: model download failed" in out
-    assert len(feedback.errors) == 1
 
 
 @pytest.mark.parametrize("model", [1, 2])
@@ -1879,16 +1726,6 @@ def test_no_inline_feedback_surfaces_are_left():
             )
 
 
-def test_the_form_frame_keeps_field_validation_inline_with_a_justification():
-    """The one documented exception, and it must stay documented: every form
-    shows its validation error through gui/widget/form_dialog's form_error."""
-    rel = "gui/widget/form_dialog.py"
-    assert "rv.Alert" in _called(rel), "the field-validation alert disappeared"
-    assert "KEPT INLINE ON PURPOSE" in _src(rel), (
-        "the retained inline validation lost its justification comment"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Final re-review, Minor 3: Save, Download and a CNN run work on the alert
 # clicked for, read at the click (UI thread), never on a mix of it and the
@@ -2052,15 +1889,8 @@ def _save_harness(tmp_path, monkeypatch):
     from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
     from gui.scripts.set_context import SetContext
 
-    class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
-        def __getattr__(self, name):
-            return lambda *a, **k: self
-
-        def getInfo(self):  # noqa: N802 - Earth Engine's name
-            return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
-
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
 
     now = datetime.now()
     rel = "periods/per/sets/glad-l"

@@ -837,7 +837,7 @@ def _ReviewMode(app_state):
 
 def _radius_text(radius_m: float) -> str:
     """The distance as the field shows it: no locale separators, so what is
-    shown parses back (``grouping.parse_radius`` reads a comma as decimal)."""
+    shown parses back (``grouping.parse_metres`` reads a comma as decimal)."""
     return f"{radius_m:g}"
 
 
@@ -885,13 +885,13 @@ def _GroupOption(app_state):
 
     def _on_radius(text):
         set_typed(text or "")
-        value = grouping.parse_radius(text or "")
+        value = grouping.parse_metres(text or "")
         if value is not None:
             _write(radius_m=value)
 
     # What was typed shows until it is valid and stored; a stored value that
     # changed elsewhere replaces it.
-    parsed = grouping.parse_radius(typed) if typed is not None else None
+    parsed = grouping.parse_metres(typed) if typed is not None else None
     bad = typed is not None and parsed is None
     shown = typed if bad or (typed is not None and parsed == radius) else _radius_text(radius)
 

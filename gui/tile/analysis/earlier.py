@@ -43,6 +43,7 @@ from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, build_section
 from gui.tile.analysis.state import set_links
+from gui.tile.analysis.widgets import replace_children
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
@@ -58,16 +59,6 @@ _LINKED = ("auto", "linked")
 _LEGEND_SHOWN = "display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center;"
 #: the width, in pixels, a row's zoom fits the alert's box into (about half a view)
 _ZOOM_PX = 200
-
-
-def parse_m(text):
-    """The distance typed in the field, in metres, as a float within
-    10-50 000, else None."""
-    try:
-        metres = float(str(text).strip().replace(",", "."))
-    except (TypeError, ValueError):
-        return None
-    return metres if math.isfinite(metres) and MIN_M <= metres <= MAX_M else None
 
 
 def has_earlier_sets(p) -> bool:
@@ -437,7 +428,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None, ask=Non
                 lines.append(t("analysis_tile.earlier.as_of", date=format_date(rc.snapshot_at.date())))
             if not view.periods:
                 lines.append(t("analysis_tile.earlier.none_in_copy"))
-        copy_lines.children = [v.Html(tag="div", class_=TYPE_LABEL, children=[line]) for line in lines]
+        replace_children(copy_lines, [v.Html(tag="div", class_=TYPE_LABEL, children=[line]) for line in lines])
         # the rows, under their period
         groups = []
         visible = [it for it in (view.items if view is not None else ()) if it.cand.node.period_id not in hidden]
@@ -447,18 +438,18 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None, ask=Non
                             children=[period_label(group[0].cand.node.period_start)])
             groups.append(SimpleNamespace(period_id=pid, header=header, rows=[_row(it) for it in group]))
         section.groups = groups
-        items.children = [w for g in groups for w in [g.header, *(r.root for r in g.rows)]]
+        replace_children(items, [w for g in groups for w in [g.header, *(r.root for r in g.rows)]])
         # the legend: the periods drawn, while the overlay is on
         on = bool(analysis.show_earlier_reviews.value)
         drawn = [(pid, start) for pid, start in shown_periods if pid not in hidden]
         colours = growth_index.period_colors([pid for pid, _ in shown_periods])
-        legend.children = [
+        replace_children(legend, [
             *(v.Html(tag="span", class_=f"d-inline-flex align-center {TYPE_LABEL}", children=[
                 v.Html(tag="span", style_=f"width: 14px; border-top: 3px solid {colours[pid]};"
                                           " display: inline-block; margin-right: 5px;"),
                 period_label(start)]) for pid, start in drawn),
             v.Html(tag="span", class_=TYPE_LABEL, children=[t("analysis_tile.earlier.legend_lines")]),
-        ]
+        ])
         legend.style_ = _LEGEND_SHOWN if on and drawn else "display: none;"
         _sync_badge()
 
@@ -483,7 +474,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None, ask=Non
             spawn_in_context(_refresh)
 
     def _on_radius(change):
-        radius_m = parse_m(change["new"])
+        radius_m = grouping_rules.parse_metres(change["new"], MIN_M, MAX_M)
         if radius_m is None:
             field_.error_messages = [t("analysis_tile.earlier.radius_error")]
             return

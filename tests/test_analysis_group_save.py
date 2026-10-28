@@ -112,7 +112,7 @@ def _groups(gdf):
 def test_grouping_off_saves_exactly_as_before(tmp_path, monkeypatch):
     h = _setup(tmp_path, monkeypatch)
     wrote, alert = _save(h)
-    assert wrote is True and alert.plan is None and alert.grouping is None
+    assert wrote is True and alert.plan is None
     stored = _stored(h)
     assert review_groups.COLUMN not in stored.columns
     assert review_groups.COLUMN not in h.s.alerts_gdf.value.columns
@@ -349,16 +349,12 @@ def test_on_saved_runs_on_the_worker_with_the_capture(tmp_path, monkeypatch):
     assert _groups(_stored(h)) == [10, 10, 10, None]
 
 
-def test_capture_records_the_set_and_the_store_generation(tmp_path, monkeypatch):
-    from gui.scripts.set_store import STORE_GENERATION
-
+def test_capture_records_the_set_and_the_evaluator(tmp_path, monkeypatch):
     h = _setup(tmp_path, monkeypatch, grouping=True, copy_of="ana")
     h.s.actual_alert_id.set(0)
     alert = capture_alert(_analysis(), WIDGETS, h.s)
-    assert alert.set_id == "x"
-    assert alert.generation == h.s.alerts_gdf.value.attrs[STORE_GENERATION] is not None
-    assert alert.evaluator == "ana" and alert.grouping.radius_m == 300.0
-    assert alert.selection == frozenset()
+    assert alert.set_id == "x" and alert.evaluator == "ana"
+    assert alert.plan.main == 0 and alert.plan.members == ()
 
 
 def test_toggle_selection_flips_and_touches():

@@ -44,7 +44,6 @@ from gui.scripts.prepare_view import source_label
 from gui.store.project_writers import is_writing, writing
 from gui.store.state_manager import AppState
 from gui.tile import prepare_step
-from gui.widget.grid_form import grid_error_key
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 PARAGUAY = (-55.5, -24.5, -55.0, -24.0)  # UTM 21S
@@ -72,14 +71,6 @@ def _art(key, kind):
 def _arts(source):
     rkey, hkey = raw_key(JAN.id, source), harm_key(JAN.id, source)
     return {rkey: _art(rkey, "raw_alert"), hkey: _art(hkey, "harmonized")}
-
-
-# ---------------------------------------------------------------------------
-# grid_error_key
-# ---------------------------------------------------------------------------
-def test_grid_error_keys():
-    assert grid_error_key("4326", 10) == "steps.prepare.grid_geographic"
-    assert grid_error_key("32721", 10) is None
 
 
 # ---------------------------------------------------------------------------

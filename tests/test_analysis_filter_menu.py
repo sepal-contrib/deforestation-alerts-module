@@ -20,11 +20,7 @@ from gui.widget.buttons import label_of
 from tests.test_analysis_context import _alerts, _state
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _six():

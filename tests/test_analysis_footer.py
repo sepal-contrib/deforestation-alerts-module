@@ -13,7 +13,6 @@ from types import SimpleNamespace
 import ipyvuetify as v
 import pandas as pd
 import pytest
-from pysepal.i18n import set_locale
 
 from deforestation_alerts.project.models import Project
 from gui.i18n import t
@@ -34,11 +33,7 @@ from tests._pane_helpers import make_panes
 from tests.conftest import _alerts_gdf
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 @pytest.fixture()
@@ -140,12 +135,12 @@ def test_the_panel_order_is_head_verdict_questions_refine_earlier(panel):
     from gui.tile.analysis import context, review_panel
 
     sections = analysis_tile.panel_sections(panel.controls)
-    _banner, block_a, block_b, questions, refine, earlier, _nearby = panel.controls.children
+    _banner, block_a, block_b, questions, refine, earlier, nearby = panel.controls.children
     context.facts_widgets(block_a)              # block A owns the facts...
     assert set(review_panel.verdict_widgets(block_b)) == {
         "Confirmed", "False Positive", "Need revision"}  # ...block B the verdict
-    assert [questions, refine, earlier] == [sections.questions.root, sections.refine.root,
-                                            sections.earlier.root]
+    assert [questions, refine, earlier, nearby] == [sections.questions.root, sections.refine.root,
+                                                    sections.earlier.root, sections.nearby.root]
 
 
 def test_the_verdict_card_no_longer_holds_the_save(panel):

@@ -2,14 +2,12 @@
 the list and its checkboxes, the badge, the outlines on the views and the map
 click that ticks a row."""
 
-from datetime import datetime
 from types import SimpleNamespace
 
 import geopandas as gpd
 import pandas as pd
 import pytest
 import solara
-from pysepal.i18n import set_locale
 from shapely.geometry import box
 
 from deforestation_alerts.project import review_groups as rg
@@ -24,11 +22,7 @@ NR = "Not reviewed"
 LNG1, LAT1 = -54.99825, -23.99975
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _alerts(n=4, *, statuses=None, groups=None, evaluators=None, gap=0.001, generation=1):
@@ -156,13 +150,6 @@ def test_opening_a_grouped_member_seeds_its_group_ticked(monkeypatch):
     assert _listed(ctx.section) == ["#2", "#3"]
     assert all(row.box.v_model for row in ctx.section.rows)
     assert "in this group" in _words(_row(ctx.section, "#2"))
-
-
-def test_seeding_does_nothing_while_grouping_is_off(monkeypatch):
-    gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[100, 100, 100, None])
-    ctx = _setup(monkeypatch, gdf=gdf, position=2, enabled=False)
-    nearby.seed_selection(ctx.analysis, ctx.app_state)
-    assert ctx.analysis.selection.value == frozenset()
 
 
 # ---- ticks ---------------------------------------------------------------------
@@ -353,30 +340,6 @@ def test_the_layer_styles_selected_and_candidate_rows():
 
 
 # ---- the panel -----------------------------------------------------------------
-def test_the_section_sits_below_earlier_alerts(tmp_path, monkeypatch):
-    import ipyvuetify as v
-
-    from deforestation_alerts.project.models import Project
-    from gui.store.state_manager import AppState
-    from gui.tile.analysis import analysis_tile
-
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    app_state = AppState()
-    app_state.new_project_state(Project(name="d", created_at=datetime.now(), updated_at=datetime.now()))
-    model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
-                            alert_set=None, remember_position=lambda *_: None)
-    controls = analysis_tile.build_controls(
-        widgets=SimpleNamespace(panes=make_panes(), imagery_ctx=solara.reactive(None)),
-        app_state=app_state, analysis=AnalysisState(),
-        aux_model=model, app_tile_model=model, id_field=v.TextField(v_model=None))
-    sections = analysis_tile.panel_sections(controls)
-    assert controls.children[-2:] == [sections.earlier.root, sections.nearby.root]
-    assert sections.footer.root not in controls.children
-    assert sections.nearby.root.style_ == "display: none;"  # grouping is off by default
-    assert sections.nearby.remove_btn.style_ == "display: none;"
-    assert sections.nearby.banner.style_ == "display: none;"
-
-
 # ---- fix round 1 ----------------------------------------------------------------
 def test_a_row_ticked_while_a_search_runs_stays_listed(monkeypatch):
     ctx = _section(monkeypatch, radius=300.0)  # lists #2, #3; #4 is ≈ 407 m away

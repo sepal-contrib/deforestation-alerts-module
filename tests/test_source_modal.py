@@ -20,6 +20,7 @@ from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.widget import source_modal as sm
 from gui.widget.enter_key import ENTER_DEFAULT
+from tests._render_helpers import run_rendered
 
 
 def _p():
@@ -632,25 +633,21 @@ def test_enter_finds_no_default_button_while_the_check_runs(monkeypatch):
     asked, done, release = _hanging(monkeypatch)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
-        try:
-            _go_custom(rc, "enter")
-            await asyncio.sleep(0.05)
-            assert _defaults(rc) == [_submit_btn(rc)]  # idle: Add is the one default
-            _submit_btn(rc).fire_event("click", None)
-            assert await _settle(lambda: len(asked) == 1)
-            [stop] = [b for b in rc.find(v.Btn).widgets
-                      if any(isinstance(c, v.ProgressCircular) for c in b.children)]
-            assert t("common.cancel") in stop.children
-            assert _defaults(rc) == []  # Enter presses nothing mid-check
-            release.set()
-            assert await _settle(lambda: open_.value is False)
-            assert len(done) == 1 and [a[0] for a in added] == [{"name": "enter"}]
-        finally:
-            rc.close()
+    async def main(rc):
+        _go_custom(rc, "enter")
+        await asyncio.sleep(0.05)
+        assert _defaults(rc) == [_submit_btn(rc)]  # idle: Add is the one default
+        _submit_btn(rc).fire_event("click", None)
+        assert await _settle(lambda: len(asked) == 1)
+        [stop] = [b for b in rc.find(v.Btn).widgets
+                  if any(isinstance(c, v.ProgressCircular) for c in b.children)]
+        assert t("common.cancel") in stop.children
+        assert _defaults(rc) == []  # Enter presses nothing mid-check
+        release.set()
+        assert await _settle(lambda: open_.value is False)
+        assert len(done) == 1 and [a[0] for a in added] == [{"name": "enter"}]
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, added, saved), handle_error=False), main)
 
 
 def test_at_the_cap_custom_is_offered_disabled_with_the_reason_as_its_hint():
@@ -660,18 +657,14 @@ def test_at_the_cap_custom_is_offered_disabled_with_the_reason_as_its_hint():
                  for i in range(sm.MAX_CUSTOM)}
     state, open_, added, saved = _state(p), solara.reactive(True), [], []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
-        try:
-            mode = rc.find(v.Select, label=t("steps.alerts.mode_label")).widget
-            [custom] = [i for i in mode.items if i["value"] == "custom"]
-            assert custom["disabled"] is True and custom["text"] == t("steps.alerts.mode_custom", n=sm.MAX_CUSTOM)
-            assert (mode.hint, mode.persistent_hint) == (t("steps.alerts.cap_reached"), True)
-            assert mode.v_model == "predefined"
-        finally:
-            rc.close()
+    async def main(rc):
+        mode = rc.find(v.Select, label=t("steps.alerts.mode_label")).widget
+        [custom] = [i for i in mode.items if i["value"] == "custom"]
+        assert custom["disabled"] is True and custom["text"] == t("steps.alerts.mode_custom", n=sm.MAX_CUSTOM)
+        assert (mode.hint, mode.persistent_hint) == (t("steps.alerts.cap_reached"), True)
+        assert mode.v_model == "predefined"
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, added, saved), handle_error=False), main)
 
 
 # ---------------------------------------------------------------- the custom form (spec 2026-10-23-source-form)
@@ -1233,14 +1226,10 @@ def test_the_raster_block_with_no_raster_draws_nothing_and_reads_nothing(monkeyp
             raster.draw(False)
         Host.raster = raster
 
-    async def main():
-        _box, rc = reacton.render(Host(), handle_error=False)
-        try:
-            await asyncio.sleep(0.1)
-            [block] = rc.find(v.Html, class_="dv-raster-block").widgets
-            assert block.children == []
-            assert gee.calls == [] and Host.raster.save_blocked is False
-        finally:
-            rc.close()
+    async def main(rc):
+        await asyncio.sleep(0.1)
+        [block] = rc.find(v.Html, class_="dv-raster-block").widgets
+        assert block.children == []
+        assert gee.calls == [] and Host.raster.save_blocked is False
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(Host(), handle_error=False), main)

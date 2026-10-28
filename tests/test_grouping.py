@@ -10,7 +10,7 @@ from deforestation_alerts.project.grouping import (
     Grouping,
     effective,
     lock_state,
-    parse_radius,
+    parse_metres,
 )
 from deforestation_alerts.project.models import (
     AlertSet,
@@ -118,5 +118,10 @@ def test_a_split_locks_all_three():
 @pytest.mark.parametrize("text, value", [("500", 500.0), (" 10 ", 10.0), ("5000", 5000.0), ("12,5", 12.5),
                                          ("9.9", None), ("5001", None), ("-5", None), ("", None), ("abc", None),
                                          ("nan", None), ("inf", None)])
-def test_parse_radius_takes_metres_within_range_only(text, value):
-    assert parse_radius(text) == value
+def test_parse_metres_takes_metres_within_range_only(text, value):
+    assert parse_metres(text) == value
+
+
+def test_parse_metres_takes_other_bounds():
+    assert parse_metres("50000", 10.0, 50_000.0) == 50_000.0
+    assert parse_metres("50001", 10.0, 50_000.0) is None

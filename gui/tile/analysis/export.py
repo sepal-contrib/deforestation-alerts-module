@@ -121,7 +121,6 @@ from types import SimpleNamespace
 
 import ipyvuetify as v
 
-from deforestation_alerts.project.review_groups import REMOVE
 from deforestation_alerts.project.review_status import CONFIRMED
 from gui.i18n import t, tn
 from gui.scripts.error_text import error_text
@@ -140,12 +139,9 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
 def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     """The save runner's body: ``review_save.save_review`` of ``alert``
-    (``state.capture_alert``; taken here when not given), or
-    ``review_save.remove_from_group`` when its plan is a removal."""
+    (``state.capture_alert``; taken here when not given), which hands a
+    removal plan to ``remove_from_group``."""
     alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
-    plan = getattr(alert, "plan", None)
-    if plan is not None and plan.kind == REMOVE:
-        return review_save.remove_from_group(alert, app_tile_model)
     return review_save.save_review(alert, app_tile_model)
 
 

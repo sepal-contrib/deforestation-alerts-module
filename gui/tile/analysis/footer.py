@@ -92,14 +92,12 @@ _AFFECTED_KEYS = {
 }
 
 
-def affected_line(a, gdf) -> str:
-    """The confirmation's line for one ``review_groups.Affected`` row of the
-    plan ``gdf`` was planned on: its number, its stored status and what the
-    save does to it ("its review is replaced", "moves from group #K"...).
-    Alert and group numbers are 1-based, as the jump menu numbers them (the
-    group's is its main's). ``gdf`` is the table the plan was made from; the
-    status the plan recorded is the one shown."""
-    del gdf  # the plan carries what the line needs
+def affected_line(a) -> str:
+    """The confirmation's line for one ``review_groups.Affected`` row of a
+    plan: its number, the status the plan recorded and what the save does to
+    it ("its review is replaced", "moves from group #K"...). Alert and group
+    numbers are 1-based, as the jump menu numbers them (the group's is its
+    main's)."""
     group = a.group + 1 if a.group is not None else None
     return t(_AFFECTED_KEYS[a.change], n=a.position + 1, status=t(status_label_key(a.status)), group=group)
 
@@ -244,7 +242,7 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
             return
         plan = getattr(alert, "plan", None)
         if plan is not None and plan.affected:
-            lines = [affected_line(a, alert.alerts) for a in plan.affected]
+            lines = [affected_line(a) for a in plan.affected]
             confirm.ask(lines, lambda: run_save(save, alert=alert))
             return
         run_save(save, alert=alert)

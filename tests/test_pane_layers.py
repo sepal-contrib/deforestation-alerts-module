@@ -16,11 +16,7 @@ SQUARE = {"type": "Feature", "properties": {}, "geometry": {
     "type": "Polygon", "coordinates": [[[0, 0], [0, 0.01], [0.01, 0.01], [0.01, 0], [0, 0]]]}}
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def test_construction_sets_the_views_the_basemaps_the_sections_and_the_labels():

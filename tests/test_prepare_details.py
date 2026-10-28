@@ -6,7 +6,6 @@ from datetime import date, datetime
 
 import pytest
 import reacton
-from pysepal.i18n import set_locale
 
 from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine.fingerprint import (
@@ -26,11 +25,7 @@ SIG30 = "EPSG:32719|30.0|300000.0|8000000.0|4812x3950"
 WHEN = datetime(2026, 10, 21, 14, 2, 41)
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _art(key, kind, inputs, *, rel="periods/a.tif", size=0, stats=None):

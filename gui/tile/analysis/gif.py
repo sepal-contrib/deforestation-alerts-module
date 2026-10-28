@@ -17,7 +17,7 @@ from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
 
 from deforestation_alerts.errors import KeyedError
-from deforestation_alerts.project.review_groups import group_record
+from deforestation_alerts.project.review_groups import group_shape
 from deforestation_alerts.scripts import alert_gif, local_files, scene_query
 from deforestation_alerts.scripts.scene_index import SOURCE_CODE
 from gui.i18n import t
@@ -75,7 +75,7 @@ def plan_frames(tables, bbox, before_info, after_info, sources, max_cloud) -> li
 def _outline_of(alerts, alert_id) -> BaseGeometry:
     """The outline the GIF draws: the group's (its main's drawing, else the
     union of its alerts), or the alert's own reviewed polygon / geometry."""
-    return group_record(alerts, alert_id)[1]
+    return group_shape(alerts, alert_id)
 
 
 def capture_gif(app_state, widgets, analysis, alert) -> GifJob:

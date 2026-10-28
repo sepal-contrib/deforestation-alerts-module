@@ -13,11 +13,7 @@ from deforestation_alerts.project.models import Artifact
 from gui.scripts.prepare_view import mask_status_label, reason_text, row_status_label, source_state, source_subtitle
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _state(row, **over):

@@ -16,7 +16,6 @@ from types import SimpleNamespace
 
 import ipyvuetify as v
 import pytest
-from pysepal.i18n import set_locale
 
 from deforestation_alerts.project.models import Project
 from gui.i18n import t
@@ -28,11 +27,7 @@ from gui.widget.buttons import label_of
 from tests._pane_helpers import make_panes
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def test_a_section_starts_collapsed_with_its_body_in_the_tree():

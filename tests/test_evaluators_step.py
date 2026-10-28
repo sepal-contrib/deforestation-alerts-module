@@ -49,6 +49,7 @@ from gui.store.state_manager import AppState
 from gui.tile import evaluators_step as es
 from gui.tile.analysis.state import AnalysisState
 from gui.widget.product_table import CARD_CONTENT_PX, fits
+from tests._render_helpers import run_rendered
 
 START, END = date(2026, 8, 1), date(2026, 8, 31)
 PERIOD = models.period_id(START, END)
@@ -339,18 +340,6 @@ def _checked(rc):
     return [k for k in ("solo", "multi") if _mode_box(rc, k).widget.v_model]
 
 
-def test_the_review_mode_is_two_checkboxes_with_their_icons(data_root):
-    _box, rc = _render(_state(_project(multi=None), _gdf(evaluators=("",) * 4)))
-    try:
-        labels = [_strings(w) for w in rc.find(v.Html, class_="defo-mode-label").widgets]
-        assert labels == [["mdi-account", t("evaluators.review_mode_solo")],
-                          ["mdi-account-group", t("evaluators.review_mode_multi")]]
-        assert _checked(rc) == []  # no mode chosen yet
-        assert _hint(rc) == t("evaluators.mode_unset_note")
-    finally:
-        rc.close()
-
-
 def test_a_solo_project_hides_the_split_and_still_starts_analysis(data_root):
     _box, rc = _render(_state(_project(multi=False), _gdf(evaluators=("",) * 4)))
     try:
@@ -400,6 +389,7 @@ def test_unchecking_the_mode_leaves_none_chosen(data_root):
     s = _state(_project(multi=None), _gdf(evaluators=("",) * 4))
     _box, rc = _render(s)
     try:
+        assert _checked(rc) == []  # no mode chosen yet
         _mode_box(rc, "solo").widget.v_model = True
         assert s.project.value.multi_evaluator is False
         _mode_box(rc, "solo").widget.v_model = False
@@ -456,20 +446,16 @@ def test_split_hands_the_typed_names_to_the_service(data_root, monkeypatch):
     monkeypatch.setattr(es.split_service, "apply_split", _apply)
     s = _state(_project(), _gdf(evaluators=("",) * 4))
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _open_split(rc)
-            rc.find(v.TextField, label=t("evaluators.count_label")).widget.v_model = "3"
-            rc.find(v.Checkbox, label=t("evaluators.include_reviewed")).widget.v_model = True
-            _button(rc, t("evaluators.split")).fire_event("click", None)
-            await _settle(lambda: calls, "the split")
-            assert calls == [(["Evaluator 1", "Evaluator 2", "Evaluator 3"], True)]
-            await _settle(lambda: tn("evaluators.split_done", 3) in _toasts("success"), "the split toast")
-        finally:
-            rc.close()
+    async def main(rc):
+        _open_split(rc)
+        rc.find(v.TextField, label=t("evaluators.count_label")).widget.v_model = "3"
+        rc.find(v.Checkbox, label=t("evaluators.include_reviewed")).widget.v_model = True
+        _button(rc, t("evaluators.split")).fire_event("click", None)
+        await _settle(lambda: calls, "the split")
+        assert calls == [(["Evaluator 1", "Evaluator 2", "Evaluator 3"], True)]
+        await _settle(lambda: tn("evaluators.split_done", 3) in _toasts("success"), "the split toast")
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_a_split_the_project_did_not_record_is_not_reported_as_done(data_root, monkeypatch):
@@ -480,17 +466,13 @@ def test_a_split_the_project_did_not_record_is_not_reported_as_done(data_root, m
                                                                  created_at=datetime.now()))
     s = _state(_project(), _gdf(evaluators=("",) * 4))
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _open_split(rc)
-            _button(rc, t("evaluators.split")).fire_event("click", None)
-            await _settle(lambda: t("evaluators.split_unrecorded", project="c") in _toasts("warning"), "the warning")
-            assert not _toasts("success")
-        finally:
-            rc.close()
+    async def main(rc):
+        _open_split(rc)
+        _button(rc, t("evaluators.split")).fire_event("click", None)
+        await _settle(lambda: t("evaluators.split_unrecorded", project="c") in _toasts("warning"), "the warning")
+        assert not _toasts("success")
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_names_mode_lists_one_field_per_evaluator(data_root):
@@ -523,20 +505,6 @@ def _widgets(w):
     return out
 
 
-def test_the_names_and_add_evaluator_sit_in_one_card_as_the_questions_options(data_root):
-    _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
-    try:
-        _open_split(rc)
-        rc.find(v.RadioGroup).widget.v_model = "names"
-        (card,) = [f for f in rc.find(v.Html, tag="fieldset").widgets
-                   if _strings(f)[:1] == [t("evaluators.names_group")]]
-        inside = _widgets(card)
-        assert all(row in inside for row in _name_rows(rc))
-        assert _button(rc, t("evaluators.add_name")) in inside
-    finally:
-        rc.close()
-
-
 def test_names_mode_stops_adding_at_the_most_evaluators(data_root):
     _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
     try:
@@ -562,18 +530,14 @@ def test_split_hands_the_named_evaluators_to_the_service(data_root, monkeypatch)
     monkeypatch.setattr(es.split_service, "apply_split", _apply)
     s = _state(_project(), _gdf(evaluators=("",) * 4))
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _open_split(rc)
-            _names_mode(rc, " Ana ", "", "Bo")
-            _button(rc, t("evaluators.split")).fire_event("click", None)
-            await _settle(lambda: calls, "the split")
-            assert calls == [["Ana", "Bo"]]
-        finally:
-            rc.close()
+    async def main(rc):
+        _open_split(rc)
+        _names_mode(rc, " Ana ", "", "Bo")
+        _button(rc, t("evaluators.split")).fire_event("click", None)
+        await _settle(lambda: calls, "the split")
+        assert calls == [["Ana", "Bo"]]
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_a_duplicate_name_is_refused_inline(data_root):
@@ -598,19 +562,15 @@ def test_a_packaged_split_warns_in_the_modal_and_one_click_proceeds(data_root, m
     monkeypatch.setattr(es.split_service, "remove_split", lambda st, m: calls.append("remove"))
     s = _state(_project(split=_split(packaged=True)), _gdf())
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            assert t("evaluators.packaged_warning") not in _strings(rc.container)
-            _open_split(rc)
-            assert t("evaluators.packaged_warning") in _strings(rc.container)
-            _button(rc, t(f"evaluators.{action}")).fire_event("click", None)
-            await _settle(lambda: calls == [action], f"the {action}")
-            assert t("evaluators.packaged_warning") not in _strings(rc.container)  # the modal closed
-        finally:
-            rc.close()
+    async def main(rc):
+        assert t("evaluators.packaged_warning") not in _strings(rc.container)
+        _open_split(rc)
+        assert t("evaluators.packaged_warning") in _strings(rc.container)
+        _button(rc, t(f"evaluators.{action}")).fire_event("click", None)
+        await _settle(lambda: calls == [action], f"the {action}")
+        assert t("evaluators.packaged_warning") not in _strings(rc.container)  # the modal closed
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_the_modal_offers_remove_only_with_a_split(data_root):
@@ -647,22 +607,18 @@ def test_remove_says_removed_only_when_the_record_is_gone(data_root, monkeypatch
 
     monkeypatch.setattr(es.split_service, "remove_split", _remove)
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _open_split(rc)
-            _button(rc, t("evaluators.remove")).fire_event("click", None)
-            if lands:
-                await _settle(lambda: t("evaluators.removed") in _toasts("success"), "the success toast")
-                assert not _toasts("warning")
-            else:
-                await _settle(lambda: t("evaluators.remove_unrecorded", project="c") in _toasts("warning"),
-                              "the warning")
-                assert not _toasts("success")
-        finally:
-            rc.close()
+    async def main(rc):
+        _open_split(rc)
+        _button(rc, t("evaluators.remove")).fire_event("click", None)
+        if lands:
+            await _settle(lambda: t("evaluators.removed") in _toasts("success"), "the success toast")
+            assert not _toasts("warning")
+        else:
+            await _settle(lambda: t("evaluators.remove_unrecorded", project="c") in _toasts("warning"),
+                          "the warning")
+            assert not _toasts("success")
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_a_split_no_package_was_built_for_is_replaced_at_once(data_root, monkeypatch):
@@ -671,16 +627,12 @@ def test_a_split_no_package_was_built_for_is_replaced_at_once(data_root, monkeyp
                         lambda st, m, names, inc: calls.append(names) or _split())
     s = _state(_project(split=_split()), _gdf())
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _open_split(rc)
-            _button(rc, t("evaluators.resplit")).fire_event("click", None)
-            await _settle(lambda: calls == [["Evaluator 1", "Evaluator 2"]], "the re-split")
-        finally:
-            rc.close()
+    async def main(rc):
+        _open_split(rc)
+        _button(rc, t("evaluators.resplit")).fire_event("click", None)
+        await _settle(lambda: calls == [["Evaluator 1", "Evaluator 2"]], "the re-split")
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_the_table_lists_the_evaluators_and_the_unassigned_alerts(data_root):
@@ -725,27 +677,23 @@ def test_generate_builds_every_evaluators_package_and_the_clouds_download_them(d
     monkeypatch.setattr(es.share, "build_package", _build)
     s = _state(_project(split=_split()), _gdf())
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            assert t("evaluators.generate") in _strings(_generate_btn(rc))
-            _generate_btn(rc).fire_event("click", None)
-            await _settle(lambda: len([c for c in _clouds(rc) if c.tag == "a"]) == 2, "both cloud links")
-            assert built == ["Ana", "Bo"]
-            ana, bo = _clouds(rc)
-            path = _set_folder() / share.package_filename("c", SET_ID, 1, "Ana")
-            assert ana.attributes["href"].endswith("/" + local_files.home_relative(path))
-            assert ana.attributes["download"] == path.name
-            assert ana.attributes["title"] == t("evaluators.package_download", evaluator="Ana")
-            split = s.project.value.alert_sets[SET_ID].split
-            assert split.packaged and split.questions_digest == split_mod.questions_digest(s.project.value.questions)
-            assert tn("evaluators.packages_ready", 2) in _toasts("success")
-            assert t("evaluators.regenerate") in _strings(_generate_btn(rc))
-            assert any(x.startswith(t("evaluators.built_at", when="")[:5]) for x in _strings(rc.container))
-        finally:
-            rc.close()
+    async def main(rc):
+        assert t("evaluators.generate") in _strings(_generate_btn(rc))
+        _generate_btn(rc).fire_event("click", None)
+        await _settle(lambda: len([c for c in _clouds(rc) if c.tag == "a"]) == 2, "both cloud links")
+        assert built == ["Ana", "Bo"]
+        ana, bo = _clouds(rc)
+        path = _set_folder() / share.package_filename("c", SET_ID, 1, "Ana")
+        assert ana.attributes["href"].endswith("/" + local_files.home_relative(path))
+        assert ana.attributes["download"] == path.name
+        assert ana.attributes["title"] == t("evaluators.package_download", evaluator="Ana")
+        split = s.project.value.alert_sets[SET_ID].split
+        assert split.packaged and split.questions_digest == split_mod.questions_digest(s.project.value.questions)
+        assert tn("evaluators.packages_ready", 2) in _toasts("success")
+        assert t("evaluators.regenerate") in _strings(_generate_btn(rc))
+        assert any(x.startswith(t("evaluators.built_at", when="")[:5]) for x in _strings(rc.container))
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_generate_stops_at_the_first_failure_and_keeps_what_it_built(data_root, monkeypatch):
@@ -760,18 +708,14 @@ def test_generate_stops_at_the_first_failure_and_keeps_what_it_built(data_root, 
     monkeypatch.setattr(es.share, "build_package", _build)
     s = _state(_project(split=_split()), _gdf())
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _generate_btn(rc).fire_event("click", None)
-            await _settle(lambda: t("share.err.no_aoi") in _toasts("error"), "the error toast")
-            await _settle(lambda: [c.tag for c in _clouds(rc)] == ["a", "span"], "Ana's link, Bo dim")
-            assert built == ["Ana"] and not _toasts("success")
-            assert s.project.value.alert_sets[SET_ID].split.packaged  # Ana's zip is out there
-        finally:
-            rc.close()
+    async def main(rc):
+        _generate_btn(rc).fire_event("click", None)
+        await _settle(lambda: t("share.err.no_aoi") in _toasts("error"), "the error toast")
+        await _settle(lambda: [c.tag for c in _clouds(rc)] == ["a", "span"], "Ana's link, Bo dim")
+        assert built == ["Ana"] and not _toasts("success")
+        assert s.project.value.alert_sets[SET_ID].split.packaged  # Ana's zip is out there
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_a_zip_built_earlier_is_offered_after_a_reload(data_root):
@@ -829,30 +773,26 @@ def test_a_reviewed_copy_is_previewed_then_merged_with_the_chosen_side(data_root
     zip_path = data_root / "bo__reviewed.zip"
     zip_path.write_bytes(b"PK")
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _open_merge(rc)
-            rc.find(FileInput).widget.v_model = str(zip_path)
-            await _settle(lambda: read, "the preview read")
-            assert read == [(str(zip_path), "c", 4)]
-            await _settle(lambda: t("evaluators.merge") in _strings(rc.container), "the preview dialog")
-            texts = _strings(rc.container)
-            assert t("share.merge_summary", evaluator="Bo", new=1, conflicts=1, unchanged=0, ignored=1) in texts
-            assert t("share.merge_questions_changed") in texts
-            assert t("share.merge_extra_columns", columns="junk") in texts
-            assert t("share.merge_selected_reload", n=3) not in texts  # Keep mine (the default) leaves alert 13
-            rc.find(v.RadioGroup, v_model="mine").widget.v_model = "theirs"
-            assert t("share.merge_selected_reload", n=3) in _strings(rc.container)
-            _button(rc, t("evaluators.merge")).fire_event("click", None)
-            await _settle(lambda: merged, "the merge")
-            assert merged == [(preview, "theirs")]
-            await _settle(lambda: t("evaluators.merged", taken=2, evaluator="Bo") in _toasts("success"), "the toast")
-            await _settle(lambda: t("evaluators.merge") not in _strings(rc.container), "the dialog closed")
-        finally:
-            rc.close()
+    async def main(rc):
+        _open_merge(rc)
+        rc.find(FileInput).widget.v_model = str(zip_path)
+        await _settle(lambda: read, "the preview read")
+        assert read == [(str(zip_path), "c", 4)]
+        await _settle(lambda: t("evaluators.merge") in _strings(rc.container), "the preview dialog")
+        texts = _strings(rc.container)
+        assert t("share.merge_summary", evaluator="Bo", new=1, conflicts=1, unchanged=0, ignored=1) in texts
+        assert t("share.merge_questions_changed") in texts
+        assert t("share.merge_extra_columns", columns="junk") in texts
+        assert t("share.merge_selected_reload", n=3) not in texts  # Keep mine (the default) leaves alert 13
+        rc.find(v.RadioGroup, v_model="mine").widget.v_model = "theirs"
+        assert t("share.merge_selected_reload", n=3) in _strings(rc.container)
+        _button(rc, t("evaluators.merge")).fire_event("click", None)
+        await _settle(lambda: merged, "the merge")
+        assert merged == [(preview, "theirs")]
+        await _settle(lambda: t("evaluators.merged", taken=2, evaluator="Bo") in _toasts("success"), "the toast")
+        await _settle(lambda: t("evaluators.merge") not in _strings(rc.container), "the dialog closed")
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 async def _open_preview(rc, zip_path):
@@ -873,17 +813,13 @@ def test_a_merge_the_project_did_not_record_says_to_merge_again(data_root, monke
     zip_path = data_root / "bo__reviewed.zip"
     zip_path.write_bytes(b"PK")
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            await _open_preview(rc, zip_path)
-            await _settle(lambda: t("evaluators.merged_unrecorded", evaluator="Bo", project="c") in _toasts("warning"),
-                          "the warning")
-            assert not _toasts("success")
-        finally:
-            rc.close()
+    async def main(rc):
+        await _open_preview(rc, zip_path)
+        await _settle(lambda: t("evaluators.merged_unrecorded", evaluator="Bo", project="c") in _toasts("warning"),
+                      "the warning")
+        assert not _toasts("success")
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 @pytest.mark.parametrize("stage", ["read", "merge"])
@@ -898,23 +834,19 @@ def test_an_unexpected_failure_reading_or_merging_a_copy_is_toasted(data_root, m
     zip_path.write_bytes(b"PK")
     expected = t("evaluators.merge_failed", file="bo__reviewed.zip", error="disk full")
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            if stage == "read":
-                _open_merge(rc)
-                rc.find(FileInput).widget.v_model = str(zip_path)
-            else:
-                await _open_preview(rc, zip_path)
-            await _settle(lambda: expected in _toasts("error"), "the error toast")
-            if stage == "read":  # the modal stays on the picker for another pick
-                assert rc.find(FileInput).widgets
-            if stage == "merge":  # the preview stays open on the copy
-                assert t("evaluators.merge") in _strings(rc.container)
-        finally:
-            rc.close()
+    async def main(rc):
+        if stage == "read":
+            _open_merge(rc)
+            rc.find(FileInput).widget.v_model = str(zip_path)
+        else:
+            await _open_preview(rc, zip_path)
+        await _settle(lambda: expected in _toasts("error"), "the error toast")
+        if stage == "read":  # the modal stays on the picker for another pick
+            assert rc.find(FileInput).widgets
+        if stage == "merge":  # the preview stays open on the copy
+            assert t("evaluators.merge") in _strings(rc.container)
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_a_review_copy_generates_its_reviewed_copy_then_the_cloud_downloads_it(data_root, monkeypatch):
@@ -931,29 +863,25 @@ def test_a_review_copy_generates_its_reviewed_copy_then_the_cloud_downloads_it(d
                _gdf(evaluators=("Ana", "Bo", "Ana", "Bo"),
                     statuses=("Confirmed", "Confirmed", "Not reviewed", "Not reviewed")))
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            texts = _strings(rc.container)
-            assert t("evaluators.return_progress", reviewed="1", assigned="2") in texts
-            assert t("evaluators.return_note") in texts
-            assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
-            assert not rc.find(FileInput).widgets  # no import in a copy
-            (cloud,) = _clouds(rc)
-            assert cloud.tag == "span" and cloud.attributes["title"] == t("evaluators.generate_return_first")
-            assert t("evaluators.generate_return") in _strings(_generate_return_btn(rc))
-            _generate_return_btn(rc).fire_event("click", None)
-            await _settle(lambda: _clouds(rc)[0].tag == "a", "the reviewed copy's link")
-            folder = paths.set_dir(paths.project_dir("c__e02-bo"), PERIOD, ["GLAD-L"])
-            assert seen == {"out_dir": folder, "evaluator": "Bo"}
-            (cloud,) = _clouds(rc)
-            assert cloud.attributes["download"] == share.return_filename("c", SET_ID, 2, "Bo")
-            assert t("evaluators.regenerate_return") in _strings(_generate_return_btn(rc))
-            assert t("evaluators.return_ready") in _toasts("success")
-        finally:
-            rc.close()
+    async def main(rc):
+        texts = _strings(rc.container)
+        assert t("evaluators.return_progress", reviewed="1", assigned="2") in texts
+        assert t("evaluators.return_note") in texts
+        assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
+        assert not rc.find(FileInput).widgets  # no import in a copy
+        (cloud,) = _clouds(rc)
+        assert cloud.tag == "span" and cloud.attributes["title"] == t("evaluators.generate_return_first")
+        assert t("evaluators.generate_return") in _strings(_generate_return_btn(rc))
+        _generate_return_btn(rc).fire_event("click", None)
+        await _settle(lambda: _clouds(rc)[0].tag == "a", "the reviewed copy's link")
+        folder = paths.set_dir(paths.project_dir("c__e02-bo"), PERIOD, ["GLAD-L"])
+        assert seen == {"out_dir": folder, "evaluator": "Bo"}
+        (cloud,) = _clouds(rc)
+        assert cloud.attributes["download"] == share.return_filename("c", SET_ID, 2, "Bo")
+        assert t("evaluators.regenerate_return") in _strings(_generate_return_btn(rc))
+        assert t("evaluators.return_ready") in _toasts("success")
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_a_reviewed_copy_built_earlier_is_offered_after_a_reload(data_root):
@@ -1142,18 +1070,14 @@ def test_a_split_replaced_while_generating_is_not_reported_recorded(data_root, m
 
     monkeypatch.setattr(es.share, "build_package", _build)
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _generate_btn(rc).fire_event("click", None)
-            await _settle(lambda: t("evaluators.packages_unrecorded") in _toasts("warning"), "the warning")
-            assert not _toasts("success")
-            assert not s.project.value.alert_sets[SET_ID].split.packaged
-            assert [c.tag for c in _clouds(rc)] == ["span", "span"]  # built for s1, the table shows s9
-        finally:
-            rc.close()
+    async def main(rc):
+        _generate_btn(rc).fire_event("click", None)
+        await _settle(lambda: t("evaluators.packages_unrecorded") in _toasts("warning"), "the warning")
+        assert not _toasts("success")
+        assert not s.project.value.alert_sets[SET_ID].split.packaged
+        assert [c.tag for c in _clouds(rc)] == ["span", "span"]  # built for s1, the table shows s9
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_switching_project_while_generating_shows_no_build_in_the_other(data_root, monkeypatch):
@@ -1272,20 +1196,16 @@ def test_cancelling_the_merge_drops_the_preview(data_root, monkeypatch):
     zip_path = data_root / "bo__reviewed.zip"
     zip_path.write_bytes(b"PK")
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _open_merge(rc)
-            rc.find(FileInput).widget.v_model = str(zip_path)
-            await _settle(lambda: t("evaluators.merge") in _strings(rc.container), "the preview")
-            _button(rc, t("common.cancel")).fire_event("click", None)
-            assert t("evaluators.merge") not in _strings(rc.container)
-            _open_merge(rc)  # a fresh pick, not the dropped preview
-            assert rc.find(FileInput).widgets and t("evaluators.merge") not in _strings(rc.container)
-        finally:
-            rc.close()
+    async def main(rc):
+        _open_merge(rc)
+        rc.find(FileInput).widget.v_model = str(zip_path)
+        await _settle(lambda: t("evaluators.merge") in _strings(rc.container), "the preview")
+        _button(rc, t("common.cancel")).fire_event("click", None)
+        assert t("evaluators.merge") not in _strings(rc.container)
+        _open_merge(rc)  # a fresh pick, not the dropped preview
+        assert rc.find(FileInput).widgets and t("evaluators.merge") not in _strings(rc.container)
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def test_cancelling_the_merge_while_a_copy_is_read_drops_it(data_root, monkeypatch):
@@ -1322,12 +1242,6 @@ def test_without_a_split_there_is_nothing_to_merge(data_root):
         rc.close()
 
 
-def test_the_step_is_named_evaluation():
-    set_locale("en")
-    assert t("app.drawer_item.evaluators") == "Evaluation"
-    assert t("steps.evaluators.info_header") == "Evaluation"
-
-
 def test_the_return_panel_offers_only_this_copys_reviewed_copy(data_root, monkeypatch):
     monkeypatch.setattr(es.share, "build_return", lambda p, pdir, out_dir, *, app_version: _return_zip(p, out_dir))
 
@@ -1338,19 +1252,15 @@ def test_the_return_panel_offers_only_this_copys_reviewed_copy(data_root, monkey
 
     s = _state(_copy("c__e01-ana", "Ana", 1), _gdf())
 
-    async def main():
-        _box, rc = _render(s)
-        try:
-            _generate_return_btn(rc).fire_event("click", None)
-            await _settle(lambda: _clouds(rc)[0].tag == "a", "Ana's reviewed copy")
-            s.load_project_state(_copy("c__e02-bo", "Bo", 2))
-            s.alerts_gdf.set(_gdf())
-            await asyncio.sleep(0.05)
-            assert _clouds(rc)[0].tag == "span"  # Ana's zip is not offered in Bo's copy
-        finally:
-            rc.close()
+    async def main(rc):
+        _generate_return_btn(rc).fire_event("click", None)
+        await _settle(lambda: _clouds(rc)[0].tag == "a", "Ana's reviewed copy")
+        s.load_project_state(_copy("c__e02-bo", "Bo", 2))
+        s.alerts_gdf.set(_gdf())
+        await asyncio.sleep(0.05)
+        assert _clouds(rc)[0].tag == "span"  # Ana's zip is not offered in Bo's copy
 
-    asyncio.run(main())
+    run_rendered(lambda: _render(s), main)
 
 
 def _walk(w):

@@ -24,6 +24,7 @@ from gui.store.workflow_steps import step_index
 from gui.tile import project_dialog as pd
 from gui.tile.analysis.state import AnalysisState
 from gui.widget.enter_key import ENTER_DEFAULT
+from tests._render_helpers import run_rendered
 
 
 def test_create_project_is_empty_and_named():
@@ -243,19 +244,15 @@ def test_an_open_project_shows_its_save_state_and_manage_selects_it(dialog):
 def test_the_list_follows_the_open_projects_saves(dialog):
     """The counts and time of the open project are read again on every save,
     not only when a project is installed or closed."""
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            dialog.state.new_project_state(pd.create_project("a"))
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed")
-            p = dialog.state.project.value
-            add_predefined_source(p, "GLAD-L")
-            dialog.state.commit(p)  # auto-saved
-            await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the saved source counted")
-        finally:
-            rc.close()
+    async def main(rc):
+        dialog.state.new_project_state(pd.create_project("a"))
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed")
+        p = dialog.state.project.value
+        add_predefined_source(p, "GLAD-L")
+        dialog.state.commit(p)  # auto-saved
+        await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the saved source counted")
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_the_name_is_checked_as_it_is_typed(dialog):
@@ -461,30 +458,26 @@ def test_deleting_the_open_project_closes_it_before_the_folder_goes(dialog, monk
 
     monkeypatch.setattr(io, "delete_project", spy)
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            dialog.state.new_project_state(pd.create_project("a"))
-            dialog.state.active_step.set(step_index("period"))
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
-            dialog.manage[-1]["on_delete"]("a")
-            await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened", rc=rc)
-            alerts = _open_form(rc).find(v.Alert).widgets
-            assert [(a.type, _texts(a)) for a in alerts] == [("warning", [t("steps.project.delete_open_warning")])]
-            await _type_and_delete(rc, "a")
-            await _settle(lambda: _toasts("success"), "the delete finished")
-            assert seen == [None]
-            assert not (dialog.root / "a").exists()
-            assert dialog.state.project.value is None and dialog.state.active_step.value == 0
-            assert _toasts("success") == [t("steps.project.deleted", name="a")] and dialog.dismissed == 0
-            # The read the close started can render the empty list on its
-            # worker while the confirmation's close waits for that render.
-            await _settle(lambda: _listed(dialog) == {}, "the list emptied", rc=rc)
-            assert not _open_form(rc).widgets  # the confirmation closed
-        finally:
-            rc.close()
+    async def main(rc):
+        dialog.state.new_project_state(pd.create_project("a"))
+        dialog.state.active_step.set(step_index("period"))
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
+        dialog.manage[-1]["on_delete"]("a")
+        await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened", rc=rc)
+        alerts = _open_form(rc).find(v.Alert).widgets
+        assert [(a.type, _texts(a)) for a in alerts] == [("warning", [t("steps.project.delete_open_warning")])]
+        await _type_and_delete(rc, "a")
+        await _settle(lambda: _toasts("success"), "the delete finished")
+        assert seen == [None]
+        assert not (dialog.root / "a").exists()
+        assert dialog.state.project.value is None and dialog.state.active_step.value == 0
+        assert _toasts("success") == [t("steps.project.deleted", name="a")] and dialog.dismissed == 0
+        # The read the close started can render the empty list on its
+        # worker while the confirmation's close waits for that render.
+        await _settle(lambda: _listed(dialog) == {}, "the list emptied", rc=rc)
+        assert not _open_form(rc).widgets  # the confirmation closed
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_a_failed_delete_of_the_open_project_opens_it_again(dialog, monkeypatch):
@@ -493,23 +486,19 @@ def test_a_failed_delete_of_the_open_project_opens_it_again(dialog, monkeypatch)
 
     monkeypatch.setattr(io, "delete_project", denied)
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            p = pd.create_project("a")
-            add_predefined_source(p, "RADD")
-            dialog.state.new_project_state(p)
-            await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the open project listed")
-            await _delete(rc, dialog, "a")
-            await _settle(lambda: _toasts("error"), "the delete failed")
-            assert _toasts("error") == [t("steps.project.delete_failed", name="a", error="denied")]
-            live = dialog.state.project.value
-            assert live is not None and live.name == "a" and list(live.sources) == ["RADD"]
-            assert _open_form(rc).find(v.TextField).widget.v_model == "a"  # still asking
-        finally:
-            rc.close()
+    async def main(rc):
+        p = pd.create_project("a")
+        add_predefined_source(p, "RADD")
+        dialog.state.new_project_state(p)
+        await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the open project listed")
+        await _delete(rc, dialog, "a")
+        await _settle(lambda: _toasts("error"), "the delete failed")
+        assert _toasts("error") == [t("steps.project.delete_failed", name="a", error="denied")]
+        live = dialog.state.project.value
+        assert live is not None and live.name == "a" and list(live.sources) == ["RADD"]
+        assert _open_form(rc).find(v.TextField).widget.v_model == "a"  # still asking
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_a_project_being_written_cannot_be_deleted(dialog):
@@ -683,27 +672,23 @@ def test_opening_the_open_project_closes_the_dialogs_and_keeps_it_as_it_is(dialo
     would silently drop what is only in memory."""
     loads = []
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            dialog.state.new_project_state(pd.create_project("a"))
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
-            live = dialog.state.project.value
-            dialog.state.current_page_view.value = "period_tile"  # wherever the user was
-            monkeypatch.setattr(dialog.state, "load_project_state", lambda p: loads.append(p))
-            _button(rc, t("steps.project.manage")).fire_event("click", None)
-            await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
-            assert dialog.manage[-1]["selected"] == "a"
-            dialog.manage[-1]["on_open"]()  # Enter, or a click on Open
-            await _settle(lambda: not dialog.manage[-1]["open"], "Manage closed")
-            await asyncio.sleep(0.05)
-            assert loads == [] and dialog.state.project.value is live
-            assert dialog.dismissed == 1 and dialog.state.current_page_view.value == "period_tile"
-            assert not _toasts("success")
-        finally:
-            rc.close()
+    async def main(rc):
+        dialog.state.new_project_state(pd.create_project("a"))
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
+        live = dialog.state.project.value
+        dialog.state.current_page_view.value = "period_tile"  # wherever the user was
+        monkeypatch.setattr(dialog.state, "load_project_state", lambda p: loads.append(p))
+        _button(rc, t("steps.project.manage")).fire_event("click", None)
+        await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+        assert dialog.manage[-1]["selected"] == "a"
+        dialog.manage[-1]["on_open"]()  # Enter, or a click on Open
+        await _settle(lambda: not dialog.manage[-1]["open"], "Manage closed")
+        await asyncio.sleep(0.05)
+        assert loads == [] and dialog.state.project.value is live
+        assert dialog.dismissed == 1 and dialog.state.current_page_view.value == "period_tile"
+        assert not _toasts("success")
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_the_open_projects_own_name_is_taken_but_not_offered_to_open(dialog):
@@ -733,21 +718,17 @@ def test_the_open_projects_own_name_is_taken_but_not_offered_to_open(dialog):
 
 def test_a_review_copy_offers_no_duplicate(dialog):
     """Spec §6.3: Duplicate is hidden for a review copy (New and Manage stay)."""
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            p = pd.create_project("c")
-            p.review_copy = ReviewCopy(evaluator="Ana", evaluator_index=1, set_id="x", split_id="sp",
-                                       set_fingerprint="f", origin_project="orig", imported_at=datetime.now())
-            dialog.state.new_project_state(p)
-            await _settle(lambda: any(t("steps.project.manage") in w.children for w in rc.find(v.Btn).widgets),
-                          "the open project's buttons")
-            labels = [c for w in rc.find(v.Btn).widgets for c in w.children if isinstance(c, str)]
-            assert t("steps.project.new") in labels and t("steps.project.duplicate") not in labels
-        finally:
-            rc.close()
+    async def main(rc):
+        p = pd.create_project("c")
+        p.review_copy = ReviewCopy(evaluator="Ana", evaluator_index=1, set_id="x", split_id="sp",
+                                   set_fingerprint="f", origin_project="orig", imported_at=datetime.now())
+        dialog.state.new_project_state(p)
+        await _settle(lambda: any(t("steps.project.manage") in w.children for w in rc.find(v.Btn).widgets),
+                      "the open project's buttons")
+        labels = [c for w in rc.find(v.Btn).widgets for c in w.children if isinstance(c, str)]
+        assert t("steps.project.new") in labels and t("steps.project.duplicate") not in labels
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 # ---------------------------------------------------------------------------
@@ -776,17 +757,13 @@ def _ana_filter():
 
 
 def test_import_is_offered_with_and_without_an_open_project(dialog):
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            assert _button(rc, t("steps.project.import")).block  # the empty state's column of buttons
-            dialog.state.new_project_state(pd.create_project("b"))
-            await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
-                                      for w in rc.find(v.Btn).widgets), "Import beside New and Manage")
-        finally:
-            rc.close()
+    async def main(rc):
+        assert _button(rc, t("steps.project.import")).block  # the empty state's column of buttons
+        dialog.state.new_project_state(pd.create_project("b"))
+        await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
+                                  for w in rc.find(v.Btn).widgets), "Import beside New and Manage")
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_import_refuses_a_reviewed_copy(dialog, monkeypatch):
@@ -794,16 +771,12 @@ def test_import_refuses_a_reviewed_copy(dialog, monkeypatch):
     imported = []
     monkeypatch.setattr(pd.share, "import_package", lambda path, root=None: imported.append(path))
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            await _import_zip(rc, dialog.root / "c__x__e01-ana__reviewed.zip")
-            await _settle(lambda: t("share.err.is_return") in _toasts("error"), "the refusal toast")
-            assert imported == [] and dialog.state.project.value is None and dialog.dismissed == 0
-        finally:
-            rc.close()
+    async def main(rc):
+        await _import_zip(rc, dialog.root / "c__x__e01-ana__reviewed.zip")
+        await _settle(lambda: t("share.err.is_return") in _toasts("error"), "the refusal toast")
+        assert imported == [] and dialog.state.project.value is None and dialog.dismissed == 0
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_an_imported_package_opens_on_analysis_filtered_to_its_evaluator(dialog, monkeypatch):
@@ -816,21 +789,17 @@ def test_an_imported_package_opens_on_analysis_filtered_to_its_evaluator(dialog,
     monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: None)
     monkeypatch.setattr(pd.share, "import_package", _import)
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
-            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c__e01-ana",
-                          "the copy installed")
-            assert dialog.state.current_page_view.value == "analysis_tile"
-            assert dialog.filters == [(dialog.analysis, _ana_filter())]
-            await _settle(lambda: dialog.dismissed == 1, "the dialog closed")
-            assert t("steps.project.imported", name="c__e01-ana") in _toasts("success")
-            assert not _open_form(rc).widgets  # the import form closed too
-        finally:
-            rc.close()
+    async def main(rc):
+        await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
+        await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c__e01-ana",
+                      "the copy installed")
+        assert dialog.state.current_page_view.value == "analysis_tile"
+        assert dialog.filters == [(dialog.analysis, _ana_filter())]
+        await _settle(lambda: dialog.dismissed == 1, "the dialog closed")
+        assert t("steps.project.imported", name="c__e01-ana") in _toasts("success")
+        assert not _open_form(rc).widgets  # the import form closed too
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 @pytest.mark.parametrize("answer", ["open", "new"])
@@ -848,24 +817,20 @@ def test_a_package_imported_before_asks_to_open_that_copy_or_import_a_new_one(di
     monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: "c__e01-ana")
     monkeypatch.setattr(pd.share, "import_package", _import)
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
-            message = t("steps.project.import_existing_message", name="c__e01-ana", evaluator="Ana")
-            await _settle(lambda: any(message in _texts(w) for w in _open_form(rc).widgets), "the re-import question")
-            assert made == []  # nothing imported before the answer
-            label = t("steps.project.import_open_existing") if answer == "open" else t("steps.project.import_as_new")
-            _button(_open_form(rc), label).fire_event("click", None)
-            expected = "c__e01-ana" if answer == "open" else "c__e01-ana-2"
-            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == expected, f"{expected} open")
-            assert made == ([] if answer == "open" else ["c__e01-ana-2"])
-            assert dialog.state.current_page_view.value == "analysis_tile"
-            assert dialog.filters[-1] == (dialog.analysis, _ana_filter())
-        finally:
-            rc.close()
+    async def main(rc):
+        await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
+        message = t("steps.project.import_existing_message", name="c__e01-ana", evaluator="Ana")
+        await _settle(lambda: any(message in _texts(w) for w in _open_form(rc).widgets), "the re-import question")
+        assert made == []  # nothing imported before the answer
+        label = t("steps.project.import_open_existing") if answer == "open" else t("steps.project.import_as_new")
+        _button(_open_form(rc), label).fire_event("click", None)
+        expected = "c__e01-ana" if answer == "open" else "c__e01-ana-2"
+        await _settle(lambda: getattr(dialog.state.project.value, "name", None) == expected, f"{expected} open")
+        assert made == ([] if answer == "open" else ["c__e01-ana-2"])
+        assert dialog.state.current_page_view.value == "analysis_tile"
+        assert dialog.filters[-1] == (dialog.analysis, _ana_filter())
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_open_existing_copy_on_the_open_copy_lands_again_without_a_reload(dialog, monkeypatch):
@@ -878,47 +843,39 @@ def test_open_existing_copy_on_the_open_copy_lands_again_without_a_reload(dialog
     monkeypatch.setattr(pd.share, "import_package", lambda path, root=None: pytest.fail("imported"))
     monkeypatch.setattr(pd.io, "load_project", lambda name, *a, **k: loads.append(name))
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            dialog.state.new_project_state(_review_copy())
-            dialog.state.current_page_view.value = "aoi_tile"
-            await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
-                                      for w in rc.find(v.Btn).widgets), "the open copy's buttons")
-            assert dialog.filters == []
-            await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
-            message = t("steps.project.import_existing_message", name="c__e01-ana", evaluator="Ana")
-            await _settle(lambda: any(message in _texts(w) for w in _open_form(rc).widgets), "the re-import question")
-            _button(_open_form(rc), t("steps.project.import_open_existing")).fire_event("click", None)
-            await _settle(lambda: dialog.state.current_page_view.value == "analysis_tile", "back on Analysis")
-            assert dialog.filters == [(dialog.analysis, _ana_filter())]
-            assert loads == [] and dialog.dismissed == 1
-            assert dialog.state.project.value.name == "c__e01-ana"
-        finally:
-            rc.close()
+    async def main(rc):
+        dialog.state.new_project_state(_review_copy())
+        dialog.state.current_page_view.value = "aoi_tile"
+        await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
+                                  for w in rc.find(v.Btn).widgets), "the open copy's buttons")
+        assert dialog.filters == []
+        await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
+        message = t("steps.project.import_existing_message", name="c__e01-ana", evaluator="Ana")
+        await _settle(lambda: any(message in _texts(w) for w in _open_form(rc).widgets), "the re-import question")
+        _button(_open_form(rc), t("steps.project.import_open_existing")).fire_event("click", None)
+        await _settle(lambda: dialog.state.current_page_view.value == "analysis_tile", "back on Analysis")
+        assert dialog.filters == [(dialog.analysis, _ana_filter())]
+        assert loads == [] and dialog.dismissed == 1
+        assert dialog.state.project.value.name == "c__e01-ana"
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_opening_a_review_copy_from_manage_lands_on_analysis(dialog):
     io.save_project(_review_copy())
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            await _settle(lambda: "c__e01-ana" in (_listed(dialog) or {}), "the copy listed")
-            _button(rc, t("steps.project.manage_count", count=1)).fire_event("click", None)
-            await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
-            _open_from_manage(dialog, "c__e01-ana")
-            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c__e01-ana",
-                          "the copy opened")
-            assert dialog.state.current_page_view.value == "analysis_tile"
-            assert dialog.filters == [(dialog.analysis, _ana_filter())]
-            await _settle(lambda: dialog.dismissed == 1, "the dialog closed")
-        finally:
-            rc.close()
+    async def main(rc):
+        await _settle(lambda: "c__e01-ana" in (_listed(dialog) or {}), "the copy listed")
+        _button(rc, t("steps.project.manage_count", count=1)).fire_event("click", None)
+        await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+        _open_from_manage(dialog, "c__e01-ana")
+        await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "c__e01-ana",
+                      "the copy opened")
+        assert dialog.state.current_page_view.value == "analysis_tile"
+        assert dialog.filters == [(dialog.analysis, _ana_filter())]
+        await _settle(lambda: dialog.dismissed == 1, "the dialog closed")
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_a_failed_import_toasts_and_opens_nothing(dialog, monkeypatch):
@@ -935,23 +892,19 @@ def test_a_failed_import_toasts_and_opens_nothing(dialog, monkeypatch):
     monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: None)
     monkeypatch.setattr(pd.share, "import_package", _fail)
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            await _import_zip(rc, dialog.root / "p.zip")
-            await _settle(lambda: t("steps.project.import_failed", file="p.zip", error="disk full")
-                          in _toasts("error"), "the failure toast")
-            assert dialog.state.project.value is None and dialog.dismissed == 0 and dialog.filters == []
-            # Still usable: the form stays open on a fresh picker, and the
-            # next pick is read (the in-flight guard was released).
-            await _settle(lambda: _open_form(rc).find(FileInput).widgets, "the picker, empty again")
-            _open_form(rc).find(FileInput).widget.v_model = str(dialog.root / "q.zip")
-            await _settle(lambda: len(peeked) == 2, "the second pick read")
-            assert peeked == [str(dialog.root / "p.zip"), str(dialog.root / "q.zip")]
-        finally:
-            rc.close()
+    async def main(rc):
+        await _import_zip(rc, dialog.root / "p.zip")
+        await _settle(lambda: t("steps.project.import_failed", file="p.zip", error="disk full")
+                      in _toasts("error"), "the failure toast")
+        assert dialog.state.project.value is None and dialog.dismissed == 0 and dialog.filters == []
+        # Still usable: the form stays open on a fresh picker, and the
+        # next pick is read (the in-flight guard was released).
+        await _settle(lambda: _open_form(rc).find(FileInput).widgets, "the picker, empty again")
+        _open_form(rc).find(FileInput).widget.v_model = str(dialog.root / "q.zip")
+        await _settle(lambda: len(peeked) == 2, "the second pick read")
+        assert peeked == [str(dialog.root / "p.zip"), str(dialog.root / "q.zip")]
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 @pytest.mark.parametrize("stage", ["peek", "import"])
@@ -966,18 +919,14 @@ def test_a_refused_package_toasts_its_own_reason_alone(dialog, monkeypatch, stag
     monkeypatch.setattr(pd.share, "find_existing_copy", lambda header, root=None: None)
     monkeypatch.setattr(pd.share, "import_package", _raise)
 
-    async def main():
-        _box, rc = dialog.render()
-        try:
-            await _import_zip(rc, dialog.root / "p.zip")
-            text = t("share.err.import_failed", error="no manifest")
-            await _settle(lambda: text in _toasts("error"), "the refusal toast")
-            assert not any("p.zip" in m for m in _toasts("error"))  # not wrapped in steps.project.import_failed
-            assert dialog.state.project.value is None and dialog.dismissed == 0 and dialog.filters == []
-        finally:
-            rc.close()
+    async def main(rc):
+        await _import_zip(rc, dialog.root / "p.zip")
+        text = t("share.err.import_failed", error="no manifest")
+        await _settle(lambda: text in _toasts("error"), "the refusal toast")
+        assert not any("p.zip" in m for m in _toasts("error"))  # not wrapped in steps.project.import_failed
+        assert dialog.state.project.value is None and dialog.dismissed == 0 and dialog.filters == []
 
-    asyncio.run(main())
+    run_rendered(lambda: dialog.render(), main)
 
 
 def test_a_second_pick_while_an_import_runs_is_dropped(dialog, monkeypatch):

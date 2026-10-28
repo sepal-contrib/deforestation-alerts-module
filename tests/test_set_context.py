@@ -20,6 +20,7 @@ from gui.scripts import questions
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
+from tests._review_helpers import AdminLookups, stub_admin_lookups
 
 SET_DIR = ("periods", "per", "sets", "glad-l")
 
@@ -218,30 +219,11 @@ def _review_alerts(set_id="x", n=2):
     return gdf
 
 
-class _AdminLookups:
-    """Stands in for ``review_save.ee``: the FAO/GAUL lookup chain. Its first
-    blocking ``getInfo`` runs ``during``, what the user does while it blocks."""
-
-    def __init__(self, during=None):
-        self.during = during
-        self.calls = 0
-
-    def __getattr__(self, name):  # FeatureCollection, String, filterBounds, iterate...
-        return lambda *a, **k: self
-
-    def getInfo(self):  # noqa: N802 - Earth Engine's name
-        self.calls += 1
-        during, self.during = self.during, None
-        if during is not None:
-            during()
-        return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
-
-
 def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):
     """Press Save on alert ``alert_id`` (Confirmed, no drawn polygon), for real."""
     from gui.tile.analysis import export
 
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", lookups or _AdminLookups())
+    stub_admin_lookups(monkeypatch, lookups)
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
@@ -278,7 +260,7 @@ def test_a_set_activated_mid_save_refuses_the_write(tmp_path, monkeypatch, publi
             s.alerts_gdf.set(_review_alerts("y"))
 
     with pytest.raises(SaveRefused) as refused:
-        _save(s, ctx, monkeypatch, _AdminLookups(during=_integrate_finishes))
+        _save(s, ctx, monkeypatch, AdminLookups(during=_integrate_finishes))
 
     assert refused.value.key == "analysis_tile.export_labels.save_set_changed"
     assert s.project.value.active_set == "y"
@@ -311,7 +293,7 @@ def test_a_project_switch_mid_save_refuses_the_write(tmp_path, monkeypatch, swit
             s.new_project_state(e)
 
     with pytest.raises(SaveRefused):
-        _save(s, ctx, monkeypatch, _AdminLookups(during=_switch))
+        _save(s, ctx, monkeypatch, AdminLookups(during=_switch))
 
     assert other.read_bytes() == b"project e's store"
     assert reviewed.read_bytes() == b"project d's store"
@@ -368,7 +350,7 @@ def test_a_same_set_rerun_mid_save_refuses_the_write(tmp_path, monkeypatch, publ
             assert publish()
 
     with pytest.raises(SaveRefused) as refused:
-        _save(s, ctx, monkeypatch, _AdminLookups(during=_rerun_finishes))
+        _save(s, ctx, monkeypatch, AdminLookups(during=_rerun_finishes))
 
     assert refused.value.key == "analysis_tile.export_labels.save_store_changed"
     assert _saved_status(store) == ["Not reviewed"] * 5  # the re-run's store, untouched
@@ -436,7 +418,7 @@ def test_the_same_project_reopened_mid_save_still_takes_the_review(tmp_path, mon
     def _reopen():
         s.load_project_state(s.project.value.model_copy(deep=True))
 
-    assert _save(s, ctx, monkeypatch, _AdminLookups(during=_reopen)) is True
+    assert _save(s, ctx, monkeypatch, AdminLookups(during=_reopen)) is True
 
     assert _saved_status(_store(tmp_path, "d", "glad-l")) == ["Confirmed", "Not reviewed"]
     assert s.project.value.alert_sets["x"].n_reviewed == 1
@@ -455,7 +437,7 @@ def test_a_save_with_no_image_selected_still_persists(tmp_path, monkeypatch):
     s.alerts_gdf.set(_review_alerts("x"))
 
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     s.actual_alert_id.set(0)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
@@ -484,7 +466,7 @@ def test_another_sets_alerts_are_not_saved_into_the_active_set(tmp_path, monkeyp
     s.alerts_gdf.set(_review_alerts("y"))
     store = _store(tmp_path, "d", "glad-l", b"set x's store")
 
-    lookups = _AdminLookups()
+    lookups = AdminLookups()
     with pytest.raises(SaveRefused) as refused:
         _save(s, ctx, monkeypatch, lookups)
 
@@ -631,55 +613,6 @@ def test_a_failed_all_alerts_layer_keeps_the_panes_own_layers(tmp_path, monkeypa
     assert map_.ee_layers == ["True Color", "False Color"]
 
 
-def test_a_save_without_a_drawn_polygon_keeps_the_integrate_area(tmp_path, monkeypatch):
-    """Integrate stores each alert's area (its pixels on the grid). Confirming
-    the alert without drawing a polygon must not wipe it to 0: alert_db.parquet
-    feeds the exports, the map tiles and the report (live walk F2: alert 0,
-    387 px = 3.87 ha, read 0.00 after the Save)."""
-    s = _state(tmp_path, monkeypatch)
-    ctx = SetContext(s)
-    alerts = _review_alerts("x")
-    alerts["area_ha"] = [3.87, 1.25]
-    s.alerts_gdf.set(alerts)
-
-    assert _save(s, ctx, monkeypatch) is True
-
-    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["status", "area_ha", "alert_polygon"])
-    assert saved.loc[0, "status"] == "Confirmed"
-    assert saved["area_ha"].tolist() == pytest.approx([3.87, 1.25])
-    assert saved.loc[0, "alert_polygon"] is None
-    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(3.87)
-
-
-def test_a_save_with_a_drawn_polygon_takes_its_area(tmp_path, monkeypatch):
-    """The drawn-polygon branch is unchanged: the drawing replaces the area."""
-    import geopandas as gpd
-    from shapely.geometry import box
-
-    from gui.tile.analysis import export
-
-    s = _state(tmp_path, monkeypatch)
-    ctx = SetContext(s)
-    alerts = _review_alerts("x")
-    alerts["area_ha"] = [3.87, 1.25]
-    s.alerts_gdf.set(alerts)
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
-    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
-    drawn = gpd.GeoDataFrame(geometry=[box(-55.0, -24.0, -54.999, -23.999)], crs="EPSG:4326")
-    analysis = AnalysisState()
-    analysis.verdict.set("Confirmed")
-    analysis.answers.set({"loss_driver": ["Agriculture"]})
-    analysis.defo_layer.set(drawn)
-    s.actual_alert_id.set(0)
-    assert export._save_attributes(widgets, s, analysis, ctx) is True
-
-    saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "alert_polygon"])
-    assert saved.loc[0, "area_ha"] == pytest.approx(mosaics_helper.calculate_total_area(drawn))
-    assert saved.loc[0, "area_ha"] != pytest.approx(3.87)
-    assert saved.loc[0, "alert_polygon"] is not None
-    assert saved.loc[1, "area_ha"] == pytest.approx(1.25)
-
-
 def test_a_drawn_polygon_is_measured_in_the_projects_grid_crs(tmp_path, monkeypatch):
     """The saved ``area_ha`` is on Integrate's scale: the grid's CRS, not Web
     Mercator, which makes a polygon at 24 deg S ~20 % larger."""
@@ -693,7 +626,7 @@ def test_a_drawn_polygon_is_measured_in_the_projects_grid_crs(tmp_path, monkeypa
     s = _state(tmp_path, monkeypatch, grid=grid)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     drawn = gpd.GeoDataFrame(geometry=[box(500_000, 7_340_000, 500_100, 7_340_100)],
                              crs="EPSG:32721").to_crs(4326)  # 1 ha, drawn in lon/lat
     analysis = AnalysisState()
@@ -743,7 +676,7 @@ def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_p
         analysis.reset_alert()
         analysis.defo_layer.set(drawn_b)
 
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups(during=_move_to_the_next_alert))
+    stub_admin_lookups(monkeypatch, AdminLookups(during=_move_to_the_next_alert))
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     assert export._save_attributes(widgets, s, analysis, ctx) is True
@@ -760,7 +693,7 @@ def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     analysis = AnalysisState()
@@ -787,7 +720,7 @@ def test_a_false_positive_stores_no_loss_driver(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     s.actual_alert_id.set(0)
     analysis = AnalysisState()

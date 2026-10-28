@@ -17,18 +17,15 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import export
 from gui.tile.analysis import review_save
 from gui.tile.analysis.state import AnalysisState, capture_alert
-from tests.test_set_context import _AdminLookups, _review_alerts, _state, _store
+from tests._review_helpers import stub_admin_lookups
+from tests.test_set_context import _review_alerts, _state, _store
 
 ROAD = Question(key="road_access", label="Road access", required=True,
                 options=[QuestionOption(code="yes", label="Yes"), QuestionOption(code="no", label="No")])
 LOSS = default_questions()[0]
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _set_questions(s, questions):
@@ -44,7 +41,7 @@ def _saved(tmp_path, monkeypatch, questions, status, answers):
     _set_questions(s, questions)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     analysis = AnalysisState()
     analysis.verdict.set(status)
@@ -141,7 +138,7 @@ def test_the_live_table_gets_the_new_column_too(tmp_path, monkeypatch):
     _set_questions(s, [ROAD])
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
     analysis.answers.set({"road_access": ["no"]})
@@ -161,7 +158,7 @@ def test_a_store_missing_a_non_answer_column_still_saves(tmp_path, monkeypatch):
     _set_questions(s, [ROAD])
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x").drop(columns=["area_ha"]))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
     analysis.answers.set({"road_access": ["yes"]})

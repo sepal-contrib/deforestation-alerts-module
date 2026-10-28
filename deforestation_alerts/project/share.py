@@ -845,38 +845,9 @@ def _cell(gdf, i: int, col: str):
     return gdf[col].iat[i] if col in gdf.columns else None
 
 
-def _return_groups(rows) -> Optional[pd.Series]:
-    """The return's ``review_group`` by ``alert_id`` as ``Int64``; None
-    without the column."""
-    if REVIEW_GROUP not in rows.columns:
-        return None
-    values = pd.to_numeric(pd.Series(rows[REVIEW_GROUP].to_numpy(dtype=object)), errors="coerce")
-    return pd.Series(values.astype("Int64").to_numpy(), index=rows.index, dtype="Int64")
-
-
 def _group_id(value, sizes) -> Optional[int]:
     """``value`` as an id when it names a group of two rows or more."""
     return None if pd.isna(value) or sizes.get(value, 0) < 2 else int(value)
-
-
-class _Components:
-    """Union-find over alert ids (spec 2026-10-26 §8.4)."""
-
-    def __init__(self):
-        self.parent: dict = {}
-
-    def find(self, a: int) -> int:
-        parent = self.parent
-        parent.setdefault(a, a)
-        while parent[a] != a:
-            parent[a] = parent[parent[a]]
-            a = parent[a]
-        return a
-
-    def union(self, a: int, b: int) -> None:
-        ra, rb = self.find(a), self.find(b)
-        if ra != rb:
-            self.parent[rb] = ra
 
 
 def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
@@ -899,8 +870,8 @@ def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
     rows = preview.rows
     store_groups = review_groups.group_values(store_gdf)
     store_sizes = store_groups.value_counts().to_dict()
-    theirs = _return_groups(rows)
-    their_sizes = theirs.value_counts().to_dict() if theirs is not None else {}
+    theirs = review_groups.group_values(rows).set_axis(rows.index)  # all <NA> without the column
+    their_sizes = theirs.value_counts().to_dict()
     statuses = rows["status"].tolist()
     detached = rows[DETACHED].tolist() if DETACHED in rows.columns else [True] * len(rows)
     kind = {}
@@ -919,12 +890,12 @@ def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
             kind[aid] = "new"
     groups = {}  # alert id -> the ids of the groups (>= 2 rows) it is in
     if store_sizes or their_sizes:
-        comps = _Components()
+        comps = review_groups.Components()
         store_ids = review_groups.ids(store_gdf)
         for i in np.flatnonzero(store_groups.notna().to_numpy()):
             if who[i] == evaluator:
                 comps.union(int(store_ids[i]), int(store_groups.iat[i]))
-        for aid, value in (theirs.dropna().items() if theirs is not None else ()):
+        for aid, value in theirs.dropna().items():
             if kind[int(aid)] != "ignored":
                 comps.union(int(aid), int(value))
         conflicted = {comps.find(aid) for aid, k in kind.items() if k == "conflicts"}
@@ -934,8 +905,7 @@ def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
             if k != "conflicts" and comps.find(aid) in conflicted:
                 kind[aid] = "conflicts"
             i = at[aid]
-            ids = {_group_id(store_groups.iat[i], store_sizes),
-                   _group_id(theirs.at[aid], their_sizes) if theirs is not None else None} - {None}
+            ids = {_group_id(store_groups.iat[i], store_sizes), _group_id(theirs.at[aid], their_sizes)} - {None}
             if ids:
                 groups[aid] = ids
     out = {"new": [], "conflicts": [], "unchanged": [], "ignored": []}

@@ -38,6 +38,7 @@ from gui.store.state_manager import AppState
 from gui.tile import masks_card
 from gui.widget import mask_modal
 from gui.widget.enter_key import ENTER_DEFAULT
+from tests._render_helpers import run_rendered
 
 FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
 MAR = Period(id="2026-03-01_2026-03-31", start=date(2026, 3, 1), end=date(2026, 3, 31))
@@ -1180,38 +1181,30 @@ def test_the_mask_form_sits_on_the_form_frame(monkeypatch):
     monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
-        try:
-            dialog = rc.find(v.Dialog).widget
-            assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
-            assert (_name_field(rc).hint, _name_field(rc).persistent_hint) == (
-                t("steps.prepare.mask_name_hint"), True)
-            fieldset = rc.find(v.Html, tag="fieldset").widget
-            assert fieldset.children[0].children == [t("steps.prepare.mask_mode_label")]
-            assert rc.find(v.RadioGroup, v_model="keep").widget in fieldset.children
-            add = _submit_btn(rc)
-            assert _defaults(rc) == [add] and _icons(add) == ["mdi-plus"]
-        finally:
-            rc.close()
+    async def main(rc):
+        dialog = rc.find(v.Dialog).widget
+        assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
+        assert (_name_field(rc).hint, _name_field(rc).persistent_hint) == (
+            t("steps.prepare.mask_name_hint"), True)
+        fieldset = rc.find(v.Html, tag="fieldset").widget
+        assert fieldset.children[0].children == [t("steps.prepare.mask_mode_label")]
+        assert rc.find(v.RadioGroup, v_model="keep").widget in fieldset.children
+        add = _submit_btn(rc)
+        assert _defaults(rc) == [add] and _icons(add) == ["mdi-plus"]
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, added, saved), handle_error=False), main)
 
 
 def test_a_mask_edit_has_a_save_button_and_no_mode_fieldset(monkeypatch):
     monkeypatch.setattr(mask_modal, "RasterInput", _StubRasterInput)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, added, saved, editing="forest"), handle_error=False)
-        try:
-            save = _submit_btn(rc, t("steps.alerts.save"))
-            assert _defaults(rc) == [save] and _icons(save) == ["mdi-content-save-outline"]
-            assert not rc.find(v.Html, tag="fieldset").widgets
-        finally:
-            rc.close()
+    async def main(rc):
+        save = _submit_btn(rc, t("steps.alerts.save"))
+        assert _defaults(rc) == [save] and _icons(save) == ["mdi-content-save-outline"]
+        assert not rc.find(v.Html, tag="fieldset").widgets
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, added, saved, editing="forest"), handle_error=False), main)
 
 
 def test_the_card_renders_nothing_once_the_project_is_closed(monkeypatch):

@@ -31,6 +31,7 @@ from gui.store.workflow_steps import STEPS, StepStatus, step_states
 from gui.tile import layers_step
 from gui.widget import vis_layer_modal as vlm
 from gui.widget.enter_key import ENTER_DEFAULT
+from tests._render_helpers import run_rendered
 
 
 def _p():
@@ -742,17 +743,13 @@ def test_the_layer_form_sits_on_the_form_frame(monkeypatch, editing, label, icon
     p.vis_layers = {"ndvi": GeeVisLayer(name="ndvi", asset="users/x/img", bands=["NDVI"], min=0, max=1)}
     state, open_, saved = _state(p), solara.reactive(True), []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, saved, editing=editing), handle_error=False)
-        try:
-            dialog = rc.find(v.Dialog).widget
-            assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
-            [primary] = _defaults(rc)
-            assert t(label) in primary.children and _icons(primary) == [icon]
-        finally:
-            rc.close()
+    async def main(rc):
+        dialog = rc.find(v.Dialog).widget
+        assert (dialog.max_width, dialog.persistent, dialog.eager) == ("560px", True, True)
+        [primary] = _defaults(rc)
+        assert t(label) in primary.children and _icons(primary) == [icon]
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, saved, editing=editing), handle_error=False), main)
 
 
 # ---------------------------------------------------------------- the step, rendered
@@ -1031,28 +1028,24 @@ def test_a_geotiff_rgb_layer_guesses_roles_from_band_names_and_saves_indexes(tmp
     monkeypatch.setattr(vlm, "RasterInput", _StubRasterInput)
     state, open_, saved = _state(_with_aoi()), solara.reactive(True), []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, saved), handle_error=False)
-        try:
-            _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
-            _StubRasterInput.seen.path.set(str(tif))
-            await _pick_all_bands(rc)
-            assert await _settle(lambda: _selected_combo(rc) == "true_color")
-            assert _rgb(rc) == [3, 2, 1]  # a GeoTIFF band is its index
-            assert _enabled_combos(rc) == ["true_color", "false_color", "custom"]
-            _composite(rc).v_model = "false_color"
-            _field(rc, "steps.layers.field_name").v_model = "fc"
-            _field(rc, "steps.layers.field_max").v_model = "3000"
-            _save_btn(rc).fire_event("click", None)
-            assert await _settle(lambda: open_.value is False)
-            [(layer, _prev)] = saved
-            assert layer == FileVisLayer(name="fc", path=str(tif), bands=[4, 3, 2], min=0, max=3000,
-                                         roles={"red": 3, "green": 2, "blue": 1, "nir": 4}, combo="false_color",
-                                         style="rgb")
-        finally:
-            rc.close()
+    async def main(rc):
+        _field(rc, "steps.raster_input.field_source", v.Select).v_model = "file"
+        _StubRasterInput.seen.path.set(str(tif))
+        await _pick_all_bands(rc)
+        assert await _settle(lambda: _selected_combo(rc) == "true_color")
+        assert _rgb(rc) == [3, 2, 1]  # a GeoTIFF band is its index
+        assert _enabled_combos(rc) == ["true_color", "false_color", "custom"]
+        _composite(rc).v_model = "false_color"
+        _field(rc, "steps.layers.field_name").v_model = "fc"
+        _field(rc, "steps.layers.field_max").v_model = "3000"
+        _save_btn(rc).fire_event("click", None)
+        assert await _settle(lambda: open_.value is False)
+        [(layer, _prev)] = saved
+        assert layer == FileVisLayer(name="fc", path=str(tif), bands=[4, 3, 2], min=0, max=3000,
+                                     roles={"red": 3, "green": 2, "blue": 1, "nir": 4}, combo="false_color",
+                                     style="rgb")
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, saved), handle_error=False), main)
 
 
 def test_editing_an_rgb_layer_saved_before_the_roles_keeps_its_bands(monkeypatch):
@@ -1085,16 +1078,12 @@ def test_a_layer_saved_with_a_colormap_keeps_it_and_its_invert_switch_is_off(mon
     p.vis_layers = {"g": FileVisLayer(name="g", path=str(tif), colormap="Greens", min=0, max=5)}
     state, open_, saved = _state(p), solara.reactive(True), []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, saved, editing="g"), handle_error=False)
-        try:
-            assert await _settle(lambda: _ramp_select(rc) is not None)
-            assert _ramp_select(rc).v_model is None
-            assert _field(rc, "steps.layers.field_invert", v.Switch).disabled is True
-            _save_btn(rc).fire_event("click", None)
-            assert await _settle(lambda: open_.value is False)
-            assert saved[0][0].colormap == "Greens" and saved[0][0].palette == []
-        finally:
-            rc.close()
+    async def main(rc):
+        assert await _settle(lambda: _ramp_select(rc) is not None)
+        assert _ramp_select(rc).v_model is None
+        assert _field(rc, "steps.layers.field_invert", v.Switch).disabled is True
+        _save_btn(rc).fire_event("click", None)
+        assert await _settle(lambda: open_.value is False)
+        assert saved[0][0].colormap == "Greens" and saved[0][0].palette == []
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, saved, editing="g"), handle_error=False), main)

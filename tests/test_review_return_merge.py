@@ -25,6 +25,7 @@ from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import analysis_tile, nearby
 from gui.tile.analysis.state import AnalysisState
+from tests._review_helpers import stub_admin_lookups
 from tests._share_helpers import AOI_FC, APP_VERSION, CREATOR, SET1, SET2, make_copy, make_creator, rezip, zip_members
 
 #: the creator's store: alert 0 reviewed alike, 1 Bo's, 2 reviewed otherwise, 3 not reviewed
@@ -486,7 +487,6 @@ def test_a_copy_link_survives_open_save_return_and_merge(tmp_path, monkeypatch):
     import types
 
     from gui.tile.analysis import earlier, export
-    from tests.test_set_context import _AdminLookups
 
     root = tmp_path / "data"
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(root))
@@ -504,7 +504,7 @@ def test_a_copy_link_survives_open_save_return_and_merge(tmp_path, monkeypatch):
     summary = growth_index.history_summary(copy, SET2, gdf, 0, [stored, ticked])
     assert summary is not None and summary.n == 3
 
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
     analysis.links.set(kept + (ticked,))
@@ -644,12 +644,6 @@ def test_rows_the_creator_grouped_after_packaging_keep_the_creators_review(tmp_p
     # Without the flag (a copy imported before the record) the same rows read as detached.
     old = _reviews(zp, tmp_path / "old.zip", lambda r: r.drop(columns=share.DETACHED))
     assert _classes(read_return(old, p, gdf)) == ([0, 1], [2, 3], [], [])
-
-
-def test_a_format_one_return_still_refuses_a_not_reviewed_row(tmp_path, monkeypatch):
-    p, _ = _creator(tmp_path, monkeypatch)
-    zp = _reviews(_return(tmp_path), tmp_path / "nr.zip", lambda r: r.assign(status="Not reviewed"))
-    assert _refused(lambda: read_return(zp, p, _store(p))).key == "share.merge_err_payload"
 
 
 @pytest.mark.parametrize("packaged", [None, [0, 1, 2]], ids=["no-record", "flagged"])

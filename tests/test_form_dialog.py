@@ -10,6 +10,7 @@ from pysepal.solara.components.task_button import use_task_button
 from gui.i18n import t
 from gui.widget import form_dialog as fd
 from gui.widget.enter_key import ENTER_DEFAULT
+from tests._render_helpers import run_rendered
 
 
 def _classes(widget):
@@ -262,22 +263,18 @@ def test_enter_finds_no_default_button_while_the_check_runs():
     def defaults(rc):
         return [b for b in rc.find(v.Btn).widgets if ENTER_DEFAULT in _classes(b)]
 
-    async def main():
-        _box, rc = reacton.render(Form(), handle_error=False)
-        try:
-            [btn] = defaults(rc)
-            btn.fire_event("click", None)  # Enter (or a click) starts the check
-            assert await _settle(lambda: started and not defaults(rc))
-            assert rc.find(v.Btn).widget.children[-1] == t("common.cancel")
-            await asyncio.sleep(0.05)
-            assert defaults(rc) == [] and done == []  # still running, still no default
-            release.set()
-            assert await _settle(lambda: done and defaults(rc))  # idle again: Enter is back
-            assert defaults(rc)[0].children[-1] == "Add source"
-        finally:
-            rc.close()
+    async def main(rc):
+        [btn] = defaults(rc)
+        btn.fire_event("click", None)  # Enter (or a click) starts the check
+        assert await _settle(lambda: started and not defaults(rc))
+        assert rc.find(v.Btn).widget.children[-1] == t("common.cancel")
+        await asyncio.sleep(0.05)
+        assert defaults(rc) == [] and done == []  # still running, still no default
+        release.set()
+        assert await _settle(lambda: done and defaults(rc))  # idle again: Enter is back
+        assert defaults(rc)[0].children[-1] == "Add source"
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(Form(), handle_error=False), main)
 
 
 def test_cancel_stops_the_check_and_gives_enter_back():
@@ -296,17 +293,13 @@ def test_cancel_stops_the_check_and_gives_enter_back():
     def defaults(rc):
         return [b for b in rc.find(v.Btn).widgets if ENTER_DEFAULT in _classes(b)]
 
-    async def main():
-        _box, rc = reacton.render(Form(), handle_error=False)
-        try:
-            rc.find(v.Btn).widget.fire_event("click", None)
-            assert await _settle(lambda: started and not defaults(rc))
-            rc.find(v.Btn).widget.fire_event("click", None)  # the same button, now Cancel
-            assert await _settle(lambda: defaults(rc))
-            release.set()
-            await asyncio.sleep(0.05)
-            assert done == []  # cancelled at its await
-        finally:
-            rc.close()
+    async def main(rc):
+        rc.find(v.Btn).widget.fire_event("click", None)
+        assert await _settle(lambda: started and not defaults(rc))
+        rc.find(v.Btn).widget.fire_event("click", None)  # the same button, now Cancel
+        assert await _settle(lambda: defaults(rc))
+        release.set()
+        await asyncio.sleep(0.05)
+        assert done == []  # cancelled at its await
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(Form(), handle_error=False), main)

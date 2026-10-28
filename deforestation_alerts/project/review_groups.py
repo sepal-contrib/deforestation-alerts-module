@@ -5,7 +5,8 @@ the drawn polygon, and its *members*, which hold copies of the review. The
 store column ``review_group`` (pandas ``Int64``) holds the main's id on every
 row of a group, the main's own row included. A single review saved while
 grouping is effective holds its own id: a *group of one*, which reads as a
-single row everywhere except ``pre_grouping``. ``<NA>`` everywhere else; a
+single row everywhere except ``nearby`` (a review without a group predates
+grouping and is offered only on request). ``<NA>`` everywhere else; a
 store without the column has no groups.
 
 The app selects rows by *position* (``app_state.actual_alert_id`` indexes
@@ -130,12 +131,6 @@ def is_grouped(gdf, position) -> bool:
     return bool(group_of(gdf, position)[1])
 
 
-def pre_grouping(gdf, position) -> bool:
-    """Whether the row was reviewed before grouping was on: a review with no
-    ``review_group`` (§4.2)."""
-    return status_of(gdf, position) != NOT_REVIEWED and bool(pd.isna(group_values(gdf).iloc[position]))
-
-
 # ---- plans ----------------------------------------------------------------
 def plan_group(gdf, opened, selected) -> GroupPlan:
     """The save of the review on screen for ``opened`` and the ticked rows
@@ -197,12 +192,6 @@ def plan_size(gdf, opened, selected) -> int:
     return 1 + len(members)
 
 
-def keep_plan(gdf, position) -> GroupPlan:
-    """``plan_group`` with the stored membership: what a save writes when it
-    was given no plan (a caller that predates groups)."""
-    return plan_group(gdf, position, group_of(gdf, position)[1])
-
-
 def plan_remove(gdf, position) -> GroupPlan:
     """*Remove from group* for a member (§4.4, §5.4). Raises ``ValueError``
     for a main or a row in no group."""
@@ -252,22 +241,18 @@ def _evaluator(gdf, position) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _plan_rows(plan) -> tuple:
-    return tuple(sorted({plan.main, *plan.members, *plan.detached}))
-
-
 def mixed_evaluators(gdf, plan) -> bool:
     """Whether the rows a plan touches (main, members, detached) carry more
     than one ``evaluator`` value; unassigned (``""``) is a value of its own."""
     if store_schema.EVALUATOR not in gdf.columns:
         return False
-    return len({_evaluator(gdf, p) for p in _plan_rows(plan)}) > 1
+    return len({_evaluator(gdf, p) for p in plan.positions()}) > 1
 
 
 def foreign_rows(gdf, plan, evaluator: str) -> tuple:
     """The positions a plan touches that are not assigned to ``evaluator``,
     sorted: what a review copy may not write."""
-    return tuple(p for p in _plan_rows(plan) if _evaluator(gdf, p) != evaluator)
+    return tuple(p for p in plan.positions() if _evaluator(gdf, p) != evaluator)
 
 
 # ---- what a plan writes (§4.3-§4.5) ---------------------------------------
@@ -526,6 +511,27 @@ def nearby(gdf, main, radius_m, crs=None, *, include=(), offer_reviewed=False, e
     return NearbyResult(tuple(rows), max(len(cands) - limit, 0))
 
 
+class Components:
+    """Union-find over ints (positions or alert ids): the neighbourhoods here,
+    a return's connected groups in ``share.classify_return`` (§8.4)."""
+
+    def __init__(self):
+        self.parent: dict = {}
+
+    def find(self, a: int) -> int:
+        parent = self.parent
+        parent.setdefault(a, a)
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def union(self, a: int, b: int) -> None:
+        ra, rb = self.find(a), self.find(b)
+        if ra != rb:
+            self.parent[rb] = ra
+
+
 def neighbourhoods(gdf, radius_m, crs=None, *, eligible=None) -> list:
     """The connected components (single linkage) of the ``eligible`` positions
     (all when None) whose polygons are within ``radius_m`` of each other,
@@ -533,32 +539,22 @@ def neighbourhoods(gdf, radius_m, crs=None, *, eligible=None) -> list:
     position. The eligible rows of a stored group (two rows or more) are one
     unit."""
     positions = sorted(range(len(gdf)) if eligible is None else {int(p) for p in eligible})
-    parent = {p: p for p in positions}
-
-    def find(p):
-        while parent[p] != p:
-            parent[p] = parent[parent[p]]
-            p = parent[p]
-        return p
-
-    def union(a, b):
-        parent[max(find(a), find(b))] = min(find(a), find(b))
-
+    comps = Components()
     values = group_values(gdf)
     by_id = _positions_by_id(gdf)
     first = {}
     for p in positions:
         value = values.iloc[p]
         if not pd.isna(value) and int(value) in by_id:
-            union(first.setdefault(int(value), p), p)
+            comps.union(first.setdefault(int(value), p), p)
     if len(positions) > 1:
         geoms = _metric(gdf, crs, None)[positions]
         pairs = shapely.STRtree(geoms).query(geoms, predicate="dwithin", distance=max(float(radius_m), 0.0))
         for a, b in pairs.T:
-            union(positions[int(a)], positions[int(b)])
+            comps.union(positions[int(a)], positions[int(b)])
     components = {}
     for p in positions:
-        components.setdefault(find(p), []).append(p)
+        components.setdefault(comps.find(p), []).append(p)
     return sorted(tuple(c) for c in components.values())
 
 

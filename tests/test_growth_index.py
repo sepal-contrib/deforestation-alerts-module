@@ -132,7 +132,7 @@ def test_history_summary_uses_draft_links(project):
     load = _loader(_stores(p))
     assert growth_index.history_summary(p, "oct", _current(), 1, [], load=load) is None
     summary = growth_index.history_summary(p, "oct", _current(), 1, [_link(p, "sep", 12)], load=load)
-    assert summary.n == 3 and summary.since == AUG.start
+    assert summary.n == 3 and summary.first_period_start == AUG.start
     assert summary.confirmed_ha > 0 and summary.unreviewed_ha > 0
 
 
@@ -373,8 +373,8 @@ def test_one_refresh_builds_the_current_sets_nodes_at_most_once(project, monkeyp
         monkeypatch.setitem(fn.__kwdefaults__, "load", load)
     monkeypatch.setattr(earlier, "active_set", lambda p_: p_.alert_sets["oct"])
     graphs = []
-    real_build = growth_index.build_graph
-    monkeypatch.setattr(growth_index, "build_graph", lambda *a: graphs.append(1) or real_build(*a))
+    real_graph = growth_index.LinkGraph
+    monkeypatch.setattr(growth_index, "LinkGraph", lambda *a: graphs.append(1) or real_graph(*a))
 
     links = (_link(p, "sep", 12),)
     gdf = _gdf([_row(1, "Not reviewed", CUR, links=links), _row(2, "Not reviewed", SEP15)])

@@ -35,6 +35,7 @@ from gui.scripts.integrate_jobs import run_integration_job
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.setup_guard import banner_text, refuse_setup, update_setup
 from gui.store.state_manager import AppState
+from tests._render_helpers import run_rendered
 
 PER = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 STORE = "periods/2026-01-01_2026-01-31/sets/glad-l/alert_db.parquet"
@@ -498,18 +499,14 @@ def test_opening_a_copy_checks_no_coverage_even_on_check_again(tmp_path, monkeyp
         NotificationProvider()
         rf.RemoteFactsLoader(app_state=s, gee_interface=SimpleNamespace(get_info_async=get_info_async))
 
-    async def main():
-        _box, rc = reacton.render(Page(), handle_error=False)
-        try:
-            assert await _settle(lambda: s.catalogue_meta.value)  # the loader's tasks did run
-            s.coverage_retry.set(s.coverage_retry.value + 1)  # "Check again"
-            await _settle(lambda: False, rounds=20)
-            assert asked == ["META"] and s.project.value.coverage == {}
-            assert s.coverage_error.value is None and s.coverage_pending.value is False
-        finally:
-            rc.close()
+    async def main(rc):
+        assert await _settle(lambda: s.catalogue_meta.value)  # the loader's tasks did run
+        s.coverage_retry.set(s.coverage_retry.value + 1)  # "Check again"
+        await _settle(lambda: False, rounds=20)
+        assert asked == ["META"] and s.project.value.coverage == {}
+        assert s.coverage_error.value is None and s.coverage_pending.value is False
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(Page(), handle_error=False), main)
 
 
 def test_a_copys_aoi_step_replays_nothing(tmp_path, monkeypatch):

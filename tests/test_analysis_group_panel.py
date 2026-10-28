@@ -15,7 +15,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import solara
-from pysepal.i18n import set_locale
 from shapely.geometry import MultiPolygon, box
 
 from deforestation_alerts.project import review_groups
@@ -35,11 +34,7 @@ CONFIRMED = "Confirmed"
 HIDDEN = "display: none;"
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _alerts(**columns):
@@ -245,16 +240,15 @@ def test_the_confirmation_lists_the_plan(tmp_path, monkeypatch):
     assert len(h.calls) == 1
     button, alert = h.calls[0]
     assert button is h.footer.save
-    assert alert.plan.members == (2,) and alert.plan.detached == (1,) and alert.selection == frozenset({2})
+    assert alert.plan.members == (2,) and alert.plan.detached == (1,)
 
 
 def test_the_lines_name_moves_and_joins():
-    gdf = _alerts(status=[CONFIRMED] * 4)
     status = t(status_label_key(CONFIRMED))
     moved = review_groups.Affected(1, CONFIRMED, review_groups.MOVED, 2)
     joined = review_groups.Affected(3, CONFIRMED, review_groups.JOINED, 3)
-    assert affected_line(moved, gdf) == f"#2 ({status}): moves from group #3"
-    assert affected_line(joined, gdf) == f"#4 ({status}): joins with group #4"
+    assert affected_line(moved) == f"#2 ({status}): moves from group #3"
+    assert affected_line(joined) == f"#4 ({status}): joins with group #4"
 
 
 def test_no_confirmation_when_nothing_is_affected(tmp_path, monkeypatch):

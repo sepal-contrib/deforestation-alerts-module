@@ -1,5 +1,5 @@
 """The group-review setting and the rules that read it (spec 2026-10-26):
-which grouping applies to a set, what is locked, and the radius text parser.
+which grouping applies to a set, what is locked, and the distance text parser.
 Pure: no I/O, no GUI."""
 
 import math
@@ -61,13 +61,14 @@ def lock_state(p, s) -> GroupLock:
     return GroupLock(False, False, False, None, 0)
 
 
-def parse_radius(text) -> Optional[float]:
+def parse_metres(text, lo: float = MIN_RADIUS_M, hi: float = MAX_RADIUS_M) -> Optional[float]:
     """Metres from the typed text (comma decimals allowed); ``None`` when it is
-    not a finite number within 10-5000."""
+    not a finite number within ``lo``-``hi`` (by default the grouping radius's
+    10-5000)."""
     try:
         value = float(str(text).strip().replace(",", "."))
     except ValueError:
         return None
-    if not math.isfinite(value) or not MIN_RADIUS_M <= value <= MAX_RADIUS_M:
+    if not math.isfinite(value) or not lo <= value <= hi:
         return None
     return value

@@ -203,7 +203,7 @@ def history_text(summary) -> str:
     """The History row's sentence: the group's alerts, the area confirmed since
     its first period and, when there is some, the area not reviewed yet."""
     text = tn("analysis_tile.facts.history_text", summary.n, confirmed=format_number(summary.confirmed_ha, 1),
-              since=format_date(summary.since, "MMM y"))
+              since=format_date(summary.first_period_start, "MMM y"))
     if summary.unreviewed_ha > 0:
         text += t("analysis_tile.facts.history_unreviewed", ha=format_number(summary.unreviewed_ha, 1))
     return text

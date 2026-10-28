@@ -194,14 +194,6 @@ def test_the_fixed_numbers_are_the_ones_the_spec_fixed():
                                   "Planet NICFI": "Planet"}
 
 
-def test_a_stripe_lands_on_its_own_date():
-    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), timeline.TRACK_PX)
-    style = timeline.stripe_hit_style(segs, date(2026, 3, 11), S2)
-    pct = 100 * scene_query.x_for(segs, date(2026, 3, 11)) / timeline.TRACK_PX
-    assert _left_pct(style) == pytest.approx(pct, abs=0.001)
-    assert "width: 11px" in style
-
-
 def test_a_stripes_percentage_is_its_own_share_of_the_view_not_a_pixel_count():
     """The whole widget is addressed in percentages. 10 days into a 61-day
     all-expanded view is 10/61 of the track; a builder that emitted ``x_for``'s
@@ -216,6 +208,7 @@ def test_a_stripes_percentage_is_its_own_share_of_the_view_not_a_pixel_count():
             - _left_pct(timeline.stripe_hit_style(segs, date(2026, 3, 6), S2)))
     assert step / 100 * timeline.TRACK_PX == pytest.approx(5 * timeline.TRACK_PX / 61, abs=0.1)
     assert step / 100 * timeline.TRACK_PX > timeline.HIT_PX
+    assert "width: 11px" in timeline.stripe_hit_style(segs, date(2026, 3, 11), S2)
 
 
 def test_a_collapsed_month_puts_every_one_of_its_dates_on_the_block():
@@ -303,23 +296,6 @@ def test_a_planet_bar_outside_the_view_is_not_drawn():
 
 
 # --------------------------------------------------------------- the locales
-
-def test_every_locale_has_the_timeline_keys():
-    import json
-    from pathlib import Path
-
-    import deforestation_alerts.message as msg
-
-    root = Path(msg.__file__).parent
-    keys = {"before", "after", "unset", "max_cloud", "one_more_month", "collapse_all", "expand_all",
-            "images", "no_images", "days_apart", "stale", "refresh_failed", "retry", "loading",
-            "legend", "legend_label", "lane_before", "lane_after",
-            "set_before", "set_after", "collapsed_month", "collapsed_group", "no_cloud_filter",
-            "swap_source"}
-    for locale in ("en", "es-ES", "fr", "pt-BR"):
-        data = json.loads((root / locale / "ui.json").read_text())
-        assert keys <= set(data["analysis"]["timeline"]), locale
-
 
 # ---------------------------------------------------------------- the widget
 

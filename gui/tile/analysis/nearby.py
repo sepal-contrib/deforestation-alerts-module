@@ -45,6 +45,7 @@ from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.section import TYPE_BODY, TYPE_CAPTION, TYPE_LABEL, build_section
 from gui.tile.analysis.state import IMAGE_AREAS, area_crs, toggle_selection, touch
+from gui.tile.analysis.widgets import replace_children
 from gui.widget.buttons import btn, set_label
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -330,14 +331,6 @@ def _span(text, class_=TYPE_LABEL):
     return v.Html(tag="span", class_=class_, children=[text])
 
 
-def _close_tree(widget) -> None:
-    """Close ``widget`` and every widget under it."""
-    for child in list(getattr(widget, "children", None) or ()):
-        if not isinstance(child, str):
-            _close_tree(child)
-    widget.close()
-
-
 def _big_group_ids(gdf) -> frozenset:
     """The ids of the groups of two rows or more: a group of one reads as a
     single row."""
@@ -462,11 +455,8 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
         # before the next search lists it there itself
         ordered = [r for r in rows if r.position in selection] + [r for r in rows if r.position not in selection]
         big, ids = _groups_of(result, gdf)
-        replaced = section.rows
         section.rows = [_row(r, r.position in selection, big, ids) for r in ordered]
-        rows_box.children = [row.root for row in section.rows]
-        for row in replaced:
-            _close_tree(row.root)  # each row is a dozen comm models: free the old ones
+        replace_children(rows_box, [row.root for row in section.rows])  # each row is a dozen comm models
         n_more = result.more if result is not None else 0
         more.children = [tn("analysis_tile.nearby.more", n_more)] if n_more else []
         more.style_ = "" if n_more else _HIDDEN

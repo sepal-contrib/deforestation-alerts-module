@@ -14,11 +14,7 @@ from gui.widget.buttons import label_of
 from tests._i18n_sweep import build_layout, english_leftovers, leftovers_of
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _switch(built, locale="fr"):

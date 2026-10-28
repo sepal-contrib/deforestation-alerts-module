@@ -23,11 +23,7 @@ from tests.test_set_store import _project_with_set, _session
 ANA = AlertFilter("evaluator", frozenset({"Ana"}))
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _six(set_id="x"):

@@ -22,11 +22,7 @@ FIRE = Question(key="fire", label="Fire scars", multiple=True,
                 options=[QuestionOption(code="a", label="A"), QuestionOption(code="b", label="B")])
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 @pytest.fixture
