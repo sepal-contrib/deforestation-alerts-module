@@ -1,4 +1,5 @@
-// basemapSwitcher: a basemap thumbnail at the bottom left of every view. One
+// basemapSwitcher: a basemap thumbnail, over a metric scale bar, at the bottom
+// left of every view. One
 // basemap shows at a time, the same in every view (mv.setBasemap).
 //
 // Collapsed, a view shows only the selected basemap's thumbnail; the row of
@@ -64,7 +65,9 @@ export const basemapSwitcher = {
 
     let removeControls = () => {};
     if (basemaps.length) {
-      removeControls = mv.addControl(options.views, () => {
+      // Added first: Leaflet stacks later bottom controls above, so the scale sits under the row.
+      const removeScale = mv.addControl(options.views, () => L.control.scale({position: "bottomleft", imperial: false}));
+      const removeRow = mv.addControl(options.views, () => {
         const control = L.control({position: "bottomleft"});
         control.onAdd = () => {
           const row = L.DomUtil.create("div", "mv-basemaps");
@@ -116,6 +119,10 @@ export const basemapSwitcher = {
         };
         return control;
       });
+      removeControls = () => {
+        removeRow();
+        removeScale();
+      };
       select(byId.has(options.selected) ? options.selected : basemaps[0].id);
       relabel();
     }

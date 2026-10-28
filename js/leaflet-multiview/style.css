@@ -78,8 +78,10 @@
 .mv-widget > .mv-widget-views { width: 100%; height: 100%; }
 
 /* --- basemapSwitcher (src/plugins/basemap-switcher) --- */
-/* Lifted above the attribution line, which a long credit stretches under it. */
-.leaflet-bottom .leaflet-control.mv-basemaps { display: flex; gap: 6px; margin-bottom: 22px; }
+/* The metric scale under the row is lifted above the attribution line, which a
+   long credit stretches under it; the row takes Leaflet's 5px scale margin-left. */
+.leaflet-bottom .leaflet-control.mv-basemaps { display: flex; gap: 6px; margin-bottom: 4px; margin-left: 5px; }
+.leaflet-bottom .leaflet-control-scale { margin-bottom: 22px; }
 .mv-root .mv-basemap {
   position: relative;
   width: 56px;
