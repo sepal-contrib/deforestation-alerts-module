@@ -47,6 +47,15 @@
   border-color: var(--mv-control-border);
 }
 .mv-dark .leaflet-control-layers-toggle { filter: invert(0.9); }
+/* Leaflet's own rule is `.leaflet-container .leaflet-control-attribution`,
+   loaded after this sheet on the page: out-rank it. */
+.mv-dark .leaflet-container .leaflet-control-attribution,
+.mv-dark .leaflet-control-scale-line {
+  background: rgba(30, 30, 30, 0.8);
+  color: var(--mv-control-fg);
+}
+.mv-dark .leaflet-control-scale-line { border-color: #aaa; }
+.mv-dark .leaflet-control-attribution a { color: #8ab4f8; }
 .mv-error {
   position: absolute;
   left: 0;
