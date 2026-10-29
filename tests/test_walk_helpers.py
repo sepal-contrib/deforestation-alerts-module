@@ -35,7 +35,7 @@ def test_the_labels_the_walks_pick_exist():
     assert phases.MODE_OFF == walklib.en("steps.prepare.mask_mode_off")
     # the mask, attribute and visualization-layer forms: a Source select above the picker
     assert phases.FIELD_SOURCE == walklib.en("steps.raster_input.field_source") == "Source"
-    assert phases.SOURCE == {"gee": "Earth Engine", "file": "GeoTIFF"}
+    assert phases.SOURCE == {"gee": "Earth Engine", "file": "GeoTIFF / VRT"}
     assert phases.MASK_BAND == "Band" and phases.MASK_ONE_BAND == "One band ("
     # the alert-source form: Alert format and the band selects, Date encoding, the one-band line
     assert (phases.ALERT_FORMAT, phases.ALERT_BAND, phases.DATE_BAND) == ("Alert format", "Alert band", "Date band")
