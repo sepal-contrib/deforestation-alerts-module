@@ -69,7 +69,7 @@ from deforestation_alerts.engine.fingerprint import (
 from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.engine.why import source_reason
 from deforestation_alerts.project import cleanup, paths
-from deforestation_alerts.project.models import sets_using_source
+from deforestation_alerts.project.models import period_sources, sets_using_source
 from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import size_text, t, tn
 from gui.scripts import aoi_io, source_layers
@@ -123,7 +123,7 @@ def mine_keys(running, stops, project: str, period_id: str) -> set:
 def mine_rows(p, period, mine) -> set:
     """The ``prepare_jobs.progress_key`` of every row (source or mask) whose
     in-flight key is in ``mine``: the rows this scope's jobs hold."""
-    sources = {progress_key(p.name, period.id, "source", s) for s in p.sources
+    sources = {progress_key(p.name, period.id, "source", s) for s in period_sources(p, period)
                if _inflight_key(p.name, period.id, s) in mine}
     masks = {progress_key(p.name, period.id, "mask", m) for m in p.masks if mask_inflight_key(p.name, m) in mine}
     return sources | masks

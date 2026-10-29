@@ -9,7 +9,7 @@ from deforestation_alerts.engine.fingerprint import harm_key, is_file_source
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import (
-    add_custom_source, add_predefined_source, remove_source, sets_using_source, update_custom_source,
+    PREDEFINED_DIGITS, add_custom_source, add_predefined_source, remove_source, sets_using_source, update_custom_source,
 )
 from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t, tn
@@ -68,14 +68,15 @@ def AlertsStep(app_state, map_, gee_interface, layers):
     rows_by_source = {r.source: r for r in plan_prepare(p, pdir, period)} if period is not None else {}
 
     def _add_predefined(key):
-        update_setup(app_state, p.name, lambda live: add_predefined_source(live, key), notifications)
+        update_setup(app_state, p.name, lambda live: add_predefined_source(live, key, period_id=live.active_period),
+                     notifications)
 
     # The two custom callbacks run in SourceModal's validation task (on the
     # loop, never from an effect); what they raise the modal shows inline, so
     # they raise translated text, never a key.
     def _add_custom(fields, cov):
         def _apply(live):
-            src = add_custom_source(live, **fields)
+            src = add_custom_source(live, **fields, period_id=live.active_period)
             live.coverage = {**live.coverage, src.name: cov}
 
         try:
@@ -189,7 +190,8 @@ def AlertsStep(app_state, map_, gee_interface, layers):
         layers.show(key, build, notifier=notifications, legend=source_layers.preview_legend(key, name, a, b))
 
     rows = []
-    for name, src in sorted(p.sources.items(), key=lambda kv: kv[1].digit):
+    # predefined in digit order, then the custom ones in catalogue order (Task 5 rebuilds this list)
+    for name, src in sorted(p.sources.items(), key=lambda kv: PREDEFINED_DIGITS.get(kv[0], len(PREDEFINED_DIGITS))):
         cov = record_for(p, name)
         reason = blocked_reason(p, name)
         if src.kind == "predefined":

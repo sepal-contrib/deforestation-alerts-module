@@ -23,6 +23,7 @@ from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.project import periods
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, Artifact, GridSpec, PeriodMask, Project, add_predefined_source,
+    set_period_source,
 )
 from gui.i18n import t, tn
 from gui.scripts import map_layers
@@ -73,6 +74,8 @@ def _project(pdir, name="per"):
     add_predefined_source(p, "GLAD-L")
     for a, b in (("2026-01-01", "2026-01-31"), ("2026-02-01", "2026-02-28")):
         assert periods.new_period(p, a, b) is None
+    for pid in (JAN_ID, FEB_ID):
+        set_period_source(p, pid, "GLAD-L", True)
     arts = {}
     for pid in (JAN_ID, FEB_ID):
         for key, kind, rel in ((fp.raw_key(pid, "GLAD-L"), "raw_alert", f"periods/{pid}/raw/raw.tif"),

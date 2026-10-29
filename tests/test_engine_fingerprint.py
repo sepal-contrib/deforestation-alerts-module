@@ -9,8 +9,10 @@ from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,
 )
 
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
-FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 
 @pytest.fixture

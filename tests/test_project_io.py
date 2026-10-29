@@ -124,6 +124,19 @@ def test_duplicate_keeps_setup_drops_results():
     assert q.periods == {} and q.alert_sets == {} and q.artifacts == {} and q.locked is False
 
 
+def test_per_period_sources_survive_save_load_and_duplicate(root):
+    from deforestation_alerts.project.models import set_new_period_source
+
+    p = _project()
+    add_predefined_source(p, "RADD")
+    p.periods["x"] = Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31), sources=["RADD"])
+    set_new_period_source(p, "GLAD-L", False)
+    io.save_project(p)
+    back = io.load_project("demo")
+    assert back.periods["x"].sources == ["RADD"] and back.new_period_sources == ["RADD"]
+    assert io.duplicate_project(p, "copy").new_period_sources == ["RADD"]
+
+
 def test_duplicate_keeps_the_questionnaire_and_group_review():
     from deforestation_alerts.project.models import GroupReview, Question
 

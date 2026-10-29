@@ -26,7 +26,7 @@ from deforestation_alerts.project.models import (
 from deforestation_alerts.scripts import gee_progress
 
 GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=30, height=20)
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31), sources=["GLAD-L"])
 RKEY, HKEY = fp.raw_key(JAN.id, "GLAD-L"), fp.harm_key(JAN.id, "GLAD-L")
 # evaluated catalogue.meta_request("GLAD-L"): UpdResult holds 2025 and 2026
 BANDS = ["conf25", "alertDate25", "conf26", "alertDate26"]

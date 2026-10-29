@@ -19,8 +19,10 @@ from deforestation_alerts.project.models import (
 
 from tests._integrate_helpers import GRID, blank, prepare, write  # noqa: E402
 
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
-DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025, 12, 31))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
+DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025, 12, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 # Spec §7.4 step 8 runs convert_to_geopandas on EPSG:4326, whose `point`
 # centroid geopandas flags for any geographic CRS (a pre-existing warning of

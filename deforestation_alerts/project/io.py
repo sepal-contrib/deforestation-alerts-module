@@ -191,6 +191,7 @@ def duplicate_project(p: Project, new_name: str) -> Project:
         updated_at=now,
         aoi=p.aoi.model_copy(deep=True) if p.aoi else None,
         sources={k: v.model_copy(deep=True) for k, v in p.sources.items()},
+        new_period_sources=list(p.new_period_sources),
         masks={k: v.model_copy(deep=True) for k, v in p.masks.items()},
         vis_layers={k: v.model_copy(deep=True) for k, v in p.vis_layers.items()},
         grid=p.grid.model_copy() if p.grid else None,

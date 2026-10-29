@@ -22,7 +22,8 @@ from deforestation_alerts.project.models import (
 )
 
 GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=30, height=20)
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])  # the custom sources join it as they are added
 _W, _S, _E, _N = Transformer.from_crs(GRID.epsg, "EPSG:4326", always_xy=True).transform_bounds(
     GRID.xmin, GRID.ymax - 200, GRID.xmin + 300, GRID.ymax)
 BOUNDS = (_W - 0.001, _S - 0.001, _E + 0.001, _N + 0.001)
@@ -53,7 +54,7 @@ def _file_source(p, tmp_path):
     return add_custom_source(p, name="tif", origin="file", ref=str(path), asset_type="FILE", format="radd",
                              date_encoding="yyddd", band_map=BandMap(alert=1, date=2),
                              native=NativeGrid(crs=GRID.epsg, scale=10.0, transform=tuple(t)[:6],
-                                               bounds=BOUNDS))
+                                               bounds=BOUNDS), period_id=p.active_period)
 
 
 def _job(p, tmp_path, source, meta=None, force=False):
@@ -162,7 +163,7 @@ def test_a_custom_earth_engine_source_downloads_at_its_native_grid(tmp_path, cov
     p = _project(tmp_path)
     add_custom_source(p, name="ee radd", origin="gee", ref="users/x/radd", asset_type="IMAGE", format="radd",
                       date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"),
-                      native=NativeGrid(crs="EPSG:4326", scale=10.0))
+                      native=NativeGrid(crs="EPSG:4326", scale=10.0), period_id=p.active_period)
     cover(p, "ee radd")
     calls = []
 
@@ -253,7 +254,8 @@ def test_a_source_not_covered_with_current_files_does_not_unlock_integrate(tmp_p
 
 def _ee_source(p, native=NativeGrid(crs="EPSG:4326", scale=10.0)):
     return add_custom_source(p, name="ee radd", origin="gee", ref="users/x/radd", asset_type="IMAGE", format="radd",
-                             date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"), native=native)
+                             date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"), native=native,
+                             period_id=p.active_period)
 
 
 @pytest.mark.parametrize("record, state", [

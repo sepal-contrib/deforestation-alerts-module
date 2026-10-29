@@ -9,7 +9,8 @@ from deforestation_alerts.project.models import (
 from gui.store.workflow_steps import RAIL_ITEMS, STEPS, StepStatus, step_states
 
 MESSAGES = Path(__file__).resolve().parents[1] / "deforestation_alerts" / "message" / "en"
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 
 def _p():

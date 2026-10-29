@@ -45,7 +45,8 @@ from gui.store.project_writers import is_writing, writing
 from gui.store.state_manager import AppState
 from gui.tile import prepare_step
 
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 PARAGUAY = (-55.5, -24.5, -55.0, -24.0)  # UTM 21S
 BRAZIL = (-50.5, -10.5, -50.0, -10.0)  # UTM 22S
 
@@ -408,7 +409,8 @@ def test_a_harmonize_failing_after_a_download_still_records_the_download(monkeyp
         assert s.project.value.artifacts == kept
 
 
-FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 
 def _switch_period(live):
@@ -1366,7 +1368,8 @@ def test_a_refusal_toast_names_its_source_once(monkeypatch):
 # ---------------------------------------------------------------------------
 # Mask rows in the step's jobs (Task 25)
 # ---------------------------------------------------------------------------
-FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 
 def _with_mask(*, origin="gee", tmp_path=None, sidecar=True, periods=(JAN,)):

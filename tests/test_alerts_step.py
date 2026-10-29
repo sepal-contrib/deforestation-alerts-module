@@ -777,6 +777,9 @@ def test_add_custom_saves_the_source_with_its_coverage_and_raises_translated_err
     monkeypatch.setattr(mod, "SourceModal", lambda **kw: modal.update(kw))
     monkeypatch.setattr(mod, "ConfirmDialog", lambda **kw: None)
     p = _project_with_source("RADD")
+    # the cap of 6 custom sources is per period: a new source joins the active one
+    p.periods = {"x": Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31), sources=["RADD"])}
+    p.active_period = "x"
     state = _app_state(p)
     fields = dict(name="mine", origin="gee", ref="users/x/a", asset_type="IMAGE", format="radd",
                   date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"),

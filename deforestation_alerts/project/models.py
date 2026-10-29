@@ -189,6 +189,8 @@ class Period(BaseModel):
     end: date
     look_back_days: int = 0
     masks: dict[str, PeriodMask] = {}  # a project mask absent here is off in this period
+    sources: list[str] = []  # the catalogue keys used in this period; read through period_sources
+    digits: dict[str, int] = {}  # each custom source's digit in this period (predefined: PREDEFINED_DIGITS)
 
     def search_window(self) -> tuple[date, date]:
         return self.start - timedelta(days=int(self.look_back_days)), self.end
@@ -425,6 +427,9 @@ class Project(BaseModel):
     updated_at: datetime
     aoi: Optional[AoiRecord] = None
     sources: dict[str, AlertSource] = {}
+    #: the catalogue keys a new period starts with ("Add to new periods");
+    #: not a source field, since fingerprint._source_def hashes the whole source
+    new_period_sources: list[str] = []
     masks: dict[str, MaskLayer] = {}
     vis_layers: dict[str, VisLayer] = {}
     grid: Optional[GridSpec] = None
@@ -454,7 +459,9 @@ class Project(BaseModel):
         project's value, so its window (and every fingerprint) is unchanged.
         A project stored before the evaluator switch is multi-evaluator when
         any of its sets was split, so its Evaluators step keeps its panel;
-        without a split it has no review mode yet."""
+        without a split it has no review mode yet. A project stored before
+        sources were per period uses every source in every period (and in
+        new periods), each custom one with the digit it was stored with."""
         if isinstance(data, dict):
             if "multi_evaluator" not in data:
                 sets = data.get("alert_sets") or {}
@@ -467,6 +474,26 @@ class Project(BaseModel):
                 data = {**data, "periods": {k: ({**v, "look_back_days": days}
                                                 if isinstance(v, dict) and "look_back_days" not in v else v)
                                             for k, v in periods_.items()}}
+            # Sources became per period: a period stored before uses every
+            # source, with the project-wide custom digits it was built with.
+            srcs = data.get("sources") or {}
+
+            def field(v, name):
+                return v.get(name) if isinstance(v, dict) else getattr(v, name, None)
+
+            ordered = sorted(srcs, key=lambda k: (field(srcs[k], "digit"), k))
+            custom = {k: field(v, "digit") for k, v in srcs.items() if field(v, "kind") == "custom"}
+
+            def with_sources(v):
+                if not isinstance(v, dict):
+                    return v
+                v = {"sources": ordered, **v}
+                return {"digits": {n: custom[n] for n in v["sources"] if n in custom}, **v}
+
+            if data.get("periods"):
+                data = {**data, "periods": {k: with_sources(v) for k, v in data["periods"].items()}}
+            if "new_period_sources" not in data:
+                data = {**data, "new_period_sources": ordered}
             # Planet NICFI was an optional layer kind; it is now the
             # timeline's Planet collection, shown when the Earth Engine
             # account has access, so a saved NICFI layer is dropped.
@@ -495,7 +522,56 @@ def set_id(period_id: str, sources: list[str]) -> str:
     return f"{period_id}__{sources_slug(sources)}"
 
 
-def add_predefined_source(p: Project, key: str) -> PredefinedSource:
+def period_digit(p: Project, period: Period, name: str) -> int:
+    """The digit ``name`` carries in ``period``'s combined raster: fixed for a
+    predefined source, the period's own for a custom one."""
+    src = p.sources[name]
+    return PREDEFINED_DIGITS[src.catalogue_key] if src.kind == "predefined" else period.digits[name]
+
+
+def period_sources(p: Project, period: Period) -> list[str]:
+    """The catalogue keys used in ``period`` that still exist, in digit order."""
+    return sorted((s for s in period.sources if s in p.sources), key=lambda s: period_digit(p, period, s))
+
+
+def _free_custom_digit(period: Period) -> int:
+    """The lowest custom digit free in ``period``; the cap of 6 custom sources is per period."""
+    used = {d for n, d in period.digits.items() if n in period.sources}
+    for d in CUSTOM_DIGITS:
+        if d not in used:
+            return d
+    raise ProjectRuleError(key="steps.alerts.cap_reached")  # this period already has 6 custom sources
+
+
+def set_period_source(p: Project, period_id: str, name: str, on: bool) -> None:
+    """Use ``name`` in ``period_id`` or not: replaces the Period and ``p.periods``
+    (published snapshots share them). On, a custom source takes the period's
+    lowest free digit; refused (``steps.alerts.cap_reached``) past 6 custom or
+    3 predefined sources in the period. Off drops its digit."""
+    period = p.periods[period_id]
+    if on and name in period.sources:
+        return
+    if not on:
+        update = {"sources": [s for s in period.sources if s != name],
+                  "digits": {k: d for k, d in period.digits.items() if k != name}}
+    elif p.sources[name].kind == "custom":
+        update = {"sources": [*period.sources, name], "digits": {**period.digits, name: _free_custom_digit(period)}}
+    else:
+        if sum(p.sources[s].kind == "predefined" for s in period.sources if s in p.sources) >= len(PREDEFINED_DIGITS):
+            raise ProjectRuleError(key="steps.alerts.cap_reached")
+        update = {"sources": [*period.sources, name]}
+    p.periods = {**p.periods, period_id: period.model_copy(update=update)}
+
+
+def set_new_period_source(p: Project, name: str, on: bool) -> None:
+    """Start new periods with ``name`` or not; existing periods are unchanged."""
+    rest = [s for s in p.new_period_sources if s != name]
+    p.new_period_sources = [*rest, name] if on else rest
+
+
+def add_predefined_source(p: Project, key: str, period_id: Optional[str] = None) -> PredefinedSource:
+    """Add ``key`` to the catalogue and to new periods, and use it in
+    ``period_id`` when given."""
     if key not in PREDEFINED_DIGITS:
         raise ValueError(f"unknown predefined source {key!r}")
     if key in p.sources:
@@ -504,36 +580,34 @@ def add_predefined_source(p: Project, key: str) -> PredefinedSource:
     # Replaced, not mutated: the app publishes shallow copies of the project
     # that share this dict with a render on another thread.
     p.sources = {**p.sources, key: src}
+    set_new_period_source(p, key, True)
+    if period_id is not None:
+        set_period_source(p, period_id, key, True)
     return src
 
 
-def next_custom_digit(p: Project) -> int:
-    used = {s.digit for s in p.sources.values()}
-    for d in CUSTOM_DIGITS:
-        if d not in used:
-            return d
-    raise ProjectRuleError("all 6 custom source slots are in use", key="steps.alerts.cap_reached")
-
-
 def add_custom_source(p: Project, *, name: str, origin: str, ref: str, asset_type: str, format: str,
-                      date_encoding: str, band_map: BandMap, native: Optional[NativeGrid]) -> CustomSource:
-    """Validate the name (spec §5.1), take the lowest free custom digit and add
-    the source. Raises ``ProjectRuleError`` (a ``ValueError``) whose text is a
-    message key: ``steps.alerts.*`` from ``validate_source_name``, or
-    ``steps.alerts.cap_reached`` once all 6 custom slots are in use (controller
-    ruling, Task 7; ``gui.scripts.error_text`` renders it)."""
+                      date_encoding: str, band_map: BandMap, native: Optional[NativeGrid],
+                      period_id: Optional[str] = None) -> CustomSource:
+    """Validate the name (spec §5.1) and add the definition to the catalogue
+    (no limit) and to new periods, and use it in ``period_id`` when given.
+    Raises ``ProjectRuleError`` (a ``ValueError``) whose text is a message key:
+    ``steps.alerts.*`` from ``validate_source_name``, or
+    ``steps.alerts.cap_reached`` when ``period_id`` already has 6 custom
+    sources -- before anything is added (``gui.scripts.error_text`` renders it)."""
     from deforestation_alerts.project.names import validate_source_name
 
     error = validate_source_name(name, p)
     if error:
         raise ProjectRuleError(key=error)
-    try:
-        digit = next_custom_digit(p)
-    except ProjectRuleError:
-        raise ProjectRuleError(key="steps.alerts.cap_reached") from None
+    # Only the legacy migration reads CustomSource.digit; per-period readers use period_digit.
+    digit = _free_custom_digit(p.periods[period_id]) if period_id is not None else CUSTOM_DIGITS[0]
     src = CustomSource(name=name.strip(), origin=origin, ref=ref, asset_type=asset_type, format=format,
                        date_encoding=date_encoding, band_map=band_map, native=native, digit=digit)
     p.sources = {**p.sources, src.name: src}  # replaced, not mutated (published snapshots share it)
+    set_new_period_source(p, src.name, True)
+    if period_id is not None:
+        set_period_source(p, period_id, src.name, True)
     return src
 
 
@@ -557,10 +631,14 @@ def update_custom_source(p: Project, name: str, **changes) -> CustomSource:
 
 
 def remove_source(p: Project, name: str) -> None:
-    """Drop the definition and, for a custom source, its coverage record. The
-    artifacts and their files go through ``project.cleanup`` (spec §5.2)."""
+    """Drop the definition, its use in every period and in new periods and,
+    for a custom source, its coverage record. The artifacts and their files
+    go through ``project.cleanup`` (spec §5.2)."""
     src = p.sources.get(name)
     p.sources = {k: s for k, s in p.sources.items() if k != name}
+    for pid in [k for k, per in p.periods.items() if name in per.sources or name in per.digits]:
+        set_period_source(p, pid, name, False)
+    set_new_period_source(p, name, False)
     if src is not None and src.kind == "custom" and name in p.coverage:
         p.coverage = {k: c for k, c in p.coverage.items() if k != name}
 
