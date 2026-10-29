@@ -653,6 +653,11 @@ def _AppShell():
         # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
         # !important since an inline style beats any stylesheet rule.
         ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
+        # The workflow panel's step strip and title stay put while a step
+        # scrolls under them; same background pair as the footer above.
+        ".defo-workflow-header { position: sticky; top: 0; z-index: 3;"
+        " background-color: var(--v-background-base, #ffffff); }\n"
+        ".theme--dark .defo-workflow-header { background-color: #1a1a1a; }\n"
         # A file tile (gui/tile/analysis/file_tile.py) is a v-btn, whose
         # content is Vuetify's `flex: 1 0 auto` and never shrinks: a long
         # detail line (an out-of-date CSV) pushed the download icon out of
@@ -830,10 +835,12 @@ def _AppShell():
     # widget slot, not a reacton child) and memoized so it is stable across
     # Page re-renders. It re-renders on its own when the AppState reactives it
     # reads change.
-    header_widget = solara.use_memo(
-        lambda: render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0],
-        dependencies=[],
-    )
+    def _header():
+        widget = render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0]
+        widget.class_ = "defo-workflow-header"  # sticky: on panel_host's own child, the tall step's sibling
+        return widget
+
+    header_widget = solara.use_memo(_header, dependencies=[])
     panel_host = solara.use_memo(
         lambda: v.Container(
             fluid=True,

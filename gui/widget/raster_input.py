@@ -16,7 +16,7 @@ from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.widget.text_style import MUTED
 
-EXTENSIONS = [".tif", ".tiff"]
+EXTENSIONS = [".tif", ".tiff", ".vrt"]  # GDAL reads a VRT like the GeoTIFFs it points to
 
 
 def band_index(band) -> Optional[int]:

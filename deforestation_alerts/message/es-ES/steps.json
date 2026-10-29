@@ -282,13 +282,13 @@
       "field_show_in_analysis": "Mostrar en Análisis"
     },
     "raster_input": {
-      "file": "GeoTIFF",
+      "file": "GeoTIFF / VRT",
       "bands_loading": "Leyendo las bandas…",
       "bands_failed": "No se pudieron leer las bandas: {error}",
       "field_source": "Fuente",
-      "source_hint": "Una imagen de Earth Engine, o un GeoTIFF en tu carpeta de SEPAL.",
+      "source_hint": "Una imagen de Earth Engine, o un GeoTIFF o VRT en tu carpeta de SEPAL.",
       "source_gee": "Earth Engine",
-      "source_file": "GeoTIFF"
+      "source_file": "GeoTIFF / VRT"
     },
     "period": {
       "description": "Cada período descarga todas las fuentes en sus fechas más los días de retrospección anteriores. Los píxeles ya reportados por los conjuntos de períodos anteriores se omiten, así que una alerta publicada tarde cae en el conjunto del siguiente período y ningún píxel se reporta dos veces.",

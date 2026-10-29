@@ -282,13 +282,13 @@
       "field_show_in_analysis": "Afficher dans Analyse"
     },
     "raster_input": {
-      "file": "GeoTIFF",
+      "file": "GeoTIFF / VRT",
       "bands_loading": "Lecture des bandes…",
       "bands_failed": "Impossible de lire les bandes : {error}",
       "field_source": "Source",
-      "source_hint": "Une image Earth Engine, ou un GeoTIFF dans votre dossier SEPAL.",
+      "source_hint": "Une image Earth Engine, ou un GeoTIFF ou VRT dans votre dossier SEPAL.",
       "source_gee": "Earth Engine",
-      "source_file": "GeoTIFF"
+      "source_file": "GeoTIFF / VRT"
     },
     "period": {
       "description": "Chaque période télécharge toutes les sources sur ses dates plus les jours de rétrospection qui les précèdent. Les pixels déjà signalés par les jeux des périodes antérieures sont ignorés, donc une alerte publiée tardivement atterrit dans le jeu de la période suivante et aucun pixel n'est signalé deux fois.",

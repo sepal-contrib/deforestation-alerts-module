@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 OUTLINE_COLOR = "bf8f2d"
 OUTLINE_PX = 2
 FRAME_PX = 512
-FRAME_MS = 1000
+FRAME_MS = 2500  # 1 s read as a flicker: users could not tell before from after
 _LABEL_PX = 16
 _PAD = 6
 _MARGIN = 8
@@ -58,7 +58,7 @@ def _labelled(png: bytes, label: str, size) -> Image.Image:
 
 
 def assemble_gif(pngs: list, labels: list, dest) -> Path:
-    """Write the labelled frames to ``dest`` as a looping GIF, a second each.
+    """Write the labelled frames to ``dest`` as a looping GIF, FRAME_MS each.
 
     The format is forced: ``dest`` is usually ``local_files.write_into``'s
     ``.part`` name, which Pillow could not infer a format from."""
