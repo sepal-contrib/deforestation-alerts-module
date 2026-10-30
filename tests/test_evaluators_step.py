@@ -1178,6 +1178,22 @@ def test_the_split_form_starts_afresh_in_another_project(data_root):
         rc.close()
 
 
+def test_opening_a_project_without_a_set_keeps_the_step_alive(data_root):
+    """The mode and evaluators children render on their own before the step
+    drops them: a set-less project must not crash them (seen in a walk)."""
+    s = _state(_project(), _gdf(evaluators=("",) * 4))
+    _box, rc = _render(s)
+    try:
+        bare = _project("d")
+        bare.alert_sets, bare.active_set = {}, None
+        s.load_project_state(bare)
+        assert t("evaluators.review_mode_label") not in _strings(rc.container)
+        s.load_project_state(_project("e"))
+        assert t("evaluators.review_mode_label") in _strings(rc.container)
+    finally:
+        rc.close()
+
+
 def test_the_split_modal_keeps_what_was_typed_when_reopened(data_root):
     _box, rc = _render(_state(_project(), _gdf(evaluators=("",) * 4)))
     try:

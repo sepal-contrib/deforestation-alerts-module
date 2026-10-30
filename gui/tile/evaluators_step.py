@@ -472,7 +472,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     # under it. So a second click (or Enter on Merge) is dropped here, before
     # it can start a second split, merge or build over the first.
     inflight = solara.use_ref(False)
-    split = s.split
+    split = s.split if s is not None else None  # the panel outlives a switch to a set-less project
 
     def _reset():
         # Another project opened: its step starts from a fresh form, without
@@ -628,7 +628,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     # The set folder is read again only when what decides a zip's fate
     # changes: the project, the set, the split, the questionnaire or a run.
     found = solara.use_memo(lambda: found_links(package_files.package_zips(p, s)),
-                            [p.name, s.id, split.split_id if split is not None else None, digest, scans])
+                            [p.name, s.id if s is not None else None, split.split_id if split is not None else None, digest, scans])
     newest = max((f["built_at"] for f in found.values()), default=None)
     building_name = building_here(building, p, split) if generate_task.pending else None
     # Before its first build the run fetches the AOI: the button spins.
@@ -805,7 +805,8 @@ def _ReviewMode(app_state):
     A split holds it on Multiple: switching to solo would leave alerts
     assigned to evaluators the step no longer shows."""
     p = app_state.project.value
-    split = active_set(p).split
+    s = active_set(p)  # None for one render when a set-less project opens (the child renders before the step)
+    split = s.split if s is not None else None
     mode = p.multi_evaluator
 
     def _set(multi, checked):
