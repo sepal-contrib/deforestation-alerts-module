@@ -24,7 +24,9 @@ from datetime import date, timedelta
 from typing import Optional
 
 from deforestation_alerts.project.cleanup import drop_artifacts, period_artifact_keys, set_artifact_keys
-from deforestation_alerts.project.models import AlertSet, Period, Project, latest_period_masks, period_id
+from deforestation_alerts.project.models import (
+    AlertSet, Period, Project, ProjectRuleError, latest_period_masks, period_id, set_period_source,
+)
 
 #: error keys, translated as ``steps.period.error_<key>``
 ERRORS = ("bad_date", "order", "exists", "locked", "not_latest", "bad_look_back")
@@ -101,6 +103,12 @@ def new_period(p: Project, start, end, look_back=None) -> Optional[str]:
         return "exists"
     p.periods = {**p.periods, pid: Period(id=pid, start=a, end=b, look_back_days=days,
                                                  masks=latest_period_masks(p))}
+    for name in p.new_period_sources:
+        if name in p.sources:
+            try:
+                set_period_source(p, pid, name, True)
+            except ProjectRuleError:
+                pass  # past the per-period cap: the period starts without it
     p.look_back_days = days
     p.active_period = pid
     return None

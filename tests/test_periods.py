@@ -8,8 +8,8 @@ import pytest
 from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.project import cleanup, periods
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, AoiRecord, Artifact, MaskLayer, NativeGrid, PeriodMask, Project, add_mask,
-    add_predefined_source, set_period_mask,
+    AlertSet, AlertSetParams, AoiRecord, Artifact, BandMap, MaskLayer, NativeGrid, PeriodMask, Project, add_custom_source,
+    add_mask, add_predefined_source, set_period_mask,
 )
 
 DEC_ID, JAN_ID, FEB_ID = "2025-12-01_2025-12-31", "2026-01-01_2026-01-31", "2026-02-01_2026-02-28"
@@ -80,6 +80,36 @@ def test_a_new_period_is_checked_and_becomes_active():
     assert periods.new_period(p, "2026-01-01", "2026-01-31") is None
     assert p.periods is not before and p.active_period == JAN_ID
     assert periods.new_period(p, "2026-01-01", "2026-01-31") == "exists"
+
+
+def _custom(p, name):
+    add_custom_source(p, name=name, origin="gee", ref="x/" + name, asset_type="IMAGE", format="date_only",
+                      date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"), native=None)
+
+
+def test_new_period_takes_the_new_period_sources():
+    p = _p()
+    _custom(p, "mine")
+    _periods(p, ("2026-01-01", "2026-01-31"))
+    period = p.periods[JAN_ID]
+    assert period.sources == ["GLAD-L", "mine"] and period.digits == {"mine": p.sources["mine"].digit}
+
+
+def test_new_period_skips_a_source_that_left_the_catalogue_or_is_off_the_list():
+    p = _p()
+    p.new_period_sources = ["gone", "GLAD-L"]
+    add_predefined_source(p, "RADD")
+    p.new_period_sources = ["gone", "GLAD-L"]
+    _periods(p, ("2026-01-01", "2026-01-31"))
+    assert p.periods[JAN_ID].sources == ["GLAD-L"]
+
+
+def test_new_period_skips_a_source_past_the_cap():
+    p = _p()
+    for i in range(7):
+        _custom(p, f"c{i}")
+    _periods(p, ("2026-01-01", "2026-01-31"))
+    assert p.periods[JAN_ID].sources == ["GLAD-L", *[f"c{i}" for i in range(6)]]
 
 
 def test_a_new_period_copies_the_choices_of_the_period_with_the_latest_start():

@@ -339,6 +339,16 @@ def test_closing_the_open_project_unmounts_the_list_without_reading_it(env):
         rc.close()
 
 
+def test_period_step_opens_without_sources(env):
+    p = Project(name="e", created_at=datetime.now(), updated_at=datetime.now())
+    p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="d", bounds=(0, 0, 1, 1))
+    layers, rc = _render(_state(p))
+    try:
+        assert p.sources == {} and rc.find(v.Btn).widgets
+    finally:
+        rc.close()
+
+
 def test_without_sources_the_step_is_locked(env):
     state = _state(Project(name="e", created_at=datetime.now(), updated_at=datetime.now()))
     layers, rc = _render(state)
