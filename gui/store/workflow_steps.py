@@ -125,7 +125,7 @@ STEPS: List[StepSpec] = [
              count=lambda p: len(period_sources(p, active_period(p))) if active_period(p) is not None else 0,
              count_key="workflow.count_sources"),
     StepSpec(key="harmonize", page_view="harmonize_tile", label_key="app.drawer_item.harmonize", icon="mdi-grid",
-             text_key="steps.prepare",  # the tile keeps its messages under the old name
+             text_key="steps.harmonize",
              unlocked=_downloaded, lock_reason_key="workflow.lock_harmonize",
              count=lambda p: len(_ready(p)),
              count_key="workflow.count_ready"),
