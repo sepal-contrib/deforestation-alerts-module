@@ -23,40 +23,40 @@ Le flux de travail en un coup d'œil
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
     :alt: Les étapes du flux de travail, de la zone d'intérêt à l'analyse
 
-Les étapes du panneau **Flux de travail** sont numérotées. Les autres outils s'ouvrent depuis la barre latérale gauche (voir `La fenêtre de l'application <defo-window_>`_).
+Le panneau **Flux de travail** range les étapes sur deux niveaux : **Préparer les alertes** construit un jeu d'alertes, et **Préparer la revue** prépare son examen. Les autres outils s'ouvrent depuis la barre latérale gauche (voir `La fenêtre de l'application <defo-window_>`_).
 
 .. list-table::
     :header-rows: 1
-    :widths: 10 30 60
+    :widths: 20 30 50
 
-    *   -   Étape
+    *   -   Niveau
         -   Sous-section
         -   À quoi elle sert
     *   -   –
         -   `Projet <defo-project_>`_
         -   Créer, ouvrir, importer ou supprimer un projet, le dossier qui contient tout votre travail.
-    *   -   1
+    *   -   **Préparer les alertes**
         -   `Zone d'intérêt <defo-aoi_>`_
         -   Choisir la zone à surveiller.
-    *   -   2
-        -   `Sources d'alertes <defo-alerts_>`_
-        -   Choisir les jeux de données d'alertes à télécharger.
-    *   -   3
-        -   `Couches facultatives <defo-layers_>`_
-        -   Ajouter des couches de référence pour juger les alertes.
-    *   -   4
+    *   -
         -   `Période de suivi <defo-period_>`_
         -   Fixer les dates d'un cycle de suivi.
-    *   -   5
-        -   `Télécharger et harmoniser <defo-prepare_>`_
-        -   Télécharger les sources de la période sur une même grille.
-    *   -   6
+    *   -
+        -   `Sources d'alertes <defo-alerts_>`_
+        -   Choisir les jeux de données d'alertes de la période et les télécharger.
+    *   -
+        -   `Harmoniser <defo-harmonize_>`_
+        -   Aligner les téléchargements sur une même grille et appliquer les masques.
+    *   -
         -   `Intégrer et vectoriser <defo-integrate_>`_
         -   Combiner les sources en un jeu d'alertes, avec un polygone par alerte.
-    *   -   7
-        -   `Questionnaire <defo-questionnaire_>`_
+    *   -   **Préparer la revue**
+        -   `Couches supplémentaires <defo-layers_>`_ (facultatif)
+        -   Ajouter des couches de référence pour juger les alertes.
+    *   -
+        -   `Questionnaire <defo-questionnaire_>`_ (facultatif)
         -   Rédiger les questions posées pour chaque alerte et choisir le modèle de rapport.
-    *   -   8
+    *   -
         -   `Évaluation <defo-evaluation_>`_
         -   Examiner seul, ou répartir les alertes entre des évaluateurs.
     *   -   –
@@ -68,6 +68,8 @@ Les étapes du panneau **Flux de travail** sont numérotées. Les autres outils 
     *   -   –
         -   `Export <defo-export_>`_
         -   Exporter les fichiers d'une alerte, ou les alertes de tout un jeu.
+
+**Préparer la revue** reste verrouillé tant que le projet n'a pas de jeu d'alertes : construisez-en d'abord un dans **Préparer les alertes**.
 
 Pour un exemple complet, du début à la fin, consultez `Cas d'usage : examen des alertes à Madre de Dios, au Pérou <defo-use-case_>`_.
 
@@ -95,7 +97,13 @@ L'application s'exécute dans votre session SEPAL et conserve vos projets dans v
 La fenêtre de l'application
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-La carte occupe toute la fenêtre. Le panneau **Flux de travail**, à droite, contient les étapes numérotées. Une étroite barre d'icônes court le long du côté gauche.
+La carte occupe toute la fenêtre. Le panneau **Flux de travail**, à droite, contient les étapes. Une étroite barre d'icônes court le long du côté gauche.
+
+L'en-tête du panneau **Flux de travail** reste visible pendant que l'étape en dessous défile :
+
+-   Une bande montre les deux niveaux côte à côte, **Préparer les alertes** et **Préparer la revue**, chacun avec son nom au-dessus d'une barre par étape. Une barre pleine a des résultats (une AOI, des périodes, des sources…), une barre grise est encore vide et une barre hachurée est verrouillée : survolez-la pour lire pourquoi (p. ex. « Construisez d'abord un ensemble d'alertes. »). Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une barre en pointillés. Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une barre pour ouvrir son étape.
+-   Sous la bande, la position de l'étape dans son niveau (p. ex. « 3 / 5 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide indique « facultatif ». Sélectionnez le nom pour passer à une autre étape depuis une liste, ou utilisez les flèches de chaque côté pour aller à l'étape précédente ou suivante.
+-   Sous le nom, une ligne dit quoi faire dans l'étape (p. ex. « Définissez la période de surveillance. »). Le bouton d'information à droite de cette ligne ouvre l'aide de l'étape.
 
 Pour utiliser la barre latérale gauche :
 
@@ -280,7 +288,7 @@ Chaque projet est un dossier nommé d'après le projet, sous ``module_results/de
     *   -   ``aoi.geojson``
         -   L'AOI, lorsqu'il s'agit d'une forme dessinée, d'un fichier vectoriel ou d'un fichier de points. Une zone administrative ou un asset GEE est lu directement dans GEE.
     *   -   ``masks/``
-        -   Les masques de `Télécharger et harmoniser <defo-prepare_>`_, alignés sur la grille du projet.
+        -   Les masques de `Harmoniser <defo-harmonize_>`_, alignés sur la grille du projet.
     *   -   ``imagery/``
         -   L'index des scènes satellite utilisées sur l'écran Analyse.
     *   -   ``periods/<start>_<end>/``
@@ -351,7 +359,7 @@ La zone est dessinée sur la carte et enregistrée aussitôt avec le projet.
         -   Une table GEE (feature collection) ou une image que vous pouvez lire, choisie dans **Selectionner un Asset** ou collée sous forme d'identifiant complet.
         -   Pour une table, ne gardez que les entités dont la **Column** a une **Value** donnée.
 
-Une fois la sélection faite, l'application confirme : « AOI enregistrée : (nom) ». Le panneau **Flux de travail** affiche le nom de l'AOI sous l'étape, et les étapes `Alertes <defo-alerts_>`_ et `Couches facultatives <defo-layers_>`_ se déverrouillent.
+Une fois la sélection faite, l'application confirme : « AOI enregistrée : (nom) ». Le panneau **Flux de travail** affiche le nom de l'AOI dans l'en-tête, et l'étape `Période <defo-period_>`_ se déverrouille.
 
 .. tip::
 
@@ -379,6 +387,167 @@ Dans une copie de révision (voir `Importer un paquet de révision <defo-project
 
     L'AOI ne peut pas changer tant qu'une tâche écrit dans le projet (un téléchargement ou une exécution d'**Intégrer et vectoriser**). L'application affiche : « Une tâche écrit dans ce projet ; modifiez l'AOI une fois celle-ci terminée. » Attendez la fin de la tâche, puis sélectionnez à nouveau la zone.
 
+.. _defo-period:
+
+Période de suivi
+----------------
+
+Une *période* est un cycle de suivi, en général d'un mois. Pour chaque période, l'application télécharge les sources d'alertes de la période sur ses dates plus une *rétrospection* qui les précède, et construit les jeux d'alertes de cette période. Un projet contient généralement une série de périodes consécutives.
+
+Ouvrez l'étape **Période** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `AOI <defo-aoi_>`_.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/period-list.png
+    :alt: L'étape Période avec une période
+
+.. _defo-period-tracking:
+
+Une perte sur plusieurs périodes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Chaque période est traitée à part, mais la perte de forêt ne s'en tient pas aux dates de la période. Une partie de la perte pourrait échapper au suivi entre deux périodes :
+
+-   un défrichement qui commence trop petit pour être une alerte ;
+-   des alertes que les fournisseurs publient en retard, après le traitement de leur période ; ou
+-   un défrichement qui continue de s'étendre au bord d'une alerte signalée dans une période antérieure.
+
+L'application suit cette perte d'une période à l'autre, et ne signale jamais deux fois la même perte :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 35 65
+
+    *   -   Cas
+        -   Ce que fait l'application
+    *   -   Une perte déjà signalée par une période antérieure
+        -   Ses pixels (l'*empreinte* du jeu d'alertes antérieur) sont retirés de l'exécution de la nouvelle période : elle n'est donc pas signalée de nouveau.
+    *   -   Un groupe trop petit pour être une alerte, ou une alerte publiée en retard
+        -   La `rétrospection <defo-period-lookback_>`_ remonte dans la période antérieure : les pixels mis de côté reviennent et peuvent rejoindre de nouveaux pixels pour former une alerte.
+    *   -   Un défrichement qui s'étend à côté d'une alerte examinée
+        -   La nouvelle alerte est `liée à l'alerte antérieure <defo-period-growth_>`_ comme *alerte d'extension*, et conservée même sous la taille minimale.
+
+.. _defo-period-lookback:
+
+La fenêtre de recherche et la rétrospection
+"""""""""""""""""""""""""""""""""""""""""""
+
+Un défrichement commence souvent petit et s'étend au fil des semaines suivantes. Dans la période où il commence, son groupe de pixels d'alerte est encore plus petit que la **Taille minimale de groupe** d'`Intégrer et vectoriser <defo-integrate_>`_ : il ne devient donc pas une alerte, et ses pixels sont mis de côté comme *non analysables*.
+
+La rétrospection garde ces pixels en jeu :
+
+-   Chaque période cherche dans une *fenêtre de recherche* plus large : ses propres dates plus les jours de rétrospection qui précèdent son début.
+-   Les pixels mis de côté par la période antérieure reviennent dans l'exécution et rejoignent les nouveaux pixels qui les touchent.
+-   Si le groupe qu'ils forment ensemble atteint la taille minimale, il devient une alerte. Sa date de première détection est celle de son pixel le plus ancien, dans la période antérieure.
+
+Pour ne pas signaler deux fois la même perte, tout pixel déjà signalé par un jeu d'alertes d'une période *antérieure* est retiré avant la construction des alertes de la nouvelle période : seul ce qui a été mis de côté revient. La rétrospection rattrape aussi les alertes que les fournisseurs ont publiées en retard, après le traitement de la période antérieure.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/lookback.gif
+    :alt: La rétrospection : un groupe trop petit dans une période rejoint les pixels de la période suivante et devient une alerte, et une alerte signalée n'est jamais signalée de nouveau
+
+.. note::
+
+    La première période n'a pas de jeu antérieur auquel se comparer : toutes les alertes de sa fenêtre de recherche sont donc conservées. Sa ligne indique **Aucun ensemble antérieur : toutes les alertes de la fenêtre de recherche sont conservées**. Avec une rétrospection, cela inclut des alertes datées d'avant le début de la période.
+
+    La première période d'un nouveau projet démarre sans rétrospection : elle ne cherche donc que dans ses propres dates, sauf si une rétrospection est définie. Un projet créé avec **Dupliquer** conserve la rétrospection du projet dont il est la copie.
+
+.. _defo-period-growth:
+
+Extension à côté d'alertes antérieures
+""""""""""""""""""""""""""""""""""""""
+
+Les pixels d'une alerte signalée font partie de l'empreinte : la rétrospection ne les fait donc pas revenir. Mais un défrichement continue souvent de s'étendre au bord d'une alerte signalée dans une période antérieure. Les nouveaux pixels forment alors leur propre groupe, souvent plus petit que la **Taille minimale de groupe**, qui serait mis de côté comme tout petit groupe.
+
+Quand l'alerte antérieure a été enregistrée comme **Alerte réelle** ou **À réexaminer**, `Intégrer et vectoriser <defo-integrate-growth_>`_ garde cette extension en vue :
+
+-   Une nouvelle alerte qui touche ou chevauche l'alerte antérieure est une *alerte d'extension*, liée à celle-ci.
+-   Un groupe sous la taille minimale est conservé s'il touche l'alerte antérieure : c'est une alerte d'extension *sous la surface minimale*. Un petit groupe qui ne touche rien est mis de côté, et la rétrospection peut encore le faire revenir à la période suivante.
+-   L'exécution cherche les alertes antérieures dans toutes les périodes antérieures, quelle que soit la rétrospection.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
+    :alt: Extension : une alerte confirmée s'étend par son bord à la période suivante, et le petit groupe nouveau est conservé et lié à elle, tandis qu'un petit groupe qui ne touche rien est mis de côté
+
+Les alertes liées entre elles, toutes périodes confondues, forment l'*historique* d'un défrichement. Analyse l'affiche sur chaque alerte (voir `Alertes précédentes <defo-analysis-earlier_>`_), et l'`Aperçu <defo-overview-growth_>`_ en fait la synthèse.
+
+.. tip::
+
+    Seules comptent les révisions enregistrées au lancement d'`Intégrer et vectoriser <defo-integrate_>`_. Examinez les alertes d'une période avant de lancer la suivante, pour que leur extension soit liée. Une alerte examinée plus tard peut encore être liée à la main dans `Alertes précédentes <defo-analysis-earlier_>`_.
+
+La liste des périodes
+^^^^^^^^^^^^^^^^^^^^^
+
+Chaque ligne de **Périodes** affiche :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Colonne
+        -   Description
+    *   -   **Période**
+        -   Les dates de la période (« début → fin »), avec des notes en dessous : sa fenêtre de recherche et les éventuels avertissements.
+    *   -   **Jeux**
+        -   Le nombre de jeux d'alertes construits pour cette période.
+    *   -   **Statut**
+        -   **obsolète** quand un téléchargement de source ou un jeu d'alertes ne correspond plus aux paramètres actuels (relancez-le dans `Alertes <defo-alerts_>`_, `Harmoniser <defo-harmonize_>`_ ou `Intégrer et vectoriser <defo-integrate_>`_) ; **manquante** quand les fichiers d'un jeu d'alertes ont disparu ; un tiret quand tout est à jour.
+
+Les icônes à droite de chaque ligne :
+
+-   le bouton radio rend la période *active* : `Alertes <defo-alerts_>`_, `Harmoniser <defo-harmonize_>`_ et `Intégrer et vectoriser <defo-integrate_>`_ travaillent sur la période active ;
+-   l'icône de crayon change ses dates ou sa rétrospection ;
+-   l'icône de corbeille la supprime.
+
+.. _defo-period-add:
+
+Ajouter une période
+^^^^^^^^^^^^^^^^^^^
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/period-new.png
+    :alt: La boîte de dialogue Nouvelle période
+
+Sélectionnez **Nouvelle période**. La boîte de dialogue est pré-remplie pour que la nouvelle période prolonge la série.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 35 45
+
+    *   -   Champ
+        -   Description
+        -   Valeur par défaut et limites
+    *   -   **Début**
+        -   Le premier jour de la période.
+        -   Le lendemain de la fin de la dernière période. Pour la première période, le premier jour du mois en cours.
+    *   -   **Fin**
+        -   Le dernier jour de la période.
+        -   Aujourd'hui. Doit être postérieure au **Début**. Deux périodes ne peuvent pas avoir les mêmes dates.
+    *   -   **Rétrospection (jours)**
+        -   Le nombre de jours avant le **Début** qui sont aussi parcourus.
+        -   0 (pas de rétrospection) pour la première période d'un nouveau projet (un projet dupliqué conserve la rétrospection de son original), puis la dernière valeur utilisée. Un nombre entier de 0 à 3650.
+
+Sous les champs, la boîte de dialogue donne un aperçu de la fenêtre de recherche (« Fenêtre de recherche : début → fin »). Sélectionnez **Ajouter une période** : la période est créée et devient la période active.
+
+Une nouvelle période démarre avec les choix de masques de la dernière période. Modifiez-les dans `Harmoniser <defo-harmonize_>`_. Ses sources d'alertes sont celles marquées **Ajouter aux nouvelles périodes** dans `Alertes <defo-alerts-new-periods_>`_ ; ajoutez-y ou retirez-y des sources.
+
+.. tip::
+
+    Pour que les groupes mis de côté reviennent, la rétrospection doit remonter jusque dans la période précédente. Avec une rétrospection de 0, la fenêtre de recherche commence le premier jour de la période elle-même et rien de ce qui a été mis de côté auparavant n'est réexaminé.
+
+    Un groupe qui reste trop petit reste en jeu dans les périodes suivantes tant que leur rétrospection remonte jusqu'à ses pixels. Une rétrospection plus longue laisse plus de temps à un défrichement qui s'étend lentement pour atteindre la taille minimale, mais alourdit chaque téléchargement (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_).
+
+Modifier une période
+^^^^^^^^^^^^^^^^^^^^
+
+Pour une période sans jeu d'alertes, l'icône de crayon ouvre une boîte de dialogue pour changer ses dates. De nouvelles dates donnent à la période une nouvelle identité : ses téléchargements et ses fichiers harmonisés sont supprimés, puisqu'ils avaient été produits pour l'ancienne fenêtre.
+
+Une période qui a des jeux d'alertes a des dates fixes (sa note indique **Ses dates sont fixées : elle a des jeux d'alertes.**). L'icône de crayon ouvre alors une boîte de dialogue où seule la rétrospection peut changer. Les téléchargements de la période apparaissent ensuite comme obsolètes.
+
+Supprimer une période
+^^^^^^^^^^^^^^^^^^^^^
+
+Sélectionnez l'icône de corbeille. La boîte de dialogue de confirmation liste ce qui est supprimé : les téléchargements et fichiers harmonisés de la période, ainsi que ses jeux d'alertes avec leurs alertes examinées.
+
+.. important::
+
+    Une période qui a des jeux d'alertes ne peut être supprimée que si c'est la dernière période. Les jeux d'une période antérieure forment l'empreinte à partir de laquelle les jeux ultérieurs ont été construits : supprimez donc d'abord les périodes ultérieures. Les périodes ne peuvent être ni modifiées ni supprimées tant qu'une tâche écrit dans le projet.
+
 .. _defo-alerts:
 
 Sources d'alertes
@@ -386,12 +555,12 @@ Sources d'alertes
 
 Une *source d'alertes* est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est *confirmé* (confiance élevée) ou *probable* (confiance faible) et porte le jour de sa première détection.
 
-L'étape **Alertes** liste les sources que le projet surveille et la part de l'AOI que chacune couvre. Chaque source est téléchargée pour chaque période, découpée selon l'AOI et la fenêtre de recherche de la période.
+L'étape **Alertes** liste les sources de la `période <defo-period_>`_ active, montre quelle part de l'AOI et de la période chacune couvre, et les télécharge. Chaque période a ses propres sources : une source ajoutée ici n'est ajoutée qu'à la période active.
 
-Ouvrez l'étape **Alertes** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `AOI <defo-aoi_>`_.
+Ouvrez l'étape **Alertes** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `période <defo-period_>`_. Elle porte sur la période active : pour travailler sur une autre période, rendez-la d'abord active à l'étape `Période <defo-period_>`_. L'encadré en haut de l'étape nomme la période et sa fenêtre de recherche, par exemple « Période 2026-09-01 → 2026-09-30 · fenêtre de recherche depuis le 2026-06-03 (90 jours de période antérieure) ».
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/alerts-list.png
-    :alt: L'étape Alertes avec trois sources prédéfinies
+    :alt: L'étape Alertes avec trois sources téléchargées
 
 La liste des sources
 ^^^^^^^^^^^^^^^^^^^^
@@ -405,15 +574,20 @@ Chaque ligne de **Sources** affiche :
     *   -   Partie de la ligne
         -   Description
     *   -   **Source**
-        -   Le nom de la source, puis une note avec son type (**prédéfinie**, ou « personnalisée · format ») et les première et dernière dates de données trouvées sur l'AOI.
-    *   -   **Couverture**
-        -   La part de l'AOI située dans l'emprise de la source : **couvre l'AOI** (en vert), « couvre 62 % de l'AOI » (en orange : le reste de l'AOI ne reçoit aucune alerte de cette source), **ne couvre pas l'AOI**, **vérification…** pendant la vérification, ou **couverture non vérifiée** lorsqu'elle n'a pas été faite ou a échoué.
+        -   Le nom de la source, puis une ligne qui dit ce que contient la ligne du tableau (« téléchargée le 2026-10-20 · 4,7 Mo ») ou pourquoi elle doit être téléchargée (par exemple « la fenêtre de recherche a changé (…) : télécharger à nouveau »), et deux pastilles :
+
+            -   **AOI** : la part de l'AOI située dans l'emprise de la source, par exemple « AOI : 100 % ». Une source qui ne couvre qu'une partie de l'AOI ne donne aucune alerte sur le reste.
+            -   Les dates : « ✓ données jusqu'au 2026-10-30 » (en vert) quand la source a des données jusqu'à la fin de la fenêtre de recherche, « données jusqu'au … seulement » (en orange) quand ses données s'arrêtent dans la fenêtre, ou « ✗ fin des données le … » (en rouge) quand elle n'en a aucune dans la fenêtre.
+    *   -   **État**
+        -   L'état de la ligne, ou un bouton pour la télécharger (voir `Télécharger les sources <defo-alerts-download_>`_).
     *   -   Icône de carte
-        -   Affiche la source sur la carte : les alertes de la fenêtre de recherche de la période active, ou toutes les dates dont la source dispose sur l'AOI quand il n'y a pas encore de période. Une source GeoTIFF n'est affichée qu'une fois harmonisée.
-    *   -   Icône de crayon
-        -   Modifie une source personnalisée (voir plus bas).
-    *   -   Icône de corbeille
-        -   Retire la source, avec ses téléchargements et ses fichiers harmonisés.
+        -   Affiche la source sur la carte : les alertes de la fenêtre de recherche de la période active. Une source GeoTIFF n'est affichée qu'une fois harmonisée.
+    *   -   Icône d'information
+        -   Ouvre les **Détails** de la source (voir `La boîte de dialogue Détails <defo-harmonize-details_>`_), avec la case **Ajouter aux nouvelles périodes** et, pour une source personnalisée, le bouton **Modifier**.
+    *   -   **Télécharger à nouveau**
+        -   Télécharge à nouveau la source (voir plus bas).
+    *   -   **Retirer de cette période**
+        -   Retire la source de la période active (voir `Retirer une source d'une période <defo-alerts-remove_>`_).
 
 La couverture est vérifiée une fois, au choix de l'AOI, et enregistrée dans le projet. Si la vérification a échoué (par exemple parce que GEE était injoignable), un bouton **Vérifier à nouveau** apparaît sous la liste.
 
@@ -422,10 +596,14 @@ Ajouter une source
 
 Sélectionnez **Ajouter une source** pour ouvrir la boîte de dialogue **Ajouter une source d'alertes**, puis choisissez le **Type de source** :
 
--   **Prédéfinie** : l'une des sources du catalogue ;
--   **Personnalisée (0 sur 6)** : votre propre image GEE, collection d'images ou GeoTIFF. Le compteur indique combien des six emplacements personnalisés sont occupés.
+-   **Prédéfinie ou du projet** : l'une des sources du catalogue, ou une source du projet qui n'est pas dans cette période (par exemple une source utilisée dans une période antérieure) ;
+-   **Personnalisée (0 sur 6)** : votre propre image GEE, collection d'images ou GeoTIFF. Le compteur indique combien des six emplacements personnalisés de la période sont occupés.
 
-Un projet contient au plus trois sources prédéfinies et six sources personnalisées.
+Une période contient au plus trois sources prédéfinies et six sources personnalisées. Le projet conserve toutes les sources qu'il a utilisées, sans limite.
+
+.. _defo-alerts-new-periods:
+
+Sous la source, la case **Ajouter aux nouvelles périodes** (cochée par défaut) décide si les périodes créées plus tard démarrent avec cette source. Elle ne modifie jamais les périodes existantes. Pour la changer plus tard, ouvrez les **Détails** de la source avec son icône d'information.
 
 Sources prédéfinies
 """""""""""""""""""
@@ -433,7 +611,7 @@ Sources prédéfinies
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/alerts-add-predefined.png
     :alt: Ajout d'une source prédéfinie
 
-Choisissez une source dans le menu déroulant **Source prédéfinie**, puis sélectionnez **Ajouter une source**. Chaque entrée indique sa couverture de l'AOI. Une source qui ne couvre pas du tout l'AOI apparaît désactivée, avec la raison.
+Choisissez une source dans le menu déroulant **Source d'alertes**, puis sélectionnez **Ajouter une source**. La liste contient les sources prédéfinies et les propres sources du projet qui ne sont pas encore dans cette période. Chaque entrée indique sa couverture de l'AOI. Une source qui ne couvre pas du tout l'AOI apparaît désactivée, avec la raison.
 
 .. list-table::
     :header-rows: 1
@@ -452,7 +630,7 @@ Choisissez une source dans le menu déroulant **Source prédéfinie**, puis sél
         -   Sentinel-2, 10 m.
         -   90°O–30°O, 20°S–20°N.
 
-Quand toutes les sources prédéfinies sont dans le projet, la boîte de dialogue indique : « Toutes les sources prédéfinies sont déjà dans ce projet. »
+Quand toutes les sources sont dans la période, la boîte de dialogue indique : « Toutes les sources sont déjà dans cette période. »
 
 Sources personnalisées
 """"""""""""""""""""""
@@ -515,14 +693,58 @@ Quand **Ajouter une source** est sélectionné, l'application vérifie le raster
 Modifier une source personnalisée
 """""""""""""""""""""""""""""""""
 
-Sélectionnez l'icône de crayon pour rouvrir le formulaire, intitulé avec le nom de la source. Le nom est fixe ; le raster, le format et les bandes peuvent changer. Le formulaire garde le format et les bandes enregistrés jusqu'à ce qu'un autre raster soit choisi.
+Ouvrez les **Détails** de la source avec son icône d'information, puis sélectionnez **Modifier** pour rouvrir le formulaire, intitulé avec le nom de la source. Le nom est fixe ; le raster, le format et les bandes peuvent changer. Le formulaire garde le format et les bandes enregistrés jusqu'à ce qu'un autre raster soit choisi.
 
-Dès qu'un jeu d'alertes utilise la source, elle ne peut plus être modifiée : supprimez-la et ajoutez-en une nouvelle.
+Dès qu'un jeu d'alertes utilise la source, elle ne peut plus être modifiée : retirez-la et ajoutez-en une nouvelle.
 
-Retirer une source
-^^^^^^^^^^^^^^^^^^
+.. _defo-alerts-download:
 
-Sélectionnez l'icône de corbeille, puis confirmez. Les téléchargements et les fichiers harmonisés de la source sont supprimés. Les jeux d'alertes qui l'utilisaient déjà conservent leurs alertes et apparaissent comme obsolètes.
+Télécharger les sources
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Chaque source est téléchargée sur la fenêtre de recherche de la période, dans sa propre projection et découpée selon l'AOI. Une source GeoTIFF n'est pas téléchargée : elle est lue depuis son fichier. Le téléchargement n'harmonise pas la source : c'est l'étape suivante, `Harmoniser <defo-harmonize_>`_, qui ne s'exécute que lorsque vous la lancez.
+
+La colonne **État** indique :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   État
+        -   Signification
+    *   -   « Téléchargé »
+        -   Téléchargée pour la fenêtre de recherche actuelle. La ligne sous le nom donne la date du téléchargement et la taille sur le disque.
+    *   -   **Télécharger**
+        -   La source n'est pas encore téléchargée pour la fenêtre de recherche de cette période, ou son téléchargement est obsolète. Sélectionnez le bouton pour la télécharger.
+    *   -   **Lire fichier**
+        -   La même chose pour une source GeoTIFF, qui est lue depuis son fichier.
+    *   -   **Réessayer**
+        -   Le dernier téléchargement a échoué. Son erreur s'affiche en rouge sous la ligne.
+    *   -   « Chargement 42 % », « Lecture », « En attente »
+        -   La ligne est en cours, ou attend son tour (« en attente de la ligne du dessus »).
+    *   -   « non couverte », « aucune donnée »
+        -   La source ne peut pas s'exécuter pour cette période : elle ne couvre pas l'AOI, ou n'a pas de données pour la fenêtre de recherche (sa pastille de dates est rouge).
+    *   -   « Sans fichier »
+        -   Le fichier d'une source GeoTIFF a disparu (voir `Messages fréquents <defo-harmonize-messages_>`_).
+
+Un bouton bleu exécute une ligne pour la première fois ; un bouton orange refait un fichier obsolète. La ligne sous le nom dit alors pourquoi : par exemple « la fenêtre de recherche a changé (…) : télécharger à nouveau » ou « l'AOI a changé : télécharger à nouveau ». Dans la `copie d'examen <defo-evaluation-return_>`_ d'un évaluateur, rien ne s'exécute : la colonne indique « À charger » au lieu d'un bouton.
+
+.. note::
+
+    Une ligne téléchargée n'a pas de bouton : une source déjà téléchargée pour la fenêtre de recherche de la période n'est pas retéléchargée d'elle-même. Pour récupérer les dernières alertes d'un catalogue qui continue d'ajouter des alertes à des dates passées, utilisez **Télécharger à nouveau**. L'application demande d'abord, avec la fenêtre et la date du fichier qu'elle remplace. Il n'est pas proposé pour une source GeoTIFF (« Rien à télécharger à nouveau : lue depuis un fichier »).
+
+Le pied du tableau télécharge par lot. Sélectionnez **Télécharger … en attente** (par exemple **Télécharger 3 en attente**) pour télécharger chaque source qui en a besoin, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ; une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante. Pendant ce temps, le pied compte ses lignes (« 1 en cours · 2 en attente », puis « 1 sur 3 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui s'arrête après la ligne en cours (« Arrêt… »). La flèche à côté du bouton (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, après confirmation.
+
+Le téléchargement apparaît aussi comme une notification de tâche intitulée **Télécharger**, avec la source en cours et son pourcentage.
+
+.. _defo-alerts-remove:
+
+Retirer une source d'une période
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sélectionnez l'icône de corbeille (**Retirer de cette période**), puis confirmez. Les fichiers téléchargés et harmonisés de la source pour cette période sont supprimés. Les jeux d'alertes de cette période qui l'utilisaient déjà conservent leurs alertes et apparaissent comme obsolètes.
+
+La source reste dans le projet : les autres périodes la conservent, et elle peut être ajoutée de nouveau avec **Ajouter une source**. Une source n'est jamais supprimée de tout le projet.
 
 Messages fréquents
 ^^^^^^^^^^^^^^^^^^
@@ -536,26 +758,498 @@ Messages fréquents
 « Cet asset CCDC stocke ses dates en jours juliens ou en temps Unix … »
     Seules les sorties CCDC datées en années fractionnaires sont prises en charge.
 
+« Cette période a déjà 6 sources personnalisées. »
+    Retirez une source personnalisée de la période avant d'en ajouter une autre.
+
 « Une tâche écrit dans ce projet ; … »
     Les sources ne peuvent pas changer pendant un téléchargement ou une exécution d'**Intégrer et vectoriser**. Attendez qu'il se termine.
 
+.. _defo-harmonize:
+
+Harmoniser
+----------
+
+Cette étape place toutes les entrées de la `période <defo-period_>`_ active sur une grille commune. Chaque source téléchargée dans `Alertes <defo-alerts-download_>`_ est *harmonisée* : alignée sur la grille du projet et découpée par les masques de la période. Rien ne s'exécute deux fois si ses entrées n'ont pas changé.
+
+Ouvrez l'étape **Harmoniser** du panneau **Flux de travail**. Elle se déverrouille dès qu'au moins une source de la période active est téléchargée (ou est une source GeoTIFF). Elle porte sur la période active : pour harmoniser une autre période, rendez-la d'abord active à l'étape `Période <defo-period_>`_.
+
+De haut en bas, l'étape comporte trois parties : la **Grille du projet**, les **Masques** et les **Sources de cette période**.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/prepare-step.png
+    :alt: L'étape Harmoniser après une exécution
+
+La grille du projet
+^^^^^^^^^^^^^^^^^^^
+
+Tous les rasters du projet sont alignés sur une même grille : une projection en mètres et une taille de pixel, sur l'AOI. Les alertes de sources aux tailles de pixel différentes peuvent alors être combinées pixel par pixel, et la taille minimale d'alerte en hectares devient un nombre de pixels.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 15 40 45
+
+    *   -   Champ
+        -   Description
+        -   Valeur par défaut et limites
+    *   -   **EPSG**
+        -   La projection de la grille, sous forme de code EPSG (European Petroleum Survey Group). Le bouton cible au bout du champ y inscrit la zone UTM (Mercator transverse universelle) de l'AOI.
+        -   La zone UTM du centre de l'AOI. Doit être un système projeté en mètres : un système géographique (comme 4326) ou un système en pieds est refusé.
+    *   -   **Résolution**
+        -   La taille du pixel, en mètres.
+        -   La taille de pixel la plus fine parmi les sources du projet : 10 m avec RADD ou GLAD-S2, 30 m avec GLAD-L seule, la taille de pixel propre d'une source personnalisée, ou 30 m quand rien n'est connu. Doit être supérieure à 0.
+
+Sous les champs, la taille de la grille est annoncée : « largeur × hauteur pixels, environ … par source avant compression ». Au-delà de 2 Go par source, un avertissement indique **Cette grille est grande : les téléchargements prendront du temps et utiliseront de l'espace disque.** (il ne bloque pas l'étape).
+
+Sélectionnez **Enregistrer la grille**. Les masques et le tableau des sources n'apparaissent qu'une fois une grille enregistrée.
+
+La grille peut changer jusqu'à la création du premier jeu d'alertes. Une nouvelle grille ne fait que réharmoniser les sources à partir des fichiers déjà téléchargés ; elle ne les télécharge pas à nouveau. Dès que le projet a un jeu d'alertes, la carte indique **La grille est verrouillée car le projet a des jeux d'alertes.**
+
+.. note::
+
+    Modifier l'`AOI <defo-aoi_>`_ efface la grille et supprime tous les téléchargements et fichiers harmonisés du projet, qui avaient été produits pour l'ancienne zone. Enregistrez à nouveau la grille ici, puis relancez les lignes.
+
+Masques
+^^^^^^^
+
+Un *masque* limite l'endroit où les alertes sont conservées. C'est un raster défini une fois pour le projet : une image ou une collection d'images GEE, ou un GeoTIFF, à une bande. Un pixel est dans le masque là où cette bande n'est pas nulle ; les pixels à zéro ou sans donnée sont hors du masque.
+
+Chaque période choisit un **Mode** pour chaque masque :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Mode
+        -   Effet sur les alertes de la période
+    *   -   **Inactif**
+        -   Le masque n'est pas utilisé dans cette période.
+    *   -   **Conserver**
+        -   Les alertes *hors* du masque sont retirées (par exemple : ne garder que les alertes à l'intérieur d'un masque forestier).
+    *   -   **Exclure**
+        -   Les alertes *dans* le masque sont retirées (par exemple : écarter les alertes situées dans des plantations ou dans l'eau).
+
+Quand plusieurs masques sont actifs, ils s'appliquent tous. Les masques agissent sur les sources harmonisées : un changement de **Mode** rend donc obsolètes les sources de la période. **Harmoniser … en attente** les réharmonise alors sans les télécharger. Une nouvelle période démarre avec les choix de masques de la dernière période.
+
+Ajouter un masque
+"""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/prepare-mask-add.png
+    :alt: Ajout d'un masque
+
+Sélectionnez **Ajouter un masque** pour ouvrir la boîte de dialogue **Ajouter un masque**. Les bandes sont lues dès que le raster est choisi.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
+
+    *   -   Champ
+        -   Description
+        -   Valeur par défaut et limites
+    *   -   **Nom**
+        -   Le nom du masque dans les listes, les légendes et les noms de fichiers.
+        -   Proposé à partir du nom de l'asset ou du fichier. 24 caractères au plus, au moins une lettre ou un chiffre, unique parmi les masques du projet.
+    *   -   **Source**
+        -   **Earth Engine** (un asset) ou **GeoTIFF** (un fichier de votre dossier SEPAL).
+        -   **Earth Engine**.
+    *   -   Asset ou **GeoTIFF**
+        -   L'image ou la collection d'images GEE, ou le fichier .tif.
+        -
+    *   -   **Bande**
+        -   La bande qui définit le masque. Affichée quand le raster a deux bandes ou plus ; avec une bande, le formulaire indique « Une bande (…) : le masque est fait à partir d'elle. »
+        -   La bande dont le nom ressemble à un masque (par exemple ``datamask``), nommée dans l'aide (« … ressemble à un masque ; les pixels non nuls sont à l'intérieur. »), sinon aucune : choisissez-la.
+    *   -   **Mode dans la période active**
+        -   **Conserver** ou **Exclure**.
+        -   **Conserver**. Le masque n'est activé que dans la période active ; toutes les autres périodes le laissent inactif jusqu'à ce qu'il y soit activé.
+
+Quand **Ajouter un masque** est sélectionné, l'application vérifie le raster et sa bande. Un problème s'affiche en rouge dans la boîte de dialogue, qui reste ouverte pour les corrections.
+
+La liste des masques
+""""""""""""""""""""
+
+Chaque ligne de **Masques** affiche :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Colonne
+        -   Description
+    *   -   **Masque**
+        -   Le nom du masque. La ligne en dessous donne sa source et sa taille sur le disque une fois prêt (« Earth Engine · 18,9 MB »), ou la raison pour laquelle il doit être exécuté (« pas encore téléchargée », « la grille a changé (…) : aligner à nouveau »). Elle se termine par « Inactif » quand le masque est inactif dans la période active.
+    *   -   **Mode**
+        -   Le mode du masque dans la période active : **Inactif**, **Conserver** ou **Exclure**. Un changement s'applique tout de suite ; les sources de la période deviennent alors obsolètes.
+    *   -   **État**
+        -   « Prête », ou un bouton pour la prochaine exécution du masque : **Télécharger** (un masque GEE pas encore téléchargé) ou **Aligner** (sur la grille). Un bouton orange refait un fichier obsolète. Pendant une exécution, la cellule indique « Chargement 42 % », « Alignement » ou « En attente ».
+
+Les icônes à droite de chaque ligne :
+
+-   l'icône de carte affiche le masque sur la carte : un masque GEE peut être prévisualisé avant d'être téléchargé, un masque GeoTIFF une fois aligné ;
+-   l'icône d'information ouvre ses **Détails** (voir `La boîte de dialogue Détails <defo-harmonize-details_>`_) ;
+-   le menu **Plus d'actions** (trois points) contient :
+
+    -   **Télécharger à nouveau** (masques GEE uniquement), pour un asset qui a changé. L'application demande d'abord : « Ceci récupère le masque à nouveau depuis Earth Engine, remplace son téléchargement, puis l'aligne. » ;
+    -   **Modifier**, qui ouvre **Modifier le masque** *nom* : le raster et la bande peuvent changer, le nom non. Dès qu'un jeu d'alertes a utilisé le masque, il ne peut plus être modifié (**Un jeu d'alertes utilise déjà ce masque : ajoutez-en un nouveau à la place.**) ;
+    -   **Supprimer le masque…**, qui supprime le masque après confirmation. Son téléchargement et son fichier aligné sont supprimés, et toutes les périodes cessent de l'utiliser. Les jeux d'alertes qui l'utilisaient conservent leurs alertes et apparaissent comme obsolètes.
+
+Un masque est téléchargé et aligné une seule fois pour tout le projet, quelle que soit la période qui l'exécute.
+
+.. _defo-harmonize-sources:
+
+Sources de cette période
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Le tableau a une ligne par source d'alertes de la période active, avec deux colonnes :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Colonne
+        -   Description
+    *   -   **Source**
+        -   Le nom de la source. La ligne en dessous dit ce que contient la ligne du tableau ou ce qu'elle attend (voir plus bas). Les avertissements, comme une couverture partielle, et les erreurs s'affichent en lignes sous la ligne du tableau.
+    *   -   **État**
+        -   L'état de la ligne, ou un bouton pour sa prochaine exécution.
+
+La colonne **État** indique :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   État
+        -   Signification
+    *   -   « Prête »
+        -   Téléchargée et harmonisée avec les entrées actuelles. La ligne sous le nom donne la date du téléchargement, la taille sur le disque et ce que le fichier harmonisé a trouvé : « téléchargée le 2026-10-20 · 31,7 MB · 2 362 718 pixels d'alerte ».
+    *   -   **Harmoniser**
+        -   Le téléchargement est à jour, mais le fichier harmonisé manque ou est obsolète (un nouveau téléchargement, une nouvelle grille, un changement de masque). Sélectionnez le bouton pour exécuter la ligne : il aligne les masques de la période qui en ont besoin, puis harmonise la source, sans la télécharger.
+    *   -   « Téléchargez-la ou lisez-la d'abord dans Alertes »
+        -   La source n'est pas téléchargée pour la fenêtre de recherche de cette période, ou son téléchargement est obsolète. La ligne n'a pas de bouton : téléchargez-la d'abord dans `Alertes <defo-alerts-download_>`_.
+    *   -   **Réessayer**
+        -   La dernière exécution de la ligne a échoué. Son erreur s'affiche en rouge sous la ligne.
+    *   -   « Chargement 42 % », « Traitement », « En attente »
+        -   La ligne est en cours, ou attend son tour dans une exécution (« en attente de la ligne du dessus »). Une ligne en cours de téléchargement dans Alertes apparaît aussi en cours ici, et ne peut pas être harmonisée avant la fin de son téléchargement.
+    *   -   « non couverte », « aucune donnée »
+        -   La source ne peut pas s'exécuter pour cette période : elle ne couvre pas l'AOI, ou n'a pas de données pour la fenêtre de recherche. La ligne sous le nom en donne la raison. Pour la couverture, voir `Sources d'alertes <defo-alerts_>`_.
+    *   -   « Sans fichier »
+        -   Le fichier d'une source GeoTIFF a disparu (voir `Messages fréquents <defo-harmonize-messages_>`_).
+
+Dans la `copie d'examen <defo-evaluation-return_>`_ d'un évaluateur, rien ne s'exécute : au lieu d'un bouton, la colonne indique « À harmoniser » ou « À aligner ».
+
+Un bouton bleu exécute une ligne pour la première fois ; un bouton orange refait un fichier obsolète. La ligne sous le nom dit alors pourquoi : par exemple « la grille a changé (EPSG:32719 · 30 m → EPSG:32719 · 10 m) : harmoniser à nouveau », « elle a été téléchargée à nouveau depuis : harmoniser à nouveau » ou « le masque forest_2000 a changé : harmoniser à nouveau ».
+
+Les icônes à droite de chaque ligne :
+
+-   l'icône de carte (**Afficher sur la carte**) affiche les alertes harmonisées sur la carte ;
+-   l'icône d'information ouvre les **Détails** de la ligne (voir plus bas) ;
+-   **Supprimer les fichiers** retire le téléchargement et le fichier harmonisé de la source pour cette période, après confirmation. La source reste dans la période : téléchargez-la à nouveau dans `Alertes <defo-alerts-download_>`_ et harmonisez-la pour les reconstruire. Les jeux d'alertes de cette période construits à partir de la source deviennent obsolètes ; leurs alertes et leurs revues sont conservées.
+
+.. _defo-harmonize-details:
+
+La boîte de dialogue Détails
+""""""""""""""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/prepare-details.png
+    :alt: La boîte de dialogue Détails d'une source
+
+L'icône d'information d'une source ou d'un masque ouvre un résumé en lecture seule de ce avec quoi ses fichiers ont été produits. Il commence par l'état de la ligne et, pour une source, la période. Quand la ligne est obsolète, une ligne orange **Pourquoi :** dit ce qui a changé.
+
+Dans `Alertes <defo-alerts_>`_, l'icône d'information d'une source ouvre la même boîte de dialogue, avec deux commandes de plus : la case **Ajouter aux nouvelles périodes** (voir `Ajouter une source <defo-alerts-new-periods_>`_) et, pour une source personnalisée, **Modifier**.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Section
+        -   Ce qu'elle liste
+    *   -   **Source**
+        -   Une source prédéfinie : son **Catalogue** et sa **Couverture** de l'AOI, avec la dernière date de données et le jour de la vérification. Une source personnalisée : son **Type**, sa **Référence**, son **Format**, son **Codage des dates**, ses **Bandes** et sa **Grille native**. Un masque : sa **Référence**, sa **Bande**, sa **Grille native** et les périodes où il est utilisé (**Utilisé dans**).
+    *   -   **Téléchargement** (**Lecture du fichier** pour une source GeoTIFF)
+        -   La **Fenêtre de recherche**, la **Grille native** dans laquelle le fichier a été téléchargé, sa **Taille** et son **Fichier** dans le dossier du projet.
+    *   -   **Harmonisation** (**Alignement** pour un masque)
+        -   La **Grille utilisée**, avec la grille actuelle quand elle a changé depuis, le **Rééchantillonnage**, les **Masques** appliqués avec leur mode, les **Pixels d'alerte** conservés (et combien les masques en ont retiré), les **Dates d'alerte** trouvées, la **Taille** et le **Fichier**. Pour un masque : ses **Pixels du masque**.
+
+Chaque section donne la date et l'heure d'écriture de son fichier, ou indique « Pas encore exécuté ». Sélectionnez **Fermer**, ou appuyez sur **Échap**, pour fermer la boîte de dialogue.
+
+.. labels-ok: Échap
+
+Tout exécuter
+"""""""""""""
+
+Le pied du tableau exécute les lignes par lot. Sélectionnez **Harmoniser … en attente** (par exemple **Harmoniser 4 en attente**). Le bouton aligne d'abord les masques activés dans la période qui en ont besoin, puis harmonise chaque source téléchargée qui en a besoin, une ligne à la fois :
+
+-   les lignes qui indiquent « non couverte » ou « aucune donnée », et les lignes encore à télécharger, sont ignorées ;
+-   une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante.
+
+Pendant l'exécution, le pied compte ses lignes (« 1 en cours · 3 en attente », puis « 2 sur 4 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui arrête l'exécution après la ligne en cours. Tant que cette ligne n'est pas finie, le bouton indique « Arrêt… ». Les lignes déjà faites le restent. Ce bouton **Arrêter** n'arrête que l'harmonisation : un téléchargement en cours dans `Alertes <defo-alerts-download_>`_ continue, et le bouton **Arrêter** d'Alertes n'arrête pas une exécution d'harmonisation.
+
+L'exécution apparaît aussi comme une notification de tâche intitulée **Harmoniser**, avec la ligne en cours (par exemple « Harmonisation de GLAD-L »).
+
+.. tip::
+
+    Chaque ligne a besoin d'espace disque libre pour ses fichiers. L'application le vérifie avant d'écrire et arrête la ligne avec un message quand le disque est trop plein. La ligne de taille de la grille donne une idée du volume que peut atteindre une source.
+
+.. _defo-harmonize-messages:
+
+Messages fréquents
+^^^^^^^^^^^^^^^^^^
+
+« Espace disque libre insuffisant : ceci nécessite … Go dans …, et … Go sont libres. »
+    Libérez de l'espace dans votre dossier SEPAL, ou utilisez une grille plus grossière.
+
+« Une ligne de cette exécution est déjà en préparation … »
+    Un masque est en cours d'alignement par l'exécution d'une autre période, ou la ligne tourne encore. Relancez-la une fois celle-ci terminée.
+
+« La géométrie de l'AOI est encore en cours de récupération ; relancez cette ligne dans un instant. »
+    Les sources et masques GeoTIFF ont besoin de la forme de l'AOI. Patientez un instant. Si elle n'a pas pu être récupérée, sélectionnez **Vérifier à nouveau** sous le tableau, puis exécutez-les.
+
+« Le masque … ne couvre aucune partie de l'AOI : en masque de conservation, toutes les alertes seraient supprimées. »
+    Le masque ne recouvre pas la zone. Vérifiez son asset ou sa bande, ou désactivez-le.
+
+« Une tâche écrit dans ce projet ; enregistrez la grille une fois celle-ci terminée. »
+    La grille, les masques et les sources ne peuvent pas changer pendant un téléchargement ou une exécution d'**Intégrer et vectoriser**.
+
+« Sans fichier », avec « manquante : fichier introuvable : … » sous la ligne, ou « Masque … : fichier introuvable (…). Remettez le fichier à cet emplacement pour utiliser le masque. »
+    Une source ou un masque GeoTIFF a été déplacé, renommé ou supprimé de votre dossier SEPAL. Remettez le fichier à l'emplacement indiqué, ou modifiez la source ou le masque pour pointer vers son nouvel emplacement.
+
+« Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Harmoniser … en attente aligne d'abord les masques. »
+    Une source ne peut pas être harmonisée avant que les masques de la période soient alignés. Sélectionnez **Harmoniser … en attente**, ou d'abord le bouton **Aligner** du masque.
+
+« Masque … : sa grille native (projection et échelle) est inconnue ; modifiez le masque. »
+    L'application ne sait pas comment télécharger ce masque GEE. Ouvrez-le avec **Modifier** dans son menu **Plus d'actions** et enregistrez-le à nouveau, pour que son raster soit revérifié.
+
+.. _defo-integrate:
+
+Intégrer et vectoriser
+----------------------
+
+Cette étape transforme les sources harmonisées de la période active en un *jeu d'alertes* : la liste des alertes à examiner dans `Analyse <defo-analysis_>`_. Elle :
+
+-   combine les sources pixel par pixel ;
+-   retire ce que les périodes antérieures ont déjà signalé ;
+-   regroupe les pixels d'alerte voisins en alertes ;
+-   dessine un polygone par alerte.
+
+Ouvrez l'étape **Intégrer et vectoriser** du panneau **Flux de travail**. Elle se déverrouille dès qu'au moins une source de la période active est prête dans `Harmoniser <defo-harmonize_>`_.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/integrate-form.png
+    :alt: Le formulaire Intégrer et vectoriser
+
+Qu'est-ce qu'une alerte
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Une alerte est un *groupe* : un ensemble de pixels d'alerte qui se touchent, par un côté ou par un coin, quelle que soit la source qui a signalé chaque pixel. Là où des pixels GLAD-L et RADD se touchent, ils forment *une seule* alerte qui mentionne les deux sources. Une alerte n'est jamais scindée en une alerte par source.
+
+Chaque alerte conserve :
+
+-   les sources qui l'ont détectée ;
+-   ses dates de première et de dernière détection (la date la plus ancienne et la plus récente parmi ses pixels) ;
+-   sa superficie en hectares ;
+-   une statistique des bandes de chaque couche d'attributs (voir plus bas).
+
+Un groupe plus petit que la **Taille minimale de groupe** (voir `Les options <defo-integrate-options_>`_) ne devient pas une alerte : ses pixels sont mis de côté comme *non analysables*.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/integrate.gif
+    :alt: Les sources sur une même grille deviennent des groupes ; chaque groupe est mesuré par rapport à la taille minimale, et devient un polygone qui mentionne ses sources ou, s'il est plus petit, est mis de côté
+
+.. _defo-integrate-earlier:
+
+Ce que les périodes antérieures ont déjà signalé
+""""""""""""""""""""""""""""""""""""""""""""""""
+
+Les pixels situés dans les alertes d'un jeu d'une période *antérieure* (son *empreinte*) sont retirés avant la formation des groupes. Ainsi, la `rétrospection <defo-period-lookback_>`_ ne signale jamais deux fois la même perte.
+
+Les pixels qui ne sont pas devenus des alertes (un groupe sous la taille minimale, ou au-delà du nombre maximal d'alertes) sont conservés comme *non analysables*. Ils ne font pas partie de l'empreinte : les récupérer est le rôle de la `rétrospection <defo-period-lookback_>`_.
+
+L'exécution d'une période ultérieure réintègre ces pixels quand les deux conditions sont remplies :
+
+-   sa rétrospection remonte jusque dans la période antérieure (cette période se termine le jour où commence la nouvelle fenêtre de recherche, ou après) ;
+-   les deux périodes partagent une source.
+
+Les pixels reviennent quelle que soit leur date de détection dans la fenêtre de recherche propre au jeu antérieur. Ils rejoignent les nouveaux pixels qui les touchent, et un groupe qui atteint désormais la taille minimale devient une alerte. Ses dates de détection peuvent être antérieures à sa propre période et à sa rétrospection. Avec une rétrospection de 0, la fenêtre de recherche commence le premier jour de la période elle-même : rien de ce qui a été mis de côté n'est donc réexaminé.
+
+.. _defo-integrate-growth:
+
+Extension d'une perte antérieure
+""""""""""""""""""""""""""""""""
+
+Un défrichement continue souvent de s'étendre d'un mois à l'autre. L'exécution relie chaque nouvelle alerte à la *perte antérieure* dont elle est l'extension : les alertes des jeux des périodes antérieures enregistrées comme **Alerte réelle** ou **À réexaminer**. La forme d'une alerte antérieure est le polygone dessiné pour elle dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut son groupe détecté.
+
+-   Une nouvelle alerte qui touche ou chevauche la forme d'une alerte antérieure est une *alerte d'extension*, liée à chaque alerte antérieure qu'elle touche. Une alerte sans lien est une *nouvelle* alerte.
+-   Un groupe plus petit que la **Taille minimale de groupe** est conservé s'il touche une perte antérieure : c'est une alerte d'extension *sous la surface minimale*. Un petit groupe qui ne touche rien est mis de côté comme *non analysable*, comme avant.
+-   Les alertes d'extension sont triées et limitées avec les autres : **Limiter le nombre de groupes** peut les écarter.
+-   Seules les révisions enregistrées au lancement de l'exécution comptent. Une alerte antérieure confirmée ensuite n'est pas liée, mais elle peut l'être à la main dans `Alertes précédentes <defo-analysis-earlier_>`_.
+
+Les alertes liées entre elles, toutes périodes confondues, forment l'*historique* d'un défrichement. Analyse l'affiche sur chaque alerte, et l'`Aperçu <defo-overview-growth_>`_ en fait la synthèse.
+
+.. _defo-integrate-options:
+
+Les options
+^^^^^^^^^^^
+
+Le formulaire s'ouvre avec les paramètres du jeu d'alertes actif (tous sauf les sources), ou avec les valeurs par défaut ci-dessous s'il n'y en a pas.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 50 30
+
+    *   -   Option
+        -   Description
+        -   Valeur par défaut et limites
+    *   -   **Sources**
+        -   Les sources dont les alertes entrent dans le jeu. Chaque source prête est listée avec ce que son fichier harmonisé a trouvé. Une source qui ne couvre pas l'AOI, ou qui n'a pas de données pour la période, apparaît désactivée, avec la raison.
+        -   Toutes les sources prêtes. Au moins une.
+    *   -   **Inclure les alertes probables (non confirmées)**
+        -   Affiché seulement si au moins une source cochée a une classe *probable* (confiance faible). Un seul interrupteur pour toutes ces sources. Désactivé, leurs pixels probables sont écartés avant tout le reste, et seuls leurs pixels confirmés comptent. Avec deux sources de ce type ou plus, **Régler par source** déplie un interrupteur par source (voir plus bas).
+        -   Activé.
+    *   -   **Taille minimale de groupe**
+        -   Les groupes plus petits sont écartés. L'aide donne cette taille en pixels de la grille (à 10 m, 0,5 ha correspond à « 50 pixels sur la grille »).
+        -   0,5 ha. N'importe quel nombre d'hectares, 0 ou plus. Même à 0, une alerte fait au moins un pixel.
+    *   -   **Ordre**
+        -   L'ordre des alertes dans le jeu, qui est l'ordre d'examen : **Groupes les plus grands en premier**, **Groupes les plus petits en premier**, **Groupes les plus récents en premier** (selon la date de dernière détection) ou **Groupes les plus anciens en premier** (selon la date de première détection).
+        -   **Groupes les plus grands en premier**.
+    *   -   **Limiter le nombre de groupes**
+        -   Coché, affiche **Nombre maximal de groupes** : seules les premières alertes selon l'**Ordre** choisi sont conservées. Son aide indique lesquelles (par exemple « Conserve les 100 groupes les plus grands. » ou « Conserve les 100 groupes les plus récents. »). Décoché, toutes les alertes sont conservées.
+        -   Décoché. Une fois coché, la limite part de 100. Ce doit être un nombre entier supérieur à 0.
+    *   -   **Couches d'attributs**
+        -   Des rasters dont les statistiques de bandes sont ajoutées à chaque alerte (voir plus bas).
+        -   Aucune.
+
+Alertes probables par source
+""""""""""""""""""""""""""""
+
+Avec deux sources cochées ou plus qui ont une classe probable, sélectionnez **Régler par source** sous **Inclure les alertes probables (non confirmées)** pour donner à chacune son propre interrupteur, au nom de la source :
+
+-   Une source cochée sans classe probable (une source personnalisée qui n'a que des dates de détection) apparaît comme « (source) : dates seules, pas de niveau probable ».
+-   Quand les interrupteurs des sources diffèrent, l'interrupteur principal est désactivé, la note **Mixte : les sources ci-dessous diffèrent.** remplace **Régler par source**, et les interrupteurs par source restent dépliés.
+-   Activer ou désactiver l'interrupteur principal règle toutes les sources d'un coup.
+
+.. _defo-integrate-attributes:
+
+Couches d'attributs
+"""""""""""""""""""
+
+Une *couche d'attributs* ajoute à chaque alerte des informations tirées d'un raster (par exemple la classe d'occupation du sol majoritaire sous l'alerte, ou son altitude moyenne). Les valeurs sont des colonnes de la table des alertes : elles sont exportées avec les alertes, et les colonnes de classes peuvent servir dans le filtre d'Analyse.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/integrate-attribute.png
+    :alt: Ajout d'une couche d'attributs
+
+Pour ajouter une couche d'attributs :
+
+1.  Sélectionnez **Ajouter une couche d'attributs** pour ouvrir la boîte de dialogue **Ajouter une couche d'attributs**.
+2.  Vérifiez le **Nom de la couche**, proposé à partir du raster une fois celui-ci choisi. Les colonnes se nomment *nom de la couche*\_\ *bande*.
+3.  Choisissez la **Source** (**Earth Engine**, une image, ou **GeoTIFF**, un fichier de votre dossier SEPAL), puis choisissez le raster. Ses bandes sont lues aussitôt.
+4.  Avec une bande, le formulaire indique « Une bande (…) : sa statistique est ajoutée à chaque alerte. » Avec deux ou plus, sélectionnez-en une ou plusieurs dans **Bandes**.
+5.  Pour chaque bande, choisissez la statistique calculée sur l'alerte : **Majorité** (pour des classes), **Moyenne**, **Minimum**, **Maximum** ou **Médiane**. Elle démarre sur **Majorité** quand le nom de la bande ressemble à des classes (par exemple ``landcover``), et sur **Moyenne** sinon, marquée « (suggéré) ». Le nom de la colonne s'affiche à côté.
+6.  Sélectionnez **Ajouter une couche d'attributs**.
+
+Règles :
+
+-   Une couche doit avoir au moins une bande (**Conservez au moins une bande.**).
+-   Deux couches ne peuvent pas lire le même raster (**Une autre couche d'attributs lit déjà ce raster.**).
+-   Les noms de colonnes ne reprennent jamais le nom d'une colonne d'alerte ni celui d'une colonne d'une autre couche : en cas de conflit, un suffixe est ajouté.
+
+La liste sous **Couches d'attributs** affiche chaque couche avec ses colonnes. L'icône de crayon modifie une couche et l'icône de corbeille la retire. Les couches appartiennent à ce formulaire jusqu'à son exécution : elles sont alors enregistrées avec le jeu d'alertes.
+
+Exécuter l'étape
+^^^^^^^^^^^^^^^^
+
+La ligne grise au-dessus du bouton nomme le jeu que l'exécution produit : « Crée ou remplace le jeu d'alertes (période) · (sources) ». Un jeu d'alertes est identifié par sa période et ses sources :
+
+-   une nouvelle combinaison de sources produit un nouveau jeu : une période peut contenir plusieurs jeux (par exemple un avec GLAD-L seule et un avec les trois sources) ;
+-   la même combinaison, relancée, *remplace* le jeu.
+
+Sélectionnez **Intégrer et vectoriser**. Le bouton reste désactivé tant qu'aucune source n'est cochée et, lorsque **Limiter le nombre de groupes** est coché, tant que la limite n'est pas valide (« Saisissez un nombre entier supérieur à 0. » sous le champ).
+
+L'exécution passe par « Combinaison des sources », « Vectorisation des groupes », « Enregistrement des alertes », « Écriture de l'empreinte » et « Construction des tuiles de carte ». À la fin, un message indique « N alertes prêtes à être examinées », suivi de « N alertes liées à des pertes antérieures (M sous la surface minimale) » quand elle a trouvé des `alertes d'extension <defo-integrate-growth_>`_, et le nouveau jeu devient le *jeu actif* : celui sur lequel travaillent `Questionnaire <defo-questionnaire_>`_, `Évaluation <defo-evaluation_>`_, `Analyse <defo-analysis_>`_ et `Aperçu <defo-overview_>`_. L'étape reste ouverte.
+
+S'il ne reste aucune alerte, le jeu est tout de même créé, vide, et le message en donne la raison pour chaque source (par exemple « GLAD-L : les 56 pixels d'alerte supprimés par les masques » ou « RADD : les alertes probables (non confirmées) ont été écartées »).
+
+.. _defo-integrate-replace:
+
+Remplacer un jeu
+""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/integrate-replace.png
+    :alt: Confirmation du remplacement d'un jeu d'alertes
+
+Quand le jeu sur le point d'être remplacé a des alertes examinées ou une `répartition entre évaluateurs <defo-evaluation_>`_, la boîte de dialogue **Remplacer ce jeu d'alertes ?** liste ce qui serait perdu : les alertes examinées (jusqu'à 20, puis « … et N de plus »), ainsi que la répartition avec les révisions que les évaluateurs n'ont pas encore renvoyées. Quand des alertes de périodes ultérieures sont l'extension de ce jeu, elle ajoute « N alertes de périodes ultérieures sont liées à ce jeu ; leurs liens seront rompus. » : après l'exécution, ces liens apparaissent comme « l'ensemble précédent a été relancé » (voir `Alertes précédentes <defo-analysis-earlier_>`_). Sélectionnez **Remplacer** pour continuer. Un jeu qui n'a rien à perdre est remplacé sans confirmation.
+
+.. attention::
+
+    Remplacer un jeu écarte ses révisions. Pour essayer d'autres paramètres sans perdre de révisions, choisissez une autre combinaison de sources, qui produit un jeu distinct.
+
+.. _defo-integrate-outdated:
+
+Quand le jeu actif est obsolète
+"""""""""""""""""""""""""""""""
+
+Si les entrées du jeu actif ont changé depuis sa création (une source téléchargée à nouveau, un masque modifié, la rétrospection de la période, l'AOI ou la grille changées), une ligne orange indique : « Le jeu actif (…) a été construit à partir d'entrées qui ont changé depuis. » Relancez **Intégrer et vectoriser** pour le reconstruire, ce qui écarte ses révisions.
+
+Si les fichiers du jeu ont été supprimés du dossier du projet, la ligne indique : « Les fichiers du jeu actif (…) sont manquants dans le dossier du projet. »
+
+.. _defo-integrate-map:
+
+Voir les alertes sur la carte
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Dès que le projet a un jeu, des interrupteurs sous le bouton le dessinent sur la carte :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 35 65
+
+    *   -   Interrupteur
+        -   Description
+    *   -   **Afficher ces alertes sur la carte**
+        -   Les alertes du jeu actif, colorées selon leur état d'examen. Cliquez sur une alerte pour voir « Alerte (id) · (état) · (superficie) ha ». Son bouton **Examiner** l'ouvre dans Analyse.
+    *   -   **Afficher les pixels non analysables**
+        -   Les pixels d'alerte qui ne sont pas devenus des alertes : **Trop petit** ou **Au-delà du plafond d'alertes**.
+    *   -   **Afficher les jeux antérieurs**
+        -   Les alertes des jeux des périodes antérieures, pour le contexte.
+
+La carte les garde dans les autres étapes. Désactivez-les ici.
+
+Messages fréquents
+^^^^^^^^^^^^^^^^^^
+
+« … n'est pas téléchargée et harmonisée pour cette période ; téléchargez-la d'abord dans Alertes et harmonisez-la dans Harmoniser. »
+    Les fichiers d'une source sont obsolètes. Téléchargez-la dans `Alertes <defo-alerts-download_>`_, puis harmonisez-la dans `Harmoniser <defo-harmonize_>`_.
+
+« L'empreinte du jeu antérieur … est manquante ; relancez d'abord Intégrer et vectoriser sur ce jeu. »
+    Les fichiers d'une période antérieure ont été supprimés. Rendez cette période active et relancez son jeu.
+
+« Espace disque libre insuffisant : … »
+    L'exécution écrit quelques rasters de la taille de la grille. Libérez de l'espace.
+
+« La période, la zone d'intérêt ou la grille du projet ont changé pendant l'exécution, donc le jeu d'alertes n'a pas été enregistré. »
+    Relancez-la.
+
+« tippecanoe n'est pas installé : la carte affichera les points d'alerte sans polygones. »
+    Le jeu est créé ; la carte affiche ses alertes sous forme de points au lieu de polygones.
+
+« Les tuiles de carte n'ont pas pu être affichées (…) : affichage des points d'alerte sans polygones. »
+    Le jeu est créé, mais sa couche cartographique n'a pas pu être construite. La carte affiche ses alertes sous forme de points.
+
+« La base d'alertes de … est manquante ; relancez Intégrer et vectoriser pour cette période. »
+    Avec **Afficher les jeux antérieurs**, le fichier d'alertes d'un jeu antérieur a disparu du dossier du projet. Rendez cette période active et relancez son jeu.
+
 .. _defo-layers:
 
-Couches facultatives
---------------------
+Couches supplémentaires
+-----------------------
 
 Les couches de visualisation appuient l'examen des alertes : une carte d'occupation du sol, une référence forestière, une mosaïque récente. Elles ne modifient jamais les alertes. Une couche est une image Earth Engine ou un GeoTIFF. Elle peut être affichée sur la carte principale et, avec **Afficher dans Analyse** coché, sur les deux cartes de l'écran `Analyse <defo-analysis_>`_.
 
-Ouvrez l'étape **Couches facultatives** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `AOI <defo-aoi_>`_.
+Ouvrez l'étape **Couches supplémentaires** du panneau **Flux de travail**, la première étape de **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_).
 
 L'étape est facultative : passez-la et revenez-y à tout moment. Dès que le projet a une `période de suivi <defo-period_>`_, le panneau **Flux de travail** compte l'étape comme terminée même sans couche, et son badge indique « aucune » au lieu de « rien pour l'instant ».
 
 .. note::
 
-    Les mosaïques Planet NICFI ne sont pas une couche facultative : si votre compte GEE a accès à NICFI, elles arrivent avec les images *Planet* de la `frise chronologique d'Analyse <defo-analysis-timeline_>`_.
+    Les mosaïques Planet NICFI ne sont pas une couche supplémentaire : si votre compte GEE a accès à NICFI, elles arrivent avec les images *Planet* de la `frise chronologique d'Analyse <defo-analysis-timeline_>`_.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/layers-list.png
-    :alt: L'étape Couches facultatives avec une couche
+    :alt: L'étape Couches supplémentaires avec une couche
 
 La liste des couches
 ^^^^^^^^^^^^^^^^^^^^
@@ -718,641 +1412,6 @@ Messages fréquents
 « Le fichier … n'existe plus. »
     Le fichier d'une couche GeoTIFF a été déplacé ou supprimé. Modifiez la couche et choisissez à nouveau le fichier.
 
-.. _defo-period:
-
-Période de suivi
-----------------
-
-Une *période* est un cycle de suivi, en général d'un mois. Pour chaque période, l'application télécharge toutes les sources sur les dates de la période plus une *rétrospection* qui les précède, et construit les jeux d'alertes de cette période. Un projet contient généralement une série de périodes consécutives.
-
-Ouvrez l'étape **Période** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a au moins une `source d'alertes <defo-alerts_>`_.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/period-list.png
-    :alt: L'étape Période avec une période
-
-.. _defo-period-tracking:
-
-Une perte sur plusieurs périodes
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Chaque période est traitée à part, mais la perte de forêt ne s'en tient pas aux dates de la période. Une partie de la perte pourrait échapper au suivi entre deux périodes :
-
--   un défrichement qui commence trop petit pour être une alerte ;
--   des alertes que les fournisseurs publient en retard, après le traitement de leur période ; ou
--   un défrichement qui continue de s'étendre au bord d'une alerte signalée dans une période antérieure.
-
-L'application suit cette perte d'une période à l'autre, et ne signale jamais deux fois la même perte :
-
-.. list-table::
-    :header-rows: 1
-    :widths: 35 65
-
-    *   -   Cas
-        -   Ce que fait l'application
-    *   -   Une perte déjà signalée par une période antérieure
-        -   Ses pixels (l'*empreinte* du jeu d'alertes antérieur) sont retirés de l'exécution de la nouvelle période : elle n'est donc pas signalée de nouveau.
-    *   -   Un groupe trop petit pour être une alerte, ou une alerte publiée en retard
-        -   La `rétrospection <defo-period-lookback_>`_ remonte dans la période antérieure : les pixels mis de côté reviennent et peuvent rejoindre de nouveaux pixels pour former une alerte.
-    *   -   Un défrichement qui s'étend à côté d'une alerte examinée
-        -   La nouvelle alerte est `liée à l'alerte antérieure <defo-period-growth_>`_ comme *alerte d'extension*, et conservée même sous la taille minimale.
-
-.. _defo-period-lookback:
-
-La fenêtre de recherche et la rétrospection
-"""""""""""""""""""""""""""""""""""""""""""
-
-Un défrichement commence souvent petit et s'étend au fil des semaines suivantes. Dans la période où il commence, son groupe de pixels d'alerte est encore plus petit que la **Taille minimale d'alerte** d'`Intégrer et vectoriser <defo-integrate_>`_ : il ne devient donc pas une alerte, et ses pixels sont mis de côté comme *non analysables*.
-
-La rétrospection garde ces pixels en jeu :
-
--   Chaque période cherche dans une *fenêtre de recherche* plus large : ses propres dates plus les jours de rétrospection qui précèdent son début.
--   Les pixels mis de côté par la période antérieure reviennent dans l'exécution et rejoignent les nouveaux pixels qui les touchent.
--   Si le groupe qu'ils forment ensemble atteint la taille minimale, il devient une alerte. Sa date de première détection est celle de son pixel le plus ancien, dans la période antérieure.
-
-Pour ne pas signaler deux fois la même perte, tout pixel déjà signalé par un jeu d'alertes d'une période *antérieure* est retiré avant la construction des alertes de la nouvelle période : seul ce qui a été mis de côté revient. La rétrospection rattrape aussi les alertes que les fournisseurs ont publiées en retard, après le traitement de la période antérieure.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/lookback.gif
-    :alt: La rétrospection : un groupe trop petit dans une période rejoint les pixels de la période suivante et devient une alerte, et une alerte signalée n'est jamais signalée de nouveau
-
-.. note::
-
-    La première période n'a pas de jeu antérieur auquel se comparer : toutes les alertes de sa fenêtre de recherche sont donc conservées. Sa ligne indique **Aucun ensemble antérieur : toutes les alertes de la fenêtre de recherche sont conservées**. Avec une rétrospection, cela inclut des alertes datées d'avant le début de la période.
-
-    La première période d'un nouveau projet démarre sans rétrospection : elle ne cherche donc que dans ses propres dates, sauf si une rétrospection est définie. Un projet créé avec **Dupliquer** conserve la rétrospection du projet dont il est la copie.
-
-.. _defo-period-growth:
-
-Extension à côté d'alertes antérieures
-""""""""""""""""""""""""""""""""""""""
-
-Les pixels d'une alerte signalée font partie de l'empreinte : la rétrospection ne les fait donc pas revenir. Mais un défrichement continue souvent de s'étendre au bord d'une alerte signalée dans une période antérieure. Les nouveaux pixels forment alors leur propre groupe, souvent plus petit que la **Taille minimale d'alerte**, qui serait mis de côté comme tout petit groupe.
-
-Quand l'alerte antérieure a été enregistrée comme **Alerte réelle** ou **À réexaminer**, `Intégrer et vectoriser <defo-integrate-growth_>`_ garde cette extension en vue :
-
--   Une nouvelle alerte qui touche ou chevauche l'alerte antérieure est une *alerte d'extension*, liée à celle-ci.
--   Un groupe sous la taille minimale est conservé s'il touche l'alerte antérieure : c'est une alerte d'extension *sous la surface minimale*. Un petit groupe qui ne touche rien est mis de côté, et la rétrospection peut encore le faire revenir à la période suivante.
--   L'exécution cherche les alertes antérieures dans toutes les périodes antérieures, quelle que soit la rétrospection.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
-    :alt: Extension : une alerte confirmée s'étend par son bord à la période suivante, et le petit groupe nouveau est conservé et lié à elle, tandis qu'un petit groupe qui ne touche rien est mis de côté
-
-Les alertes liées entre elles, toutes périodes confondues, forment l'*historique* d'un défrichement. Analyse l'affiche sur chaque alerte (voir `Alertes précédentes <defo-analysis-earlier_>`_), et l'`Aperçu <defo-overview-growth_>`_ en fait la synthèse.
-
-.. tip::
-
-    Seules comptent les révisions enregistrées au lancement d'`Intégrer et vectoriser <defo-integrate_>`_. Examinez les alertes d'une période avant de lancer la suivante, pour que leur extension soit liée. Une alerte examinée plus tard peut encore être liée à la main dans `Alertes précédentes <defo-analysis-earlier_>`_.
-
-La liste des périodes
-^^^^^^^^^^^^^^^^^^^^^
-
-Chaque ligne de **Périodes** affiche :
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Colonne
-        -   Description
-    *   -   **Période**
-        -   Les dates de la période (« début → fin »), avec des notes en dessous : sa fenêtre de recherche et les éventuels avertissements.
-    *   -   **Jeux**
-        -   Le nombre de jeux d'alertes construits pour cette période.
-    *   -   **Statut**
-        -   **obsolète** quand un téléchargement de source ou un jeu d'alertes ne correspond plus aux paramètres actuels (relancez-le dans `Télécharger et harmoniser <defo-prepare_>`_ ou `Intégrer et vectoriser <defo-integrate_>`_) ; **manquante** quand les fichiers d'un jeu d'alertes ont disparu ; un tiret quand tout est à jour.
-
-Les icônes à droite de chaque ligne :
-
--   le bouton radio rend la période *active* : `Télécharger et harmoniser <defo-prepare_>`_ et `Intégrer et vectoriser <defo-integrate_>`_ travaillent sur la période active ;
--   l'icône de crayon change ses dates ou sa rétrospection ;
--   l'icône de corbeille la supprime.
-
-.. _defo-period-add:
-
-Ajouter une période
-^^^^^^^^^^^^^^^^^^^
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/period-new.png
-    :alt: La boîte de dialogue Nouvelle période
-
-Sélectionnez **Nouvelle période**. La boîte de dialogue est pré-remplie pour que la nouvelle période prolonge la série.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 35 45
-
-    *   -   Champ
-        -   Description
-        -   Valeur par défaut et limites
-    *   -   **Début**
-        -   Le premier jour de la période.
-        -   Le lendemain de la fin de la dernière période. Pour la première période, le premier jour du mois en cours.
-    *   -   **Fin**
-        -   Le dernier jour de la période.
-        -   Aujourd'hui. Doit être postérieure au **Début**. Deux périodes ne peuvent pas avoir les mêmes dates.
-    *   -   **Rétrospection (jours)**
-        -   Le nombre de jours avant le **Début** qui sont aussi parcourus.
-        -   0 (pas de rétrospection) pour la première période d'un nouveau projet (un projet dupliqué conserve la rétrospection de son original), puis la dernière valeur utilisée. Un nombre entier de 0 à 3650.
-
-Sous les champs, la boîte de dialogue donne un aperçu de la fenêtre de recherche (« Fenêtre de recherche : début → fin »). Sélectionnez **Ajouter une période** : la période est créée et devient la période active.
-
-Une nouvelle période démarre avec les choix de masques de la dernière période. Modifiez-les dans `Télécharger et harmoniser <defo-prepare_>`_.
-
-.. tip::
-
-    Pour que les groupes mis de côté reviennent, la rétrospection doit remonter jusque dans la période précédente. Avec une rétrospection de 0, la fenêtre de recherche commence le premier jour de la période elle-même et rien de ce qui a été mis de côté auparavant n'est réexaminé.
-
-    Un groupe qui reste trop petit reste en jeu dans les périodes suivantes tant que leur rétrospection remonte jusqu'à ses pixels. Une rétrospection plus longue laisse plus de temps à un défrichement qui s'étend lentement pour atteindre la taille minimale, mais alourdit chaque téléchargement (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_).
-
-Modifier une période
-^^^^^^^^^^^^^^^^^^^^
-
-Pour une période sans jeu d'alertes, l'icône de crayon ouvre une boîte de dialogue pour changer ses dates. De nouvelles dates donnent à la période une nouvelle identité : ses téléchargements et ses fichiers harmonisés sont supprimés, puisqu'ils avaient été produits pour l'ancienne fenêtre.
-
-Une période qui a des jeux d'alertes a des dates fixes (sa note indique **Ses dates sont fixées : elle a des jeux d'alertes.**). L'icône de crayon ouvre alors une boîte de dialogue où seule la rétrospection peut changer. Les téléchargements de la période apparaissent ensuite comme obsolètes.
-
-Supprimer une période
-^^^^^^^^^^^^^^^^^^^^^
-
-Sélectionnez l'icône de corbeille. La boîte de dialogue de confirmation liste ce qui est supprimé : les téléchargements et fichiers harmonisés de la période, ainsi que ses jeux d'alertes avec leurs alertes examinées.
-
-.. important::
-
-    Une période qui a des jeux d'alertes ne peut être supprimée que si c'est la dernière période. Les jeux d'une période antérieure forment l'empreinte à partir de laquelle les jeux ultérieurs ont été construits : supprimez donc d'abord les périodes ultérieures. Les périodes ne peuvent être ni modifiées ni supprimées tant qu'une tâche écrit dans le projet.
-
-.. _defo-prepare:
-
-Télécharger et harmoniser
--------------------------
-
-Cette étape prépare toutes les entrées de la `période <defo-period_>`_ active sur une grille commune. Chaque source d'alertes est téléchargée sur la fenêtre de recherche de la période dans sa propre projection, puis *harmonisée* : alignée sur la grille du projet et découpée par les masques de la période. Rien ne s'exécute deux fois si ses entrées n'ont pas changé.
-
-Ouvrez l'étape **Télécharger et harmoniser** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une période active. Elle porte sur la période active : pour préparer une autre période, rendez-la d'abord active à l'étape `Période <defo-period_>`_.
-
-De haut en bas, l'étape comporte trois parties : la **Grille du projet**, les **Masques** et les **Sources de cette période**.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/prepare-step.png
-    :alt: L'étape Télécharger et harmoniser après une exécution
-
-La grille du projet
-^^^^^^^^^^^^^^^^^^^
-
-Tous les rasters du projet sont alignés sur une même grille : une projection en mètres et une taille de pixel, sur l'AOI. Les alertes de sources aux tailles de pixel différentes peuvent alors être combinées pixel par pixel, et la taille minimale d'alerte en hectares devient un nombre de pixels.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 15 40 45
-
-    *   -   Champ
-        -   Description
-        -   Valeur par défaut et limites
-    *   -   **EPSG**
-        -   La projection de la grille, sous forme de code EPSG (European Petroleum Survey Group). Le bouton cible au bout du champ y inscrit la zone UTM (Mercator transverse universelle) de l'AOI.
-        -   La zone UTM du centre de l'AOI. Doit être un système projeté en mètres : un système géographique (comme 4326) ou un système en pieds est refusé.
-    *   -   **Résolution**
-        -   La taille du pixel, en mètres.
-        -   La taille de pixel la plus fine parmi les sources du projet : 10 m avec RADD ou GLAD-S2, 30 m avec GLAD-L seule, la taille de pixel propre d'une source personnalisée, ou 30 m quand rien n'est connu. Doit être supérieure à 0.
-
-Sous les champs, la taille de la grille est annoncée : « largeur × hauteur pixels, environ … par source avant compression ». Au-delà de 2 Go par source, un avertissement indique **Cette grille est grande : les téléchargements prendront du temps et utiliseront de l'espace disque.** (il ne bloque pas l'étape).
-
-Sélectionnez **Enregistrer la grille**. Les masques et le tableau des sources n'apparaissent qu'une fois une grille enregistrée.
-
-La grille peut changer jusqu'à la création du premier jeu d'alertes. Une nouvelle grille ne fait que réharmoniser les sources à partir des fichiers déjà téléchargés ; elle ne les télécharge pas à nouveau. Dès que le projet a un jeu d'alertes, la carte indique **La grille est verrouillée car le projet a des jeux d'alertes.**
-
-.. note::
-
-    Modifier l'`AOI <defo-aoi_>`_ efface la grille et supprime tous les téléchargements et fichiers harmonisés du projet, qui avaient été produits pour l'ancienne zone. Enregistrez à nouveau la grille ici, puis relancez les lignes.
-
-Masques
-^^^^^^^
-
-Un *masque* limite l'endroit où les alertes sont conservées. C'est un raster défini une fois pour le projet : une image ou une collection d'images GEE, ou un GeoTIFF, à une bande. Un pixel est dans le masque là où cette bande n'est pas nulle ; les pixels à zéro ou sans donnée sont hors du masque.
-
-Chaque période choisit un **Mode** pour chaque masque :
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Mode
-        -   Effet sur les alertes de la période
-    *   -   **Inactif**
-        -   Le masque n'est pas utilisé dans cette période.
-    *   -   **Conserver**
-        -   Les alertes *hors* du masque sont retirées (par exemple : ne garder que les alertes à l'intérieur d'un masque forestier).
-    *   -   **Exclure**
-        -   Les alertes *dans* le masque sont retirées (par exemple : écarter les alertes situées dans des plantations ou dans l'eau).
-
-Quand plusieurs masques sont actifs, ils s'appliquent tous. Les masques agissent sur les sources harmonisées : un changement de **Mode** rend donc obsolètes les sources de la période. **Exécuter … en attente** les réharmonise alors sans les télécharger. Une nouvelle période démarre avec les choix de masques de la dernière période.
-
-Ajouter un masque
-"""""""""""""""""
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/prepare-mask-add.png
-    :alt: Ajout d'un masque
-
-Sélectionnez **Ajouter un masque** pour ouvrir la boîte de dialogue **Ajouter un masque**. Les bandes sont lues dès que le raster est choisi.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 40 40
-
-    *   -   Champ
-        -   Description
-        -   Valeur par défaut et limites
-    *   -   **Nom**
-        -   Le nom du masque dans les listes, les légendes et les noms de fichiers.
-        -   Proposé à partir du nom de l'asset ou du fichier. 24 caractères au plus, au moins une lettre ou un chiffre, unique parmi les masques du projet.
-    *   -   **Source**
-        -   **Earth Engine** (un asset) ou **GeoTIFF** (un fichier de votre dossier SEPAL).
-        -   **Earth Engine**.
-    *   -   Asset ou **GeoTIFF**
-        -   L'image ou la collection d'images GEE, ou le fichier .tif.
-        -
-    *   -   **Bande**
-        -   La bande qui définit le masque. Affichée quand le raster a deux bandes ou plus ; avec une bande, le formulaire indique « Une bande (…) : le masque est fait à partir d'elle. »
-        -   La bande dont le nom ressemble à un masque (par exemple ``datamask``), nommée dans l'aide (« … ressemble à un masque ; les pixels non nuls sont à l'intérieur. »), sinon aucune : choisissez-la.
-    *   -   **Mode dans la période active**
-        -   **Conserver** ou **Exclure**.
-        -   **Conserver**. Le masque n'est activé que dans la période active ; toutes les autres périodes le laissent inactif jusqu'à ce qu'il y soit activé.
-
-Quand **Ajouter un masque** est sélectionné, l'application vérifie le raster et sa bande. Un problème s'affiche en rouge dans la boîte de dialogue, qui reste ouverte pour les corrections.
-
-La liste des masques
-""""""""""""""""""""
-
-Chaque ligne de **Masques** affiche :
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Colonne
-        -   Description
-    *   -   **Masque**
-        -   Le nom du masque. La ligne en dessous donne sa source et sa taille sur le disque une fois prêt (« Earth Engine · 18,9 MB »), ou la raison pour laquelle il doit être exécuté (« pas encore téléchargée », « la grille a changé (…) : aligner à nouveau »). Elle se termine par « Inactif » quand le masque est inactif dans la période active.
-    *   -   **Mode**
-        -   Le mode du masque dans la période active : **Inactif**, **Conserver** ou **Exclure**. Un changement s'applique tout de suite ; les sources de la période deviennent alors obsolètes.
-    *   -   **État**
-        -   « Prête », ou un bouton pour la prochaine exécution du masque : **Télécharger** (un masque GEE pas encore téléchargé) ou **Aligner** (sur la grille). Un bouton orange refait un fichier obsolète. Pendant une exécution, la cellule indique « Chargement 42 % », « Alignement » ou « En attente ».
-
-Les icônes à droite de chaque ligne :
-
--   l'icône de carte affiche le masque sur la carte : un masque GEE peut être prévisualisé avant d'être téléchargé, un masque GeoTIFF une fois aligné ;
--   l'icône d'information ouvre ses **Détails** (voir `La boîte de dialogue Détails <defo-prepare-details_>`_) ;
--   le menu **Plus d'actions** (trois points) contient :
-
-    -   **Télécharger à nouveau** (masques GEE uniquement), pour un asset qui a changé. L'application demande d'abord : « Ceci récupère le masque à nouveau depuis Earth Engine, remplace son téléchargement, puis l'aligne. » ;
-    -   **Modifier**, qui ouvre **Modifier le masque** *nom* : le raster et la bande peuvent changer, le nom non. Dès qu'un jeu d'alertes a utilisé le masque, il ne peut plus être modifié (**Un jeu d'alertes utilise déjà ce masque : ajoutez-en un nouveau à la place.**) ;
-    -   **Supprimer le masque…**, qui supprime le masque après confirmation. Son téléchargement et son fichier aligné sont supprimés, et toutes les périodes cessent de l'utiliser. Les jeux d'alertes qui l'utilisaient conservent leurs alertes et apparaissent comme obsolètes.
-
-Un masque est téléchargé et aligné une seule fois pour tout le projet, quelle que soit la période qui l'exécute.
-
-.. _defo-prepare-sources:
-
-Sources de cette période
-^^^^^^^^^^^^^^^^^^^^^^^^
-
-Le tableau a une ligne par source d'alertes du projet, avec deux colonnes :
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Colonne
-        -   Description
-    *   -   **Source**
-        -   Le nom de la source. La ligne en dessous dit ce que contient la ligne du tableau ou ce qu'elle attend (voir plus bas). Les avertissements, comme une couverture partielle, et les erreurs s'affichent en lignes sous la ligne du tableau.
-    *   -   **État**
-        -   L'état de la ligne, ou un bouton pour sa prochaine exécution.
-
-La colonne **État** indique :
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   État
-        -   Signification
-    *   -   « Prête »
-        -   Téléchargée et harmonisée avec les entrées actuelles. La ligne sous le nom donne la date du téléchargement, la taille sur le disque et ce que le fichier harmonisé a trouvé : « téléchargée le 2026-10-20 · 31,7 MB · 2 362 718 pixels d'alerte ».
-    *   -   **Télécharger**
-        -   La source n'est pas encore téléchargée pour la fenêtre de recherche de cette période, ou son téléchargement est obsolète. Sélectionnez le bouton pour exécuter la ligne : il aligne les masques de la période qui en ont besoin, télécharge la source, puis l'harmonise.
-    *   -   **Harmoniser**
-        -   Le téléchargement est à jour, mais le fichier harmonisé manque ou est obsolète (une nouvelle grille, un changement de masque). L'exécution réharmonise sans télécharger. Une source GeoTIFF n'est jamais téléchargée : elle est lue depuis son fichier, donc son bouton indique toujours **Harmoniser**.
-    *   -   **Réessayer**
-        -   La dernière exécution de la ligne a échoué. Son erreur s'affiche en rouge sous la ligne.
-    *   -   « Chargement 42 % », « Traitement », « En attente »
-        -   La ligne est en cours, ou attend son tour dans une exécution (« en attente de la ligne du dessus »).
-    *   -   « non couverte », « aucune donnée »
-        -   La source ne peut pas s'exécuter pour cette période : elle ne couvre pas l'AOI, ou n'a pas de données pour la fenêtre de recherche. La ligne sous le nom en donne la raison. Pour la couverture, voir `Sources d'alertes <defo-alerts_>`_.
-    *   -   « Sans fichier »
-        -   Le fichier d'une source GeoTIFF a disparu (voir `Messages fréquents <defo-prepare-messages_>`_).
-
-Dans la `copie d'examen <defo-evaluation-return_>`_ d'un évaluateur, rien ne s'exécute : au lieu d'un bouton, la colonne indique « À charger », « À harmoniser » ou « À aligner ».
-
-Un bouton bleu exécute une ligne pour la première fois ; un bouton orange refait un fichier obsolète. La ligne sous le nom dit alors pourquoi, et ce que l'exécution fait à ce sujet : par exemple « la grille a changé (EPSG:32719 · 30 m → EPSG:32719 · 10 m) : harmoniser à nouveau », « la fenêtre de recherche a changé (…) : télécharger à nouveau », « le masque forest_2000 a changé : harmoniser à nouveau » ou « l'AOI a changé : télécharger à nouveau ».
-
-.. note::
-
-    Une ligne prête n'a pas de bouton : une source déjà téléchargée pour la fenêtre de recherche de la période n'est pas retéléchargée d'elle-même. Pour récupérer les dernières alertes d'un catalogue qui continue d'ajouter des alertes à des dates passées, utilisez **Télécharger à nouveau**.
-
-Les icônes à droite de chaque ligne :
-
--   l'icône de carte (**Afficher sur la carte**) affiche les alertes harmonisées sur la carte ;
--   l'icône d'information ouvre les **Détails** de la ligne (voir plus bas) ;
--   **Télécharger à nouveau** récupère à nouveau la source même si rien n'a changé, puis l'harmonise. L'application demande d'abord, avec la fenêtre et la date du fichier qu'elle remplace. Il n'est pas proposé pour une source GeoTIFF (« Rien à télécharger à nouveau : lue depuis un fichier »), et attend tant qu'un masque de la période doit être exécuté (« Exécutez d'abord les masques en attente ») ;
--   **Supprimer les fichiers** retire le téléchargement et le fichier harmonisé de la source pour cette période, après confirmation. La source reste dans le projet : exécutez à nouveau la ligne pour les reconstruire. Les jeux d'alertes de cette période construits à partir de la source deviennent obsolètes ; leurs alertes et leurs revues sont conservées.
-
-.. _defo-prepare-details:
-
-La boîte de dialogue Détails
-""""""""""""""""""""""""""""
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/prepare-details.png
-    :alt: La boîte de dialogue Détails d'une source
-
-L'icône d'information d'une source ou d'un masque ouvre un résumé en lecture seule de ce avec quoi ses fichiers ont été produits. Il commence par l'état de la ligne et, pour une source, la période. Quand la ligne est obsolète, une ligne orange **Pourquoi :** dit ce qui a changé.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   Section
-        -   Ce qu'elle liste
-    *   -   **Source**
-        -   Une source prédéfinie : son **Catalogue** et sa **Couverture** de l'AOI, avec la dernière date de données et le jour de la vérification. Une source personnalisée : son **Type**, sa **Référence**, son **Format**, son **Codage des dates**, ses **Bandes** et sa **Grille native**. Un masque : sa **Référence**, sa **Bande**, sa **Grille native** et les périodes où il est utilisé (**Utilisé dans**).
-    *   -   **Téléchargement** (**Lecture du fichier** pour une source GeoTIFF)
-        -   La **Fenêtre de recherche**, la **Grille native** dans laquelle le fichier a été téléchargé, sa **Taille** et son **Fichier** dans le dossier du projet.
-    *   -   **Harmonisation** (**Alignement** pour un masque)
-        -   La **Grille utilisée**, avec la grille actuelle quand elle a changé depuis, le **Rééchantillonnage**, les **Masques** appliqués avec leur mode, les **Pixels d'alerte** conservés (et combien les masques en ont retiré), les **Dates d'alerte** trouvées, la **Taille** et le **Fichier**. Pour un masque : ses **Pixels du masque**.
-
-Chaque section donne la date et l'heure d'écriture de son fichier, ou indique « Pas encore exécuté ». Sélectionnez **Fermer**, ou appuyez sur **Échap**, pour fermer la boîte de dialogue.
-
-.. labels-ok: Échap
-
-Tout exécuter
-"""""""""""""
-
-Le pied du tableau exécute les lignes par lot. Sélectionnez **Exécuter … en attente** (par exemple **Exécuter 4 en attente**). Le bouton aligne d'abord les masques activés dans la période qui en ont besoin, puis exécute chaque source qui doit être exécutée, une ligne à la fois :
-
--   les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ;
--   une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante.
-
-Pendant l'exécution, le pied compte ses lignes (« 1 en cours · 3 en attente », puis « 2 sur 4 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui arrête l'exécution après la ligne en cours. Tant que cette ligne n'est pas finie, le bouton indique « Arrêt… ». Les lignes déjà faites le restent.
-
-La flèche à côté d'**Exécuter … en attente** (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, puis harmonisée, après confirmation.
-
-L'exécution apparaît aussi comme une notification de tâche intitulée **Télécharger et harmoniser**, avec l'étape en cours (« Préparation de GLAD-L », puis « Harmonisation de GLAD-L ») et le pourcentage du téléchargement (« Télécharger et harmoniser · 35 % »).
-
-.. tip::
-
-    Chaque ligne a besoin d'espace disque libre pour ses fichiers. L'application le vérifie avant d'écrire et arrête la ligne avec un message quand le disque est trop plein. La ligne de taille de la grille donne une idée du volume que peut atteindre une source.
-
-.. _defo-prepare-messages:
-
-Messages fréquents
-^^^^^^^^^^^^^^^^^^
-
-« Espace disque libre insuffisant : ceci nécessite … Go dans …, et … Go sont libres. »
-    Libérez de l'espace dans votre dossier SEPAL, ou utilisez une grille plus grossière.
-
-« Une ligne de cette exécution est déjà en préparation … »
-    Un masque est en cours d'alignement par l'exécution d'une autre période, ou la ligne tourne encore. Relancez-la une fois celle-ci terminée.
-
-« La géométrie de l'AOI est encore en cours de récupération ; relancez cette ligne dans un instant. »
-    Les sources et masques GeoTIFF ont besoin de la forme de l'AOI. Patientez un instant. Si elle n'a pas pu être récupérée, sélectionnez **Vérifier à nouveau** sous le tableau, puis exécutez-les.
-
-« Le masque … ne couvre aucune partie de l'AOI : en masque de conservation, toutes les alertes seraient supprimées. »
-    Le masque ne recouvre pas la zone. Vérifiez son asset ou sa bande, ou désactivez-le.
-
-« Une tâche écrit dans ce projet ; enregistrez la grille une fois celle-ci terminée. »
-    La grille, les masques et les sources ne peuvent pas changer pendant un téléchargement ou une exécution d'**Intégrer et vectoriser**.
-
-« Sans fichier », avec « manquante : fichier introuvable : … » sous la ligne, ou « Masque … : fichier introuvable (…). Remettez le fichier à cet emplacement pour utiliser le masque. »
-    Une source ou un masque GeoTIFF a été déplacé, renommé ou supprimé de votre dossier SEPAL. Remettez le fichier à l'emplacement indiqué, ou modifiez la source ou le masque pour pointer vers son nouvel emplacement.
-
-« Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Exécuter … en attente aligne d'abord les masques. »
-    Une source ne peut pas être harmonisée avant que les masques de la période soient alignés. Sélectionnez **Exécuter … en attente**, ou d'abord le bouton **Aligner** du masque.
-
-« Masque … : sa grille native (projection et échelle) est inconnue ; modifiez le masque. »
-    L'application ne sait pas comment télécharger ce masque GEE. Ouvrez-le avec **Modifier** dans son menu **Plus d'actions** et enregistrez-le à nouveau, pour que son raster soit revérifié.
-
-.. _defo-integrate:
-
-Intégrer et vectoriser
-----------------------
-
-Cette étape transforme les sources harmonisées de la période active en un *jeu d'alertes* : la liste des alertes à examiner dans `Analyse <defo-analysis_>`_. Elle :
-
--   combine les sources pixel par pixel ;
--   retire ce que les périodes antérieures ont déjà signalé ;
--   regroupe les pixels d'alerte voisins en alertes ;
--   dessine un polygone par alerte.
-
-Ouvrez l'étape **Intégrer et vectoriser** du panneau **Flux de travail**. Elle se déverrouille dès qu'au moins une source de la période active est prête dans `Télécharger et harmoniser <defo-prepare_>`_.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/integrate-form.png
-    :alt: Le formulaire Intégrer et vectoriser
-
-Qu'est-ce qu'une alerte
-^^^^^^^^^^^^^^^^^^^^^^^
-
-Une alerte est un *groupe* : un ensemble de pixels d'alerte qui se touchent, par un côté ou par un coin, quelle que soit la source qui a signalé chaque pixel. Là où des pixels GLAD-L et RADD se touchent, ils forment *une seule* alerte qui mentionne les deux sources. Une alerte n'est jamais scindée en une alerte par source.
-
-Chaque alerte conserve :
-
--   les sources qui l'ont détectée ;
--   ses dates de première et de dernière détection (la date la plus ancienne et la plus récente parmi ses pixels) ;
--   sa superficie en hectares ;
--   une statistique des bandes de chaque couche d'attributs (voir plus bas).
-
-Un groupe plus petit que la **Taille minimale d'alerte** (voir `Les options <defo-integrate-options_>`_) ne devient pas une alerte : ses pixels sont mis de côté comme *non analysables*.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/integrate.gif
-    :alt: Les sources sur une même grille deviennent des groupes ; chaque groupe est mesuré par rapport à la taille minimale, et devient un polygone qui mentionne ses sources ou, s'il est plus petit, est mis de côté
-
-.. _defo-integrate-earlier:
-
-Ce que les périodes antérieures ont déjà signalé
-""""""""""""""""""""""""""""""""""""""""""""""""
-
-Les pixels situés dans les alertes d'un jeu d'une période *antérieure* (son *empreinte*) sont retirés avant la formation des groupes. Ainsi, la `rétrospection <defo-period-lookback_>`_ ne signale jamais deux fois la même perte.
-
-Les pixels qui ne sont pas devenus des alertes (un groupe sous la taille minimale, ou au-delà du nombre maximal d'alertes) sont conservés comme *non analysables*. Ils ne font pas partie de l'empreinte : les récupérer est le rôle de la `rétrospection <defo-period-lookback_>`_.
-
-L'exécution d'une période ultérieure réintègre ces pixels quand les deux conditions sont remplies :
-
--   sa rétrospection remonte jusque dans la période antérieure (cette période se termine le jour où commence la nouvelle fenêtre de recherche, ou après) ;
--   les deux périodes partagent une source.
-
-Les pixels reviennent quelle que soit leur date de détection dans la fenêtre de recherche propre au jeu antérieur. Ils rejoignent les nouveaux pixels qui les touchent, et un groupe qui atteint désormais la taille minimale devient une alerte. Ses dates de détection peuvent être antérieures à sa propre période et à sa rétrospection. Avec une rétrospection de 0, la fenêtre de recherche commence le premier jour de la période elle-même : rien de ce qui a été mis de côté n'est donc réexaminé.
-
-.. _defo-integrate-growth:
-
-Extension d'une perte antérieure
-""""""""""""""""""""""""""""""""
-
-Un défrichement continue souvent de s'étendre d'un mois à l'autre. L'exécution relie chaque nouvelle alerte à la *perte antérieure* dont elle est l'extension : les alertes des jeux des périodes antérieures enregistrées comme **Alerte réelle** ou **À réexaminer**. La forme d'une alerte antérieure est le polygone dessiné pour elle dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut son groupe détecté.
-
--   Une nouvelle alerte qui touche ou chevauche la forme d'une alerte antérieure est une *alerte d'extension*, liée à chaque alerte antérieure qu'elle touche. Une alerte sans lien est une *nouvelle* alerte.
--   Un groupe plus petit que la **Taille minimale d'alerte** est conservé s'il touche une perte antérieure : c'est une alerte d'extension *sous la surface minimale*. Un petit groupe qui ne touche rien est mis de côté comme *non analysable*, comme avant.
--   Les alertes d'extension sont triées et limitées avec les autres : **Limiter le nombre d'alertes** peut les écarter.
--   Seules les révisions enregistrées au lancement de l'exécution comptent. Une alerte antérieure confirmée ensuite n'est pas liée, mais elle peut l'être à la main dans `Alertes précédentes <defo-analysis-earlier_>`_.
-
-Les alertes liées entre elles, toutes périodes confondues, forment l'*historique* d'un défrichement. Analyse l'affiche sur chaque alerte, et l'`Aperçu <defo-overview-growth_>`_ en fait la synthèse.
-
-.. _defo-integrate-options:
-
-Les options
-^^^^^^^^^^^
-
-Le formulaire s'ouvre avec les paramètres du jeu d'alertes actif (tous sauf les sources), ou avec les valeurs par défaut ci-dessous s'il n'y en a pas.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 50 30
-
-    *   -   Option
-        -   Description
-        -   Valeur par défaut et limites
-    *   -   **Sources à combiner**
-        -   Les sources dont les alertes entrent dans le jeu. Chaque source prête est listée avec ce que son fichier harmonisé a trouvé. Une source qui ne couvre pas l'AOI, ou qui n'a pas de données pour la période, apparaît désactivée, avec la raison.
-        -   Toutes les sources prêtes. Au moins une.
-    *   -   **Inclure les alertes probables (non confirmées)**
-        -   Affiché seulement si au moins une source cochée a une classe *probable* (confiance faible). Un seul interrupteur pour toutes ces sources. Désactivé, leurs pixels probables sont écartés avant tout le reste, et seuls leurs pixels confirmés comptent. Avec deux sources de ce type ou plus, **Régler par source** déplie un interrupteur par source (voir plus bas).
-        -   Activé.
-    *   -   **Taille minimale d'alerte**
-        -   Les groupes plus petits sont écartés. L'aide donne cette taille en pixels de la grille (à 10 m, 0,5 ha correspond à « 50 pixels sur la grille »).
-        -   0,5 ha. N'importe quel nombre d'hectares, 0 ou plus. Même à 0, une alerte fait au moins un pixel.
-    *   -   **Ordre**
-        -   L'ordre des alertes dans le jeu, qui est l'ordre d'examen : **Alertes les plus grandes en premier**, **Alertes les plus petites en premier**, **Alertes les plus récentes en premier** (selon la date de dernière détection) ou **Alertes les plus anciennes en premier** (selon la date de première détection).
-        -   **Alertes les plus grandes en premier**.
-    *   -   **Limiter le nombre d'alertes**
-        -   Coché, affiche **Nombre maximal d'alertes** : seules les premières alertes selon l'**Ordre** choisi sont conservées. Son aide indique lesquelles (par exemple « Conserve les 100 alertes les plus grandes. » ou « Conserve les 100 alertes les plus récentes. »). Décoché, toutes les alertes sont conservées.
-        -   Décoché. Une fois coché, la limite part de 100. Ce doit être un nombre entier supérieur à 0.
-    *   -   **Couches d'attributs**
-        -   Des rasters dont les statistiques de bandes sont ajoutées à chaque alerte (voir plus bas).
-        -   Aucune.
-
-Alertes probables par source
-""""""""""""""""""""""""""""
-
-Avec deux sources cochées ou plus qui ont une classe probable, sélectionnez **Régler par source** sous **Inclure les alertes probables (non confirmées)** pour donner à chacune son propre interrupteur, au nom de la source :
-
--   Une source cochée sans classe probable (une source personnalisée qui n'a que des dates de détection) apparaît comme « (source) : dates seules, pas de niveau probable ».
--   Quand les interrupteurs des sources diffèrent, l'interrupteur principal est désactivé, la note **Mixte : les sources ci-dessous diffèrent.** remplace **Régler par source**, et les interrupteurs par source restent dépliés.
--   Activer ou désactiver l'interrupteur principal règle toutes les sources d'un coup.
-
-.. _defo-integrate-attributes:
-
-Couches d'attributs
-"""""""""""""""""""
-
-Une *couche d'attributs* ajoute à chaque alerte des informations tirées d'un raster (par exemple la classe d'occupation du sol majoritaire sous l'alerte, ou son altitude moyenne). Les valeurs sont des colonnes de la table des alertes : elles sont exportées avec les alertes, et les colonnes de classes peuvent servir dans le filtre d'Analyse.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/integrate-attribute.png
-    :alt: Ajout d'une couche d'attributs
-
-Pour ajouter une couche d'attributs :
-
-1.  Sélectionnez **Ajouter une couche d'attributs** pour ouvrir la boîte de dialogue **Ajouter une couche d'attributs**.
-2.  Vérifiez le **Nom de la couche**, proposé à partir du raster une fois celui-ci choisi. Les colonnes se nomment *nom de la couche*\_\ *bande*.
-3.  Choisissez la **Source** (**Earth Engine**, une image, ou **GeoTIFF**, un fichier de votre dossier SEPAL), puis choisissez le raster. Ses bandes sont lues aussitôt.
-4.  Avec une bande, le formulaire indique « Une bande (…) : sa statistique est ajoutée à chaque alerte. » Avec deux ou plus, sélectionnez-en une ou plusieurs dans **Bandes**.
-5.  Pour chaque bande, choisissez la statistique calculée sur l'alerte : **Majorité** (pour des classes), **Moyenne**, **Minimum**, **Maximum** ou **Médiane**. Elle démarre sur **Majorité** quand le nom de la bande ressemble à des classes (par exemple ``landcover``), et sur **Moyenne** sinon, marquée « (suggéré) ». Le nom de la colonne s'affiche à côté.
-6.  Sélectionnez **Ajouter une couche d'attributs**.
-
-Règles :
-
--   Une couche doit avoir au moins une bande (**Conservez au moins une bande.**).
--   Deux couches ne peuvent pas lire le même raster (**Une autre couche d'attributs lit déjà ce raster.**).
--   Les noms de colonnes ne reprennent jamais le nom d'une colonne d'alerte ni celui d'une colonne d'une autre couche : en cas de conflit, un suffixe est ajouté.
-
-La liste sous **Couches d'attributs** affiche chaque couche avec ses colonnes. L'icône de crayon modifie une couche et l'icône de corbeille la retire. Les couches appartiennent à ce formulaire jusqu'à son exécution : elles sont alors enregistrées avec le jeu d'alertes.
-
-Exécuter l'étape
-^^^^^^^^^^^^^^^^
-
-La ligne grise au-dessus du bouton nomme le jeu que l'exécution produit : « Crée ou remplace le jeu d'alertes (période) · (sources) ». Un jeu d'alertes est identifié par sa période et ses sources :
-
--   une nouvelle combinaison de sources produit un nouveau jeu : une période peut contenir plusieurs jeux (par exemple un avec GLAD-L seule et un avec les trois sources) ;
--   la même combinaison, relancée, *remplace* le jeu.
-
-Sélectionnez **Intégrer et vectoriser**. Le bouton reste désactivé tant qu'aucune source n'est cochée et, lorsque **Limiter le nombre d'alertes** est coché, tant que la limite n'est pas valide (« Saisissez un nombre entier supérieur à 0. » sous le champ).
-
-L'exécution passe par « Combinaison des sources », « Vectorisation des groupes », « Enregistrement des alertes », « Écriture de l'empreinte » et « Construction des tuiles de carte ». À la fin, un message indique « N alertes prêtes à être examinées », suivi de « N alertes liées à des pertes antérieures (M sous la surface minimale) » quand elle a trouvé des `alertes d'extension <defo-integrate-growth_>`_, et le nouveau jeu devient le *jeu actif* : celui sur lequel travaillent `Questionnaire <defo-questionnaire_>`_, `Évaluation <defo-evaluation_>`_, `Analyse <defo-analysis_>`_ et `Aperçu <defo-overview_>`_. L'étape reste ouverte.
-
-S'il ne reste aucune alerte, le jeu est tout de même créé, vide, et le message en donne la raison pour chaque source (par exemple « GLAD-L : les 56 pixels d'alerte supprimés par les masques » ou « RADD : les alertes probables (non confirmées) ont été écartées »).
-
-.. _defo-integrate-replace:
-
-Remplacer un jeu
-""""""""""""""""
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/integrate-replace.png
-    :alt: Confirmation du remplacement d'un jeu d'alertes
-
-Quand le jeu sur le point d'être remplacé a des alertes examinées ou une `répartition entre évaluateurs <defo-evaluation_>`_, la boîte de dialogue **Remplacer ce jeu d'alertes ?** liste ce qui serait perdu : les alertes examinées (jusqu'à 20, puis « … et N de plus »), ainsi que la répartition avec les révisions que les évaluateurs n'ont pas encore renvoyées. Quand des alertes de périodes ultérieures sont l'extension de ce jeu, elle ajoute « N alertes de périodes ultérieures sont liées à ce jeu ; leurs liens seront rompus. » : après l'exécution, ces liens apparaissent comme « l'ensemble précédent a été relancé » (voir `Alertes précédentes <defo-analysis-earlier_>`_). Sélectionnez **Remplacer** pour continuer. Un jeu qui n'a rien à perdre est remplacé sans confirmation.
-
-.. attention::
-
-    Remplacer un jeu écarte ses révisions. Pour essayer d'autres paramètres sans perdre de révisions, choisissez une autre combinaison de sources, qui produit un jeu distinct.
-
-.. _defo-integrate-outdated:
-
-Quand le jeu actif est obsolète
-"""""""""""""""""""""""""""""""
-
-Si les entrées du jeu actif ont changé depuis sa création (une source téléchargée à nouveau, un masque modifié, la rétrospection de la période, l'AOI ou la grille changées), une ligne orange indique : « Le jeu actif (…) a été construit à partir d'entrées qui ont changé depuis. » Relancez **Intégrer et vectoriser** pour le reconstruire, ce qui écarte ses révisions.
-
-Si les fichiers du jeu ont été supprimés du dossier du projet, la ligne indique : « Les fichiers du jeu actif (…) sont manquants dans le dossier du projet. »
-
-.. _defo-integrate-map:
-
-Voir les alertes sur la carte
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Dès que le projet a un jeu, des interrupteurs sous le bouton le dessinent sur la carte :
-
-.. list-table::
-    :header-rows: 1
-    :widths: 35 65
-
-    *   -   Interrupteur
-        -   Description
-    *   -   **Afficher ces alertes sur la carte**
-        -   Les alertes du jeu actif, colorées selon leur état d'examen. Cliquez sur une alerte pour voir « Alerte (id) · (état) · (superficie) ha ». Son bouton **Examiner** l'ouvre dans Analyse.
-    *   -   **Afficher les pixels non analysables**
-        -   Les pixels d'alerte qui ne sont pas devenus des alertes : **Trop petit** ou **Au-delà du plafond d'alertes**.
-    *   -   **Afficher les jeux antérieurs**
-        -   Les alertes des jeux des périodes antérieures, pour le contexte.
-
-La carte les garde dans les autres étapes. Désactivez-les ici.
-
-Messages fréquents
-^^^^^^^^^^^^^^^^^^
-
-« … n'est pas téléchargée et harmonisée pour cette période ; lancez d'abord Télécharger et harmoniser. »
-    Les fichiers d'une source sont obsolètes. Exécutez-la dans `Télécharger et harmoniser <defo-prepare_>`_.
-
-« L'empreinte du jeu antérieur … est manquante ; relancez d'abord Intégrer et vectoriser sur ce jeu. »
-    Les fichiers d'une période antérieure ont été supprimés. Rendez cette période active et relancez son jeu.
-
-« Espace disque libre insuffisant : … »
-    L'exécution écrit quelques rasters de la taille de la grille. Libérez de l'espace.
-
-« La période, la zone d'intérêt ou la grille du projet ont changé pendant l'exécution, donc le jeu d'alertes n'a pas été enregistré. »
-    Relancez-la.
-
-« tippecanoe n'est pas installé : la carte affichera les points d'alerte sans polygones. »
-    Le jeu est créé ; la carte affiche ses alertes sous forme de points au lieu de polygones.
-
-« Les tuiles de carte n'ont pas pu être affichées (…) : affichage des points d'alerte sans polygones. »
-    Le jeu est créé, mais sa couche cartographique n'a pas pu être construite. La carte affiche ses alertes sous forme de points.
-
-« La base d'alertes de … est manquante ; relancez Intégrer et vectoriser pour cette période. »
-    Avec **Afficher les jeux antérieurs**, le fichier d'alertes d'un jeu antérieur a disparu du dossier du projet. Rendez cette période active et relancez son jeu.
-
 .. _defo-questionnaire:
 
 Questionnaire
@@ -1367,7 +1426,7 @@ Le *questionnaire* contient les questions auxquelles on répond pour chaque aler
 
 Cette étape permet aussi de choisir le modèle de rapport.
 
-Ouvrez l'étape **Questionnaire** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Le questionnaire appartient au projet : tous les jeux d'alertes du projet sont examinés avec lui.
+Ouvrez l'étape **Questionnaire** du panneau **Flux de travail**, dans **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Le questionnaire appartient au projet : tous les jeux d'alertes du projet sont examinés avec lui. L'étape est facultative : sans modification, Analyse pose la question par défaut.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/questionnaire-list.png
     :alt: L'étape Questionnaire
@@ -1528,7 +1587,7 @@ Cette étape détermine qui examine les alertes du jeu actif :
 -   examinez-les toutes vous-même ; ou
 -   répartissez-les entre plusieurs évaluateurs. Chaque évaluateur reçoit un *paquet de révision*, examine ses propres alertes dans son propre compte SEPAL et renvoie une *copie révisée*, qui est ensuite fusionnée dans le projet.
 
-Ouvrez l'étape **Évaluation** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Elle porte sur le jeu actif : une répartition appartient à un seul jeu d'alertes.
+Ouvrez l'étape **Évaluation** du panneau **Flux de travail**, la dernière étape de **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Elle porte sur le jeu actif : une répartition appartient à un seul jeu d'alertes.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/evaluators.gif
     :alt: Le jeu d'alertes est réparti en paquets, chaque évaluateur examine le sien, et les révisions sont fusionnées en retour
@@ -1834,7 +1893,7 @@ Le filtre retient certaines valeurs d'un attribut et masque les autres alertes d
 
 Quand un filtre est actif :
 
--   **Précédente**, **Suivante**, **Prochaine alerte non révisée** et **Enregistrer et suivante** ne parcourent que les alertes correspondantes ;
+-   **Précédente**, **Suivante** et **Prochaine alerte non révisée** ne parcourent que les alertes correspondantes ;
 -   le compteur compte les correspondances (« 06 / 24 »), ou indique « – / 24 » tant que l'alerte à l'écran n'en fait pas partie, et la ligne d'avancement se termine par « filtrées · 48 au total » ;
 -   le menu de saut prend toujours le numéro de l'alerte dans le jeu entier, mais refuse un numéro que le filtre masque (« L'alerte 12 n'est pas dans le filtre actuel ») ; et
 -   quand rien ne correspond, le compteur indique « Aucune alerte ne correspond à ce filtre ».
@@ -1877,8 +1936,8 @@ Le menu **Couches** liste :
         -   *True Color* (activée) et *False Color* (proche infrarouge, rouge et vert ; désactivée) : l'image choisie pour cette carte.
     *   -   **Alertes**
         -   *Original Alert* : les pixels d'alerte du jeu, en semi-transparence (désactivée). *Alert BB* : le cadre de l'alerte. *Defo Layer* : le polygone enregistré pour l'alerte (voir `Affiner le polygone <defo-analysis-refine_>`_). *Alertes précédentes* (voir `Alertes précédentes <defo-analysis-earlier_>`_).
-    *   -   **Couches facultatives**
-        -   Les `couches facultatives <defo-layers_>`_ marquées **Afficher dans Analyse**, désactivées.
+    *   -   **Couches supplémentaires**
+        -   Les `couches supplémentaires <defo-layers_>`_ marquées **Afficher dans Analyse**, désactivées.
 
 Une carte affiche « Les images n'ont pas pu être chargées » quand les tuiles de son image ne se chargent pas.
 
@@ -2036,7 +2095,7 @@ Pour affiner le polygone :
 
 .. important::
 
-    **Enregistrer le dessin** n'enregistre pas la révision : sélectionnez ensuite **Sauvegarder** ou **Enregistrer et suivante**. Tant que le dessin n'est pas enregistré, le pied du panneau indique « Enregistrez votre dessin avant d'enregistrer cette revue » et la révision ne peut pas être enregistrée.
+    **Enregistrer le dessin** n'enregistre pas la révision : sélectionnez ensuite **Sauvegarder**. Tant que le dessin n'est pas enregistré, le pied du panneau indique « Enregistrez votre dessin avant d'enregistrer cette revue » et la révision ne peut pas être enregistrée.
 
 Les deux modèles
 ################
@@ -2046,7 +2105,7 @@ Sous les boutons de dessin, deux réseaux de neurones convolutifs (CNN) peuvent 
 Pour utiliser un modèle :
 
 1.  Sélectionnez **Exécuter** sur la ligne d'un modèle. L'application télécharge les deux images (la zone fixée par **Zone d'image**) et exécute le modèle. Cela prend un moment ; l'exécution apparaît dans la liste des tâches.
-2.  Lisez le résultat sur la ligne (par exemple « Trouvé 3 parcelles · 2,1 ha »). Les parcelles plus petites que la **Taille minimale d'alerte** du jeu sont écartées. Quand le modèle n'a rien trouvé, une icône d'avertissement rouge apparaît à la place (« Le modèle n'a trouvé aucune perte »).
+2.  Lisez le résultat sur la ligne (par exemple « Trouvé 3 parcelles · 2,1 ha »). Les parcelles plus petites que la **Taille minimale de groupe** du jeu sont écartées. Quand le modèle n'a rien trouvé, une icône d'avertissement rouge apparaît à la place (« Le modèle n'a trouvé aucune perte »).
 3.  Sélectionnez l'icône de carte avec un signe plus (**Ajouter à la carte**) pour ajouter les parcelles au dessin (en passant en mode dessin si nécessaire) : en vert citron pour le **Modèle 1**, en violet pour le **Modèle 2**. L'icône prend alors un signe moins (**Retirer de la carte**), qui les retire.
 4.  Modifiez le résultat comme n'importe quel dessin, puis sélectionnez **Enregistrer le dessin**.
 
@@ -2068,7 +2127,7 @@ Les alertes sont regroupées par période, de la plus récente à la plus ancien
 
 Sélectionnez le numéro d'une alerte pour zoomer les deux cartes sur elle.
 
-Pour lier ou délier une alerte, cochez ou décochez sa case. La modification fait partie de la révision : le pied du panneau indique « Modifications non enregistrées sur cette alerte », et **Sauvegarder** ou **Enregistrer et suivante** l'enregistre avec le verdict. Cocher une alerte d'une période antérieure fait de cette alerte une alerte d'extension, même si elle ne la touche pas.
+Pour lier ou délier une alerte, cochez ou décochez sa case. La modification fait partie de la révision : le pied du panneau indique « Modifications non enregistrées sur cette alerte », et **Sauvegarder** l'enregistre avec le verdict. Cocher une alerte d'une période antérieure fait de cette alerte une alerte d'extension, même si elle ne la touche pas.
 
 Certaines lignes n'ont pas de case :
 
@@ -2092,10 +2151,10 @@ Le pied du panneau reste en bas :
 
     *   -   Bouton
         -   Description
-    *   -   **Enregistrer et suivante**
-        -   Enregistre la révision, puis ouvre l'alerte suivante (la correspondance suivante sous un filtre). Il ne passe à la suivante que si l'enregistrement a réussi.
     *   -   **Sauvegarder**
         -   Enregistre la révision et reste sur l'alerte.
+    *   -   **Suivante**
+        -   Ouvre l'alerte suivante (la correspondance suivante sous un filtre). S'il y a des modifications non enregistrées, il demande d'abord : **Abandonner** les supprime et passe à la suivante, **Rester** vous garde sur l'alerte.
 
 La ligne sous les boutons indique « Modifications non enregistrées sur cette alerte », « Enregistrez votre dessin avant d'enregistrer cette revue » ou « Enregistrée à 14:32 ».
 
@@ -2361,8 +2420,8 @@ La section **Exporter cette alerte** se trouve dans le pied du panneau d'examen 
 
     *   -   Tuile
         -   Description
-    *   -   **Générer les fichiers de l'alerte**
-        -   Génère les données et le rapport de l'alerte. Elle indique « (enregistrez d'abord) » et reste désactivée tant que **Sauvegarder** ou **Enregistrer et suivante** n'a pas été sélectionné sur cette alerte au cours de cette session. Elle s'exécute dans la liste des tâches et prend un moment : elle télécharge les images d'avant et d'après.
+    *   -   **Générer les fichiers**
+        -   Génère les données et le rapport de l'alerte. Elle indique « Enregistrez d'abord cette alerte » et reste désactivée tant que **Sauvegarder** n'a pas été sélectionné sur cette alerte au cours de cette session. Elle s'exécute dans la liste des tâches et prend un moment : elle télécharge les images d'avant et d'après.
     *   -   **Données de l'alerte**
         -   Télécharge un fichier .zip : le GeoPackage de l'alerte, ses images d'avant et d'après réunies dans un seul GeoTIFF et, pour une alerte réelle, son GIF.
     *   -   **Rapport de l'alerte**
@@ -2501,12 +2560,6 @@ La coordinatrice configure le projet comme suit :
 
 1.  **Projet** : dans l'application, sélectionnez **Nouveau projet** et nommez-le ``madre_de_dios`` (voir `Créer un projet <defo-project-create_>`_).
 2.  **AOI** : à l'étape `AOI <defo-aoi_>`_, choisissez **Niveau administratif 1**, puis le Pérou, puis « Madre De Dios » (tel que la liste l'écrit), et sélectionnez **Selectionner cet AOI**. La zone est enregistrée sous le nom ``PER_Madre_De_Dios``. Un département entier est une grande zone : chaque étape suivante prend plus de temps que pour un district.
-3.  **Sources d'alertes** : dans `Sources d'alertes <defo-alerts_>`_, ajoutez les trois sources prédéfinies : **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** et **GLAD-S2 (Sentinel-2, 10 m)**. Chacune **couvre l'AOI**. Sous RADD, l'application précise qu'elle ne détecte que dans la forêt tropicale humide primaire : ailleurs dans le département, seules GLAD-L et GLAD-S2 peuvent signaler des alertes.
-4.  **Couches facultatives** : pour juger les alertes au regard d'une image récente, ajoutez une `couche facultative <defo-layers_>`_ : une image Sentinel-2 **Earth Engine** du 27 septembre 2026 (tuile 19LDF, à l'est de Puerto Maldonado), affichée en **Composite RVB** en **Couleurs naturelles** (B4, B3, B2), **Min** 0 et **Max** 3000, nommée ``Sentinel-2 2026-09-27``, et **Afficher dans Analyse** coché.
-
-.. note::
-
-    Les mosaïques mensuelles Planet NICFI couvriraient tout le département, mais le compte utilisé pour cet article n'a pas accès à NICFI. C'est pourquoi la frise d'Analyse des captures d'écran ci-dessous n'a pas de pastille *Planet*.
 
 Le cycle de septembre
 ^^^^^^^^^^^^^^^^^^^^^
@@ -2523,16 +2576,21 @@ Dans `Période de suivi <defo-period_>`_, la coordinatrice :
 
 La fenêtre de recherche va du 2026-06-03 au 2026-09-30 : les groupes qui ont commencé entre juin et août, ainsi que les alertes que les sources ont publiées en retard, sont donc trouvés aussi. Comme première période, elle n'a pas de jeu antérieur : toutes les alertes de sa fenêtre de recherche sont conservées.
 
-Télécharger et harmoniser
-"""""""""""""""""""""""""
+Alertes
+"""""""
 
-Dans `Télécharger et harmoniser <defo-prepare_>`_, la coordinatrice :
+Dans `Sources d'alertes <defo-alerts_>`_, la coordinatrice ajoute les trois sources prédéfinies : **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** et **GLAD-S2 (Sentinel-2, 10 m)**, chacune avec **Ajouter aux nouvelles périodes** laissé coché, pour que les périodes suivantes démarrent avec elles. Chacune couvre toute l'AOI. Sous RADD, l'application précise qu'elle ne détecte que dans la forêt tropicale humide primaire : ailleurs dans le département, seules GLAD-L et GLAD-S2 peuvent signaler des alertes. Puis **Télécharger 3 en attente**, dans le pied du tableau, télécharge les trois sources sur la fenêtre de recherche.
+
+Harmoniser
+""""""""""
+
+Dans `Harmoniser <defo-harmonize_>`_, la coordinatrice :
 
 1.  garde la grille proposée, la zone UTM du département (``EPSG:32719``) à 10 m, et sélectionne **Enregistrer la grille**. La grille fait 41425 × 38561 pixels, soit environ 12,8 Go par source avant compression : l'application prévient donc que les téléchargements prendront du temps ;
 2.  ajoute un masque pour que seules les alertes en forêt comptent : **Ajouter un masque**, l'image Hansen Global Forest Change ``UMD/hansen/global_forest_change_2025_v1_13``, bande ``treecover2000``, nommée ``forest_2000``, mode **Conserver** ; et
-3.  sélectionne **Exécuter … en attente** dans le pied du tableau, qui aligne le masque, puis télécharge et harmonise les trois sources.
+3.  sélectionne **Harmoniser … en attente** dans le pied du tableau, qui aligne le masque, puis harmonise les trois sources.
 
-L'exécution a pris environ 15 minutes. Le masque et chaque source indiquent alors « Prête » : GLAD-L avec 2362718 pixels d'alerte, RADD avec 1508527 et GLAD-S2 avec 1462458.
+Le téléchargement et l'harmonisation ont pris environ 15 minutes. Le masque et chaque source indiquent alors « Prête » : GLAD-L avec 2362718 pixels d'alerte, RADD avec 1508527 et GLAD-S2 avec 1462458.
 
 Intégrer et vectoriser
 """"""""""""""""""""""
@@ -2540,12 +2598,21 @@ Intégrer et vectoriser
 Dans `Intégrer et vectoriser <defo-integrate_>`_, la coordinatrice :
 
 -   garde les trois sources et **Inclure les alertes probables (non confirmées)** activé ;
--   règle la **Taille minimale d'alerte** sur 1 ha et l'**Ordre** sur **Alertes les plus grandes en premier** ; et
--   coche **Limiter le nombre d'alertes**, avec un **Nombre maximal d'alertes** de 48 : l'équipe peut examiner environ 48 alertes par mois, elle commence donc par les plus grandes.
+-   règle la **Taille minimale de groupe** sur 1 ha et l'**Ordre** sur **Groupes les plus grands en premier** ; et
+-   coche **Limiter le nombre de groupes**, avec un **Nombre maximal de groupes** de 48 : l'équipe peut examiner environ 48 alertes par mois, elle commence donc par les plus grandes.
 
 L'exécution produit le jeu d'alertes « 2026-09-01 → 2026-09-30 · GLAD-L + GLAD-S2 + RADD » de 48 alertes, de 383,18 ha à 27,84 ha : 2870 ha au total.
 
 Les groupes au-delà du plafond sont conservés comme non analysables. La période suivante ne les réexamine que si sa rétrospection remonte jusqu'en septembre et qu'elle utilise les mêmes sources. C'est le cas de la rétrospection de 90 jours d'octobre (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_).
+
+Couches supplémentaires
+"""""""""""""""""""""""
+
+Une fois le jeu d'alertes construit, **Préparer la revue** se déverrouille. Pour juger les alertes au regard d'une image récente, la coordinatrice ajoute une `couche supplémentaire <defo-layers_>`_ : une image Sentinel-2 **Earth Engine** du 27 septembre 2026 (tuile 19LDF, à l'est de Puerto Maldonado), affichée en **Composite RVB** en **Couleurs naturelles** (B4, B3, B2), **Min** 0 et **Max** 3000, nommée ``Sentinel-2 2026-09-27``, et **Afficher dans Analyse** coché.
+
+.. note::
+
+    Les mosaïques mensuelles Planet NICFI couvriraient tout le département, mais le compte utilisé pour cet article n'a pas accès à NICFI. C'est pourquoi la frise d'Analyse des captures d'écran ci-dessous n'a pas de pastille *Planet*.
 
 Examiner seule, puis à plusieurs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2582,7 +2649,7 @@ La copie de révision d'Ana
 
 Ana copie le paquet dans son dossier SEPAL et l'importe avec **Importer** dans la boîte de dialogue `Projet <defo-project-import_>`_. Il s'ouvre comme projet ``madre-de-dios__e01-ana``, sur l'écran Analyse, déjà filtré sur ses alertes (« Évaluateur : Ana »).
 
-Ana les parcourt avec **Enregistrer et suivante** :
+Ana les parcourt avec **Sauvegarder** et **Suivante** :
 
 -   la barre du haut affiche « 5 examinées · 18 restantes · filtrées · 48 au total » (les deux examens de ses alertes faits par la coordinatrice et trois des siens) ;
 -   le compteur numérote ses alertes de 1 à 23 ; et
@@ -2636,11 +2703,11 @@ Avec 13 des 48 alertes examinées, la plupart des points sont encore gris. La pl
 Le cycle d'octobre
 ^^^^^^^^^^^^^^^^^^
 
-Au début du cycle suivant, la coordinatrice sélectionne **Nouvelle période** dans `Période de suivi <defo-period-add_>`_. La boîte de dialogue est pré-remplie : du 2026-10-01 (le lendemain de la fin de septembre) à aujourd'hui, avec les 90 jours de rétrospection utilisés la fois précédente. La coordinatrice fixe la fin au 2026-10-20, le jour de ce cycle. **Ajouter une période** en fait la période active, avec les choix de masques de la période de septembre.
+Au début du cycle suivant, la coordinatrice sélectionne **Nouvelle période** dans `Période de suivi <defo-period-add_>`_. La boîte de dialogue est pré-remplie : du 2026-10-01 (le lendemain de la fin de septembre) à aujourd'hui, avec les 90 jours de rétrospection utilisés la fois précédente. La coordinatrice fixe la fin au 2026-10-20, le jour de ce cycle. **Ajouter une période** en fait la période active, avec les choix de masques de la période de septembre et les trois sources marquées **Ajouter aux nouvelles périodes**.
 
 Ensuite :
 
--   **Exécuter … en attente** dans `Télécharger et harmoniser <defo-prepare_>`_ télécharge les trois sources pour la nouvelle fenêtre ; la grille et le masque sont déjà là.
+-   **Télécharger 3 en attente** dans `Alertes <defo-alerts_>`_ télécharge les trois sources pour la nouvelle fenêtre, et **Harmoniser … en attente** dans `Harmoniser <defo-harmonize_>`_ les harmonise ; la grille et le masque sont déjà là.
 -   Dans `Intégrer et vectoriser <defo-integrate_>`_, la coordinatrice reprend les réglages de septembre (1 ha, les 48 plus grandes alertes). Avant de regrouper les pixels en alertes, l'exécution retire tous les pixels situés dans les 48 alertes de septembre, si bien que rien n'est signalé deux fois. Le nouveau jeu contient de nouveau 48 alertes, pour 1177 ha. Aucune ne touche une alerte confirmée en septembre : l'exécution n'en lie donc aucune à une perte antérieure (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_).
 
 L'équipe les examine comme en septembre ; 16 sont examinées à ce stade, dont 11 comme alertes réelles. Avec **Afficher ces alertes sur la carte** et **Afficher les jeux antérieurs** tous deux activés, la carte montre les alertes d'octobre à côté de celles de septembre, dessinées en couleurs plus pâles. Les alertes d'octobre se situent dans les mêmes parties du département que celles de septembre.
@@ -2685,7 +2752,7 @@ En bas de l'Aperçu, la carte **Exporter les alertes** écrit le jeu d'octobre d
 Une alerte
 """"""""""
 
-Pour faire un rapport sur une alerte seule, la coordinatrice l'ouvre dans Analyse, l'enregistre et sélectionne **Générer les fichiers de l'alerte** sous **Exporter cette alerte**. Le résultat est un fichier .zip avec le GeoPackage de l'alerte et ses images d'avant et d'après, ainsi qu'un rapport Word construit à partir du modèle du projet. Pour une alerte réelle, la tuile **Timelapse** crée aussi un GIF animé des images, d'avant en après. Voir `Une alerte, depuis Analyse <defo-export-alert_>`_.
+Pour faire un rapport sur une alerte seule, la coordinatrice l'ouvre dans Analyse, l'enregistre et sélectionne **Générer les fichiers** sous **Exporter cette alerte**. Le résultat est un fichier .zip avec le GeoPackage de l'alerte et ses images d'avant et d'après, ainsi qu'un rapport Word construit à partir du modèle du projet. Pour une alerte réelle, la tuile **Timelapse** crée aussi un GIF animé des images, d'avant en après. Voir `Une alerte, depuis Analyse <defo-export-alert_>`_.
 
 Chaque fichier est aussi conservé dans le dossier du jeu d'alertes du projet, sous ``periods/2026-10-01_2026-10-20/sets/glad-l-glad-s2-radd/``.
 

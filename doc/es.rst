@@ -23,40 +23,40 @@ El flujo de trabajo de un vistazo
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
     :alt: Los pasos del flujo de trabajo, del área de interés al análisis
 
-Los pasos del panel **Flujo de trabajo** están numerados. Las demás herramientas se abren desde la barra lateral izquierda (consulta `La ventana de la aplicación <defo-window_>`_).
+El panel **Flujo de trabajo** agrupa los pasos en dos niveles: **Preparar alertas** crea un conjunto de alertas y **Preparar la revisión** prepara su revisión. Las demás herramientas se abren desde la barra lateral izquierda (consulta `La ventana de la aplicación <defo-window_>`_).
 
 .. list-table::
     :header-rows: 1
-    :widths: 10 30 60
+    :widths: 20 30 50
 
-    *   -   Paso
+    *   -   Nivel
         -   Subsección
         -   Para qué sirve
     *   -   –
         -   `Proyecto <defo-project_>`_
         -   Crear, abrir, importar o eliminar un proyecto, la carpeta que guarda todo tu trabajo.
-    *   -   1
+    *   -   **Preparar alertas**
         -   `Área de interés <defo-aoi_>`_
         -   Elegir el área que se va a monitorear.
-    *   -   2
-        -   `Fuentes de alertas <defo-alerts_>`_
-        -   Elegir los conjuntos de datos de alertas que se van a descargar.
-    *   -   3
-        -   `Capas opcionales <defo-layers_>`_
-        -   Añadir capas de referencia para evaluar las alertas.
-    *   -   4
+    *   -
         -   `Período de monitoreo <defo-period_>`_
         -   Fijar las fechas de una ronda de monitoreo.
-    *   -   5
-        -   `Descargar y armonizar <defo-prepare_>`_
-        -   Descargar las fuentes del período en una misma cuadrícula.
-    *   -   6
+    *   -
+        -   `Fuentes de alertas <defo-alerts_>`_
+        -   Elegir los conjuntos de datos de alertas del período y descargarlos.
+    *   -
+        -   `Armonizar <defo-harmonize_>`_
+        -   Alinear las descargas en una misma cuadrícula y aplicar las máscaras.
+    *   -
         -   `Integrar y vectorizar <defo-integrate_>`_
         -   Combinar las fuentes en un conjunto de alertas, con un polígono por alerta.
-    *   -   7
-        -   `Cuestionario <defo-questionnaire_>`_
+    *   -   **Preparar la revisión**
+        -   `Capas adicionales <defo-layers_>`_ (opcional)
+        -   Añadir capas de referencia para evaluar las alertas.
+    *   -
+        -   `Cuestionario <defo-questionnaire_>`_ (opcional)
         -   Redactar las preguntas que se hacen para cada alerta y elegir la plantilla del informe.
-    *   -   8
+    *   -
         -   `Evaluación <defo-evaluation_>`_
         -   Revisar en solitario o repartir las alertas entre evaluadores.
     *   -   –
@@ -68,6 +68,8 @@ Los pasos del panel **Flujo de trabajo** están numerados. Las demás herramient
     *   -   –
         -   `Exportar <defo-export_>`_
         -   Exportar los archivos de una alerta o las alertas de todo un conjunto.
+
+**Preparar la revisión** sigue bloqueado hasta que el proyecto tiene un conjunto de alertas: crea uno primero en **Preparar alertas**.
 
 Para ver un ejemplo completo de principio a fin, consulta `Caso de uso: revisión de alertas en Madre de Dios, Perú <defo-use-case_>`_.
 
@@ -95,7 +97,13 @@ La aplicación se ejecuta en tu sesión de SEPAL y guarda tus proyectos en tu ca
 La ventana de la aplicación
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-El mapa ocupa toda la ventana. El panel **Flujo de trabajo**, a la derecha, contiene los pasos numerados. A la izquierda hay una barra lateral estrecha de iconos.
+El mapa ocupa toda la ventana. El panel **Flujo de trabajo**, a la derecha, contiene los pasos. A la izquierda hay una barra lateral estrecha de iconos.
+
+La cabecera del panel **Flujo de trabajo** queda a la vista mientras el paso de debajo se desplaza:
+
+-   Una franja muestra los dos niveles uno al lado del otro, **Preparar alertas** y **Preparar la revisión**, cada uno con su nombre sobre una barra por paso. Una barra rellena tiene resultados (una AOI, períodos, fuentes…), una barra gris sigue vacía y una barra rayada está bloqueada: pasa el cursor sobre ella para leer el motivo (por ejemplo, "Crea primero un conjunto de alertas."). Los dos pasos opcionales, **Capas adicionales** y **Cuestionario**, tienen una barra discontinua. El nombre de un nivel recibe una marca de verificación en cuanto su último paso obligatorio tiene resultados. Selecciona una barra para abrir su paso.
+-   Bajo la franja, la posición del paso en su nivel (por ejemplo, "3 / 5"), su nombre y lo que contiene ("3 fuentes"). Un paso opcional que sigue vacío indica "opcional". Selecciona el nombre para saltar a otro paso desde una lista, o usa las flechas de cada lado para ir al paso anterior o al siguiente.
+-   Bajo el nombre, una línea indica qué hacer en el paso (por ejemplo, "Define el período de monitoreo."). El botón de información a la derecha de esa línea abre la ayuda del paso.
 
 Para usar la barra lateral izquierda:
 
@@ -278,7 +286,7 @@ Cada proyecto es una carpeta con el nombre del proyecto, dentro de ``module_resu
     *   -   ``aoi.geojson``
         -   La AOI, cuando es una forma dibujada, un archivo vectorial o un archivo de puntos. Un área administrativa o un recurso de GEE se leen en cambio desde GEE.
     *   -   ``masks/``
-        -   Las máscaras de `Descargar y armonizar <defo-prepare_>`_, alineadas con la cuadrícula del proyecto.
+        -   Las máscaras de `Armonizar <defo-harmonize_>`_, alineadas con la cuadrícula del proyecto.
     *   -   ``imagery/``
         -   El índice de escenas satelitales que se usan en la pantalla de Análisis.
     *   -   ``periods/<start>_<end>/``
@@ -349,7 +357,7 @@ El área se dibuja en el mapa y se guarda con el proyecto de inmediato.
         -   Una tabla (colección de entidades) o una imagen de GEE que puedas leer, elegida en **Selecciona un Asset** o pegada con su identificador completo.
         -   Para una tabla, conserva solo las entidades cuya **Column** tiene un **Value** determinado.
 
-Cuando la selección termina, la aplicación confirma: "AOI guardada: (nombre)". El panel **Flujo de trabajo** muestra el nombre de la AOI bajo el paso, y se desbloquean los pasos `Alertas <defo-alerts_>`_ y `Capas opcionales <defo-layers_>`_.
+Cuando la selección termina, la aplicación confirma: "AOI guardada: (nombre)". El panel **Flujo de trabajo** muestra el nombre de la AOI en la cabecera, y se desbloquea el paso `Período <defo-period_>`_.
 
 .. tip::
 
@@ -377,6 +385,167 @@ En una copia de revisión (consulta `Importar un paquete de revisión <defo-proj
 
     La AOI no puede cambiar mientras una tarea escribe en el proyecto (una descarga o una ejecución de **Integrar y vectorizar**). La aplicación indica: "Un trabajo está escribiendo en este proyecto; cambia la AOI cuando termine." Espera a que la tarea termine y vuelve a seleccionar el área.
 
+.. _defo-period:
+
+Período de monitoreo
+--------------------
+
+Un *período* es una ronda de monitoreo, normalmente un mes. Para cada período, la aplicación descarga las fuentes de alertas del período en sus fechas más una *retrospección* anterior a ellas, y genera los conjuntos de alertas de ese período. Un proyecto suele tener una serie de períodos consecutivos.
+
+Abre el paso **Período** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene una `AOI <defo-aoi_>`_.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/period-list.png
+    :alt: El paso Período con un período
+
+.. _defo-period-tracking:
+
+Pérdidas que abarcan varios períodos
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Cada período se procesa por separado, pero la pérdida de bosque no se ajusta a las fechas del período. Parte de la pérdida podría perderse entre dos períodos:
+
+-   un desmonte que empieza demasiado pequeño para ser una alerta;
+-   alertas que los proveedores publican tarde, después de procesar su período; o
+-   un desmonte que sigue creciendo en el borde de una alerta reportada en un período anterior.
+
+La aplicación sigue esta pérdida de un período al siguiente, y nunca reporta dos veces la misma pérdida:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 35 65
+
+    *   -   Caso
+        -   Qué hace la aplicación
+    *   -   Pérdida ya reportada por un período anterior
+        -   Sus píxeles (la *huella* del conjunto de alertas anterior) se eliminan de la ejecución del nuevo período, así que no se reporta de nuevo.
+    *   -   Un grupo demasiado pequeño para ser una alerta, o una alerta publicada tarde
+        -   La `retrospección <defo-period-lookback_>`_ busca hacia atrás en el período anterior: los píxeles que se dejaron de lado vuelven y pueden unirse a píxeles nuevos para formar una alerta.
+    *   -   Un desmonte que crece junto a una alerta revisada
+        -   La alerta nueva se `vincula a la alerta anterior <defo-period-growth_>`_ como *alerta de crecimiento*, y se conserva aunque esté bajo el tamaño mínimo.
+
+.. _defo-period-lookback:
+
+La ventana de búsqueda y la retrospección
+"""""""""""""""""""""""""""""""""""""""""
+
+Un desmonte suele empezar pequeño y crecer durante las semanas siguientes. En el período en que empieza, su grupo de píxeles de alerta es todavía menor que el **Tamaño mínimo de grupo** de `Integrar y vectorizar <defo-integrate_>`_, así que no llega a ser una alerta: sus píxeles se dejan de lado como *no analizables*.
+
+La retrospección mantiene esos píxeles en juego:
+
+-   Cada período busca en una *ventana de búsqueda* más amplia: sus propias fechas más los días de retrospección anteriores a su inicio.
+-   Los píxeles que el período anterior dejó de lado vuelven a la ejecución y se unen a los píxeles nuevos que los tocan.
+-   Si el grupo que forman juntos alcanza el tamaño mínimo, se convierte en una alerta. Su primera fecha de detección es la de su píxel más antiguo, en el período anterior.
+
+Para no reportar dos veces la misma pérdida, todos los píxeles ya reportados por un conjunto de alertas de un período *anterior* se eliminan antes de generar las alertas del nuevo período: solo vuelve lo que se dejó de lado. La retrospección también capta las alertas que los proveedores publicaron tarde, después de procesar el período anterior.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/lookback.gif
+    :alt: La retrospección: un grupo demasiado pequeño en un período se une a los píxeles del período siguiente y se convierte en alerta, y una alerta reportada nunca se reporta de nuevo
+
+.. note::
+
+    El primer período no tiene ningún conjunto anterior con el que compararse, así que se conservan todas las alertas de su ventana de búsqueda. Su fila indica **Sin conjunto anterior: se conservan todas las alertas de la ventana de búsqueda**. Con retrospección, eso incluye alertas fechadas antes del inicio del período.
+
+    El primer período de un proyecto nuevo empieza sin retrospección, así que solo busca en sus propias fechas, a menos que se defina una. Un proyecto creado con **Duplicar** conserva la retrospección del proyecto del que se copió.
+
+.. _defo-period-growth:
+
+Crecimiento junto a alertas anteriores
+""""""""""""""""""""""""""""""""""""""
+
+Los píxeles de una alerta reportada forman parte de la huella, así que la retrospección no los recupera. Pero un desmonte suele seguir creciendo en el borde de una alerta reportada en un período anterior. Los píxeles nuevos forman entonces un grupo propio, a menudo menor que el **Tamaño mínimo de grupo**, que se dejaría de lado como cualquier grupo pequeño.
+
+Cuando la alerta anterior se guardó como **Alerta verdadera** o **Requiere revisión**, `Integrar y vectorizar <defo-integrate-growth_>`_ no pierde de vista este crecimiento:
+
+-   Una alerta nueva que toca o se superpone a la alerta anterior es una *alerta de crecimiento*, vinculada a ella.
+-   Un grupo bajo el tamaño mínimo se conserva cuando toca la alerta anterior: es una alerta de crecimiento *bajo el área mínima*. Un grupo pequeño que no toca nada se deja de lado, y la retrospección aún puede recuperarlo en el período siguiente.
+-   La ejecución busca alertas anteriores en todos los períodos anteriores, sea cual sea la retrospección.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
+    :alt: Crecimiento: una alerta confirmada crece por su borde en el período siguiente, y el grupo nuevo pequeño se conserva y se vincula a ella, mientras que un grupo pequeño que no toca nada se deja de lado
+
+Las alertas vinculadas entre sí, a lo largo de todos los períodos, forman el *historial* de un desmonte. Análisis lo muestra en cada alerta (consulta `Alertas anteriores <defo-analysis-earlier_>`_), y el `Resumen <defo-overview-growth_>`_ lo resume.
+
+.. tip::
+
+    Solo cuentan las revisiones guardadas cuando empieza `Integrar y vectorizar <defo-integrate_>`_. Revisa las alertas de un período antes de ejecutar el siguiente, para que su crecimiento quede vinculado. Una alerta revisada después todavía se puede vincular a mano en `Alertas anteriores <defo-analysis-earlier_>`_.
+
+La lista de períodos
+^^^^^^^^^^^^^^^^^^^^
+
+Cada fila de **Períodos** muestra:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Columna
+        -   Descripción
+    *   -   **Período**
+        -   Las fechas del período ("inicio → fin"), con notas debajo: su ventana de búsqueda y las advertencias que haya.
+    *   -   **Conjuntos**
+        -   El número de conjuntos de alertas generados para este período.
+    *   -   **Estado**
+        -   **desactualizada** cuando la descarga de una fuente o un conjunto de alertas ya no corresponde a la configuración actual (vuelve a ejecutarlo en `Alertas <defo-alerts_>`_, `Armonizar <defo-harmonize_>`_ o `Integrar y vectorizar <defo-integrate_>`_); **falta** cuando los archivos de un conjunto de alertas han desaparecido; un guion cuando todo está al día.
+
+Los iconos a la derecha de cada fila:
+
+-   el botón de opción convierte el período en el período *activo*: `Alertas <defo-alerts_>`_, `Armonizar <defo-harmonize_>`_ e `Integrar y vectorizar <defo-integrate_>`_ trabajan sobre el período activo;
+-   el icono de lápiz cambia sus fechas o su retrospección; y
+-   el icono de papelera lo elimina.
+
+.. _defo-period-add:
+
+Añadir un período
+^^^^^^^^^^^^^^^^^
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/period-new.png
+    :alt: El diálogo Nuevo período
+
+Selecciona **Nuevo período**. El diálogo viene rellenado para que el nuevo período continúe la serie.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 35 45
+
+    *   -   Campo
+        -   Descripción
+        -   Valor predeterminado y límites
+    *   -   **Inicio**
+        -   El primer día del período.
+        -   El día siguiente al fin del último período. Para el primer período, el primer día del mes en curso.
+    *   -   **Fin**
+        -   El último día del período.
+        -   Hoy. Debe ser posterior a **Inicio**. Dos períodos no pueden tener las mismas fechas.
+    *   -   **Retrospección (días)**
+        -   El número de días antes de **Inicio** en los que también se busca.
+        -   0 (sin retrospección) para el primer período de un proyecto nuevo (un proyecto duplicado conserva la retrospección de su origen); después, el último valor usado. Un número entero de 0 a 3650.
+
+Debajo de los campos, el diálogo muestra una vista previa de la ventana de búsqueda ("Ventana de búsqueda: inicio → fin"). Selecciona **Añadir período**: el período se crea y pasa a ser el período activo.
+
+Un período nuevo empieza con las opciones de máscara del último período. Cámbialas en `Armonizar <defo-harmonize_>`_. Sus fuentes de alertas son las marcadas con **Añadir a los nuevos periodos** en `Alertas <defo-alerts-new-periods_>`_; añade o quita fuentes allí.
+
+.. tip::
+
+    Para que los grupos dejados de lado vuelvan, la retrospección debe llegar hasta el período anterior. Con una retrospección de 0, la ventana de búsqueda empieza el primer día del propio período y no se vuelve a considerar nada de lo que se dejó de lado antes.
+
+    Un grupo que sigue siendo demasiado pequeño permanece en juego en los períodos siguientes mientras su retrospección llegue hasta sus píxeles. Una retrospección más larga da más tiempo a un desmonte que crece despacio para alcanzar el tamaño mínimo, pero hace más grande cada descarga (consulta `Lo que ya reportaron los períodos anteriores <defo-integrate-earlier_>`_).
+
+Modificar un período
+^^^^^^^^^^^^^^^^^^^^
+
+En un período sin conjuntos de alertas, el icono de lápiz abre un diálogo para cambiar sus fechas. Con fechas nuevas, el período pasa a ser otro: sus descargas y sus archivos armonizados se eliminan, porque se hicieron para la ventana anterior.
+
+Un período con conjuntos de alertas tiene las fechas fijas (su nota indica **Sus fechas están fijas: tiene conjuntos de alertas.**). El icono de lápiz abre entonces un diálogo donde solo se puede cambiar la retrospección. Las descargas del período aparecen entonces como desactualizadas.
+
+Eliminar un período
+^^^^^^^^^^^^^^^^^^^
+
+Selecciona el icono de papelera. El diálogo de confirmación enumera lo que se elimina: las descargas y los archivos armonizados del período, y sus conjuntos de alertas con sus alertas revisadas.
+
+.. important::
+
+    Un período con conjuntos de alertas solo se puede eliminar cuando es el último período. Los conjuntos de un período anterior son la huella a partir de la cual se generaron los conjuntos posteriores, así que elimina primero los períodos posteriores. Los períodos no se pueden modificar ni eliminar mientras una tarea escribe en el proyecto.
+
 .. _defo-alerts:
 
 Fuentes de alertas
@@ -384,12 +553,12 @@ Fuentes de alertas
 
 Una *fuente de alertas* es un conjunto de datos de alertas de pérdida de bosque. Cada píxel de alerta es *confirmado* (confianza alta) o *probable* (confianza baja) y lleva el día en que se detectó por primera vez.
 
-El paso **Alertas** muestra las fuentes que monitorea el proyecto y qué parte de la AOI cubre cada una. Cada fuente se descarga para cada período, recortada a la AOI y a la ventana de búsqueda del período.
+El paso **Alertas** muestra las fuentes del `período <defo-period_>`_ activo, indica qué parte de la AOI y del período cubre cada una, y las descarga. Cada período tiene sus propias fuentes: una fuente añadida aquí se añade solo al período activo.
 
-Abre el paso **Alertas** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene una `AOI <defo-aoi_>`_.
+Abre el paso **Alertas** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene un `período <defo-period_>`_. Trabaja sobre el período activo: para trabajar en otro período, primero hazlo activo en el paso `Período <defo-period_>`_. El recuadro de la parte superior del paso indica el período y su ventana de búsqueda, por ejemplo, "Periodo 2026-09-01 → 2026-09-30 · ventana de búsqueda desde el 2026-06-03 (90 días de período previo)".
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/alerts-list.png
-    :alt: El paso Alertas con tres fuentes predefinidas
+    :alt: El paso Alertas con tres fuentes descargadas
 
 La lista de fuentes
 ^^^^^^^^^^^^^^^^^^^
@@ -403,15 +572,20 @@ Cada fila de **Fuentes** muestra:
     *   -   Parte de la fila
         -   Descripción
     *   -   **Fuente**
-        -   El nombre de la fuente y, debajo, una nota con su tipo (**predefinida**, o "personalizada · formato") y la primera y la última fecha con datos sobre la AOI.
-    *   -   **Cobertura**
-        -   La parte de la AOI dentro de la huella de la fuente: **cubre la AOI** (verde), "cubre el 62% de la AOI" (naranja: el resto de la AOI no recibe alertas de esta fuente), **no cubre la AOI**, **comprobando…** mientras se hace la comprobación, o **cobertura sin comprobar** cuando no se ha hecho o ha fallado.
+        -   El nombre de la fuente y, debajo, una línea con lo que contiene la fila ("descargada el 2026-10-20 · 4,7 MB") o por qué necesita una descarga (por ejemplo, "la ventana de búsqueda cambió (…): descargar de nuevo"), y dos chips:
+
+            -   **AOI**: la parte de la AOI dentro de la huella de la fuente, por ejemplo, "AOI 100%". Una fuente que solo cubre parte de la AOI no recibe alertas sobre el resto.
+            -   Las fechas: "✓ datos hasta 2026-10-30" (verde) cuando la fuente tiene datos hasta el final de la ventana de búsqueda, "datos solo hasta …" (naranja) cuando sus datos terminan dentro de la ventana, o "✗ los datos terminan el …" (rojo) cuando no tiene ninguno en la ventana.
+    *   -   **Estado**
+        -   El estado de la fila, o un botón para descargarla (consulta `Descargar las fuentes <defo-alerts-download_>`_).
     *   -   Icono de mapa
-        -   Muestra la fuente en el mapa: las alertas de la ventana de búsqueda del período activo, o todas las fechas que la fuente tiene sobre la AOI cuando todavía no hay ningún período. Una fuente GeoTIFF solo se muestra una vez armonizada.
-    *   -   Icono de lápiz
-        -   Edita una fuente personalizada (ver más abajo).
-    *   -   Icono de papelera
-        -   Quita la fuente, junto con sus descargas y sus archivos armonizados.
+        -   Muestra la fuente en el mapa: las alertas de la ventana de búsqueda del período activo. Una fuente GeoTIFF solo se muestra una vez armonizada.
+    *   -   Icono de información
+        -   Abre los **Detalles** de la fuente (consulta `El diálogo de detalles <defo-harmonize-details_>`_), con la casilla **Añadir a los nuevos periodos** y, para una fuente personalizada, el botón **Editar**.
+    *   -   **Descargar de nuevo**
+        -   Descarga la fuente de nuevo (ver más abajo).
+    *   -   **Quitar de este periodo**
+        -   Quita la fuente del período activo (consulta `Quitar una fuente de un período <defo-alerts-remove_>`_).
 
 La cobertura se comprueba una vez, al elegir la AOI, y se guarda en el proyecto. Si la comprobación falló (por ejemplo, porque no se pudo acceder a GEE), aparece un botón **Comprobar de nuevo** debajo de la lista.
 
@@ -420,10 +594,14 @@ Añadir una fuente
 
 Selecciona **Añadir fuente** para abrir el diálogo **Añadir una fuente de alertas** y elige el **Tipo de fuente**:
 
--   **Predefinida**: una de las fuentes del catálogo; o
--   **Personalizada (0 de 6)**: tu propia imagen de GEE, colección de imágenes o GeoTIFF. El contador indica cuántos de los seis espacios personalizados están en uso.
+-   **Predefinida o del proyecto**: una de las fuentes del catálogo, o una fuente del proyecto que no está en este período (por ejemplo, una usada en un período anterior); o
+-   **Personalizada (0 de 6)**: tu propia imagen de GEE, colección de imágenes o GeoTIFF. El contador indica cuántos de los seis espacios personalizados del período están en uso.
 
-Un proyecto admite como máximo tres fuentes predefinidas y seis personalizadas.
+Un período admite como máximo tres fuentes predefinidas y seis personalizadas. El proyecto conserva todas las fuentes que ha usado, sin límite.
+
+.. _defo-alerts-new-periods:
+
+Bajo la fuente, la casilla **Añadir a los nuevos periodos** (marcada por defecto) decide si los períodos creados después empiezan con esta fuente. Nunca cambia los períodos existentes. Para cambiarla más tarde, abre los **Detalles** de la fuente con su icono de información.
 
 Fuentes predefinidas
 """"""""""""""""""""
@@ -431,7 +609,7 @@ Fuentes predefinidas
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/alerts-add-predefined.png
     :alt: Añadir una fuente predefinida
 
-Elige una fuente en el menú desplegable **Fuente predefinida** y selecciona **Añadir fuente**. Cada opción muestra su cobertura de la AOI. Una fuente que no cubre nada de la AOI aparece desactivada, con el motivo.
+Elige una fuente en el menú desplegable **Fuente** y selecciona **Añadir fuente**. La lista contiene las fuentes predefinidas y las fuentes propias del proyecto que todavía no están en este período. Cada opción muestra su cobertura de la AOI. Una fuente que no cubre nada de la AOI aparece desactivada, con el motivo.
 
 .. list-table::
     :header-rows: 1
@@ -450,7 +628,7 @@ Elige una fuente en el menú desplegable **Fuente predefinida** y selecciona **A
         -   Sentinel-2, 10 m.
         -   90°O–30°O, 20°S–20°N.
 
-Cuando todas las fuentes predefinidas ya están en el proyecto, el diálogo indica: "Ya están en este proyecto todas las fuentes predefinidas."
+Cuando todas las fuentes ya están en el período, el diálogo indica: "Todas las fuentes ya están en este período."
 
 Fuentes personalizadas
 """"""""""""""""""""""
@@ -513,14 +691,58 @@ Al seleccionar **Añadir fuente**, la aplicación comprueba el raster: que las b
 Editar una fuente personalizada
 """""""""""""""""""""""""""""""
 
-Selecciona el icono de lápiz para volver a abrir el formulario, titulado con el nombre de la fuente. El nombre no se puede cambiar; el raster, el formato y las bandas sí. El formulario conserva el formato y las bandas guardados hasta que se elige otro raster.
+Abre los **Detalles** de la fuente con su icono de información y selecciona **Editar** para volver a abrir el formulario, titulado con el nombre de la fuente. El nombre no se puede cambiar; el raster, el formato y las bandas sí. El formulario conserva el formato y las bandas guardados hasta que se elige otro raster.
 
-En cuanto un conjunto de alertas usa la fuente, ya no se puede editar: elimínala y añade una nueva.
+En cuanto un conjunto de alertas usa la fuente, ya no se puede editar: quítala y añade una nueva.
 
-Quitar una fuente
-^^^^^^^^^^^^^^^^^
+.. _defo-alerts-download:
 
-Selecciona el icono de papelera y confirma. Se eliminan las descargas y los archivos armonizados de la fuente. Los conjuntos de alertas que ya la usaban conservan sus alertas y aparecen como desactualizados.
+Descargar las fuentes
+^^^^^^^^^^^^^^^^^^^^^
+
+Cada fuente se descarga en la ventana de búsqueda del período, en su propia proyección y recortada a la AOI. Una fuente GeoTIFF no se descarga: se lee de su archivo. Descargar no armoniza la fuente: eso es el paso siguiente, `Armonizar <defo-harmonize_>`_, que solo se ejecuta cuando lo inicias allí.
+
+La columna **Estado** indica:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Estado
+        -   Significado
+    *   -   "Descargado"
+        -   Descargada para la ventana de búsqueda actual. La línea bajo el nombre da la fecha de descarga y el tamaño en disco.
+    *   -   **Descargar**
+        -   La fuente todavía no se ha descargado para la ventana de búsqueda de este período, o su descarga está desactualizada. Selecciona el botón para descargarla.
+    *   -   **Leer archivo**
+        -   Lo mismo para una fuente GeoTIFF, que se lee de su archivo.
+    *   -   **Reintentar**
+        -   La última descarga falló. Su error se muestra en rojo debajo de la fila.
+    *   -   "Descargando 42%", "Leyendo", "En cola"
+        -   La fila se está ejecutando, o espera su turno ("esperando a la fila de arriba").
+    *   -   "no cubierta", "sin datos"
+        -   La fuente no se puede ejecutar para este período: no cubre la AOI, o no tiene datos para la ventana de búsqueda (su chip de fechas está en rojo).
+    *   -   "Sin archivo"
+        -   El archivo de una fuente GeoTIFF ha desaparecido (consulta `Mensajes frecuentes <defo-harmonize-messages_>`_).
+
+Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo desactualizado. La línea bajo el nombre indica entonces el motivo: por ejemplo, "la ventana de búsqueda cambió (…): descargar de nuevo" o "el AOI cambió: descargar de nuevo". En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica "A descargar".
+
+.. note::
+
+    Una fila descargada no tiene botón: una fuente ya descargada para la ventana de búsqueda del período no se vuelve a descargar por sí sola. Para obtener las últimas alertas de un catálogo que sigue añadiendo alertas a fechas pasadas, usa **Descargar de nuevo**. La aplicación pregunta antes, indicando la ventana y la fecha del archivo que reemplaza. No se ofrece para una fuente GeoTIFF ("Nada que descargar de nuevo: se lee de un archivo").
+
+El pie bajo la tabla descarga en lote. Selecciona **Descargar … pendientes** (por ejemplo, **Descargar 3 pendientes**) para descargar cada fuente que lo necesite, una fila tras otra. Las filas que indican "no cubierta" o "sin datos" se omiten; una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente. Mientras dura, el pie cuenta sus filas ("1 en curso · 2 en cola", luego "1 de 3 terminadas", con una barra de progreso) y el botón se convierte en **Detener**, que se detiene después de la fila en curso ("Deteniendo…"). La flecha junto al botón (**Más acciones por lotes**) abre **Descargar todo de nuevo (…)**: cada fuente que no está bloqueada y no es un GeoTIFF se descarga de nuevo, después de confirmar.
+
+La descarga también aparece como una notificación de tarea titulada **Descargar**, con la fuente en la que está y su porcentaje.
+
+.. _defo-alerts-remove:
+
+Quitar una fuente de un período
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Selecciona el icono de papelera (**Quitar de este periodo**) y confirma. Se eliminan los archivos descargados y armonizados de la fuente en este período. Los conjuntos de alertas de este período que ya la usaban conservan sus alertas y aparecen como desactualizados.
+
+La fuente sigue en el proyecto: los demás períodos la conservan, y se puede volver a añadir con **Añadir fuente**. Una fuente nunca se elimina de todo el proyecto.
 
 Mensajes frecuentes
 ^^^^^^^^^^^^^^^^^^^
@@ -534,26 +756,498 @@ Mensajes frecuentes
 "Este recurso CCDC guarda sus fechas como días julianos o tiempo Unix …"
     Solo se admiten resultados de CCDC fechados en años fraccionarios.
 
+"Este periodo ya tiene 6 fuentes personalizadas."
+    Quita una fuente personalizada del período antes de añadir otra.
+
 "Un trabajo está escribiendo en este proyecto; …"
     Las fuentes no pueden cambiar durante una descarga o una ejecución de **Integrar y vectorizar**. Espera a que termine.
 
-.. _defo-layers:
+.. _defo-harmonize:
 
-Capas opcionales
-----------------
+Armonizar
+---------
 
-Las capas de visualización ayudan a revisar las alertas: un mapa de cobertura del suelo, una línea base de bosque, un mosaico reciente. Nunca modifican las alertas. Una capa es una imagen de Earth Engine o un GeoTIFF. Se puede mostrar en el mapa principal y, con **Mostrar en Análisis** marcado, en los dos mapas de la pantalla de `Análisis <defo-analysis_>`_.
+Este paso pone todas las entradas del `período <defo-period_>`_ activo en una cuadrícula común. Cada fuente descargada en `Alertas <defo-alerts-download_>`_ se *armoniza*: se alinea con la cuadrícula del proyecto y se recorta con las máscaras del período. Nunca se repite nada cuyas entradas no hayan cambiado.
 
-Abre el paso **Capas opcionales** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene una `AOI <defo-aoi_>`_.
+Abre el paso **Armonizar** del panel **Flujo de trabajo**. Se desbloquea en cuanto al menos una fuente del período activo está descargada (o es una fuente GeoTIFF). Trabaja sobre el período activo: para armonizar otro período, primero hazlo activo en el paso `Período <defo-period_>`_.
 
-El paso es opcional: sáltalo y vuelve en cualquier momento. En cuanto el proyecto tiene un `período de monitoreo <defo-period_>`_, el panel **Flujo de trabajo** da el paso por completado aunque no haya ninguna capa, y su indicador muestra "ninguna" en lugar de "nada todavía".
+De arriba abajo, el paso tiene tres partes: la **Cuadrícula del proyecto**, las **Máscaras** y las **Fuentes de este período**.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/prepare-step.png
+    :alt: El paso Armonizar después de una ejecución
+
+La cuadrícula del proyecto
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Todos los rasters del proyecto se alinean con una misma cuadrícula: una proyección en metros y un tamaño de píxel, sobre la AOI. Así, las alertas de fuentes con distintos tamaños de píxel se pueden combinar píxel a píxel, y el tamaño mínimo de alerta en hectáreas se convierte en un número de píxeles.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 15 40 45
+
+    *   -   Campo
+        -   Descripción
+        -   Valor predeterminado y límites
+    *   -   **EPSG**
+        -   La proyección de la cuadrícula, como código del European Petroleum Survey Group (EPSG). El botón de mira al final del campo rellena la zona Universal Transversal de Mercator (UTM) de la AOI.
+        -   La zona UTM del centro de la AOI. Debe ser un sistema proyectado en metros: se rechaza un sistema geográfico (como 4326) o uno en pies.
+    *   -   **Resolución**
+        -   El tamaño de píxel, en metros.
+        -   El tamaño de píxel más fino entre las fuentes del proyecto: 10 m con RADD o GLAD-S2, 30 m solo con GLAD-L, el tamaño de píxel propio de una fuente personalizada, o 30 m cuando no se sabe nada. Debe ser mayor que 0.
+
+Debajo de los campos se muestra el tamaño de la cuadrícula: "ancho × alto píxeles, unos … por fuente antes de comprimir". Por encima de 2 GB por fuente, un aviso indica **Esta cuadrícula es grande: las descargas tardarán y usarán espacio en disco.** (no bloquea el paso).
+
+Selecciona **Guardar cuadrícula**. Las máscaras y la tabla de fuentes solo aparecen una vez guardada una cuadrícula.
+
+La cuadrícula puede cambiar hasta que se genere el primer conjunto de alertas. Una cuadrícula nueva solo vuelve a armonizar las fuentes a partir de los archivos ya descargados; no las descarga de nuevo. En cuanto el proyecto tiene un conjunto de alertas, la tarjeta indica **La cuadrícula está bloqueada porque el proyecto tiene conjuntos de alertas.**
 
 .. note::
 
-    Los mosaicos de Planet NICFI no son una capa opcional: si tu cuenta de GEE tiene acceso a NICFI, llegan con las imágenes *Planet* de la `línea de tiempo de Análisis <defo-analysis-timeline_>`_.
+    Cambiar la `AOI <defo-aoi_>`_ borra la cuadrícula y elimina todas las descargas y todos los archivos armonizados del proyecto, que se hicieron para el área anterior. Vuelve a guardar la cuadrícula aquí y luego ejecuta de nuevo las filas.
+
+Máscaras
+^^^^^^^^
+
+Una *máscara* limita dónde se conservan las alertas. Es un raster que se define una sola vez para el proyecto: una imagen o colección de imágenes de GEE, o un GeoTIFF, con una banda. Un píxel está dentro de la máscara donde esa banda no es cero; los píxeles con cero o sin datos quedan fuera.
+
+Cada período elige un **Modo** para cada máscara:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Modo
+        -   Efecto sobre las alertas del período
+    *   -   **Inactiva**
+        -   La máscara no se usa en este período.
+    *   -   **Conservar**
+        -   Se eliminan las alertas *fuera* de la máscara (por ejemplo, para conservar solo las alertas dentro de una máscara de bosque).
+    *   -   **Excluir**
+        -   Se eliminan las alertas *dentro* de la máscara (por ejemplo, para descartar las alertas en plantaciones o en agua).
+
+Cuando hay varias máscaras activas, se aplican todas. Las máscaras actúan sobre las fuentes armonizadas, así que un cambio de **Modo** deja desactualizadas las fuentes del período. **Armonizar … pendientes** las vuelve a armonizar sin descargarlas. Un período nuevo empieza con las opciones de máscara del último período.
+
+Añadir una máscara
+""""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/prepare-mask-add.png
+    :alt: Añadir una máscara
+
+Selecciona **Añadir máscara** para abrir el diálogo **Añadir una máscara**. Las bandas se leen en cuanto se elige el raster.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
+
+    *   -   Campo
+        -   Descripción
+        -   Valor predeterminado y límites
+    *   -   **Nombre**
+        -   El nombre de la máscara en listas, leyendas y nombres de archivo.
+        -   Se sugiere a partir del nombre del recurso o del archivo. Como máximo 24 caracteres, al menos una letra o cifra, único entre las máscaras del proyecto.
+    *   -   **Fuente**
+        -   **Earth Engine** (un recurso) o **GeoTIFF** (un archivo de tu carpeta de SEPAL).
+        -   **Earth Engine**.
+    *   -   Recurso o **GeoTIFF**
+        -   La imagen o colección de imágenes de GEE, o el archivo .tif.
+        -
+    *   -   **Banda**
+        -   La banda que define la máscara. Aparece cuando el raster tiene dos bandas o más; con una banda, el formulario indica "Una banda (…): la máscara se hace con ella."
+        -   La banda cuyo nombre parece de máscara (por ejemplo, ``datamask``), nombrada en la ayuda ("… parece una máscara; los píxeles distintos de cero están dentro de ella."); si no hay ninguna, elígela tú.
+    *   -   **Modo en el período activo**
+        -   **Conservar** o **Excluir**.
+        -   **Conservar**. La máscara se activa solo en el período activo; los demás períodos la dejan inactiva hasta que se active en ellos.
+
+Al seleccionar **Añadir máscara**, la aplicación comprueba el raster y su banda. Cualquier problema se muestra en rojo dentro del diálogo, que sigue abierto para hacer correcciones.
+
+La lista de máscaras
+""""""""""""""""""""
+
+Cada fila de **Máscaras** muestra:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Columna
+        -   Descripción
+    *   -   **Máscara**
+        -   El nombre de la máscara. La línea de debajo indica su fuente y su tamaño en disco una vez lista ("Earth Engine · 18,9 MB"), o por qué necesita una ejecución ("aún no descargada", "la cuadrícula cambió (…): alinear de nuevo"). Termina con "Inactiva" cuando la máscara está inactiva en el período activo.
+    *   -   **Modo**
+        -   El modo de la máscara en el período activo: **Inactiva**, **Conservar** o **Excluir**. Un cambio se aplica enseguida; las fuentes del período pasan entonces a estar desactualizadas.
+    *   -   **Estado**
+        -   "Lista", o un botón para la siguiente ejecución de la máscara: **Descargar** (una máscara de GEE todavía no descargada) o **Alinear** (con la cuadrícula). Un botón naranja rehace un archivo desactualizado. Durante una ejecución, la celda indica "Descargando 42%", "Alineando" o "En cola".
+
+Los iconos a la derecha de cada fila:
+
+-   el icono de mapa muestra la máscara en el mapa: una máscara de GEE se puede previsualizar antes de descargarla, y una máscara GeoTIFF, una vez alineada;
+-   el icono de información abre sus **Detalles** (consulta `El diálogo de detalles <defo-harmonize-details_>`_); y
+-   el menú **Más acciones** (tres puntos) contiene:
+
+    -   **Descargar de nuevo** (solo máscaras de GEE), para un recurso que ha cambiado. La aplicación pregunta primero: "Esto obtiene la máscara de nuevo desde Earth Engine, reemplaza su descarga y luego la alinea.";
+    -   **Editar**, que abre **Editar máscara** *nombre*: el raster y la banda se pueden cambiar, el nombre no. En cuanto un conjunto de alertas ha usado la máscara, ya no se puede editar (**Un conjunto de alertas ya usa esta máscara: añade una nueva en su lugar.**); y
+    -   **Eliminar máscara…**, que elimina la máscara después de confirmar. Se eliminan su descarga y su archivo alineado, y todos los períodos dejan de usarla. Los conjuntos de alertas que la usaban conservan sus alertas y aparecen como desactualizados.
+
+Una máscara se descarga y se alinea una sola vez para todo el proyecto, sea cual sea el período que la ejecute.
+
+.. _defo-harmonize-sources:
+
+Fuentes de este período
+^^^^^^^^^^^^^^^^^^^^^^^
+
+La tabla tiene una fila por cada fuente de alertas del período activo, con dos columnas:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Columna
+        -   Descripción
+    *   -   **Fuente**
+        -   El nombre de la fuente. La línea de debajo indica lo que contiene la fila o lo que espera (ver más abajo). Los avisos, como una cobertura parcial, y los errores aparecen como líneas bajo la fila.
+    *   -   **Estado**
+        -   El estado de la fila, o un botón para su siguiente ejecución.
+
+La columna **Estado** indica:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Estado
+        -   Significado
+    *   -   "Lista"
+        -   Descargada y armonizada con las entradas actuales. La línea bajo el nombre indica la fecha de descarga, el tamaño en disco y lo que encontró el archivo armonizado: "descargada el 2026-10-20 · 31,7 MB · 2.362.718 píxeles de alerta".
+    *   -   **Armonizar**
+        -   La descarga está al día, pero el archivo armonizado falta o está desactualizado (una descarga nueva, una cuadrícula nueva, un cambio de máscara). Selecciona el botón para ejecutar la fila: alinea las máscaras del período que lo necesiten y luego armoniza la fuente, sin descargarla.
+    *   -   "Descárgala o léela primero en Alertas"
+        -   La fuente no está descargada para la ventana de búsqueda de este período, o su descarga está desactualizada. La fila no tiene botón: descárgala primero en `Alertas <defo-alerts-download_>`_.
+    *   -   **Reintentar**
+        -   La última ejecución de la fila falló. Su error aparece en rojo bajo la fila.
+    *   -   "Descargando 42%", "Armonizando", "En cola"
+        -   La fila está en curso, o espera su turno en una ejecución ("esperando a la fila de arriba"). Una fila que se está descargando en Alertas también aparece en curso aquí, y no se puede armonizar hasta que termine su descarga.
+    *   -   "no cubierta", "sin datos"
+        -   La fuente no se puede ejecutar en este período: no cubre la AOI, o no tiene datos para la ventana de búsqueda. La línea bajo el nombre da el motivo. Consulta `Fuentes de alertas <defo-alerts_>`_ para la cobertura.
+    *   -   "Sin archivo"
+        -   El archivo de una fuente GeoTIFF ya no está (consulta `Mensajes frecuentes <defo-harmonize-messages_>`_).
+
+En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica "A armonizar" o "A alinear".
+
+Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo desactualizado. La línea bajo el nombre indica entonces el motivo: por ejemplo, "la cuadrícula cambió (EPSG:32719 · 30 m → EPSG:32719 · 10 m): armonizar de nuevo", "se descargó de nuevo desde entonces: armonizar de nuevo" o "la máscara forest_2000 cambió: armonizar de nuevo".
+
+Los iconos a la derecha de cada fila:
+
+-   el icono de mapa (**Mostrar en el mapa**) muestra en el mapa las alertas armonizadas;
+-   el icono de información abre los **Detalles** de la fila (ver más abajo); y
+-   **Eliminar archivos** quita la descarga y el archivo armonizado de la fuente en este período, después de confirmar. La fuente sigue en el período: descárgala de nuevo en `Alertas <defo-alerts-download_>`_ y armonízala para reconstruirlos. Los conjuntos de alertas de este período hechos con la fuente pasan a estar desactualizados; sus alertas y sus revisiones se conservan.
+
+.. _defo-harmonize-details:
+
+El diálogo de detalles
+""""""""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/prepare-details.png
+    :alt: El diálogo de detalles de una fuente
+
+El icono de información de una fuente o de una máscara abre un resumen de solo lectura de con qué se hicieron sus archivos. Empieza con el estado de la fila y, para una fuente, el período. Cuando la fila está desactualizada, una línea naranja **Motivo:** dice qué cambió.
+
+En `Alertas <defo-alerts_>`_, el icono de información de una fuente abre el mismo diálogo, con dos controles más: la casilla **Añadir a los nuevos periodos** (consulta `Añadir una fuente <defo-alerts-new-periods_>`_) y, para una fuente personalizada, **Editar**.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Sección
+        -   Lo que enumera
+    *   -   **Fuente**
+        -   Una fuente predefinida: su **Catálogo** y su **Cobertura** de la AOI, con la última fecha de datos y el día en que se comprobó. Una fuente personalizada: su **Tipo**, **Referencia**, **Formato**, **Codificación de fechas**, **Bandas** y **Cuadrícula nativa**. Una máscara: su **Referencia**, **Banda**, **Cuadrícula nativa** y los períodos en que se usa (**Usada en**).
+    *   -   **Descarga** (**Lectura del archivo** para una fuente GeoTIFF)
+        -   La **Ventana de búsqueda**, la **Cuadrícula nativa** en la que se descargó el archivo, su **Tamaño** y su **Archivo** en la carpeta del proyecto.
+    *   -   **Armonización** (**Alineación** para una máscara)
+        -   La **Cuadrícula usada**, con la cuadrícula actual cuando cambió desde entonces, el **Remuestreo**, las **Máscaras** aplicadas con su modo, los **Píxeles de alerta** conservados (y cuántos eliminaron las máscaras), las **Fechas de alerta** encontradas, el **Tamaño** y el **Archivo**. Para una máscara: sus **Píxeles de la máscara**.
+
+Cada sección indica la fecha y la hora en que se escribió su archivo, o "Aún no ejecutado". Selecciona **Cerrar**, o pulsa **Esc**, para cerrar el diálogo.
+
+.. labels-ok: Esc
+
+Ejecutarlo todo
+"""""""""""""""
+
+El pie de la tabla ejecuta las filas en lote. Selecciona **Armonizar … pendientes** (por ejemplo, **Armonizar 4 pendientes**). Primero alinea las máscaras activas en el período que lo necesitan y luego armoniza cada fuente descargada que lo necesite, una fila tras otra:
+
+-   las filas que indican "no cubierta" o "sin datos", y las filas que faltan por descargar, se omiten;
+-   una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente.
+
+Mientras dura la ejecución, el pie cuenta sus filas ("1 en curso · 3 en cola", luego "2 de 4 terminadas", con una barra de progreso) y el botón pasa a ser **Detener**, que detiene la ejecución después de la fila en curso. Hasta que esa fila termina, el botón indica "Deteniendo…". Las filas ya hechas quedan hechas. Este **Detener** solo detiene la armonización: una descarga en curso en `Alertas <defo-alerts-download_>`_ continúa, y el **Detener** de Alertas no detiene una armonización.
+
+La ejecución también aparece como una notificación de tarea titulada **Armonizar**, con la fila en la que está (por ejemplo, "Armonizando GLAD-L").
+
+.. tip::
+
+    Cada fila necesita espacio libre en disco para sus archivos. La aplicación lo comprueba antes de escribir y detiene la fila con un mensaje cuando el disco está demasiado lleno. La línea del tamaño de la cuadrícula da una idea de cuánto puede ocupar una fuente.
+
+.. _defo-harmonize-messages:
+
+Mensajes frecuentes
+^^^^^^^^^^^^^^^^^^^
+
+"No hay suficiente espacio libre en disco: esto necesita … GB en …, y hay … GB libres."
+    Libera espacio en tu carpeta de SEPAL o usa una cuadrícula más gruesa.
+
+"Ya se está preparando una fila de esta ejecución …"
+    El trabajo de otro período está alineando una máscara, o la fila todavía está en curso. Vuelve a ejecutarla cuando termine.
+
+"La geometría de la AOI todavía se está obteniendo; ejecuta esta fila de nuevo en un momento."
+    Las fuentes y las máscaras GeoTIFF necesitan la forma de la AOI. Espera un momento. Si no se pudo obtener, selecciona **Comprobar de nuevo** debajo de la tabla y luego ejecútalas.
+
+"La máscara … no cubre nada de la AOI: como máscara de conservar, se eliminarían todas las alertas."
+    La máscara no alcanza el área. Revisa su recurso o su banda, o desactívala.
+
+"Un trabajo está escribiendo en este proyecto; guarda la cuadrícula cuando termine."
+    La cuadrícula, las máscaras y las fuentes no pueden cambiar mientras hay en curso una descarga o una ejecución de **Integrar y vectorizar**.
+
+"Sin archivo", con "falta: archivo no encontrado: …" bajo la fila, o "Máscara …: archivo no encontrado (…). Vuelve a poner el archivo en esta ruta para usar la máscara."
+    Una fuente o máscara GeoTIFF se movió, se renombró o se eliminó de tu carpeta de SEPAL. Vuelve a poner el archivo en la ruta indicada, o edita la fuente o la máscara para que apunte a su nueva ubicación.
+
+"Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Armonizar … pendientes alinea primero las máscaras."
+    Una fuente no se puede armonizar antes de que las máscaras del período estén alineadas. Selecciona **Armonizar … pendientes**, o primero el botón **Alinear** de la máscara.
+
+"Máscara …: se desconoce su cuadrícula nativa (proyección y escala); edita la máscara."
+    La aplicación no sabe cómo descargar esta máscara de GEE. Ábrela con **Editar** en su menú **Más acciones** y vuelve a guardarla, para que su raster se compruebe de nuevo.
+
+.. _defo-integrate:
+
+Integrar y vectorizar
+---------------------
+
+Este paso convierte las fuentes armonizadas del período activo en un *conjunto de alertas*: la lista de alertas que se revisan en `Análisis <defo-analysis_>`_. El paso:
+
+-   combina las fuentes píxel a píxel;
+-   elimina lo que los períodos anteriores ya reportaron;
+-   agrupa los píxeles de alerta vecinos en alertas; y
+-   dibuja un polígono por alerta.
+
+Abre el paso **Integrar y vectorizar** del panel **Flujo de trabajo**. Se desbloquea en cuanto al menos una fuente del período activo está lista en `Armonizar <defo-harmonize_>`_.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/integrate-form.png
+    :alt: El formulario de Integrar y vectorizar
+
+Qué es una alerta
+^^^^^^^^^^^^^^^^^
+
+Una alerta es un *grupo*: un conjunto de píxeles de alerta que se tocan entre sí, por los lados o por las esquinas, sea cual sea la fuente que detectó cada píxel. Donde se tocan píxeles de GLAD-L y de RADD, forman *una sola* alerta que indica ambas fuentes. Una alerta nunca se divide en una alerta por fuente.
+
+Cada alerta conserva:
+
+-   las fuentes que la detectaron;
+-   su primera y su última fecha de detección (la fecha más temprana y la más tardía entre sus píxeles);
+-   su superficie en hectáreas; y
+-   una estadística de las bandas de cada capa de atributos (ver más abajo).
+
+Un grupo más pequeño que el **Tamaño mínimo de grupo** (consulta `Las opciones <defo-integrate-options_>`_) no llega a ser una alerta: sus píxeles se dejan de lado como *no analizables*.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/integrate.gif
+    :alt: Las fuentes, en una misma cuadrícula, se convierten en grupos; cada grupo se mide con el tamaño mínimo y se convierte en un polígono que indica sus fuentes o, si es menor, se deja de lado
+
+.. _defo-integrate-earlier:
+
+Lo que ya reportaron los períodos anteriores
+""""""""""""""""""""""""""""""""""""""""""""
+
+Los píxeles que caen dentro de las alertas de un conjunto de alertas de un período *anterior* (su *huella*) se eliminan antes de formar los grupos. Así, la `retrospección <defo-period-lookback_>`_ nunca reporta dos veces la misma pérdida.
+
+Los píxeles que no llegaron a ser alertas (un grupo por debajo del tamaño mínimo, o más allá del número máximo de alertas) se conservan como *no analizables*. No forman parte de la huella: recuperarlos es la función de la `retrospección <defo-period-lookback_>`_.
+
+La ejecución de un período posterior vuelve a añadir esos píxeles cuando se cumplen las dos condiciones:
+
+-   su retrospección llega hasta el período anterior (ese período termina el día en que empieza la nueva ventana de búsqueda o después); y
+-   los dos períodos comparten una fuente.
+
+Los píxeles vuelven sea cual sea su fecha de detección dentro de la propia ventana de búsqueda del conjunto anterior. Se unen a los píxeles nuevos que los tocan, y un grupo que ahora alcanza el tamaño mínimo se convierte en una alerta. Sus fechas de detección pueden ser anteriores a su propio período y a su retrospección. Con una retrospección de 0, la ventana de búsqueda empieza el primer día del propio período, así que no se vuelve a considerar nada de lo que se dejó de lado.
+
+.. _defo-integrate-growth:
+
+Crecimiento de una pérdida anterior
+"""""""""""""""""""""""""""""""""""
+
+Un desmonte suele seguir creciendo de un mes a otro. La ejecución vincula cada alerta nueva a la *pérdida anterior* de la que crece: las alertas de los conjuntos de períodos anteriores que se guardaron como **Alerta verdadera** o **Requiere revisión**. La forma de una alerta anterior es el polígono dibujado para ella en `Precisar el polígono <defo-analysis-refine_>`_ o, si no lo hay, su grupo detectado.
+
+-   Una alerta nueva que toca o se superpone a la forma de una alerta anterior es una *alerta de crecimiento*, vinculada a todas las alertas anteriores que toca. Una alerta sin vínculo es una alerta *nueva*.
+-   Un grupo más pequeño que el **Tamaño mínimo de grupo** se conserva cuando toca una pérdida anterior: es una alerta de crecimiento *bajo el área mínima*. Un grupo pequeño que no toca nada se deja de lado como *no analizable*, como antes.
+-   Las alertas de crecimiento se ordenan y se limitan junto con las demás: **Limitar el número de grupos** puede dejarlas fuera.
+-   Solo cuentan las revisiones guardadas cuando empieza la ejecución. Una alerta anterior confirmada después no se vincula, pero se puede vincular a mano en `Alertas anteriores <defo-analysis-earlier_>`_.
+
+Las alertas vinculadas entre sí, a lo largo de todos los períodos, forman el *historial* de un desmonte. Análisis lo muestra en cada alerta, y el `Resumen <defo-overview-growth_>`_ lo resume.
+
+.. _defo-integrate-options:
+
+Las opciones
+^^^^^^^^^^^^
+
+El formulario se abre con la configuración del conjunto de alertas activo (todo menos las fuentes), o con los valores predeterminados de abajo cuando no hay ninguno.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 50 30
+
+    *   -   Opción
+        -   Descripción
+        -   Valor predeterminado y límites
+    *   -   **Fuentes**
+        -   Las fuentes cuyas alertas entran en el conjunto. Cada fuente lista aparece con lo que encontró su archivo armonizado. Una fuente que no cubre la AOI, o que no tiene datos para el período, aparece desactivada, con el motivo.
+        -   Todas las fuentes listas. Al menos una.
+    *   -   **Incluir alertas probables (no confirmadas)**
+        -   Solo aparece cuando al menos una de las fuentes seleccionadas tiene una clase *probable* (confianza baja). Un único interruptor para todas esas fuentes. Si está desactivado, sus píxeles probables se descartan antes que nada, y solo cuentan sus píxeles confirmados. Con dos o más fuentes de ese tipo, **Definir por fuente** despliega un interruptor por fuente (ver más abajo).
+        -   Activado.
+    *   -   **Tamaño mínimo de grupo**
+        -   Se descartan los grupos más pequeños que este tamaño. La ayuda indica ese tamaño en píxeles de la cuadrícula (a 10 m, 0,5 ha son "50 píxeles en la cuadrícula").
+        -   0,5 ha. Cualquier número de hectáreas, 0 o más. Incluso con 0, una alerta tiene al menos un píxel.
+    *   -   **Orden**
+        -   El orden de las alertas en el conjunto, que es el orden de revisión: **Grupos más grandes primero**, **Grupos más pequeños primero**, **Grupos más recientes primero** (por la última fecha de detección) o **Grupos más antiguos primero** (por la primera fecha de detección).
+        -   **Grupos más grandes primero**.
+    *   -   **Limitar el número de grupos**
+        -   Si se marca, muestra **Número máximo de grupos**: solo se conservan las primeras alertas según el **Orden** elegido. Su ayuda indica cuáles (por ejemplo, "Conserva los 100 grupos más grandes." o "Conserva los 100 grupos más recientes."). Si no se marca, se conservan todas las alertas.
+        -   Sin marcar. Al marcarlo, el límite empieza en 100. Debe ser un número entero mayor que 0.
+    *   -   **Capas de atributos**
+        -   Rasters cuyas estadísticas de bandas se añaden a cada alerta (ver más abajo).
+        -   Ninguna.
+
+Alertas probables por fuente
+""""""""""""""""""""""""""""
+
+Con dos o más fuentes seleccionadas que tienen una clase probable, selecciona **Definir por fuente** bajo **Incluir alertas probables (no confirmadas)** para dar a cada una su propio interruptor, con el nombre de la fuente:
+
+-   Una fuente seleccionada sin clase probable (una fuente personalizada que solo tiene fechas de detección) aparece como "(fuente): solo fechas, sin nivel probable".
+-   Cuando los interruptores de las fuentes difieren, el interruptor principal aparece desactivado, la nota **Mixto: las fuentes de abajo difieren.** sustituye a **Definir por fuente** y los interruptores por fuente siguen desplegados.
+-   Activar o desactivar el interruptor principal cambia todas las fuentes a la vez.
+
+.. _defo-integrate-attributes:
+
+Capas de atributos
+""""""""""""""""""
+
+Una *capa de atributos* añade a cada alerta información de un raster (por ejemplo, la clase de cobertura del suelo mayoritaria bajo la alerta, o su altitud media). Los valores son columnas de la tabla de alertas: se exportan con las alertas, y las columnas de clases se pueden usar en el filtro de Análisis.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/integrate-attribute.png
+    :alt: Añadir una capa de atributos
+
+Para añadir una capa de atributos:
+
+1.  Selecciona **Añadir capa de atributos** para abrir el diálogo **Añadir una capa de atributos**.
+2.  Comprueba el **Nombre de la capa**, sugerido a partir del raster una vez elegido. Las columnas se llaman *nombre de la capa*\_\ *banda*.
+3.  Elige la **Fuente** (**Earth Engine**, una imagen, o **GeoTIFF**, un archivo de tu carpeta de SEPAL) y luego elige el raster. Sus bandas se leen enseguida.
+4.  Con una banda, el formulario indica "Una banda (…): su estadística se añade a cada alerta." Con dos o más, selecciona una o varias en **Bandas**.
+5.  Para cada banda, elige la estadística que se calcula sobre la alerta: **Mayoría** (para clases), **Media**, **Mínimo**, **Máximo** o **Mediana**. Empieza en **Mayoría** cuando el nombre de la banda parece de clases (por ejemplo, ``landcover``), y en **Media** en los demás casos, marcada "(sugerido)". El nombre de la columna aparece al lado.
+6.  Selecciona **Añadir capa de atributos**.
+
+Reglas:
+
+-   Una capa necesita al menos una banda (**Conserva al menos una banda.**).
+-   Dos capas no pueden leer el mismo raster (**Otra capa de atributos ya lee este raster.**).
+-   Los nombres de columna nunca toman el nombre de una columna de las alertas ni de una columna de otra capa: si coinciden, se les añade un sufijo.
+
+La lista bajo **Capas de atributos** muestra cada capa con sus columnas. El icono de lápiz edita una capa y el icono de papelera la quita. Las capas pertenecen a este formulario hasta que se ejecuta: se guardan con el conjunto de alertas.
+
+Ejecutar el paso
+^^^^^^^^^^^^^^^^
+
+La línea gris sobre el botón indica qué conjunto genera la ejecución: "Crea o reemplaza el conjunto de alertas (período) · (fuentes)". Un conjunto de alertas se identifica por su período y sus fuentes:
+
+-   una combinación nueva de fuentes genera un conjunto nuevo: un período puede tener varios conjuntos (por ejemplo, uno solo con GLAD-L y otro con las tres fuentes); y
+-   la misma combinación otra vez *reemplaza* el conjunto.
+
+Selecciona **Integrar y vectorizar**. El botón sigue desactivado hasta que haya al menos una fuente seleccionada y, cuando **Limitar el número de grupos** está marcado, el límite sea válido ("Introduce un número entero mayor que 0." bajo el campo).
+
+La ejecución pasa por "Combinando fuentes", "Vectorizando grupos", "Guardando las alertas", "Escribiendo la huella" y "Generando las teselas del mapa". Al terminar, un mensaje indica "N alertas listas para revisar", seguido de "Se vincularon N alertas a pérdidas anteriores (M por debajo del área mínima)" cuando encontró `alertas de crecimiento <defo-integrate-growth_>`_, y el nuevo conjunto pasa a ser el *conjunto activo*: aquel con el que trabajan `Cuestionario <defo-questionnaire_>`_, `Evaluación <defo-evaluation_>`_, `Análisis <defo-analysis_>`_ y `Resumen <defo-overview_>`_. El paso sigue abierto.
+
+Si no queda ninguna alerta, el conjunto se genera igualmente, vacío, y el mensaje indica el motivo para cada fuente (por ejemplo, "GLAD-L: los 56 píxeles de alerta eliminados por máscaras" o "RADD: se dejaron fuera las alertas probables (no confirmadas)").
+
+.. _defo-integrate-replace:
+
+Reemplazar un conjunto
+""""""""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/integrate-replace.png
+    :alt: Confirmación del reemplazo de un conjunto de alertas
+
+Cuando el conjunto que se va a reemplazar tiene alertas revisadas o un `reparto entre evaluadores <defo-evaluation_>`_, el diálogo **¿Reemplazar este conjunto de alertas?** enumera lo que se perdería: las alertas revisadas (hasta 20, y luego "… y N más"), y el reparto con las revisiones que los evaluadores todavía no han devuelto. Cuando hay alertas de períodos posteriores que crecen de este conjunto, añade "N alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán.": tras la ejecución, esos vínculos aparecen como "el conjunto anterior se volvió a ejecutar" (consulta `Alertas anteriores <defo-analysis-earlier_>`_). Selecciona **Reemplazar** para continuar. Un conjunto sin nada que perder se reemplaza sin confirmación.
+
+.. attention::
+
+    Reemplazar un conjunto descarta sus revisiones. Para probar otra configuración sin perder revisiones, elige otra combinación de fuentes, que genera un conjunto aparte.
+
+.. _defo-integrate-outdated:
+
+Cuando el conjunto activo está desactualizado
+"""""""""""""""""""""""""""""""""""""""""""""
+
+Si las entradas del conjunto activo cambiaron desde que se generó (una fuente descargada de nuevo, una máscara activada o desactivada, o un cambio en la retrospección del período, la AOI o la cuadrícula), una línea naranja indica: "El conjunto activo (…) se generó a partir de entradas que han cambiado desde entonces." Vuelve a ejecutar **Integrar y vectorizar** para reconstruirlo, lo que descarta sus revisiones.
+
+Si los archivos del conjunto se eliminaron de la carpeta del proyecto, la línea indica: "Faltan los archivos del conjunto activo (…) en la carpeta del proyecto."
+
+.. _defo-integrate-map:
+
+Ver las alertas en el mapa
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+En cuanto el proyecto tiene un conjunto, los interruptores bajo el botón lo dibujan en el mapa:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 35 65
+
+    *   -   Interruptor
+        -   Descripción
+    *   -   **Mostrar estas alertas en el mapa**
+        -   Las alertas del conjunto activo, coloreadas según su estado de revisión. Haz clic en una alerta para ver "Alerta (id) · (estado) · (superficie) ha". Su botón **Revisar** la abre en Análisis.
+    *   -   **Mostrar píxeles no analizables**
+        -   Los píxeles de alerta que no llegaron a ser alertas: **Demasiado pequeño** o **Sobre el límite de alertas**.
+    *   -   **Mostrar conjuntos anteriores**
+        -   Las alertas de los conjuntos de períodos anteriores, como contexto.
+
+El mapa las conserva en los demás pasos. Desactívalas aquí.
+
+Mensajes frecuentes
+^^^^^^^^^^^^^^^^^^^
+
+"… no está descargada y armonizada para este período; descárgala primero en Alertas y armonízala en Armonizar."
+    Los archivos de una fuente están desactualizados. Descárgala en `Alertas <defo-alerts-download_>`_ y luego armonízala en `Armonizar <defo-harmonize_>`_.
+
+"Falta la huella del conjunto anterior …; ejecuta Integrar y vectorizar en ese conjunto de nuevo primero."
+    Se eliminaron los archivos de un período anterior. Haz activo ese período y vuelve a ejecutar su conjunto.
+
+"No hay suficiente espacio libre en disco: …"
+    La ejecución escribe algunos rasters del tamaño de la cuadrícula. Libera espacio.
+
+"El período, el área de interés o la cuadrícula del proyecto cambiaron mientras la ejecución estaba en curso, así que el conjunto de alertas no se registró."
+    Vuelve a ejecutarla.
+
+"tippecanoe no está instalado: el mapa mostrará los puntos de alerta sin polígonos."
+    El conjunto se genera; el mapa muestra sus alertas como puntos en lugar de polígonos.
+
+"No se pudieron mostrar las teselas del mapa (…): se muestran los puntos de alerta sin polígonos."
+    El conjunto se genera, pero no se pudo crear su capa de mapa. El mapa muestra sus alertas como puntos.
+
+"Falta la base de alertas de …; vuelve a ejecutar Integrar y vectorizar para ese período."
+    Con **Mostrar conjuntos anteriores**, el archivo de alertas de un conjunto anterior ha desaparecido de la carpeta del proyecto. Haz activo ese período y vuelve a ejecutar su conjunto.
+
+.. _defo-layers:
+
+Capas adicionales
+-----------------
+
+Las capas de visualización ayudan a revisar las alertas: un mapa de cobertura del suelo, una línea base de bosque, un mosaico reciente. Nunca modifican las alertas. Una capa es una imagen de Earth Engine o un GeoTIFF. Se puede mostrar en el mapa principal y, con **Mostrar en Análisis** marcado, en los dos mapas de la pantalla de `Análisis <defo-analysis_>`_.
+
+Abre el paso **Capas adicionales** del panel **Flujo de trabajo**, el primer paso de **Preparar la revisión**. Se desbloquea en cuanto el proyecto tiene un conjunto de alertas (consulta `Integrar y vectorizar <defo-integrate_>`_).
+
+El paso es opcional: sáltalo y vuelve en cualquier momento. Su barra en la cabecera es discontinua, y el paso indica "opcional" hasta que tiene una capa.
+
+.. note::
+
+    Los mosaicos de Planet NICFI no son una capa adicional: si tu cuenta de GEE tiene acceso a NICFI, llegan con las imágenes *Planet* de la `línea de tiempo de Análisis <defo-analysis-timeline_>`_.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/layers-list.png
-    :alt: El paso Capas opcionales con una capa
+    :alt: El paso Capas adicionales con una capa
 
 La lista de capas
 ^^^^^^^^^^^^^^^^^
@@ -716,641 +1410,6 @@ Mensajes frecuentes
 "El archivo … ya no existe."
     El archivo de una capa GeoTIFF se movió o se eliminó. Edita la capa y vuelve a elegir el archivo.
 
-.. _defo-period:
-
-Período de monitoreo
---------------------
-
-Un *período* es una ronda de monitoreo, normalmente un mes. Para cada período, la aplicación descarga todas las fuentes en las fechas del período más una *retrospección* anterior a ellas, y genera los conjuntos de alertas de ese período. Un proyecto suele tener una serie de períodos consecutivos.
-
-Abre el paso **Período** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene al menos una `fuente de alertas <defo-alerts_>`_.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/period-list.png
-    :alt: El paso Período con un período
-
-.. _defo-period-tracking:
-
-Pérdidas que abarcan varios períodos
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Cada período se procesa por separado, pero la pérdida de bosque no se ajusta a las fechas del período. Parte de la pérdida podría perderse entre dos períodos:
-
--   un desmonte que empieza demasiado pequeño para ser una alerta;
--   alertas que los proveedores publican tarde, después de procesar su período; o
--   un desmonte que sigue creciendo en el borde de una alerta reportada en un período anterior.
-
-La aplicación sigue esta pérdida de un período al siguiente, y nunca reporta dos veces la misma pérdida:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 35 65
-
-    *   -   Caso
-        -   Qué hace la aplicación
-    *   -   Pérdida ya reportada por un período anterior
-        -   Sus píxeles (la *huella* del conjunto de alertas anterior) se eliminan de la ejecución del nuevo período, así que no se reporta de nuevo.
-    *   -   Un grupo demasiado pequeño para ser una alerta, o una alerta publicada tarde
-        -   La `retrospección <defo-period-lookback_>`_ busca hacia atrás en el período anterior: los píxeles que se dejaron de lado vuelven y pueden unirse a píxeles nuevos para formar una alerta.
-    *   -   Un desmonte que crece junto a una alerta revisada
-        -   La alerta nueva se `vincula a la alerta anterior <defo-period-growth_>`_ como *alerta de crecimiento*, y se conserva aunque esté bajo el tamaño mínimo.
-
-.. _defo-period-lookback:
-
-La ventana de búsqueda y la retrospección
-"""""""""""""""""""""""""""""""""""""""""
-
-Un desmonte suele empezar pequeño y crecer durante las semanas siguientes. En el período en que empieza, su grupo de píxeles de alerta es todavía menor que el **Tamaño mínimo de alerta** de `Integrar y vectorizar <defo-integrate_>`_, así que no llega a ser una alerta: sus píxeles se dejan de lado como *no analizables*.
-
-La retrospección mantiene esos píxeles en juego:
-
--   Cada período busca en una *ventana de búsqueda* más amplia: sus propias fechas más los días de retrospección anteriores a su inicio.
--   Los píxeles que el período anterior dejó de lado vuelven a la ejecución y se unen a los píxeles nuevos que los tocan.
--   Si el grupo que forman juntos alcanza el tamaño mínimo, se convierte en una alerta. Su primera fecha de detección es la de su píxel más antiguo, en el período anterior.
-
-Para no reportar dos veces la misma pérdida, todos los píxeles ya reportados por un conjunto de alertas de un período *anterior* se eliminan antes de generar las alertas del nuevo período: solo vuelve lo que se dejó de lado. La retrospección también capta las alertas que los proveedores publicaron tarde, después de procesar el período anterior.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/lookback.gif
-    :alt: La retrospección: un grupo demasiado pequeño en un período se une a los píxeles del período siguiente y se convierte en alerta, y una alerta reportada nunca se reporta de nuevo
-
-.. note::
-
-    El primer período no tiene ningún conjunto anterior con el que compararse, así que se conservan todas las alertas de su ventana de búsqueda. Su fila indica **Sin conjunto anterior: se conservan todas las alertas de la ventana de búsqueda**. Con retrospección, eso incluye alertas fechadas antes del inicio del período.
-
-    El primer período de un proyecto nuevo empieza sin retrospección, así que solo busca en sus propias fechas, a menos que se defina una. Un proyecto creado con **Duplicar** conserva la retrospección del proyecto del que se copió.
-
-.. _defo-period-growth:
-
-Crecimiento junto a alertas anteriores
-""""""""""""""""""""""""""""""""""""""
-
-Los píxeles de una alerta reportada forman parte de la huella, así que la retrospección no los recupera. Pero un desmonte suele seguir creciendo en el borde de una alerta reportada en un período anterior. Los píxeles nuevos forman entonces un grupo propio, a menudo menor que el **Tamaño mínimo de alerta**, que se dejaría de lado como cualquier grupo pequeño.
-
-Cuando la alerta anterior se guardó como **Alerta verdadera** o **Requiere revisión**, `Integrar y vectorizar <defo-integrate-growth_>`_ no pierde de vista este crecimiento:
-
--   Una alerta nueva que toca o se superpone a la alerta anterior es una *alerta de crecimiento*, vinculada a ella.
--   Un grupo bajo el tamaño mínimo se conserva cuando toca la alerta anterior: es una alerta de crecimiento *bajo el área mínima*. Un grupo pequeño que no toca nada se deja de lado, y la retrospección aún puede recuperarlo en el período siguiente.
--   La ejecución busca alertas anteriores en todos los períodos anteriores, sea cual sea la retrospección.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
-    :alt: Crecimiento: una alerta confirmada crece por su borde en el período siguiente, y el grupo nuevo pequeño se conserva y se vincula a ella, mientras que un grupo pequeño que no toca nada se deja de lado
-
-Las alertas vinculadas entre sí, a lo largo de todos los períodos, forman el *historial* de un desmonte. Análisis lo muestra en cada alerta (consulta `Alertas anteriores <defo-analysis-earlier_>`_), y el `Resumen <defo-overview-growth_>`_ lo resume.
-
-.. tip::
-
-    Solo cuentan las revisiones guardadas cuando empieza `Integrar y vectorizar <defo-integrate_>`_. Revisa las alertas de un período antes de ejecutar el siguiente, para que su crecimiento quede vinculado. Una alerta revisada después todavía se puede vincular a mano en `Alertas anteriores <defo-analysis-earlier_>`_.
-
-La lista de períodos
-^^^^^^^^^^^^^^^^^^^^
-
-Cada fila de **Períodos** muestra:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Columna
-        -   Descripción
-    *   -   **Período**
-        -   Las fechas del período ("inicio → fin"), con notas debajo: su ventana de búsqueda y las advertencias que haya.
-    *   -   **Conjuntos**
-        -   El número de conjuntos de alertas generados para este período.
-    *   -   **Estado**
-        -   **desactualizada** cuando la descarga de una fuente o un conjunto de alertas ya no corresponde a la configuración actual (vuelve a ejecutarlo en `Descargar y armonizar <defo-prepare_>`_ o en `Integrar y vectorizar <defo-integrate_>`_); **falta** cuando los archivos de un conjunto de alertas han desaparecido; un guion cuando todo está al día.
-
-Los iconos a la derecha de cada fila:
-
--   el botón de opción convierte el período en el período *activo*: `Descargar y armonizar <defo-prepare_>`_ e `Integrar y vectorizar <defo-integrate_>`_ trabajan sobre el período activo;
--   el icono de lápiz cambia sus fechas o su retrospección; y
--   el icono de papelera lo elimina.
-
-.. _defo-period-add:
-
-Añadir un período
-^^^^^^^^^^^^^^^^^
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/period-new.png
-    :alt: El diálogo Nuevo período
-
-Selecciona **Nuevo período**. El diálogo viene rellenado para que el nuevo período continúe la serie.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 35 45
-
-    *   -   Campo
-        -   Descripción
-        -   Valor predeterminado y límites
-    *   -   **Inicio**
-        -   El primer día del período.
-        -   El día siguiente al fin del último período. Para el primer período, el primer día del mes en curso.
-    *   -   **Fin**
-        -   El último día del período.
-        -   Hoy. Debe ser posterior a **Inicio**. Dos períodos no pueden tener las mismas fechas.
-    *   -   **Retrospección (días)**
-        -   El número de días antes de **Inicio** en los que también se busca.
-        -   0 (sin retrospección) para el primer período de un proyecto nuevo (un proyecto duplicado conserva la retrospección de su origen); después, el último valor usado. Un número entero de 0 a 3650.
-
-Debajo de los campos, el diálogo muestra una vista previa de la ventana de búsqueda ("Ventana de búsqueda: inicio → fin"). Selecciona **Añadir período**: el período se crea y pasa a ser el período activo.
-
-Un período nuevo empieza con las opciones de máscara del último período. Cámbialas en `Descargar y armonizar <defo-prepare_>`_.
-
-.. tip::
-
-    Para que los grupos dejados de lado vuelvan, la retrospección debe llegar hasta el período anterior. Con una retrospección de 0, la ventana de búsqueda empieza el primer día del propio período y no se vuelve a considerar nada de lo que se dejó de lado antes.
-
-    Un grupo que sigue siendo demasiado pequeño permanece en juego en los períodos siguientes mientras su retrospección llegue hasta sus píxeles. Una retrospección más larga da más tiempo a un desmonte que crece despacio para alcanzar el tamaño mínimo, pero hace más grande cada descarga (consulta `Lo que ya reportaron los períodos anteriores <defo-integrate-earlier_>`_).
-
-Modificar un período
-^^^^^^^^^^^^^^^^^^^^
-
-En un período sin conjuntos de alertas, el icono de lápiz abre un diálogo para cambiar sus fechas. Con fechas nuevas, el período pasa a ser otro: sus descargas y sus archivos armonizados se eliminan, porque se hicieron para la ventana anterior.
-
-Un período con conjuntos de alertas tiene las fechas fijas (su nota indica **Sus fechas están fijas: tiene conjuntos de alertas.**). El icono de lápiz abre entonces un diálogo donde solo se puede cambiar la retrospección. Las descargas del período aparecen entonces como desactualizadas.
-
-Eliminar un período
-^^^^^^^^^^^^^^^^^^^
-
-Selecciona el icono de papelera. El diálogo de confirmación enumera lo que se elimina: las descargas y los archivos armonizados del período, y sus conjuntos de alertas con sus alertas revisadas.
-
-.. important::
-
-    Un período con conjuntos de alertas solo se puede eliminar cuando es el último período. Los conjuntos de un período anterior son la huella a partir de la cual se generaron los conjuntos posteriores, así que elimina primero los períodos posteriores. Los períodos no se pueden modificar ni eliminar mientras una tarea escribe en el proyecto.
-
-.. _defo-prepare:
-
-Descargar y armonizar
----------------------
-
-Este paso prepara todas las entradas del `período <defo-period_>`_ activo en una cuadrícula común. Cada fuente de alertas se descarga en la ventana de búsqueda del período en su propia proyección y después se *armoniza*: se alinea con la cuadrícula del proyecto y se recorta con las máscaras del período. Nunca se repite nada cuyas entradas no hayan cambiado.
-
-Abre el paso **Descargar y armonizar** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene un período activo. Trabaja sobre el período activo: para preparar otro período, primero hazlo activo en el paso `Período <defo-period_>`_.
-
-De arriba abajo, el paso tiene tres partes: la **Cuadrícula del proyecto**, las **Máscaras** y las **Fuentes de este período**.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/prepare-step.png
-    :alt: El paso Descargar y armonizar después de una ejecución
-
-La cuadrícula del proyecto
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Todos los rasters del proyecto se alinean con una misma cuadrícula: una proyección en metros y un tamaño de píxel, sobre la AOI. Así, las alertas de fuentes con distintos tamaños de píxel se pueden combinar píxel a píxel, y el tamaño mínimo de alerta en hectáreas se convierte en un número de píxeles.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 15 40 45
-
-    *   -   Campo
-        -   Descripción
-        -   Valor predeterminado y límites
-    *   -   **EPSG**
-        -   La proyección de la cuadrícula, como código del European Petroleum Survey Group (EPSG). El botón de mira al final del campo rellena la zona Universal Transversal de Mercator (UTM) de la AOI.
-        -   La zona UTM del centro de la AOI. Debe ser un sistema proyectado en metros: se rechaza un sistema geográfico (como 4326) o uno en pies.
-    *   -   **Resolución**
-        -   El tamaño de píxel, en metros.
-        -   El tamaño de píxel más fino entre las fuentes del proyecto: 10 m con RADD o GLAD-S2, 30 m solo con GLAD-L, el tamaño de píxel propio de una fuente personalizada, o 30 m cuando no se sabe nada. Debe ser mayor que 0.
-
-Debajo de los campos se muestra el tamaño de la cuadrícula: "ancho × alto píxeles, unos … por fuente antes de comprimir". Por encima de 2 GB por fuente, un aviso indica **Esta cuadrícula es grande: las descargas tardarán y usarán espacio en disco.** (no bloquea el paso).
-
-Selecciona **Guardar cuadrícula**. Las máscaras y la tabla de fuentes solo aparecen una vez guardada una cuadrícula.
-
-La cuadrícula puede cambiar hasta que se genere el primer conjunto de alertas. Una cuadrícula nueva solo vuelve a armonizar las fuentes a partir de los archivos ya descargados; no las descarga de nuevo. En cuanto el proyecto tiene un conjunto de alertas, la tarjeta indica **La cuadrícula está bloqueada porque el proyecto tiene conjuntos de alertas.**
-
-.. note::
-
-    Cambiar la `AOI <defo-aoi_>`_ borra la cuadrícula y elimina todas las descargas y todos los archivos armonizados del proyecto, que se hicieron para el área anterior. Vuelve a guardar la cuadrícula aquí y luego ejecuta de nuevo las filas.
-
-Máscaras
-^^^^^^^^
-
-Una *máscara* limita dónde se conservan las alertas. Es un raster que se define una sola vez para el proyecto: una imagen o colección de imágenes de GEE, o un GeoTIFF, con una banda. Un píxel está dentro de la máscara donde esa banda no es cero; los píxeles con cero o sin datos quedan fuera.
-
-Cada período elige un **Modo** para cada máscara:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Modo
-        -   Efecto sobre las alertas del período
-    *   -   **Inactiva**
-        -   La máscara no se usa en este período.
-    *   -   **Conservar**
-        -   Se eliminan las alertas *fuera* de la máscara (por ejemplo, para conservar solo las alertas dentro de una máscara de bosque).
-    *   -   **Excluir**
-        -   Se eliminan las alertas *dentro* de la máscara (por ejemplo, para descartar las alertas en plantaciones o en agua).
-
-Cuando hay varias máscaras activas, se aplican todas. Las máscaras actúan sobre las fuentes armonizadas, así que un cambio de **Modo** deja desactualizadas las fuentes del período. **Ejecutar … pendientes** las vuelve a armonizar sin descargarlas. Un período nuevo empieza con las opciones de máscara del último período.
-
-Añadir una máscara
-""""""""""""""""""
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/prepare-mask-add.png
-    :alt: Añadir una máscara
-
-Selecciona **Añadir máscara** para abrir el diálogo **Añadir una máscara**. Las bandas se leen en cuanto se elige el raster.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 40 40
-
-    *   -   Campo
-        -   Descripción
-        -   Valor predeterminado y límites
-    *   -   **Nombre**
-        -   El nombre de la máscara en listas, leyendas y nombres de archivo.
-        -   Se sugiere a partir del nombre del recurso o del archivo. Como máximo 24 caracteres, al menos una letra o cifra, único entre las máscaras del proyecto.
-    *   -   **Fuente**
-        -   **Earth Engine** (un recurso) o **GeoTIFF** (un archivo de tu carpeta de SEPAL).
-        -   **Earth Engine**.
-    *   -   Recurso o **GeoTIFF**
-        -   La imagen o colección de imágenes de GEE, o el archivo .tif.
-        -
-    *   -   **Banda**
-        -   La banda que define la máscara. Aparece cuando el raster tiene dos bandas o más; con una banda, el formulario indica "Una banda (…): la máscara se hace con ella."
-        -   La banda cuyo nombre parece de máscara (por ejemplo, ``datamask``), nombrada en la ayuda ("… parece una máscara; los píxeles distintos de cero están dentro de ella."); si no hay ninguna, elígela tú.
-    *   -   **Modo en el período activo**
-        -   **Conservar** o **Excluir**.
-        -   **Conservar**. La máscara se activa solo en el período activo; los demás períodos la dejan inactiva hasta que se active en ellos.
-
-Al seleccionar **Añadir máscara**, la aplicación comprueba el raster y su banda. Cualquier problema se muestra en rojo dentro del diálogo, que sigue abierto para hacer correcciones.
-
-La lista de máscaras
-""""""""""""""""""""
-
-Cada fila de **Máscaras** muestra:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Columna
-        -   Descripción
-    *   -   **Máscara**
-        -   El nombre de la máscara. La línea de debajo indica su fuente y su tamaño en disco una vez lista ("Earth Engine · 18,9 MB"), o por qué necesita una ejecución ("aún no descargada", "la cuadrícula cambió (…): alinear de nuevo"). Termina con "Inactiva" cuando la máscara está inactiva en el período activo.
-    *   -   **Modo**
-        -   El modo de la máscara en el período activo: **Inactiva**, **Conservar** o **Excluir**. Un cambio se aplica enseguida; las fuentes del período pasan entonces a estar desactualizadas.
-    *   -   **Estado**
-        -   "Lista", o un botón para la siguiente ejecución de la máscara: **Descargar** (una máscara de GEE todavía no descargada) o **Alinear** (con la cuadrícula). Un botón naranja rehace un archivo desactualizado. Durante una ejecución, la celda indica "Descargando 42%", "Alineando" o "En cola".
-
-Los iconos a la derecha de cada fila:
-
--   el icono de mapa muestra la máscara en el mapa: una máscara de GEE se puede previsualizar antes de descargarla, y una máscara GeoTIFF, una vez alineada;
--   el icono de información abre sus **Detalles** (consulta `El diálogo de detalles <defo-prepare-details_>`_); y
--   el menú **Más acciones** (tres puntos) contiene:
-
-    -   **Descargar de nuevo** (solo máscaras de GEE), para un recurso que ha cambiado. La aplicación pregunta primero: "Esto obtiene la máscara de nuevo desde Earth Engine, reemplaza su descarga y luego la alinea.";
-    -   **Editar**, que abre **Editar máscara** *nombre*: el raster y la banda se pueden cambiar, el nombre no. En cuanto un conjunto de alertas ha usado la máscara, ya no se puede editar (**Un conjunto de alertas ya usa esta máscara: añade una nueva en su lugar.**); y
-    -   **Eliminar máscara…**, que elimina la máscara después de confirmar. Se eliminan su descarga y su archivo alineado, y todos los períodos dejan de usarla. Los conjuntos de alertas que la usaban conservan sus alertas y aparecen como desactualizados.
-
-Una máscara se descarga y se alinea una sola vez para todo el proyecto, sea cual sea el período que la ejecute.
-
-.. _defo-prepare-sources:
-
-Fuentes de este período
-^^^^^^^^^^^^^^^^^^^^^^^
-
-La tabla tiene una fila por cada fuente de alertas del proyecto, con dos columnas:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Columna
-        -   Descripción
-    *   -   **Fuente**
-        -   El nombre de la fuente. La línea de debajo indica lo que contiene la fila o lo que espera (ver más abajo). Los avisos, como una cobertura parcial, y los errores aparecen como líneas bajo la fila.
-    *   -   **Estado**
-        -   El estado de la fila, o un botón para su siguiente ejecución.
-
-La columna **Estado** indica:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   Estado
-        -   Significado
-    *   -   "Lista"
-        -   Descargada y armonizada con las entradas actuales. La línea bajo el nombre indica la fecha de descarga, el tamaño en disco y lo que encontró el archivo armonizado: "descargada el 2026-10-20 · 31,7 MB · 2.362.718 píxeles de alerta".
-    *   -   **Descargar**
-        -   La fuente todavía no está descargada para la ventana de búsqueda de este período, o su descarga está desactualizada. Selecciona el botón para ejecutar la fila: alinea las máscaras del período que lo necesiten, descarga la fuente y luego la armoniza.
-    *   -   **Armonizar**
-        -   La descarga está al día, pero el archivo armonizado falta o está desactualizado (una cuadrícula nueva, un cambio de máscara). La ejecución vuelve a armonizar sin descargar. Una fuente GeoTIFF nunca se descarga: se lee de su archivo, así que su botón siempre indica **Armonizar**.
-    *   -   **Reintentar**
-        -   La última ejecución de la fila falló. Su error aparece en rojo bajo la fila.
-    *   -   "Descargando 42%", "Armonizando", "En cola"
-        -   La fila está en curso, o espera su turno en una ejecución ("esperando a la fila de arriba").
-    *   -   "no cubierta", "sin datos"
-        -   La fuente no se puede ejecutar en este período: no cubre la AOI, o no tiene datos para la ventana de búsqueda. La línea bajo el nombre da el motivo. Consulta `Fuentes de alertas <defo-alerts_>`_ para la cobertura.
-    *   -   "Sin archivo"
-        -   El archivo de una fuente GeoTIFF ya no está (consulta `Mensajes frecuentes <defo-prepare-messages_>`_).
-
-En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica "A descargar", "A armonizar" o "A alinear".
-
-Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo desactualizado. La línea bajo el nombre dice entonces por qué y qué hace la ejecución al respecto: por ejemplo, "la cuadrícula cambió (EPSG:32719 · 30 m → EPSG:32719 · 10 m): armonizar de nuevo", "la ventana de búsqueda cambió (…): descargar de nuevo", "la máscara forest_2000 cambió: armonizar de nuevo" o "el AOI cambió: descargar de nuevo".
-
-.. note::
-
-    Una fila lista no tiene botón: una fuente ya descargada para la ventana de búsqueda del período no se vuelve a descargar por sí sola. Para obtener las últimas alertas de un catálogo que sigue añadiendo alertas a fechas pasadas, usa **Descargar de nuevo**.
-
-Los iconos a la derecha de cada fila:
-
--   el icono de mapa (**Mostrar en el mapa**) muestra en el mapa las alertas armonizadas;
--   el icono de información abre los **Detalles** de la fila (ver más abajo);
--   **Descargar de nuevo** vuelve a obtener la fuente aunque nada haya cambiado y luego la armoniza. La aplicación pregunta primero, con la ventana y la fecha del archivo que reemplaza. No se ofrece para una fuente GeoTIFF ("Nada que descargar de nuevo: se lee de un archivo"), y espera mientras una máscara del período necesite una ejecución ("Ejecute primero las máscaras pendientes"); y
--   **Eliminar archivos** quita la descarga y el archivo armonizado de la fuente en este período, después de confirmar. La fuente sigue en el proyecto: ejecuta la fila de nuevo para reconstruirlos. Los conjuntos de alertas de este período hechos con la fuente pasan a estar desactualizados; sus alertas y sus revisiones se conservan.
-
-.. _defo-prepare-details:
-
-El diálogo de detalles
-""""""""""""""""""""""
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/prepare-details.png
-    :alt: El diálogo de detalles de una fuente
-
-El icono de información de una fuente o de una máscara abre un resumen de solo lectura de con qué se hicieron sus archivos. Empieza con el estado de la fila y, para una fuente, el período. Cuando la fila está desactualizada, una línea naranja **Motivo:** dice qué cambió.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   Sección
-        -   Lo que enumera
-    *   -   **Fuente**
-        -   Una fuente predefinida: su **Catálogo** y su **Cobertura** de la AOI, con la última fecha de datos y el día en que se comprobó. Una fuente personalizada: su **Tipo**, **Referencia**, **Formato**, **Codificación de fechas**, **Bandas** y **Cuadrícula nativa**. Una máscara: su **Referencia**, **Banda**, **Cuadrícula nativa** y los períodos en que se usa (**Usada en**).
-    *   -   **Descarga** (**Lectura del archivo** para una fuente GeoTIFF)
-        -   La **Ventana de búsqueda**, la **Cuadrícula nativa** en la que se descargó el archivo, su **Tamaño** y su **Archivo** en la carpeta del proyecto.
-    *   -   **Armonización** (**Alineación** para una máscara)
-        -   La **Cuadrícula usada**, con la cuadrícula actual cuando cambió desde entonces, el **Remuestreo**, las **Máscaras** aplicadas con su modo, los **Píxeles de alerta** conservados (y cuántos eliminaron las máscaras), las **Fechas de alerta** encontradas, el **Tamaño** y el **Archivo**. Para una máscara: sus **Píxeles de la máscara**.
-
-Cada sección indica la fecha y la hora en que se escribió su archivo, o "Aún no ejecutado". Selecciona **Cerrar**, o pulsa **Esc**, para cerrar el diálogo.
-
-.. labels-ok: Esc
-
-Ejecutarlo todo
-"""""""""""""""
-
-El pie de la tabla ejecuta las filas en lote. Selecciona **Ejecutar … pendientes** (por ejemplo, **Ejecutar 4 pendientes**). Primero alinea las máscaras activas en el período que lo necesitan y luego ejecuta cada fuente que necesite una ejecución, una fila tras otra:
-
--   las filas que indican "no cubierta" o "sin datos" se omiten;
--   una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente.
-
-Mientras dura la ejecución, el pie cuenta sus filas ("1 en curso · 3 en cola", luego "2 de 4 terminadas", con una barra de progreso) y el botón pasa a ser **Detener**, que detiene la ejecución después de la fila en curso. Hasta que esa fila termina, el botón indica "Deteniendo…". Las filas ya hechas quedan hechas.
-
-La flecha junto a **Ejecutar … pendientes** (**Más acciones por lotes**) abre **Descargar todo de nuevo (…)**: cada fuente que no está bloqueada y no es un GeoTIFF se descarga de nuevo y luego se armoniza, después de confirmar.
-
-La ejecución también aparece como una notificación de tarea titulada **Descargar y armonizar**, con la etapa en la que está ("Preparando GLAD-L", luego "Armonizando GLAD-L") y el porcentaje de la descarga ("Descargar y armonizar · 35%").
-
-.. tip::
-
-    Cada fila necesita espacio libre en disco para sus archivos. La aplicación lo comprueba antes de escribir y detiene la fila con un mensaje cuando el disco está demasiado lleno. La línea del tamaño de la cuadrícula da una idea de cuánto puede ocupar una fuente.
-
-.. _defo-prepare-messages:
-
-Mensajes frecuentes
-^^^^^^^^^^^^^^^^^^^
-
-"No hay suficiente espacio libre en disco: esto necesita … GB en …, y hay … GB libres."
-    Libera espacio en tu carpeta de SEPAL o usa una cuadrícula más gruesa.
-
-"Ya se está preparando una fila de esta ejecución …"
-    El trabajo de otro período está alineando una máscara, o la fila todavía está en curso. Vuelve a ejecutarla cuando termine.
-
-"La geometría de la AOI todavía se está obteniendo; ejecuta esta fila de nuevo en un momento."
-    Las fuentes y las máscaras GeoTIFF necesitan la forma de la AOI. Espera un momento. Si no se pudo obtener, selecciona **Comprobar de nuevo** debajo de la tabla y luego ejecútalas.
-
-"La máscara … no cubre nada de la AOI: como máscara de conservar, se eliminarían todas las alertas."
-    La máscara no alcanza el área. Revisa su recurso o su banda, o desactívala.
-
-"Un trabajo está escribiendo en este proyecto; guarda la cuadrícula cuando termine."
-    La cuadrícula, las máscaras y las fuentes no pueden cambiar mientras hay en curso una descarga o una ejecución de **Integrar y vectorizar**.
-
-"Sin archivo", con "falta: archivo no encontrado: …" bajo la fila, o "Máscara …: archivo no encontrado (…). Vuelve a poner el archivo en esta ruta para usar la máscara."
-    Una fuente o máscara GeoTIFF se movió, se renombró o se eliminó de tu carpeta de SEPAL. Vuelve a poner el archivo en la ruta indicada, o edita la fuente o la máscara para que apunte a su nueva ubicación.
-
-"Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Ejecutar … pendientes alinea primero las máscaras."
-    Una fuente no se puede armonizar antes de que las máscaras del período estén alineadas. Selecciona **Ejecutar … pendientes**, o primero el botón **Alinear** de la máscara.
-
-"Máscara …: se desconoce su cuadrícula nativa (proyección y escala); edita la máscara."
-    La aplicación no sabe cómo descargar esta máscara de GEE. Ábrela con **Editar** en su menú **Más acciones** y vuelve a guardarla, para que su raster se compruebe de nuevo.
-
-.. _defo-integrate:
-
-Integrar y vectorizar
----------------------
-
-Este paso convierte las fuentes armonizadas del período activo en un *conjunto de alertas*: la lista de alertas que se revisan en `Análisis <defo-analysis_>`_. El paso:
-
--   combina las fuentes píxel a píxel;
--   elimina lo que los períodos anteriores ya reportaron;
--   agrupa los píxeles de alerta vecinos en alertas; y
--   dibuja un polígono por alerta.
-
-Abre el paso **Integrar y vectorizar** del panel **Flujo de trabajo**. Se desbloquea en cuanto al menos una fuente del período activo está lista en `Descargar y armonizar <defo-prepare_>`_.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/integrate-form.png
-    :alt: El formulario de Integrar y vectorizar
-
-Qué es una alerta
-^^^^^^^^^^^^^^^^^
-
-Una alerta es un *grupo*: un conjunto de píxeles de alerta que se tocan entre sí, por los lados o por las esquinas, sea cual sea la fuente que detectó cada píxel. Donde se tocan píxeles de GLAD-L y de RADD, forman *una sola* alerta que indica ambas fuentes. Una alerta nunca se divide en una alerta por fuente.
-
-Cada alerta conserva:
-
--   las fuentes que la detectaron;
--   su primera y su última fecha de detección (la fecha más temprana y la más tardía entre sus píxeles);
--   su superficie en hectáreas; y
--   una estadística de las bandas de cada capa de atributos (ver más abajo).
-
-Un grupo más pequeño que el **Tamaño mínimo de alerta** (consulta `Las opciones <defo-integrate-options_>`_) no llega a ser una alerta: sus píxeles se dejan de lado como *no analizables*.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/integrate.gif
-    :alt: Las fuentes, en una misma cuadrícula, se convierten en grupos; cada grupo se mide con el tamaño mínimo y se convierte en un polígono que indica sus fuentes o, si es menor, se deja de lado
-
-.. _defo-integrate-earlier:
-
-Lo que ya reportaron los períodos anteriores
-""""""""""""""""""""""""""""""""""""""""""""
-
-Los píxeles que caen dentro de las alertas de un conjunto de alertas de un período *anterior* (su *huella*) se eliminan antes de formar los grupos. Así, la `retrospección <defo-period-lookback_>`_ nunca reporta dos veces la misma pérdida.
-
-Los píxeles que no llegaron a ser alertas (un grupo por debajo del tamaño mínimo, o más allá del número máximo de alertas) se conservan como *no analizables*. No forman parte de la huella: recuperarlos es la función de la `retrospección <defo-period-lookback_>`_.
-
-La ejecución de un período posterior vuelve a añadir esos píxeles cuando se cumplen las dos condiciones:
-
--   su retrospección llega hasta el período anterior (ese período termina el día en que empieza la nueva ventana de búsqueda o después); y
--   los dos períodos comparten una fuente.
-
-Los píxeles vuelven sea cual sea su fecha de detección dentro de la propia ventana de búsqueda del conjunto anterior. Se unen a los píxeles nuevos que los tocan, y un grupo que ahora alcanza el tamaño mínimo se convierte en una alerta. Sus fechas de detección pueden ser anteriores a su propio período y a su retrospección. Con una retrospección de 0, la ventana de búsqueda empieza el primer día del propio período, así que no se vuelve a considerar nada de lo que se dejó de lado.
-
-.. _defo-integrate-growth:
-
-Crecimiento de una pérdida anterior
-"""""""""""""""""""""""""""""""""""
-
-Un desmonte suele seguir creciendo de un mes a otro. La ejecución vincula cada alerta nueva a la *pérdida anterior* de la que crece: las alertas de los conjuntos de períodos anteriores que se guardaron como **Alerta verdadera** o **Requiere revisión**. La forma de una alerta anterior es el polígono dibujado para ella en `Precisar el polígono <defo-analysis-refine_>`_ o, si no lo hay, su grupo detectado.
-
--   Una alerta nueva que toca o se superpone a la forma de una alerta anterior es una *alerta de crecimiento*, vinculada a todas las alertas anteriores que toca. Una alerta sin vínculo es una alerta *nueva*.
--   Un grupo más pequeño que el **Tamaño mínimo de alerta** se conserva cuando toca una pérdida anterior: es una alerta de crecimiento *bajo el área mínima*. Un grupo pequeño que no toca nada se deja de lado como *no analizable*, como antes.
--   Las alertas de crecimiento se ordenan y se limitan junto con las demás: **Limitar el número de alertas** puede dejarlas fuera.
--   Solo cuentan las revisiones guardadas cuando empieza la ejecución. Una alerta anterior confirmada después no se vincula, pero se puede vincular a mano en `Alertas anteriores <defo-analysis-earlier_>`_.
-
-Las alertas vinculadas entre sí, a lo largo de todos los períodos, forman el *historial* de un desmonte. Análisis lo muestra en cada alerta, y el `Resumen <defo-overview-growth_>`_ lo resume.
-
-.. _defo-integrate-options:
-
-Las opciones
-^^^^^^^^^^^^
-
-El formulario se abre con la configuración del conjunto de alertas activo (todo menos las fuentes), o con los valores predeterminados de abajo cuando no hay ninguno.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 50 30
-
-    *   -   Opción
-        -   Descripción
-        -   Valor predeterminado y límites
-    *   -   **Fuentes a combinar**
-        -   Las fuentes cuyas alertas entran en el conjunto. Cada fuente lista aparece con lo que encontró su archivo armonizado. Una fuente que no cubre la AOI, o que no tiene datos para el período, aparece desactivada, con el motivo.
-        -   Todas las fuentes listas. Al menos una.
-    *   -   **Incluir alertas probables (no confirmadas)**
-        -   Solo aparece cuando al menos una de las fuentes seleccionadas tiene una clase *probable* (confianza baja). Un único interruptor para todas esas fuentes. Si está desactivado, sus píxeles probables se descartan antes que nada, y solo cuentan sus píxeles confirmados. Con dos o más fuentes de ese tipo, **Definir por fuente** despliega un interruptor por fuente (ver más abajo).
-        -   Activado.
-    *   -   **Tamaño mínimo de alerta**
-        -   Se descartan los grupos más pequeños que este tamaño. La ayuda indica ese tamaño en píxeles de la cuadrícula (a 10 m, 0,5 ha son "50 píxeles en la cuadrícula").
-        -   0,5 ha. Cualquier número de hectáreas, 0 o más. Incluso con 0, una alerta tiene al menos un píxel.
-    *   -   **Orden**
-        -   El orden de las alertas en el conjunto, que es el orden de revisión: **Alertas más grandes primero**, **Alertas más pequeñas primero**, **Alertas más recientes primero** (por la última fecha de detección) o **Alertas más antiguas primero** (por la primera fecha de detección).
-        -   **Alertas más grandes primero**.
-    *   -   **Limitar el número de alertas**
-        -   Si se marca, muestra **Número máximo de alertas**: solo se conservan las primeras alertas según el **Orden** elegido. Su ayuda indica cuáles (por ejemplo, "Conserva las 100 alertas más grandes." o "Conserva las 100 alertas más recientes."). Si no se marca, se conservan todas las alertas.
-        -   Sin marcar. Al marcarlo, el límite empieza en 100. Debe ser un número entero mayor que 0.
-    *   -   **Capas de atributos**
-        -   Rasters cuyas estadísticas de bandas se añaden a cada alerta (ver más abajo).
-        -   Ninguna.
-
-Alertas probables por fuente
-""""""""""""""""""""""""""""
-
-Con dos o más fuentes seleccionadas que tienen una clase probable, selecciona **Definir por fuente** bajo **Incluir alertas probables (no confirmadas)** para dar a cada una su propio interruptor, con el nombre de la fuente:
-
--   Una fuente seleccionada sin clase probable (una fuente personalizada que solo tiene fechas de detección) aparece como "(fuente): solo fechas, sin nivel probable".
--   Cuando los interruptores de las fuentes difieren, el interruptor principal aparece desactivado, la nota **Mixto: las fuentes de abajo difieren.** sustituye a **Definir por fuente** y los interruptores por fuente siguen desplegados.
--   Activar o desactivar el interruptor principal cambia todas las fuentes a la vez.
-
-.. _defo-integrate-attributes:
-
-Capas de atributos
-""""""""""""""""""
-
-Una *capa de atributos* añade a cada alerta información de un raster (por ejemplo, la clase de cobertura del suelo mayoritaria bajo la alerta, o su altitud media). Los valores son columnas de la tabla de alertas: se exportan con las alertas, y las columnas de clases se pueden usar en el filtro de Análisis.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/integrate-attribute.png
-    :alt: Añadir una capa de atributos
-
-Para añadir una capa de atributos:
-
-1.  Selecciona **Añadir capa de atributos** para abrir el diálogo **Añadir una capa de atributos**.
-2.  Comprueba el **Nombre de la capa**, sugerido a partir del raster una vez elegido. Las columnas se llaman *nombre de la capa*\_\ *banda*.
-3.  Elige la **Fuente** (**Earth Engine**, una imagen, o **GeoTIFF**, un archivo de tu carpeta de SEPAL) y luego elige el raster. Sus bandas se leen enseguida.
-4.  Con una banda, el formulario indica "Una banda (…): su estadística se añade a cada alerta." Con dos o más, selecciona una o varias en **Bandas**.
-5.  Para cada banda, elige la estadística que se calcula sobre la alerta: **Mayoría** (para clases), **Media**, **Mínimo**, **Máximo** o **Mediana**. Empieza en **Mayoría** cuando el nombre de la banda parece de clases (por ejemplo, ``landcover``), y en **Media** en los demás casos, marcada "(sugerido)". El nombre de la columna aparece al lado.
-6.  Selecciona **Añadir capa de atributos**.
-
-Reglas:
-
--   Una capa necesita al menos una banda (**Conserva al menos una banda.**).
--   Dos capas no pueden leer el mismo raster (**Otra capa de atributos ya lee este raster.**).
--   Los nombres de columna nunca toman el nombre de una columna de las alertas ni de una columna de otra capa: si coinciden, se les añade un sufijo.
-
-La lista bajo **Capas de atributos** muestra cada capa con sus columnas. El icono de lápiz edita una capa y el icono de papelera la quita. Las capas pertenecen a este formulario hasta que se ejecuta: se guardan con el conjunto de alertas.
-
-Ejecutar el paso
-^^^^^^^^^^^^^^^^
-
-La línea gris sobre el botón indica qué conjunto genera la ejecución: "Crea o reemplaza el conjunto de alertas (período) · (fuentes)". Un conjunto de alertas se identifica por su período y sus fuentes:
-
--   una combinación nueva de fuentes genera un conjunto nuevo: un período puede tener varios conjuntos (por ejemplo, uno solo con GLAD-L y otro con las tres fuentes); y
--   la misma combinación otra vez *reemplaza* el conjunto.
-
-Selecciona **Integrar y vectorizar**. El botón sigue desactivado hasta que haya al menos una fuente seleccionada y, cuando **Limitar el número de alertas** está marcado, el límite sea válido ("Introduce un número entero mayor que 0." bajo el campo).
-
-La ejecución pasa por "Combinando fuentes", "Vectorizando grupos", "Guardando las alertas", "Escribiendo la huella" y "Generando las teselas del mapa". Al terminar, un mensaje indica "N alertas listas para revisar", seguido de "Se vincularon N alertas a pérdidas anteriores (M por debajo del área mínima)" cuando encontró `alertas de crecimiento <defo-integrate-growth_>`_, y el nuevo conjunto pasa a ser el *conjunto activo*: aquel con el que trabajan `Cuestionario <defo-questionnaire_>`_, `Evaluación <defo-evaluation_>`_, `Análisis <defo-analysis_>`_ y `Resumen <defo-overview_>`_. El paso sigue abierto.
-
-Si no queda ninguna alerta, el conjunto se genera igualmente, vacío, y el mensaje indica el motivo para cada fuente (por ejemplo, "GLAD-L: los 56 píxeles de alerta eliminados por máscaras" o "RADD: se dejaron fuera las alertas probables (no confirmadas)").
-
-.. _defo-integrate-replace:
-
-Reemplazar un conjunto
-""""""""""""""""""""""
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/integrate-replace.png
-    :alt: Confirmación del reemplazo de un conjunto de alertas
-
-Cuando el conjunto que se va a reemplazar tiene alertas revisadas o un `reparto entre evaluadores <defo-evaluation_>`_, el diálogo **¿Reemplazar este conjunto de alertas?** enumera lo que se perdería: las alertas revisadas (hasta 20, y luego "… y N más"), y el reparto con las revisiones que los evaluadores todavía no han devuelto. Cuando hay alertas de períodos posteriores que crecen de este conjunto, añade "N alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán.": tras la ejecución, esos vínculos aparecen como "el conjunto anterior se volvió a ejecutar" (consulta `Alertas anteriores <defo-analysis-earlier_>`_). Selecciona **Reemplazar** para continuar. Un conjunto sin nada que perder se reemplaza sin confirmación.
-
-.. attention::
-
-    Reemplazar un conjunto descarta sus revisiones. Para probar otra configuración sin perder revisiones, elige otra combinación de fuentes, que genera un conjunto aparte.
-
-.. _defo-integrate-outdated:
-
-Cuando el conjunto activo está desactualizado
-"""""""""""""""""""""""""""""""""""""""""""""
-
-Si las entradas del conjunto activo cambiaron desde que se generó (una fuente descargada de nuevo, una máscara activada o desactivada, o un cambio en la retrospección del período, la AOI o la cuadrícula), una línea naranja indica: "El conjunto activo (…) se generó a partir de entradas que han cambiado desde entonces." Vuelve a ejecutar **Integrar y vectorizar** para reconstruirlo, lo que descarta sus revisiones.
-
-Si los archivos del conjunto se eliminaron de la carpeta del proyecto, la línea indica: "Faltan los archivos del conjunto activo (…) en la carpeta del proyecto."
-
-.. _defo-integrate-map:
-
-Ver las alertas en el mapa
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-En cuanto el proyecto tiene un conjunto, los interruptores bajo el botón lo dibujan en el mapa:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 35 65
-
-    *   -   Interruptor
-        -   Descripción
-    *   -   **Mostrar estas alertas en el mapa**
-        -   Las alertas del conjunto activo, coloreadas según su estado de revisión. Haz clic en una alerta para ver "Alerta (id) · (estado) · (superficie) ha". Su botón **Revisar** la abre en Análisis.
-    *   -   **Mostrar píxeles no analizables**
-        -   Los píxeles de alerta que no llegaron a ser alertas: **Demasiado pequeño** o **Sobre el límite de alertas**.
-    *   -   **Mostrar conjuntos anteriores**
-        -   Las alertas de los conjuntos de períodos anteriores, como contexto.
-
-El mapa las conserva en los demás pasos. Desactívalas aquí.
-
-Mensajes frecuentes
-^^^^^^^^^^^^^^^^^^^
-
-"… no está descargada y armonizada para este período; ejecuta primero Descargar y armonizar."
-    Los archivos de una fuente están desactualizados. Ejecútala en `Descargar y armonizar <defo-prepare_>`_.
-
-"Falta la huella del conjunto anterior …; ejecuta Integrar y vectorizar en ese conjunto de nuevo primero."
-    Se eliminaron los archivos de un período anterior. Haz activo ese período y vuelve a ejecutar su conjunto.
-
-"No hay suficiente espacio libre en disco: …"
-    La ejecución escribe algunos rasters del tamaño de la cuadrícula. Libera espacio.
-
-"El período, el área de interés o la cuadrícula del proyecto cambiaron mientras la ejecución estaba en curso, así que el conjunto de alertas no se registró."
-    Vuelve a ejecutarla.
-
-"tippecanoe no está instalado: el mapa mostrará los puntos de alerta sin polígonos."
-    El conjunto se genera; el mapa muestra sus alertas como puntos en lugar de polígonos.
-
-"No se pudieron mostrar las teselas del mapa (…): se muestran los puntos de alerta sin polígonos."
-    El conjunto se genera, pero no se pudo crear su capa de mapa. El mapa muestra sus alertas como puntos.
-
-"Falta la base de alertas de …; vuelve a ejecutar Integrar y vectorizar para ese período."
-    Con **Mostrar conjuntos anteriores**, el archivo de alertas de un conjunto anterior ha desaparecido de la carpeta del proyecto. Haz activo ese período y vuelve a ejecutar su conjunto.
-
 .. _defo-questionnaire:
 
 Cuestionario
@@ -1365,7 +1424,7 @@ El *cuestionario* contiene las preguntas que se responden para cada alerta en `A
 
 Este paso también elige la plantilla del informe.
 
-Abre el paso **Cuestionario** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene un conjunto de alertas (consulta `Integrar y vectorizar <defo-integrate_>`_). El cuestionario pertenece al proyecto: todos los conjuntos de alertas del proyecto se revisan con él.
+Abre el paso **Cuestionario** del panel **Flujo de trabajo**, en **Preparar la revisión**. Se desbloquea en cuanto el proyecto tiene un conjunto de alertas (consulta `Integrar y vectorizar <defo-integrate_>`_). El cuestionario pertenece al proyecto: todos los conjuntos de alertas del proyecto se revisan con él. El paso es opcional: sin cambios, Análisis hace la pregunta predeterminada.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/questionnaire-list.png
     :alt: El paso Cuestionario
@@ -1526,7 +1585,7 @@ Este paso decide quién revisa las alertas del conjunto activo:
 -   revisarlas todas tú mismo; o
 -   repartirlas entre varios evaluadores. Cada evaluador recibe un *paquete de revisión*, revisa sus propias alertas en su propia cuenta de SEPAL y devuelve una *copia revisada*, que luego se integra en el proyecto.
 
-Abre el paso **Evaluación** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene un conjunto de alertas (consulta `Integrar y vectorizar <defo-integrate_>`_). Trabaja sobre el conjunto activo: un reparto pertenece a un conjunto de alertas.
+Abre el paso **Evaluación** del panel **Flujo de trabajo**, el último paso de **Preparar la revisión**. Se desbloquea en cuanto el proyecto tiene un conjunto de alertas (consulta `Integrar y vectorizar <defo-integrate_>`_). Trabaja sobre el conjunto activo: un reparto pertenece a un conjunto de alertas.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/evaluators.gif
     :alt: El conjunto de alertas se reparte en paquetes, cada evaluador revisa el suyo y las revisiones se vuelven a integrar
@@ -1832,7 +1891,7 @@ El filtro conserva los valores de un atributo y oculta las demás alertas de la 
 
 Con un filtro activo:
 
--   **Anterior**, **Siguiente**, **Siguiente alerta sin revisar** y **Guardar y siguiente** se mueven solo entre las alertas que coinciden;
+-   **Anterior**, **Siguiente** y **Siguiente alerta sin revisar** se mueven solo entre las alertas que coinciden;
 -   el contador cuenta las coincidencias ("06 / 24"), o indica "– / 24" mientras la alerta en pantalla no es una de ellas, y la línea de progreso termina con "filtradas · 48 en total";
 -   el menú de salto sigue aceptando el número de la alerta en todo el conjunto, pero rechaza uno que el filtro oculta ("La alerta 12 no está en el filtro actual"); y
 -   cuando nada coincide, el contador indica "Ninguna alerta coincide con este filtro".
@@ -1875,8 +1934,8 @@ El menú **Capas** contiene:
         -   *True Color* (activada) y *False Color* (infrarrojo cercano, rojo y verde; desactivada): la imagen elegida para ese mapa.
     *   -   **Alertas**
         -   *Original Alert*: los píxeles de alerta del conjunto, semitransparentes (desactivada). *Alert BB*: el recuadro que delimita la alerta. *Defo Layer*: el polígono guardado para la alerta (consulta `Precisar el polígono <defo-analysis-refine_>`_). *Alertas anteriores* (consulta `Alertas anteriores <defo-analysis-earlier_>`_).
-    *   -   **Capas opcionales**
-        -   Las `capas opcionales <defo-layers_>`_ marcadas con **Mostrar en Análisis**, desactivadas.
+    *   -   **Capas adicionales**
+        -   Las `capas adicionales <defo-layers_>`_ marcadas con **Mostrar en Análisis**, desactivadas.
 
 Un mapa muestra "No se pudieron cargar las imágenes" cuando los mosaicos de su imagen no se cargan.
 
@@ -2034,7 +2093,7 @@ Para precisar el polígono:
 
 .. important::
 
-    **Guardar dibujo** no guarda la revisión: después, selecciona **Guardar** o **Guardar y siguiente**. Hasta que se guarda el dibujo, el pie indica "Guarde su dibujo antes de guardar esta revisión" y la revisión no se puede guardar.
+    **Guardar dibujo** no guarda la revisión: después, selecciona **Guardar**. Hasta que se guarda el dibujo, el pie indica "Guarde su dibujo antes de guardar esta revisión" y la revisión no se puede guardar.
 
 Los dos modelos
 ###############
@@ -2044,7 +2103,7 @@ Bajo los botones de dibujo, dos redes neuronales convolucionales (CNN) pueden en
 Para usar un modelo:
 
 1.  Selecciona **Ejecutar** en la fila de un modelo. La aplicación descarga las dos imágenes (el área fijada en **Área de imagen**) y ejecuta el modelo. Tarda un poco; la ejecución aparece en la lista de tareas.
-2.  Lee el resultado en la fila (por ejemplo, "Encontrados 3 parches · 2,1 ha"). Los parches más pequeños que el **Tamaño mínimo de alerta** del conjunto se descartan. Cuando el modelo no encuentra nada, aparece en su lugar un icono rojo de aviso ("El modelo no encontró pérdidas").
+2.  Lee el resultado en la fila (por ejemplo, "Encontrados 3 parches · 2,1 ha"). Los parches más pequeños que el **Tamaño mínimo de grupo** del conjunto se descartan. Cuando el modelo no encuentra nada, aparece en su lugar un icono rojo de aviso ("El modelo no encontró pérdidas").
 3.  Selecciona el icono de mapa con un signo más (**Agregar al mapa**) para añadir los parches al dibujo (activa el modo de dibujo si hace falta): verde lima para **Modelo 1** y morado para **Modelo 2**. El icono pasa entonces a un signo menos (**Quitar del mapa**), que los vuelve a quitar.
 4.  Edita el resultado como cualquier dibujo y selecciona **Guardar dibujo**.
 
@@ -2066,7 +2125,7 @@ Las alertas se agrupan por período, del más reciente al más antiguo. Cada fil
 
 Selecciona el número de una alerta para acercar los dos mapas a ella.
 
-Para vincular o desvincular una alerta, marca o desmarca su casilla. El cambio forma parte de la revisión: el pie indica "Cambios sin guardar en esta alerta", y **Guardar** o **Guardar y siguiente** lo guarda con el veredicto. Marcar una alerta de un período anterior convierte esta alerta en una alerta de crecimiento, aunque no la toque.
+Para vincular o desvincular una alerta, marca o desmarca su casilla. El cambio forma parte de la revisión: el pie indica "Cambios sin guardar en esta alerta", y **Guardar** lo guarda con el veredicto. Marcar una alerta de un período anterior convierte esta alerta en una alerta de crecimiento, aunque no la toque.
 
 Algunas filas no tienen casilla:
 
@@ -2090,10 +2149,10 @@ El pie queda fijo en la parte inferior del panel:
 
     *   -   Botón
         -   Descripción
-    *   -   **Guardar y siguiente**
-        -   Guarda la revisión y abre la siguiente alerta (la siguiente coincidencia si hay un filtro). Solo avanza si el guardado funcionó.
     *   -   **Guardar**
         -   Guarda la revisión y se queda en la alerta.
+    *   -   **Siguiente**
+        -   Abre la siguiente alerta (la siguiente coincidencia si hay un filtro). Con cambios sin guardar, pregunta antes: **Descartar** los desecha y avanza, **Quedarse** te mantiene en la alerta.
 
 La línea bajo los botones indica "Cambios sin guardar en esta alerta", "Guarde su dibujo antes de guardar esta revisión" o "Guardada a las 14:32".
 
@@ -2359,8 +2418,8 @@ La sección **Exportar esta alerta** está en el pie del panel de revisión de `
 
     *   -   Mosaico
         -   Descripción
-    *   -   **Generar archivos de la alerta**
-        -   Genera los datos y el informe de la alerta. Indica "(guarda primero)" y está desactivado hasta que se selecciona **Guardar** o **Guardar y siguiente** en esta alerta durante esta sesión. Se ejecuta en la lista de tareas y tarda un poco: descarga las imágenes de antes y de después.
+    *   -   **Generar archivos**
+        -   Genera los datos y el informe de la alerta. Indica "Guarda primero esta alerta" y está desactivado hasta que se selecciona **Guardar** en esta alerta durante esta sesión. Se ejecuta en la lista de tareas y tarda un poco: descarga las imágenes de antes y de después.
     *   -   **Datos de la alerta**
         -   Descarga un archivo .zip: el GeoPackage de la alerta, sus imágenes de antes y de después en un solo GeoTIFF y, para una alerta verdadera, su GIF.
     *   -   **Informe de la alerta**
@@ -2499,12 +2558,6 @@ La coordinadora configura el proyecto así:
 
 1.  **Proyecto**: en la aplicación, selecciona **Nuevo proyecto** y lo llama ``madre_de_dios`` (consulta `Crear un proyecto <defo-project-create_>`_).
 2.  **AOI**: en el paso `AOI <defo-aoi_>`_, elige **Nivel administrativo 1**, luego Perú y luego "Madre De Dios" (como lo escribe la lista), y selecciona **Usar selección**. El área se guarda como ``PER_Madre_De_Dios``. Un departamento entero es un área grande: todos los pasos siguientes tardan más que para un distrito.
-3.  **Alertas**: en `Fuentes de alertas <defo-alerts_>`_, añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**. Cada una **cubre la AOI**. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas.
-4.  **Capas opcionales**: para evaluar las alertas frente a una imagen reciente, añade una `capa opcional <defo-layers_>`_: una imagen Sentinel-2 de **Earth Engine** del 27 de septiembre de 2026 (tesela 19LDF, al este de Puerto Maldonado), dibujada como **Compuesto RGB** en **Color verdadero** (B4, B3, B2), **Mín** 0 y **Máx** 3000, llamada ``Sentinel-2 2026-09-27``, y con **Mostrar en Análisis** marcado.
-
-.. note::
-
-    Los mosaicos mensuales de Planet NICFI cubrirían todo el departamento, pero la cuenta usada para este artículo no tiene acceso a NICFI. Por eso la línea de tiempo de Análisis de las capturas siguientes no tiene etiqueta *Planet*.
 
 La ronda de septiembre
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -2521,16 +2574,21 @@ En `Período de monitoreo <defo-period_>`_, la coordinadora:
 
 La ventana de búsqueda va del 2026-06-03 al 2026-09-30, así que también se encuentran los grupos que empezaron entre junio y agosto y las alertas que las fuentes publicaron con retraso. Como es el primer período, no tiene ningún conjunto anterior: se conservan todas las alertas de su ventana de búsqueda.
 
-Descargar y armonizar
-"""""""""""""""""""""
+Alertas
+"""""""
 
-En `Descargar y armonizar <defo-prepare_>`_, la coordinadora:
+En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos periodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, **Descargar 3 pendientes** en el pie descarga las tres fuentes en la ventana de búsqueda.
+
+Armonizar
+"""""""""
+
+En `Armonizar <defo-harmonize_>`_, la coordinadora:
 
 1.  conserva la cuadrícula sugerida, la zona UTM del departamento (``EPSG:32719``) a 10 m, y selecciona **Guardar cuadrícula**. La cuadrícula mide 41425 × 38561 píxeles, unos 12,8 GB por fuente antes de la compresión, así que la aplicación avisa de que las descargas tardarán un rato;
 2.  añade una máscara para que solo cuenten las alertas en bosque: **Añadir máscara**, la imagen Hansen Global Forest Change ``UMD/hansen/global_forest_change_2025_v1_13``, banda ``treecover2000``, llamada ``forest_2000``, modo **Conservar**; y
-3.  selecciona **Ejecutar … pendientes** en el pie de la tabla, que alinea la máscara y luego descarga y armoniza las tres fuentes.
+3.  selecciona **Armonizar … pendientes** en el pie de la tabla, que alinea la máscara y luego armoniza las tres fuentes.
 
-La ejecución tardó unos 15 minutos. Después, la máscara y cada fuente indican "Lista": GLAD-L con 2362718 píxeles de alerta, RADD con 1508527 y GLAD-S2 con 1462458.
+La descarga y la armonización tardaron unos 15 minutos. Después, la máscara y cada fuente indican "Lista": GLAD-L con 2362718 píxeles de alerta, RADD con 1508527 y GLAD-S2 con 1462458.
 
 Integrar y vectorizar
 """""""""""""""""""""
@@ -2538,12 +2596,21 @@ Integrar y vectorizar
 En `Integrar y vectorizar <defo-integrate_>`_, la coordinadora:
 
 -   mantiene activadas las tres fuentes e **Incluir alertas probables (no confirmadas)**;
--   fija **Tamaño mínimo de alerta** en 1 ha y **Orden** en **Alertas más grandes primero**; y
--   marca **Limitar el número de alertas**, con **Número máximo de alertas** en 48: el equipo puede revisar unas 48 alertas al mes, así que empieza por las más grandes.
+-   fija **Tamaño mínimo de grupo** en 1 ha y **Orden** en **Grupos más grandes primero**; y
+-   marca **Limitar el número de grupos**, con **Número máximo de grupos** en 48: el equipo puede revisar unas 48 alertas al mes, así que empieza por las más grandes.
 
 La ejecución genera el conjunto de alertas "2026-09-01 → 2026-09-30 · GLAD-L + GLAD-S2 + RADD" con 48 alertas, de 383,18 ha a 27,84 ha: 2870 ha en total.
 
 Los grupos que quedan por encima del tope se conservan como no analizables. El período siguiente solo los reconsidera si su retrospección llega hasta septiembre y usa las mismas fuentes. La retrospección de 90 días de octubre lo hace (consulta `Lo que ya reportaron los períodos anteriores <defo-integrate-earlier_>`_).
+
+Capas adicionales
+"""""""""""""""""
+
+Con el conjunto de alertas creado, **Preparar la revisión** se desbloquea. Para evaluar las alertas frente a una imagen reciente, la coordinadora añade una `capa adicional <defo-layers_>`_: una imagen Sentinel-2 de **Earth Engine** del 27 de septiembre de 2026 (tesela 19LDF, al este de Puerto Maldonado), dibujada como **Compuesto RGB** en **Color verdadero** (B4, B3, B2), **Mín** 0 y **Máx** 3000, llamada ``Sentinel-2 2026-09-27``, y con **Mostrar en Análisis** marcado.
+
+.. note::
+
+    Los mosaicos mensuales de Planet NICFI cubrirían todo el departamento, pero la cuenta usada para este artículo no tiene acceso a NICFI. Por eso la línea de tiempo de Análisis de las capturas siguientes no tiene etiqueta *Planet*.
 
 Revisar en solitario y luego en equipo
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2580,7 +2647,7 @@ La copia de revisión de Ana
 
 Ana copia el paquete en su carpeta de SEPAL y lo importa con **Importar** en el diálogo `Proyecto <defo-project-import_>`_. Se abre como el proyecto ``madre-de-dios__e01-ana``, en la pantalla de Análisis, ya filtrado a sus alertas ("Evaluador: Ana").
 
-Ana las recorre con **Guardar y siguiente**:
+Ana las recorre con **Guardar** y **Siguiente**:
 
 -   la barra superior cuenta "5 revisadas · 18 pendientes · filtradas · 48 en total" (las dos revisiones de la coordinadora sobre sus alertas y tres propias);
 -   el contador numera sus alertas del 1 al 23; y
@@ -2634,11 +2701,11 @@ Con 13 de las 48 alertas revisadas, la mayoría de los puntos siguen en gris. La
 La ronda de octubre
 ^^^^^^^^^^^^^^^^^^^
 
-Al empezar la ronda siguiente, la coordinadora selecciona **Nuevo período** en `Período de monitoreo <defo-period-add_>`_. El diálogo viene completado: del 2026-10-01 (el día siguiente al fin de septiembre) a hoy, con los 90 días de retrospección usados la vez anterior. La coordinadora fija el final en 2026-10-20, el día de esta ronda. **Añadir período** lo convierte en el período activo, con las opciones de máscara del período de septiembre.
+Al empezar la ronda siguiente, la coordinadora selecciona **Nuevo período** en `Período de monitoreo <defo-period-add_>`_. El diálogo viene completado: del 2026-10-01 (el día siguiente al fin de septiembre) a hoy, con los 90 días de retrospección usados la vez anterior. La coordinadora fija el final en 2026-10-20, el día de esta ronda. **Añadir período** lo convierte en el período activo, con las opciones de máscara del período de septiembre y las tres fuentes marcadas con **Añadir a los nuevos periodos**.
 
 Después:
 
--   **Ejecutar … pendientes** en `Descargar y armonizar <defo-prepare_>`_ descarga las tres fuentes para la nueva ventana; la cuadrícula y la máscara ya están listas.
+-   **Descargar 3 pendientes** en `Alertas <defo-alerts_>`_ descarga las tres fuentes para la nueva ventana, y **Armonizar … pendientes** en `Armonizar <defo-harmonize_>`_ las armoniza; la cuadrícula y la máscara ya están listas.
 -   En `Integrar y vectorizar <defo-integrate_>`_, la coordinadora usa los mismos ajustes que en septiembre (1 ha, las 48 alertas más grandes). Antes de agrupar los píxeles en alertas, la ejecución elimina todos los píxeles que caen dentro de las 48 alertas de septiembre, para que nada se reporte dos veces. El nuevo conjunto vuelve a contener 48 alertas, con 1177 ha. Ninguna toca una alerta confirmada en septiembre, así que la ejecución no vincula ninguna a una pérdida anterior (consulta `Crecimiento de una pérdida anterior <defo-integrate-growth_>`_).
 
 El equipo las revisa como en septiembre; por ahora hay 16 revisadas, 11 de ellas como alertas verdaderas. Con **Mostrar estas alertas en el mapa** y **Mostrar conjuntos anteriores** activados, el mapa muestra las alertas de octubre junto a las de septiembre, que se dibujan con colores más tenues. Las alertas de octubre están en las mismas zonas del departamento que las de septiembre.
@@ -2683,7 +2750,7 @@ En la parte inferior del Resumen, la tarjeta **Exportar alertas** escribe el con
 Una alerta
 """"""""""
 
-Para informar sobre una alerta, la coordinadora la abre en Análisis, la guarda y selecciona **Generar archivos de la alerta** en **Exportar esta alerta**. El resultado es un archivo .zip con el GeoPackage de la alerta y sus imágenes de antes y de después, y un informe de Word generado a partir de la plantilla del proyecto. Para una alerta verdadera, el mosaico **Secuencia temporal** también crea un GIF animado de las imágenes de antes a después. Consulta `Una alerta, desde Análisis <defo-export-alert_>`_.
+Para informar sobre una alerta, la coordinadora la abre en Análisis, la guarda y selecciona **Generar archivos** en **Exportar esta alerta**. El resultado es un archivo .zip con el GeoPackage de la alerta y sus imágenes de antes y de después, y un informe de Word generado a partir de la plantilla del proyecto. Para una alerta verdadera, el mosaico **Secuencia temporal** también crea un GIF animado de las imágenes de antes a después. Consulta `Una alerta, desde Análisis <defo-export-alert_>`_.
 
 Cada archivo también se guarda en la carpeta del conjunto de alertas del proyecto, en ``periods/2026-10-01_2026-10-20/sets/glad-l-glad-s2-radd/``.
 
