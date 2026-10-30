@@ -390,6 +390,11 @@ def test_optional_segments_are_dashed():
     assert "dashed" in bar["layers"] and "transparent" in bar["layers"]
     assert "dashed" not in bar["evaluators"]
     rc.close()
+    # a locked level's optional bars are grey, not the accent
+    box, rc, _ = _render("aoi", _project(aoi_name="Acre"))
+    cells = {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}
+    assert "dashed rgba(128, 128, 128" in cells["layers"].children[0].style_
+    rc.close()
 
 
 def test_unified_activator_and_testable_segments():

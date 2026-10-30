@@ -659,6 +659,10 @@ def _AppShell():
         ".defo-workflow-header { position: sticky; top: 0; z-index: 3;"
         " background-color: var(--v-background-base, #ffffff); }\n"
         ".theme--dark .defo-workflow-header { background-color: #1a1a1a; }\n"
+        # MapApp pads its right panel's content (`pa-4`): on top of the
+        # header's own padding that left an empty band under the "Workflow"
+        # title. The header pads itself, so drop the panel's top padding.
+        ".right-panel .pa-4:has(.defo-workflow-header) { padding-top: 0 !important; }\n"
         # A file tile (gui/tile/analysis/file_tile.py) is a v-btn, whose
         # content is Vuetify's `flex: 1 0 auto` and never shrinks: a long
         # detail line (an out-of-date CSV) pushed the download icon out of

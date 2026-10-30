@@ -204,8 +204,9 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
         else:
             fill = primary if states[i] is StepStatus.HAS_OUTPUTS else _SEG_EMPTY
             bg = f"background: {fill};"
-        if STEPS[i].optional:
-            bg += f" border: 1.5px dashed {primary}; box-sizing: border-box;"
+        if STEPS[i].optional:  # a locked level's bars stay all grey
+            edge = "rgba(128, 128, 128, 0.45)" if states[i] is StepStatus.LOCKED else primary
+            bg += f" border: 1.5px dashed {edge}; box-sizing: border-box;"
         ring = ring_css if i == active_step else ""
         return f"width: 100%; height: 7px; border-radius: 3.5px; {bg}{ring}"
 
@@ -232,7 +233,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
         on_navigate(i)
 
     with solara.Column(
-        style="gap: 0px; padding: 10px 12px 6px;"
+        style="gap: 0px; padding: 8px 12px 6px;"
         " border-bottom: 1px solid rgba(128, 128, 128, 0.25);"
     ):
         # Both levels in one strip: per level, its label over its bars, the
