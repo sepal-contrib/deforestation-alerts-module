@@ -21,7 +21,7 @@ O fluxo de trabalho num relance
 -------------------------------
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
-    :alt: As etapas do fluxo de trabalho, da área de interesse até a análise
+    :alt: Os dois níveis do fluxo de trabalho: as etapas de Preparar alertas, da área de interesse até o conjunto de alertas, e depois as etapas de Preparar a revisão, bloqueadas até que esse conjunto exista
 
 O painel **Fluxo de trabalho** organiza as etapas em dois níveis: **Preparar alertas** cria um conjunto de alertas, e **Preparar a revisão** prepara a revisão dele. As outras ferramentas abrem pela barra lateral esquerda (veja `A janela do app <defo-window_>`_).
 
@@ -2553,7 +2553,7 @@ A equipe tem:
     Os valores deste caso de uso vêm do projeto de demonstração usado nas capturas de tela deste artigo. Os vereditos e as respostas mostram como o app registra uma revisão; são exemplos, não uma avaliação verificada da floresta de Madre de Dios.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
-    :alt: As etapas do fluxo de trabalho, da área de interesse até a análise
+    :alt: Os dois níveis do fluxo de trabalho: as etapas de Preparar alertas, da área de interesse até o conjunto de alertas, e depois as etapas de Preparar a revisão, bloqueadas até que esse conjunto exista
 
 Configurar o projeto
 ^^^^^^^^^^^^^^^^^^^^

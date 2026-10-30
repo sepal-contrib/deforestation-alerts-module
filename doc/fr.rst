@@ -21,7 +21,7 @@ Le flux de travail en un coup d'œil
 -----------------------------------
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
-    :alt: Les étapes du flux de travail, de la zone d'intérêt à l'analyse
+    :alt: Les deux niveaux du flux de travail : les étapes de Préparer les alertes, de la zone d'intérêt au jeu d'alertes, puis les étapes de Configurer la revue, verrouillées tant que ce jeu n'existe pas
 
 Le panneau **Flux de travail** range les étapes sur deux niveaux : **Préparer les alertes** construit un jeu d'alertes, et **Configurer la revue** prépare son examen. Les autres outils s'ouvrent depuis la barre latérale gauche (voir `La fenêtre de l'application <defo-window_>`_).
 
@@ -2551,7 +2551,7 @@ L'équipe compte :
     Les valeurs de ce cas d'usage proviennent du projet de démonstration dont sont tirées les captures d'écran de cet article. Les verdicts et les réponses montrent comment l'application enregistre un examen ; ce sont des exemples, pas une évaluation vérifiée de la forêt de Madre de Dios.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
-    :alt: Les étapes du flux de travail, de la zone d'intérêt à l'analyse
+    :alt: Les deux niveaux du flux de travail : les étapes de Préparer les alertes, de la zone d'intérêt au jeu d'alertes, puis les étapes de Configurer la revue, verrouillées tant que ce jeu n'existe pas
 
 Configurer le projet
 ^^^^^^^^^^^^^^^^^^^^

@@ -21,7 +21,7 @@ Workflow at a glance
 --------------------
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
-    :alt: The workflow steps, from the area of interest to the analysis
+    :alt: The two workflow levels: the Prepare alerts steps, from the area of interest to the alert set, then the Set up review steps, locked until that set exists
 
 The **Workflow** panel holds the steps in two levels: **Prepare alerts** builds an alert set, and **Set up review** prepares its review. The other tools open from the left rail (see `The app window <defo-window_>`_).
 
@@ -2623,7 +2623,7 @@ The team has:
     The values in this use case come from the demo project the screenshots of this article are taken from. The verdicts and answers show how the app records a review; they are examples, not a checked assessment of the forest in Madre de Dios.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
-    :alt: The workflow steps, from the area of interest to the analysis
+    :alt: The two workflow levels: the Prepare alerts steps, from the area of interest to the alert set, then the Set up review steps, locked until that set exists
 
 Set up the project
 ^^^^^^^^^^^^^^^^^^
