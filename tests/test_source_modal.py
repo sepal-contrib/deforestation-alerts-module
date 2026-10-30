@@ -14,12 +14,14 @@ import solara
 from affine import Affine
 
 from deforestation_alerts.project.models import (
-    AoiRecord, BandMap, CustomSource, NativeGrid, Project, RegionCoverage, SourceCoverage, add_predefined_source,
+    AoiRecord, BandMap, CustomSource, NativeGrid, Period, Project, RegionCoverage, SourceCoverage,
+    add_predefined_source,
 )
 from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.widget import source_modal as sm
 from gui.widget.enter_key import ENTER_DEFAULT
+from tests._render_helpers import run_rendered
 
 
 def _p():
@@ -49,6 +51,17 @@ def test_predefined_items_while_checking_and_after_a_failed_check():
     assert all("checking coverage" in i["text"] and not i["disabled"] for i in items)
     items = sm.predefined_items(p, pending=False)  # no record and not checking: the check failed
     assert all("coverage not checked" in i["text"] and not i["disabled"] for i in items)
+
+
+def test_add_to_new_periods_starts_from_a_known_sources_own_setting():
+    p = _p()
+    add_predefined_source(p, "RADD")
+    p.new_period_sources = []  # the user switched RADD off for new periods
+    assert sm.new_periods_default(p, "predefined", "RADD") is False
+    p.new_period_sources = ["RADD"]
+    assert sm.new_periods_default(p, "predefined", "RADD") is True
+    assert sm.new_periods_default(p, "predefined", "GLAD-L") is True  # new to the project: on
+    assert sm.new_periods_default(p, "custom", None) is True
 
 
 def _gee(answer):
@@ -285,6 +298,33 @@ def test_a_custom_geotiff_is_validated_added_inside_the_task_and_the_modal_close
             assert (kw["origin"], kw["ref"], kw["asset_type"], kw["fmt"]) == ("file", str(path), "FILE", "radd")
             assert (kw["alert_band"], kw["date_band"], kw["editing"]) == (1, 2, None)
             assert added[0][0] == {"name": "my radd"}
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_picking_a_source_the_project_has_shows_its_own_add_to_new_periods():
+    """A source taken out of new periods and picked again does not quietly rejoin them."""
+    p = _p()
+    jan = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+    p.periods, p.active_period = {jan.id: jan}, jan.id
+    add_predefined_source(p, "RADD")  # in the project, not in January
+    p.new_period_sources = []
+    p.coverage = {k: _cov(1.0) for k in ("GLAD-L", "RADD", "GLAD-S2")}
+    state, open_, new_periods = _state(p), solara.reactive(True), solara.reactive(True)
+
+    async def main():  # the form's validation task needs a running loop
+        box, rc = reacton.render(sm.SourceModal(open_=open_, app_state=state, gee_interface=object(),
+                                                on_add_predefined=print, on_add_custom=print, on_save_custom=print,
+                                                new_periods=new_periods), handle_error=False)
+        try:
+            picker = rc.find(v.Select, label=t("steps.alerts.predefined_label")).widget
+            assert picker.v_model == "GLAD-L" and new_periods.value is True  # new to the project: on
+            picker.v_model = "RADD"
+            assert new_periods.value is False
+            picker.v_model = "GLAD-S2"
+            assert new_periods.value is True
         finally:
             rc.close()
 
@@ -632,46 +672,73 @@ def test_enter_finds_no_default_button_while_the_check_runs(monkeypatch):
     asked, done, release = _hanging(monkeypatch)
     state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
-        try:
-            _go_custom(rc, "enter")
-            await asyncio.sleep(0.05)
-            assert _defaults(rc) == [_submit_btn(rc)]  # idle: Add is the one default
-            _submit_btn(rc).fire_event("click", None)
-            assert await _settle(lambda: len(asked) == 1)
-            [stop] = [b for b in rc.find(v.Btn).widgets
-                      if any(isinstance(c, v.ProgressCircular) for c in b.children)]
-            assert t("common.cancel") in stop.children
-            assert _defaults(rc) == []  # Enter presses nothing mid-check
-            release.set()
-            assert await _settle(lambda: open_.value is False)
-            assert len(done) == 1 and [a[0] for a in added] == [{"name": "enter"}]
-        finally:
-            rc.close()
+    async def main(rc):
+        _go_custom(rc, "enter")
+        await asyncio.sleep(0.05)
+        assert _defaults(rc) == [_submit_btn(rc)]  # idle: Add is the one default
+        _submit_btn(rc).fire_event("click", None)
+        assert await _settle(lambda: len(asked) == 1)
+        [stop] = [b for b in rc.find(v.Btn).widgets
+                  if any(isinstance(c, v.ProgressCircular) for c in b.children)]
+        assert t("common.cancel") in stop.children
+        assert _defaults(rc) == []  # Enter presses nothing mid-check
+        release.set()
+        assert await _settle(lambda: open_.value is False)
+        assert len(done) == 1 and [a[0] for a in added] == [{"name": "enter"}]
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, added, saved), handle_error=False), main)
+
+
+def _customs(n):
+    return {f"c{i}": CustomSource(name=f"c{i}", origin="gee", ref=f"users/x/c{i}", format="radd",
+                                  native=NativeGrid(crs="EPSG:4326", scale=10.0), digit=3 + i) for i in range(n)}
 
 
 def test_at_the_cap_custom_is_offered_disabled_with_the_reason_as_its_hint():
+    """Spec §3: the cap counts the active period's custom sources, not the project's."""
     p = _p()
-    p.sources = {f"c{i}": CustomSource(name=f"c{i}", origin="gee", ref=f"users/x/c{i}", format="radd",
-                                       native=NativeGrid(crs="EPSG:4326", scale=10.0), digit=3 + i)
-                 for i in range(sm.MAX_CUSTOM)}
+    p.sources = _customs(sm.MAX_CUSTOM + 1)
+    p.periods = {"x": Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31),
+                             sources=[f"c{i}" for i in range(sm.MAX_CUSTOM)],
+                             digits={f"c{i}": 3 + i for i in range(sm.MAX_CUSTOM)})}
+    p.active_period = "x"
     state, open_, added, saved = _state(p), solara.reactive(True), [], []
 
-    async def main():
-        _box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
-        try:
-            mode = rc.find(v.Select, label=t("steps.alerts.mode_label")).widget
-            [custom] = [i for i in mode.items if i["value"] == "custom"]
-            assert custom["disabled"] is True and custom["text"] == t("steps.alerts.mode_custom", n=sm.MAX_CUSTOM)
-            assert (mode.hint, mode.persistent_hint) == (t("steps.alerts.cap_reached"), True)
-            assert mode.v_model == "predefined"
-        finally:
-            rc.close()
+    async def main(rc):
+        mode = rc.find(v.Select, label=t("steps.alerts.mode_label")).widget
+        [custom] = [i for i in mode.items if i["value"] == "custom"]
+        assert custom["disabled"] is True and custom["text"] == t("steps.alerts.mode_custom", n=sm.MAX_CUSTOM)
+        assert (mode.hint, mode.persistent_hint) == (t("steps.alerts.cap_reached"), True)
+        assert mode.v_model == "predefined"
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(_modal(state, open_, added, saved), handle_error=False), main)
+
+
+def test_six_project_customs_outside_the_period_leave_custom_open():
+    p = _p()
+    p.sources = _customs(sm.MAX_CUSTOM)
+    p.periods = {"x": Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31), sources=["c0"], digits={"c0": 3})}
+    p.active_period = "x"
+    assert sm.custom_in_use(p) == 1
+
+
+def test_the_add_form_holds_the_add_to_new_periods_checkbox():
+    state, open_, added = _state(_p()), solara.reactive(True), []
+    new_periods = solara.reactive(True)
+
+    def render():
+        return reacton.render(sm.SourceModal(open_=open_, app_state=state, gee_interface=object(),
+                                             on_add_predefined=added.append, on_add_custom=lambda f, c: None,
+                                             on_save_custom=lambda n, ch, c: None, new_periods=new_periods),
+                              handle_error=False)
+
+    async def main(rc):
+        box = rc.find(v.Checkbox, label=t("steps.alerts.add_to_new_periods")).widget
+        assert box.v_model is True
+        box.v_model = False
+        assert new_periods.value is False
+
+    run_rendered(render, main)
 
 
 # ---------------------------------------------------------------- the custom form (spec 2026-10-23-source-form)
@@ -1233,14 +1300,10 @@ def test_the_raster_block_with_no_raster_draws_nothing_and_reads_nothing(monkeyp
             raster.draw(False)
         Host.raster = raster
 
-    async def main():
-        _box, rc = reacton.render(Host(), handle_error=False)
-        try:
-            await asyncio.sleep(0.1)
-            [block] = rc.find(v.Html, class_="dv-raster-block").widgets
-            assert block.children == []
-            assert gee.calls == [] and Host.raster.save_blocked is False
-        finally:
-            rc.close()
+    async def main(rc):
+        await asyncio.sleep(0.1)
+        [block] = rc.find(v.Html, class_="dv-raster-block").widgets
+        assert block.children == []
+        assert gee.calls == [] and Host.raster.save_blocked is False
 
-    asyncio.run(main())
+    run_rendered(lambda: reacton.render(Host(), handle_error=False), main)

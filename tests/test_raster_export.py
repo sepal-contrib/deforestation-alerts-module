@@ -305,6 +305,79 @@ def test_export_options_reach_geedim(tmp_path):
     assert geo["max_requests"] == 4
 
 
+_TOO_MANY = ("Too Many Requests: Exceeded Earth Engine concurrency limit. "
+             "Your project is in Restricted Mode.")
+
+
+@pytest.fixture()
+def unrestricted(monkeypatch):
+    """Each test starts before any download of the session met a 429."""
+    monkeypatch.setattr(export_module, "_restricted", False)
+
+
+def _geotiff_calls(tmp_path, *outcomes):
+    """Run one download whose geedim exports end as ``outcomes`` in turn (an
+    exception raises, anything else succeeds); return each export's
+    (max_requests, Earth Engine client retries) and what the download raised."""
+    image = MagicMock(spec=ee.Image)
+    prepared = MagicMock()
+    prepared.gd.id = None  # no STAC entry to prefetch
+    seen, pending = [], list(outcomes)
+
+    def to_geotiff(**kw):
+        seen.append((kw["max_requests"], ee.data._get_state().max_retries))
+        outcome = pending.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+
+    prepared.gd.toGeoTIFF.side_effect = to_geotiff
+    image.gd.prepareForExport.return_value = prepared
+    try:
+        download_ee_image(image, str(tmp_path / "x.tif"))
+    except Exception as exc:  # the caller asserts on it
+        return seen, exc
+    return seen, None
+
+
+def test_an_unrestricted_project_downloads_at_full_speed(tmp_path, unrestricted):
+    default = ee.data._get_state().max_retries
+    seen, raised = _geotiff_calls(tmp_path, None)
+    assert raised is None
+    assert seen == [(export_module.EE_MAX_REQUESTS, default)]
+
+
+def test_a_restricted_project_is_asked_again_gently(tmp_path, unrestricted):
+    """A project in restricted mode answered geedim's 32 concurrent tile
+    requests with 429 "Exceeded Earth Engine concurrency limit"; the Earth
+    Engine client gave up after its 5 retries and the whole download failed
+    (2026-10-25). The download is tried again with fewer tiles at once and a
+    more patient client, and later downloads start that way."""
+    default = ee.data._get_state().max_retries
+    seen, raised = _geotiff_calls(tmp_path, ee.EEException(_TOO_MANY), None)
+    assert raised is None
+    gentle = (export_module.EE_RESTRICTED_REQUESTS, export_module.EE_RESTRICTED_RETRIES)
+    assert seen == [(export_module.EE_MAX_REQUESTS, default), gentle]
+    assert export_module.EE_RESTRICTED_REQUESTS < export_module.EE_MAX_REQUESTS
+    assert export_module.EE_RESTRICTED_RETRIES > default
+    assert ee.data._get_state().max_retries == default
+
+    seen, raised = _geotiff_calls(tmp_path, None)
+    assert raised is None and seen == [gentle]
+
+
+def test_another_earth_engine_error_is_not_tried_again(tmp_path, unrestricted):
+    seen, raised = _geotiff_calls(tmp_path, ee.EEException("Image.select: band not found"))
+    assert isinstance(raised, ee.EEException) and len(seen) == 1
+    assert export_module._restricted is False
+
+
+def test_a_gentle_download_that_still_fails_restores_the_client(tmp_path, unrestricted):
+    default = ee.data._get_state().max_retries
+    seen, raised = _geotiff_calls(tmp_path, ee.EEException(_TOO_MANY), ee.EEException(_TOO_MANY))
+    assert isinstance(raised, ee.EEException) and len(seen) == 2
+    assert ee.data._get_state().max_retries == default
+
+
 def _local_disk_full():
     import errno
 

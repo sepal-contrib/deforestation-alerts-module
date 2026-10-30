@@ -41,17 +41,6 @@ def test_the_coverage_texts_of_a_table():
 
     a, b = date(2019, 1, 1), date(2026, 9, 30)
     full = cov(1.0, RegionCoverage(name="sa", fraction=1.0, first=a, last=b))
-    assert coverage_ui.chip_cell(full) == {"type": "chip", "value": t("coverage.chip_full"), "color": "success"}
-    assert coverage_ui.chip_cell(cov(0.35)) == {"type": "chip", "value": t("coverage.chip_partial", pct="35"),
-                                                "color": "warning"}
-    assert coverage_ui.chip_cell(None, pending=True) == {"type": "chip", "value": t("coverage.chip_checking")}
-    assert coverage_ui.chip_cell(None)["color"] == "error"
-
-    assert coverage_ui.dates_text(full) == "2019-01-01 → 2026-09-30"
-    two = cov(1.0, RegionCoverage(name="sa", fraction=0.5, first=a, last=b),
-              RegionCoverage(name="ca", fraction=0.5, first=date(2020, 1, 1), last=b))
-    assert coverage_ui.dates_text(two) == "sa: 2019-01-01 → 2026-09-30; ca: 2020-01-01 → 2026-09-30"
-    assert coverage_ui.dates_text(cov(1.0, RegionCoverage(name="tif", fraction=1.0))) == ""
 
     note = Note("coverage.partial_share", (("source", "RADD"), ("pct", "35")))
     assert coverage_ui.note_text(note) == t("coverage.partial_share", pct="35")

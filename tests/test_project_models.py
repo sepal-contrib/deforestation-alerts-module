@@ -11,11 +11,14 @@ from deforestation_alerts.project.models import (
     Period,
     Project,
     add_predefined_source,
-    next_custom_digit,
+    period_digit,
     period_id,
-    remove_source,
+    period_sources,
     set_id,
+    set_new_period_source,
+    set_period_source,
 )
+from deforestation_alerts.errors import ProjectRuleError
 
 
 def _project():
@@ -49,22 +52,6 @@ def test_predefined_digits_are_fixed_and_unique():
         add_predefined_source(p, "RADD")
 
 
-def test_custom_digit_reuses_the_lowest_free_one():
-    p = _project()
-    for d in (3, 4, 5):
-        p.sources[f"c{d}"] = CustomSource(name=f"c{d}", origin="gee", ref="a", format="radd", digit=d)
-    remove_source(p, "c4")
-    assert next_custom_digit(p) == 4
-
-
-def test_custom_digit_cap():
-    p = _project()
-    for d in range(3, 9):
-        p.sources[f"c{d}"] = CustomSource(name=f"c{d}", origin="gee", ref="a", format="radd", digit=d)
-    with pytest.raises(ValueError):
-        next_custom_digit(p)
-
-
 def test_grid_transform_and_signature():
     g = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=7400000, width=100, height=50)
     assert g.signature == "EPSG:32721|10.0|500000.0|7400000.0|100x50"
@@ -82,15 +69,14 @@ def test_period_window_and_ids():
 def test_source_edits_replace_the_shared_sources_dict_instead_of_mutating_it():
     """The app publishes shallow copies of the project, so every snapshot
     shares ``sources``; a render iterating it on another thread must not see
-    it change size under an add or a remove."""
+    it change size under an add."""
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
     add_predefined_source(p, "GLAD-L")
     snapshot = p.model_copy()
     being_iterated = iter(snapshot.sources.values())
     add_predefined_source(p, "RADD")
-    remove_source(p, "GLAD-L")
     assert [s.name for s in being_iterated] == ["GLAD-L"]  # no "dictionary changed size during iteration"
-    assert list(snapshot.sources) == ["GLAD-L"] and list(p.sources) == ["RADD"]
+    assert list(snapshot.sources) == ["GLAD-L"] and list(p.sources) == ["GLAD-L", "RADD"]
 
 
 def test_locked_once_a_set_exists():
@@ -138,17 +124,13 @@ def test_round_trip_custom_source_coverage_and_stats():
     assert back.sources["ccdc tif"].band_map.alert == 1 and back.sources["Forest RADD"].band_map.date == "Date"
 
 
-def test_custom_digits_cap_and_reuse():
+def test_the_catalogue_has_no_custom_cap():
+    """The cap of 6 custom sources is per period (``test_custom_cap_is_per_period``);
+    a definition added outside a period keeps the first custom digit."""
     p = _project()
-    for i in range(6):
+    for i in range(7):
         _add(p, f"s{i}")
-    assert sorted(s.digit for s in p.sources.values()) == [3, 4, 5, 6, 7, 8]
-    # Controller ruling (Task 7): the cap is a message key too, like every
-    # other add_custom_source error, not next_custom_digit's plain string.
-    with pytest.raises(ValueError, match="steps.alerts.cap_reached"):
-        _add(p, "s6")
-    remove_source(p, "s2")
-    assert _add(p, "again").digit == 5
+    assert len(p.sources) == 7 and {s.digit for s in p.sources.values()} == {3}
 
 
 def test_add_refuses_a_bad_name():
@@ -167,17 +149,6 @@ def test_edit_is_refused_once_a_set_used_the_source():
     assert sets_using_source(p, "mine") == ["x__mine"]
     with pytest.raises(ValueError, match="steps.alerts.edit_used"):
         update_custom_source(p, "mine", ref="users/x/c")
-
-
-def test_remove_source_drops_a_custom_coverage_record_only():
-    p = _project()
-    add_predefined_source(p, "RADD")
-    _add(p, "mine")
-    cov = SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=1.0)
-    p.coverage = {"RADD": cov, "mine": cov}
-    remove_source(p, "mine")
-    remove_source(p, "RADD")
-    assert set(p.coverage) == {"RADD"}  # the three predefined entries are always kept (spec §5.1)
 
 
 def test_set_ids_use_the_shared_slug():
@@ -296,7 +267,8 @@ def test_old_manifest_keeps_every_status(tmp_path):
     p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=(0, 0, 1, 1))
     p.grid = GRID
     add_predefined_source(p, "GLAD-L")
-    per = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31), look_back_days=31)
+    per = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31), look_back_days=31,
+                 sources=["GLAD-L"])
     p.periods[per.id] = per
     arr = blank()
     arr[2:10, 2:10] = 1
@@ -326,3 +298,147 @@ def test_old_manifest_keeps_every_status(tmp_path):
 def test_empty_confirmed_only_keeps_the_params_dump_unchanged():
     assert "confirmed_only" not in AlertSetParams().model_dump(mode="json")
     assert AlertSetParams(confirmed_only=["RADD"]).model_dump(mode="json")["confirmed_only"] == ["RADD"]
+
+
+# ---------------------------------------------------------------------------
+# Per-period sources (workflow two levels, spec §3)
+# ---------------------------------------------------------------------------
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+
+
+def _two_periods(sources=("GLAD-L", "RADD")):
+    from deforestation_alerts.project.models import AoiRecord
+    from tests._integrate_helpers import GRID
+
+    p = Project(name="d", created_at=NOW, updated_at=NOW)
+    p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=(0, 0, 1, 1))
+    p.grid = GRID
+    for key in sources:
+        add_predefined_source(p, key)
+    p.periods = {per.id: per.model_copy(update={"sources": list(sources)}) for per in (JAN, FEB)}
+    p.new_period_sources = list(sources)
+    return p
+
+
+def _as_legacy(p):
+    """``p``'s manifest as saved before sources were per period."""
+    raw = p.model_dump(mode="json")
+    del raw["new_period_sources"]
+    for d in raw["periods"].values():
+        del d["sources"], d["digits"]
+    return raw
+
+
+def test_legacy_manifest_keeps_every_fingerprint(tmp_path):
+    from deforestation_alerts.engine import fingerprint as fp
+    from deforestation_alerts.engine import integrate
+    from deforestation_alerts.engine.plan import plan_prepare
+    from tests._integrate_helpers import blank, prepare
+
+    p = _two_periods()
+    arr = blank()
+    arr[2:10, 2:10] = 1
+    for per in p.periods.values():
+        prepare(p, tmp_path, per, {"GLAD-L": arr, "RADD": arr}, 2026015)
+    res = integrate.run_integration(integrate.IntegrationJob(
+        project=p.model_copy(deep=True), pdir=tmp_path, period=p.periods[JAN.id], sources=["GLAD-L", "RADD"],
+        params=AlertSetParams(min_size_ha=0.01)))
+    p.artifacts.update(res.artifacts)
+    p.alert_sets[res.alert_set.id] = res.alert_set
+
+    p2 = Project.model_validate(_as_legacy(p))
+    assert all(per.sources == ["GLAD-L", "RADD"] for per in p2.periods.values())
+    assert p2.new_period_sources == ["GLAD-L", "RADD"]
+    for per in p2.periods.values():
+        assert [(r.source, r.raw, r.harmonized) for r in plan_prepare(p2, tmp_path, per)] == [
+            ("GLAD-L", fp.Status.CURRENT, fp.Status.CURRENT), ("RADD", fp.Status.CURRENT, fp.Status.CURRENT)]
+    assert fp.set_status(p2, tmp_path, p2.alert_sets[res.alert_set.id]) is fp.Status.CURRENT
+
+
+def test_legacy_periods_list_sources_in_digit_order_and_keep_their_custom_digits():
+    p = _two_periods(("RADD", "GLAD-L"))
+    p.sources = {**p.sources, "PyEO": CustomSource(name="PyEO", origin="gee", ref="a", format="pyeo", digit=4)}
+    p2 = Project.model_validate(_as_legacy(p))
+    assert all(per.sources == ["GLAD-L", "RADD", "PyEO"] for per in p2.periods.values())
+    assert all(per.digits == {"PyEO": 4} for per in p2.periods.values())
+    assert p2.new_period_sources == ["GLAD-L", "RADD", "PyEO"]
+    assert period_digit(p2, p2.periods[JAN.id], "PyEO") == 4
+    assert period_digit(p2, p2.periods[JAN.id], "RADD") == 1
+
+
+def test_plan_prepare_lists_only_the_period_sources(tmp_path):
+    from deforestation_alerts.engine.plan import plan_prepare
+
+    p = _two_periods()
+    set_period_source(p, JAN.id, "RADD", False)
+    assert [r.source for r in plan_prepare(p, tmp_path, p.periods[JAN.id])] == ["GLAD-L"]
+    assert [r.source for r in plan_prepare(p, tmp_path, p.periods[FEB.id])] == ["GLAD-L", "RADD"]
+
+
+def test_set_period_source_replaces_the_period_instead_of_mutating_it():
+    p = _two_periods()
+    periods, jan = p.periods, p.periods[JAN.id]
+    set_period_source(p, JAN.id, "RADD", False)
+    assert jan.sources == ["GLAD-L", "RADD"] and periods[JAN.id] is jan
+    assert p.periods[JAN.id].sources == ["GLAD-L"]
+    set_period_source(p, JAN.id, "RADD", True)
+    assert period_sources(p, p.periods[JAN.id]) == ["GLAD-L", "RADD"]
+
+
+def test_new_source_joins_the_active_period_and_new_periods():
+    p = _two_periods(("GLAD-L",))
+    add_predefined_source(p, "RADD", period_id=JAN.id)
+    assert "RADD" in p.periods[JAN.id].sources and "RADD" in p.new_period_sources
+    assert "RADD" not in p.periods[FEB.id].sources
+    _add(p, "mine", period_id=FEB.id)
+    assert p.periods[FEB.id].digits == {"mine": 3} and "mine" not in p.periods[JAN.id].sources
+    assert p.new_period_sources == ["GLAD-L", "RADD", "mine"]
+
+
+def test_set_new_period_source_toggles_the_list_only():
+    p = _two_periods()
+    set_new_period_source(p, "RADD", False)
+    assert p.new_period_sources == ["GLAD-L"]
+    assert all(per.sources == ["GLAD-L", "RADD"] for per in p.periods.values())
+    set_new_period_source(p, "RADD", True)
+    set_new_period_source(p, "RADD", True)
+    assert p.new_period_sources == ["GLAD-L", "RADD"]
+
+
+def test_custom_cap_is_per_period():
+    p = _two_periods()
+    for i in range(6):
+        _add(p, f"custom{i}", period_id=JAN.id)
+    _add(p, "custom7")  # the catalogue has no limit
+    assert len(p.sources) == 9
+    assert sorted(p.periods[JAN.id].digits.values()) == [3, 4, 5, 6, 7, 8]
+    with pytest.raises(ProjectRuleError, match="steps.alerts.cap_reached"):
+        set_period_source(p, JAN.id, "custom7", True)
+    with pytest.raises(ProjectRuleError, match="steps.alerts.cap_reached"):
+        _add(p, "custom8", period_id=JAN.id)
+    assert "custom8" not in p.sources  # refused before anything was added
+    set_period_source(p, FEB.id, "custom2", True)
+    set_period_source(p, FEB.id, "custom7", True)  # another period: fine
+    assert p.periods[FEB.id].digits == {"custom2": 3, "custom7": 4}
+    set_period_source(p, JAN.id, "custom1", False)  # frees digit 4 in January
+    set_period_source(p, JAN.id, "custom7", True)
+    assert p.periods[JAN.id].digits["custom7"] == 4 and "custom1" not in p.periods[JAN.id].digits
+
+
+def test_source_fingerprint_unchanged_by_period_fields():
+    from deforestation_alerts.engine.fingerprint import raw_alert_inputs
+
+    p = _two_periods()
+    period = p.periods[JAN.id]
+    before = raw_alert_inputs(p, "GLAD-L", period)
+    set_new_period_source(p, "GLAD-L", False)
+    set_period_source(p, JAN.id, "RADD", False)
+    assert raw_alert_inputs(p, "GLAD-L", p.periods[JAN.id]) == before
+
+
+def test_keeping_small_growth_keeps_the_params_dump_unchanged():
+    assert "keep_small_growth" not in AlertSetParams().model_dump(mode="json")
+    off = AlertSetParams(keep_small_growth=False)
+    assert off.model_dump(mode="json")["keep_small_growth"] is False
+    assert AlertSetParams.model_validate_json(off.model_dump_json()).keep_small_growth is False

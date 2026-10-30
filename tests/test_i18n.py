@@ -16,19 +16,12 @@ from pysepal.i18n import set_locale
 from gui import i18n
 
 LOCALES = ["en", "es-ES", "fr", "pt-BR"]
-# The generic widgets' namespaces (widgets.json): complete in every locale.
-SCAFFOLD_NAMESPACES = ["common", "dialog", "widgets", "workflow"]
 # The files whose every English key must be used by the code: the legacy
 # cm-era strings were pruned in Task 42, and nothing may pile up there again.
 PRUNED_FILES = ("app.json", "ui.json", "about.json")
 
 
-@pytest.fixture(autouse=True)
-def _pin_english():
-    """Pin the active locale to English so assertions are deterministic."""
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def test_t_resolves_and_formats():
@@ -71,7 +64,7 @@ def test_the_catalogue_is_complete_in_every_locale():
 
 
 #: Names kept as they are in every language (product, format and unit names).
-PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", "SEPAL", "GeoTIFF", "GeoPackage",
+PROPER_NAMES = ("GLAD-L", "GLAD-S2", "RADD", "Planet", "NICFI", "Earth Engine", "SEPAL", "GeoTIFF", "VRT", "GeoPackage",
                 "EPSG", "UTM", "CCDC", "Sentinel-1", "Sentinel-2", "Landsat", "Hansen", "PMTiles", "tippecanoe",
                 "Python", "PATH", "Word", ".docx", "CSV", "GPKG", "GeoJSON", "GIF", "yyddd", "yymm", "yyyyddd", "Int32",
                 "uint8", "AOI", "GB", "MB", "ha", "px", "m",
@@ -91,6 +84,7 @@ SAME_IN = {
         "analysis_tile.verdict.title",
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_col_raster", "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
+        "steps.integrate.sources",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
         # ramp names, the SWIR acronym and "Palette" are the same in French
         "steps.layers.ramp_magma", "steps.layers.ramp_oranges", "steps.layers.ramp_terrain",
@@ -112,6 +106,8 @@ SAME_IN = {
         "steps.raster_input.field_source", "steps.layers.field_composite",
         # "catalogue", "format" and "source" are the same words in French.
         "steps.prepare.f_catalogue", "steps.prepare.f_format", "steps.prepare.sec_source",
+        # "distance" is the same word in French.
+        "evaluators.group_radius_label",
     },
     "pt-BR": {
         # "item", "status", "total", "normal", "raster" and "download" are the same
@@ -153,18 +149,6 @@ def test_no_english_is_left_in_the_translations(locale):
     copies = sorted(k for k, text in target.messages.items()
                     if text == english_of(k) and len(_letters(text)) >= 3 and k not in SAME_IN[locale])
     assert not copies, f"{locale} still reads English for: {copies}"
-
-
-@pytest.mark.parametrize("locale", ["es-ES", "fr", "pt-BR"])
-def test_the_step_labels_are_translated(locale):
-    keys = ["alerts", "layers", "period", "prepare", "integrate", "analysis", "project", "overview"]
-    english = {k: i18n.t(f"app.drawer_item.{k}") for k in keys}
-    set_locale(locale)
-    assert all(i18n.t(f"app.drawer_item.{k}") != english[k] for k in keys)
-
-
-def test_the_scaffold_namespaces_are_complete_in_every_locale():
-    assert not [p for p in i18n.messages.check() if p.key.split(".")[0] in SCAFFOLD_NAMESPACES]
 
 
 @pytest.mark.parametrize("locale", LOCALES)
@@ -326,8 +310,14 @@ def test_every_key_the_code_uses_exists_in_the_english_catalogue():
     literal, built = _keys_in_code(set(catalogue))
     table = _dynamic_keys()
     missing, unknown, heads = [], [], set()
+    def _section(key):  # StepSpec.text_key names a whole section of messages
+        node = catalogue
+        for part in key.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        return isinstance(node, dict)
+
     for where, key in literal:
-        if not _resolves(catalogue, key):
+        if not _resolves(catalogue, key) and not (where.startswith("gui/store/workflow_steps.py") and _section(key)):
             missing.append(f"{where} {key}")
     for where, node in built:
         head, *rest = node.values
@@ -400,29 +390,37 @@ def test_a_rows_pixel_count_is_counted_in_the_language(locale, many, one):
 def test_counted_labels_agree_with_their_count():
     from gui.i18n import size_text
 
-    assert i18n.tn("steps.prepare.run_all", 1) == "Run 1 pending"
+    assert i18n.tn("steps.harmonize.run_all", 1) == "Harmonize 1 pending"
     assert i18n.tn("steps.alerts.delete_used", 1).startswith("Used by 1 alert set;")
-    assert i18n.tn("steps.integrate.replace_message", 1) == "1 reviewed alert in this set will be discarded."
+    assert i18n.tn("steps.integrate.replace_message", 1) == "1 reviewed cluster in this set will be discarded."
     assert i18n.tn("steps.sets.alerts", 1) == "1 alert"
     set_locale("es-ES")
-    assert i18n.tn("steps.prepare.run_all", 2) == "Ejecutar 2 pendientes"
+    assert i18n.tn("steps.harmonize.run_all", 2) == "Armonizar 2 pendientes"
     assert i18n.tn("steps.sets.alerts", 1_000_000) == "1.000.000 de alertas"
     assert size_text(5_400_000) == "5,4 MB"
     set_locale("pt-BR")
-    assert i18n.tn("steps.prepare.run_all", 2) == "Executar 2 pendentes"
+    assert i18n.tn("steps.harmonize.run_all", 2) == "Harmonizar 2 pendentes"
     assert i18n.tn("steps.sets.alerts", 1_000_000) == "1.000.000 de alertas"
 
 
 @pytest.mark.parametrize("locale, old, button", [
-    ("en", "Run all", "Run … pending"), ("es-ES", "Ejecutar todo", "Ejecutar … pendientes"),
-    ("fr", "Tout exécuter", "Exécuter … en attente"), ("pt-BR", "Executar tudo", "Executar … pendentes")])
+    ("en", "Run … pending", "Harmonize … pending"), ("es-ES", "Ejecutar … pendientes", "Armonizar … pendientes"),
+    ("fr", "Exécuter … en attente", "Harmoniser … en attente"),
+    ("pt-BR", "Executar … pendentes", "Harmonizar … pendentes")])
 def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
     set_locale(locale)
-    for key in ("info_md", "mask_not_ready", "masks_switched"):
-        text = i18n.t(f"steps.prepare.{key}")
-        assert old not in text and button in text, key
-    first, _, last = i18n.tn("steps.prepare.run_all", 3).partition("3")
+    first, _, last = i18n.tn("steps.harmonize.run_all", 3).partition("3")
     assert button == f"{first}…{last}"
+    for key in ("steps.prepare.mask_not_ready", "steps.prepare.masks_switched", "steps.harmonize.info_md"):
+        text = i18n.t(key)
+        assert old not in text and button in text, key
+
+
+@pytest.mark.parametrize("key", ["aoi", "period", "alerts", "harmonize", "integrate", "layers",
+                                 "questionnaire", "evaluators"])
+def test_every_step_has_an_instruction(key):
+    """The line under the step's title; the parity test covers the other languages."""
+    assert i18n.has_message(f"steps.{key}.instruction")
 
 
 @pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])
@@ -480,11 +478,11 @@ def test_the_integrate_and_grid_texts_follow_the_language():
 
     assert integrate_jobs.outcome_lines({"GLAD-L": {"alert_pixels": 1, "alert_pixels_unmasked": 1}}, {}) == [
         "GLAD-L: 1 alert pixel (below the minimum size, or under earlier sets' footprints)"]
-    assert i18n.tn("steps.integrate.done", 1) == "1 alert ready for review"
+    assert i18n.tn("steps.integrate.done", 1) == "1 cluster ready for review"
     set_locale("es-ES")
     assert integrate_jobs.outcome_lines({"RADD": {"alert_pixels": 0, "alert_pixels_unmasked": 12345}}, {}) == [
         "RADD: los 12.345 píxeles de alerta eliminados por máscaras"]
-    assert i18n.tn("steps.integrate.done", 2) == "2 alertas listas para revisar"
+    assert i18n.tn("steps.integrate.done", 2) == "2 grupos listos para revisar"
     grid = SimpleNamespace(width=12345, height=6789)
     original = grid_form.gridmod.estimate_bytes
     grid_form.gridmod.estimate_bytes = lambda g: 2_500_000_000

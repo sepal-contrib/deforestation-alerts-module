@@ -32,11 +32,15 @@ def _clusters(shapes, below_min):
     return gpd.GeoDataFrame({"below_min": below_min, "count": range(len(shapes))}, geometry=shapes, crs=GRID.epsg)
 
 
-def test_link_parents_finds_edge_and_corner_neighbours():
-    parent = _candidate(_px(10, 10, 2, 2))
-    vgdf = _clusters([_px(12, 12), _px(10, 12), _px(10, 13)], [False, False, False])  # corner, edge, one px away
+def test_link_parents_reaches_one_pixel():
+    parent = _candidate(_px(10, 10, 2, 2))  # rows and columns 10-11
+    vgdf = _clusters(
+        # corner, edge, one empty pixel away, two away, one away diagonally (sqrt 2 pixels)
+        [_px(12, 12), _px(10, 12), _px(10, 13), _px(10, 14), _px(13, 13)],
+        [False] * 5,
+    )
     out = link_parents(vgdf, [parent], GRID)
-    assert list(out[GROWS_FROM_AUTO]) == [["dec#0@r1"], ["dec#0@r1"], []]
+    assert list(out[GROWS_FROM_AUTO]) == [["dec#0@r1"], ["dec#0@r1"], ["dec#0@r1"], [], []]
 
 
 def test_link_parents_links_overlapping_parents():
@@ -54,6 +58,12 @@ def test_link_parents_drops_unlinked_small():
     assert list(out[GROWS_FROM_AUTO]) == [[], ["dec#0@r1"]]
 
 
+def test_link_parents_keeps_a_small_cluster_one_pixel_away():
+    parent = _candidate(_px(10, 10))
+    out = link_parents(_clusters([_px(10, 12), _px(10, 13)], [True, True]), [parent], GRID)
+    assert list(out["count"]) == [0] and list(out[GROWS_FROM_AUTO]) == [["dec#0@r1"]]
+
+
 def test_link_parents_without_candidates_keeps_the_big_ones():
     out = link_parents(_clusters([_px(0, 0, 5, 5), _px(20, 20)], [False, True]), [], GRID)
     assert list(out["count"]) == [0] and list(out[GROWS_FROM_AUTO]) == [[]]
@@ -64,12 +74,30 @@ def test_burn_touch_mask_none_without_candidates(tmp_path):
     assert not (tmp_path / "touch.tif").exists()
 
 
-def test_burn_touch_mask_covers_the_ring_around_the_parent(tmp_path):
+def test_burn_touch_mask_covers_two_rings_around_the_parent(tmp_path):
     import rasterio
 
     out = burn_touch_mask([_candidate(_px(10, 10, 2, 2))], GRID, tmp_path / "touch.tif")
     with rasterio.open(out) as src:
         m = src.read(1)
         assert str(src.dtypes[0]) == "int32"
-    assert m[9:13, 9:13].all()  # the parent and its 8-neighbour ring
-    assert int(m.sum()) == 16
+    assert m[8:14, 8:14].all()  # the parent and the two rings a cluster within one pixel can reach
+    assert int(m.sum()) == 36
+
+
+def test_a_later_cluster_links_to_the_main_only(monkeypatch):
+    """Group review (spec 2026-10-26 §7.2): an undrawn group is one candidate,
+    keyed to its main, shaped as the union of its rows."""
+    from dataclasses import replace
+
+    from deforestation_alerts.engine import growth_links
+
+    main = _candidate(_px(10, 10), alert_id=0)
+    member = _candidate(_px(10, 20), alert_id=1)
+    rows = [replace(main, node=replace(main.node, review_group=0)),
+            replace(member, node=replace(member.node, review_group=0))]
+    monkeypatch.setattr(growth_links, "project_rows", lambda p, pdir, period: rows)
+    cands = growth_links.project_candidates(None, None, None)
+    assert [c.link for c in cands] == ["dec#0@r1"]
+    out = link_parents(_clusters([_px(10, 21)], [False]), cands, GRID)  # touches the member only
+    assert list(out[GROWS_FROM_AUTO]) == [["dec#0@r1"]]

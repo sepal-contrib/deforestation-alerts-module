@@ -1,5 +1,5 @@
 """Slice 6 gate walk (spec §14 row 6): a report from the project's template,
-an info button and description on every step, Manage projects' search, the
+an info button and instruction line on every step, Manage projects' search, the
 Project dialog's "saved X ago", and the app in Spanish and French.
 
     python -m tools.walk.slice6_walk --port 8986 --out /tmp/slice6_walk
@@ -26,8 +26,8 @@ OTHERS = ("north_s6", "north_s6_b", "south_s6")
 REPO = Path(__file__).resolve().parents[2]
 MESSAGES = REPO / "deforestation_alerts" / "message"
 MARKER = "MARKER-SLICE6"
-STEP_KEYS = ("aoi", "alerts", "layers", "period", "prepare", "integrate")
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_slice6"
+STEP_KEYS = ("aoi", "period", "alerts", "harmonize", "integrate", "layers", "questionnaire", "evaluators")
+DATA = w.ROOT / "deforestation_alerts_walk_slice6"
 
 
 def catalogue(locale, name):
@@ -61,6 +61,8 @@ def pick_template(page, rec, *, out, data, template):
     (questionnaire Task 4); the Export section only builds and downloads.
     """
     w.goto_step(page, "questionnaire", 2000)
+    page.locator(".right-panel button.defo-template-toggle:visible").first.click()  # the template card's caret
+    page.wait_for_timeout(800)
     ph.pick_file(page, "Report template", template)  # Task 6's FileInputComponent helper
     w.wait_for(lambda: ph.manifest(data, PROJECT).get("report_template") == str(template), 30,
                "the template saved in project.json")
@@ -82,7 +84,7 @@ def info_buttons(page, rec, *, out):
     seen = {}
     for key in STEP_KEYS:
         w.goto_step(page, key, 2000)
-        assert steps[key]["description"][:60] in w.panel_text(page), f"{key}: no description"
+        assert steps[key]["instruction"][:60] in w.panel_text(page), f"{key}: no instruction line"
         page.locator(".right-panel .mdi-information-outline:visible").first.click()
         w.wait_for(lambda: page.locator(ph.MODAL).count(), 15, f"{key}: info dialog")
         text = page.locator(ph.MODAL).last.inner_text()
@@ -92,10 +94,13 @@ def info_buttons(page, rec, *, out):
         w.wait_for(lambda: not page.locator(ph.MODAL).count(), 15, f"{key}: info dialog closed")
     ui = catalogue("en", "ui")["analysis_tile"]
     w.goto_step(page, "analysis", 4000)
-    w.wait_for(lambda: ui["description"][:60] in w.panel_text(page), 60, "the Analysis panel")
+    # the analysis screen's info is the help button in its top bar, titled with the description
+    info = page.locator(f'button[aria-label="{ui["info_header"]}"]:visible').first
+    w.wait_for(lambda: info.count() and info.get_attribute("title") == ui["description"], 60,
+               "the Analysis info button")
 
     def _open_info():  # a click while the panel swaps from the last step can land on the leaving tile
-        page.locator(".defo-analysis-right .mdi-information-outline:visible").last.click()
+        info.click()
         page.wait_for_timeout(1500)
         return page.locator(ph.MODAL).count()
 
@@ -177,40 +182,47 @@ def _all_leaves(locale) -> set:
 
 def english_left(text, code) -> list:
     """The English catalogue texts (four letters or more, no placeholder, not
-    also a text of ``code``'s catalogue) that ``text`` still shows as words."""
-    own = _all_leaves(code)
+    also words of ``code``'s catalogue, e.g. es "Solo alertas…") that ``text``
+    still shows as words."""
+    own = "\n".join(_all_leaves(code))
+    word = lambda v, s: re.search(rf"(?<!\w){re.escape(v)}(?!\w)", s)  # noqa: E731
     return sorted(v for v in _all_leaves("en")
-                  if "{" not in v and len(re.sub(r"[^A-Za-z]", "", v)) >= 4 and v not in own
-                  and re.search(rf"(?<!\w){re.escape(v)}(?!\w)", text))
+                  if "{" not in v and len(re.sub(r"[^A-Za-z]", "", v)) >= 4 and not word(v, own)
+                  and word(v, text))
 
 
 def _switch(page, code):
     """Pick ``code`` in the language selector and wait until the pipeline
-    header reads that language (the prepare segment's tooltip is its label)."""
+    header reads that language (the harmonize segment's tooltip is its label)."""
     page.locator("button:has(.mdi-translate)").first.click()
     page.locator(f'{ph.MODAL} .v-list-item:has-text("({code})")').first.click()
-    label = catalogue(code, "app")["app"]["drawer_item"]["prepare"]
-    page.locator(f'[data-step-key="prepare"][title^="{label}"]').first.wait_for(state="attached", timeout=60000)
+    label = catalogue(code, "app")["app"]["drawer_item"]["harmonize"]
+    page.locator(f'[data-step-key="harmonize"][title^="{label}"]').first.wait_for(state="attached", timeout=60000)
 
 
 def languages(page, rec, *, out):
     english_legend = {v for v in leaves(catalogue("en", "legend")) if len(re.sub(r"[^A-Za-z]", "", v)) >= 4}
-    english_title = catalogue("en", "steps")["steps"]["prepare"]["title"]
+    english_title = catalogue("en", "app")["app"]["drawer_item"]["harmonize"]  # the header's title
+    # saved_ago's look-back edit left both downloads out of date, which locks
+    # Harmonize (it opens once a download is current): download them again,
+    # then harmonize them (a download no longer chains into it, option C).
+    ph.download_all(page, rec, out=out, expect_ready=2)
+    ph.run_all(page, rec, out=out, expect_ready=2, shot_name="languages_harmonized")
     # The active set's layer is switched on in Integrate & vectorize (while the
     # app is still in English) and stays on for the rest of the walk, so every
     # language's status legend can be read off the shared map.
     ph.show_alerts(page)
     for code in ("es-ES", "fr"):
-        w.goto_step(page, "prepare", 2000)
+        w.goto_step(page, "harmonize", 2000)
         _switch(page, code)
-        title = catalogue(code, "steps")["steps"]["prepare"]["title"]
-        description = catalogue(code, "steps")["steps"]["prepare"]["description"]
+        title = catalogue(code, "app")["app"]["drawer_item"]["harmonize"]
+        description = catalogue(code, "steps")["steps"]["harmonize"]["instruction"]
         w.wait_for(lambda: title in w.panel_text(page) and english_title not in w.panel_text(page)
-                   and description[:60] in w.panel_text(page), 60, f"{code}: the prepare panel translated")
+                   and description[:60] in w.panel_text(page), 60, f"{code}: the harmonize panel translated")
         body = page.evaluate("() => document.body.innerText")
         assert "⟦" not in body, f"{code}: a missing key renders"
         assert title in w.panel_text(page) and english_title not in w.panel_text(page), f"{code}: step not translated"
-        assert description[:60] in w.panel_text(page), f"{code}: the step's description is not translated"
+        assert description[:60] in w.panel_text(page), f"{code}: the step's instruction is not translated"
         rec[f"{code}_title"] = title
         for key in STEP_KEYS:  # every step's panel reads translated
             w.goto_step(page, key, 1500)
@@ -231,7 +243,7 @@ def languages(page, rec, *, out):
         # Analysis covers the shared map with its own before/after maps and
         # hides the map legend (slice4 asserts it), so the legend is read on a
         # step that shows the shared map.
-        w.goto_step(page, "prepare", 1500)
+        w.goto_step(page, "harmonize", 1500)
         w.wait_for(lambda: all(v in ph.legend_text(page) for v in statuses), 60,
                    f"{code}: the alert set's legend")
         ph.open_overview(page)  # the dashboard: a dialog, read with dialog_text
@@ -245,9 +257,9 @@ def languages(page, rec, *, out):
         assert all(v in legend for v in statuses), f"{code}: the legend lacks {statuses}"
         w.shot(page, out, f"lang_{code}")
         assert w.close_dialog(page), f"{code}: the Overview dialog did not close"
-        page.locator('[data-step-key="prepare"]:visible').first.wait_for(timeout=30000)
+        page.locator('[data-step-key="harmonize"]:visible').first.wait_for(timeout=30000)
     _switch(page, "en")
-    w.goto_step(page, "prepare", 2000)
+    w.goto_step(page, "harmonize", 2000)
     w.wait_for(lambda: english_title in w.panel_text(page), 60, "the app back in English")
     rec["back_to_en"] = True
 

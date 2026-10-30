@@ -15,11 +15,7 @@ from gui.tile.analysis.state import AnalysisState
 STATUSES = ["Confirmed", "False Positive", "Need revision"]
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 @pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])

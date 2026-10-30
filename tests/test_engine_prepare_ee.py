@@ -55,6 +55,10 @@ def test_glad_l_downloads_natively_and_harmonizes_onto_a_utm_grid(gee, tiny_aoi,
                          meta=meta, aoi=tiny_aoi),
         on_tiles=lambda done, total: tiles.append((done, total)),
     )
+    runner.apply_artifacts(p, arts)  # the download, then the Harmonize step's run (no chain)
+    arts = {**arts, **runner.run_source_row(
+        runner.SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=Y2025, source="GLAD-L",
+                         meta=meta, aoi=tiny_aoi, mode="harmonize"))}
     assert tiles and tiles[-1][0] == tiles[-1][1]
     raw_path = tmp_path / arts[fp.raw_key(Y2025.id, "GLAD-L")].rel_path
     harm_path = tmp_path / arts[fp.harm_key(Y2025.id, "GLAD-L")].rel_path

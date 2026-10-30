@@ -48,7 +48,7 @@ def test_has_probable_is_false_only_for_a_date_only_custom_source():
 
 def test_choices_skip_sources_that_are_neither_ready_nor_left_out(monkeypatch):
     """A covered source whose files are not built yet is not offered: it is
-    the Download & harmonize step's business, not a reason to show."""
+    the Harmonize step's business, not a reason to show."""
     rows = [
         PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT, "covered", (), stats=None),
         PrepareRow("RADD", Status.MISSING, Status.MISSING, "covered", ()),
@@ -67,7 +67,7 @@ def test_outcome_lines_of_an_empty_set():
     assert lines == [
         "GLAD-L: 120 alert pixels (all below the minimum size, or under earlier sets' footprints)",
         "MINE: all 7 alert pixels removed by masks",
-        "RADD: 0 alerts found",
+        "RADD: 0 alert pixels found",
         "GLAD-S2 does not cover this AOI",
     ]
 
@@ -107,17 +107,18 @@ def test_a_stored_scale_reaches_the_download_estimate_in_metres():
 
 
 def test_publish_alerts_refuses_once_another_set_is_active():
-    state = SimpleNamespace(_lock=threading.RLock(),  # _publish_alerts publishes under AppState's lock
+    from gui.scripts import set_store
+
+    state = SimpleNamespace(_lock=threading.RLock(),  # Integrate publishes under AppState's lock
                             project=SimpleNamespace(value=SimpleNamespace(name="i", active_set="other")),
                             actual_alert_id=SimpleNamespace(set=lambda v: None),
                             alerts_gdf=SimpleNamespace(set=lambda v: None))
-    result = SimpleNamespace(alert_set=SimpleNamespace(id="mine"), alerts=None)
-    assert integrate_jobs._publish_alerts(state, "i", result) is False
+    assert set_store.publish_set_alerts(state, "i", SimpleNamespace(id="mine"), None) is False
 
 
 def test_outcome_lines_say_when_probable_alerts_were_left_out():
     outcomes = {"RADD": {"alert_pixels": 0, "alert_pixels_unmasked": 0}, "GLAD-L": {"alert_pixels": 0, "alert_pixels_unmasked": 0}}
     lines = integrate_jobs.outcome_lines(outcomes, {}, confirmed_only=["RADD", "OTHER"])
-    assert lines == ["GLAD-L: 0 alerts found", "RADD: 0 alerts found",
+    assert lines == ["GLAD-L: 0 alert pixels found", "RADD: 0 alert pixels found",
                      t("steps.integrate.outcome_confirmed_only", source="RADD")]
     assert "left out" in lines[-1]

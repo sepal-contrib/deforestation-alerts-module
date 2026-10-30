@@ -1,4 +1,4 @@
-"""The Download & harmonize batch footer (spec "Footer"): its counts, idle and busy."""
+"""The Harmonize batch footer (spec "Footer"): its counts, idle and busy."""
 
 from datetime import date, datetime
 
@@ -12,8 +12,10 @@ from gui.scripts import prepare_jobs
 from gui.tile import prepare_step
 from gui.widget.batch_footer import BatchFooter, footer_counts
 
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
-FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 
 def _walk(w, out):
@@ -70,14 +72,14 @@ def test_footer_counts_only_this_scope():
     add_predefined_source(p, "RADD")
     p.periods = {JAN.id: JAN, FEB.id: FEB}
     p.active_period = JAN.id
-    mine = {prepare_step._inflight_key("r", JAN.id, "RADD")}
+    mine = {prepare_step.inflight_key("r", JAN.id, "RADD")}
     foreign = {prepare_jobs.progress_key("r", FEB.id, "source", "RADD"): "download",
                prepare_jobs.progress_key("other", JAN.id, "source", "RADD"): "download"}
     stages = prepare_step.scope_stages(foreign, "r", JAN.id)
     assert stages == {}
     [row] = prepare_step.build_rows(p, "/tmp/x", JAN, [PrepareRow("RADD", Status.MISSING, Status.MISSING)],
                                     mine=mine, errors={}, on=set(), building=set(), run=None, toggle=None,
-                                    on_info=None, on_refresh=None, on_delete=None, stages=stages)
+                                    on_info=None, on_delete=None, stages=stages)
     assert row["cells"][1]["label"] == "Queued"
     rows = prepare_step.mine_rows(p, JAN, mine)
     assert rows == {prepare_jobs.progress_key("r", JAN.id, "source", "RADD")}
@@ -89,10 +91,13 @@ def test_footer_idle_shows_run_and_caret():
     rc, calls = _render(IDLE, menu=[{"label": "Download all again (3)", "on_click": lambda: calls.append("again")}])
     try:
         _btn(rc, "Run 2 pending").click()
-        [item] = [w for w in _all(rc) if isinstance(w, v.ListItem)]
-        item.fire_event("click", None)
+        assert "mdi-menu-down" in _texts(rc) and "Download all again (3)" not in _texts(rc)
+        caret = next(w for w in _all(rc) if isinstance(w, v.Btn) and "defo-split-caret" in (w.class_ or ""))
+        caret.click()
+        assert "mdi-menu-up" in _texts(rc)
+        _btn(rc, "Download all again (3)").click()
         assert calls == ["run", "again"]
-        assert "mdi-menu-up" in _texts(rc) and "Download all again (3)" in _texts(rc)
+        assert "Download all again (3)" not in _texts(rc)  # an item click closes the stack
         assert "mdi-stop" not in _texts(rc) and not any("running" in s for s in _texts(rc))
     finally:
         rc.close()
@@ -101,7 +106,7 @@ def test_footer_idle_shows_run_and_caret():
 def test_footer_idle_without_a_menu_has_no_caret_and_nothing_pending_disables_run():
     rc, _ = _render(IDLE, pending=0)
     try:
-        assert "mdi-menu-up" not in _texts(rc)
+        assert "mdi-menu-down" not in _texts(rc)
         assert _btn(rc, "Run 2 pending").disabled
     finally:
         rc.close()
@@ -138,7 +143,8 @@ def test_a_disabled_menu_item_keeps_its_tooltip():
     rc, _ = _render(IDLE, menu=[{"label": "Download all again (3)", "on_click": lambda: clicked.append(1),
                                  "disabled": True, "title": "Run the pending masks first"}])
     try:
-        [item] = [w for w in _all(rc) if isinstance(w, v.ListItem)]
+        next(w for w in _all(rc) if isinstance(w, v.Btn) and "defo-split-caret" in (w.class_ or "")).click()
+        item = _btn(rc, "Download all again (3)")
         assert item.disabled
         tips = [w.attributes.get("title") for w in _all(rc) if isinstance(w, v.Html)]
         assert "Run the pending masks first" in tips

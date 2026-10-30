@@ -25,11 +25,7 @@ from gui.scripts.alert_filter import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 QS = default_questions() + [Question(key="road", label="Road nearby?", options=[
@@ -80,6 +76,11 @@ def test_ids_measures_dates_images_and_lists_are_never_offered():
                 "area_ha", "before_img", "before_img_info", "alert_type_unique", "geometry"):
         assert col not in offered, col
     assert "q_deleted" not in offered  # a deleted question's answers
+
+
+def test_review_group_is_not_a_filter_attribute():
+    gdf = _six().assign(review_group=[1, 1, 2, 2, 3, 3])
+    assert "review_group" not in {c.column for c in filter_columns(gdf, QS)}
 
 
 def test_a_column_needs_two_to_fifty_distinct_values():

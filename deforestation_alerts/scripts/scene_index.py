@@ -24,7 +24,7 @@ from shapely.geometry import shape
 INDEX_VERSION = 2
 
 #: One lock per project directory, process-wide. Every write of the index
-#: (``scene_cache.store_chunk`` and ``note_failed_chunk``) and a
+#: (``scene_cache.store_chunk``) and a
 #: review package's copy of it (``project.share.build_package``) take it, so
 #: a package never holds the files of two different writes.
 _INDEX_LOCKS: dict[str, threading.Lock] = {}
@@ -76,26 +76,10 @@ class PlanetState(BaseModel):
     access: bool = False
 
 
-class ChunkRecord(BaseModel):
-    """One window the index was fetched in, and whether it landed.
-
-    The index is built a month at a time (spec §5.5 and §9). One ``getInfo``
-    over a two-year project asks Earth Engine for the whole span at once and
-    has no partial result, so a payload too large leaves no index at all;
-    chunked, a failure part-way leaves what did land, and this is the record
-    of which months that is. ``ok`` is false for a window that was requested
-    and did not come back, so a reader can tell "no images there" from "never
-    successfully asked".
-    """
-
-    start: date
-    end: date
-    fetched_at: datetime
-    ok: bool = True
-
-
 class SceneManifest(BaseModel):
-    """What is in ``scenes.parquet``, and how old it is."""
+    """What is in ``scenes.parquet``, and how old it is. Extra keys are
+    ignored (pydantic's default), so a manifest with the retired ``chunks``
+    list still reads."""
 
     version: int = INDEX_VERSION
     aoi_digest: str
@@ -103,10 +87,6 @@ class SceneManifest(BaseModel):
     covered: Coverage
     counts: dict[str, int] = Field(default_factory=dict)
     planet: PlanetState = Field(default_factory=PlanetState)
-    #: Defaulted on purpose: every manifest already on disk was written
-    #: before this field existed, and a required field here would turn every
-    #: cached project into an unreadable index and a full refetch.
-    chunks: list[ChunkRecord] = Field(default_factory=list)
 
 
 SCENE_COLUMNS = ("source", "date", "cloud", "tile", "key")

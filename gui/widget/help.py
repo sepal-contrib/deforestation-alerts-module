@@ -6,15 +6,14 @@ button that opens a popup dialog rendering Markdown (links included). Short
 per-field help belongs in the field's own ``hint``/``persistent_hint`` props,
 not here.
 
-``StepIntro`` is how every workflow step opens: its description plus an
-``InfoButton``.
+Every workflow step's ``InfoButton`` sits in the pipeline header, at the right
+of the step's instruction line (``gui/widget/pipeline_header.py``).
 """
 
 import reacton.ipyvuetify as rv
 import solara
 
 from gui.i18n import t
-from gui.widget.text_style import MUTED
 
 
 @solara.component
@@ -22,9 +21,9 @@ def InfoButton(title: str, markdown: str, icon: str = "mdi-information-outline")
     """Info icon button opening an 'About …' popup dialog with Markdown content.
 
     Uses the proven top-level ``use_state`` + ``rv.Dialog(eager=True)`` toggle
-    (same as ``ConfirmDialog``). Render it once per tile near the component's
-    top level — nested button→dialog toggles (e.g. inside list rows) have
-    proved unreliable.
+    (same as ``ConfirmDialog``). Render it once per tile (or once in the
+    pipeline header) near the component's top level — nested button→dialog
+    toggles (e.g. inside list rows) have proved unreliable.
     """
     open_, set_open = solara.use_state(False)
 
@@ -49,7 +48,7 @@ def InfoButton(title: str, markdown: str, icon: str = "mdi-information-outline")
             with rv.CardTitle(style_="gap:8px;"):
                 rv.Icon(children=[icon])
                 solara.Text(title)
-            with rv.CardText():
+            with rv.CardText(class_="defo-markdown"):
                 solara.Markdown(markdown)
             with rv.CardActions(style_="justify-content: flex-end;"):
                 solara.Button(
@@ -58,14 +57,3 @@ def InfoButton(title: str, markdown: str, icon: str = "mdi-information-outline")
                     text=True,
                     small=True,
                 )
-
-
-@solara.component
-def StepIntro(description: str, title: str, markdown: str):
-    """A workflow step's opening line (spec §14 slice 6): its description and
-    an info button with the longer explanation. Rendered once per step, as the
-    first line of its body (the header above names the step), at the
-    component's top level (see InfoButton)."""
-    with solara.Row(style="gap:4px;align-items:center;flex-wrap:nowrap;"):
-        solara.Text(description, style=MUTED + "flex:1 1 auto;")
-        InfoButton(title, markdown)

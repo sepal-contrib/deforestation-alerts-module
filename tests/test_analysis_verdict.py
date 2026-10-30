@@ -2,8 +2,8 @@
 
 The loss driver left this block for the Questions section (spec D4): its
 hiding for a false positive, its codes and its dirty mark are tested in
-tests/test_analysis_questions_panel.py. Save & next, Save and the save-state
-line left it for the panel's sticky footer (spec D6): tested in
+tests/test_analysis_questions_panel.py. Save, Next and the save-state line
+left it for the panel's dock (spec D6; option B, 2026-10-26): tested in
 tests/test_analysis_footer.py.
 """
 
@@ -12,7 +12,6 @@ from types import SimpleNamespace
 
 import geopandas as gpd
 import pytest
-from pysepal.i18n import set_locale
 from shapely.geometry import box
 
 from deforestation_alerts.project.models import Project
@@ -23,13 +22,10 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import review_panel
 from gui.tile.analysis import review_save
 from gui.tile.analysis.state import AnalysisState
+from tests._review_helpers import stub_admin_lookups
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _panel(monkeypatch, tmp_path):
@@ -114,10 +110,10 @@ def test_an_alert_change_seeds_the_verdict_from_the_row(tmp_path, monkeypatch):
 def test_a_save_with_an_unapplied_drawing_is_refused_before_anything_is_written(
     tmp_path, monkeypatch
 ):
-    """The reviewer draws (or adds a model's prediction) and presses Save &
-    next without *Apply*: the polygon on the maps is not what ``defo_layer``
+    """The reviewer draws (or adds a model's prediction) and presses Save
+    without *Apply*: the polygon on the maps is not what ``defo_layer``
     holds, so the save would store the previous polygon -- or none -- over work
-    still on screen, and Save & next would navigate it away. OLD disabled the
+    still on screen. OLD disabled the
     review Save for the whole edit session; the refusal is that guard, as a
     message that names what to do. Nothing is written: not the store, not the
     row."""
@@ -144,14 +140,6 @@ def test_a_save_with_an_unapplied_drawing_is_refused_before_anything_is_written(
     assert gdf.at[0, "status"] == "Not reviewed", "the refused save changed the row"
 
 
-class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
-    def __getattr__(self, name):
-        return lambda *a, **k: self
-
-    def getInfo(self):  # noqa: N802 - Earth Engine's name
-        return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
-
-
 def _review_row():
     """One alert row with every column a review Save writes, all empty."""
     gdf = gpd.GeoDataFrame(
@@ -172,7 +160,7 @@ def _save_pieces(monkeypatch, gdf, *, verdict, drawn=None):
     import gui.tile.analysis.export as export
     from gui.tile.analysis.state import capture_alert
 
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     app_state = AppState()
     # A project with the default questionnaire (Loss driver): the questions a
     # Save writes come with the answers (``capture_alert``).

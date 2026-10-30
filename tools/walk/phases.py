@@ -59,9 +59,9 @@ def visible_btn(page, text, scope=""):
 # (queue counter, navigation, facts grid + status chip), block B (the verdict)
 # and three sections -- Questions (the loss driver and every other project
 # question, spec D4), Refine polygon, and Export this alert, which sits in the
-# sticky footer above Save & next / Save (spec D6) -- whose bodies are
-# COLLAPSED (hidden with ``display``), so nothing inside them is ``:visible``
-# until the header is clicked. The retired "Alert info" card's facts live in block A.
+# dock fixed to the panel's bottom edge, above Save / Next (spec D6; option B,
+# 2026-10-26) -- whose bodies are COLLAPSED (hidden with ``display``), so
+# nothing inside them is ``:visible`` until the header is clicked. The retired "Alert info" card's facts live in block A.
 # Block A is a flat ``panel_block`` (a ``div.py-3``, no longer a ``v-card``).
 _BLOCK_A_JS = """
     const card = [...document.querySelectorAll('.defo-analysis-right .py-3, .defo-analysis-right .pb-3')]
@@ -94,7 +94,8 @@ def status_chip(page):
 def open_section(page, title):
     """Open a collapsible Analysis section ("Questions" / "Refine polygon" /
     "Export this alert"): its body is hidden with ``display`` until the 50px header is
-    clicked, and the header's chevron says which way it is."""
+    clicked, and the header's chevron says which way it is -- down when open
+    (closed, the sections point right and the dock's Export up)."""
     header = visible_btn(page, title)
     wait_for(lambda: header.count(), 30, f'the "{title}" section header')
     if not header.locator(".mdi-chevron-down").count():
@@ -102,28 +103,27 @@ def open_section(page, title):
         page.wait_for_timeout(800)
 
 
-#: The panel's sticky footer (``gui/tile/analysis/footer.py``), by its class.
+#: The panel's dock (``gui/tile/analysis/footer.py``), by its class.
 _FOOTER = ".defo-analysis-footer"
 
 
 def save_btn(page):
-    """The footer's *Save* -- exact text, since *Save & next* also reads
-    "Save", and SCOPED to the footer, since three other catalogue strings
+    """The dock's *Save* -- exact text, as no other dock button reads
+    "Save" in part, and SCOPED to the dock, since three other catalogue strings
     render exactly "Save" too (the alert-source, period and visualization
     modals' own Save buttons). All three live inside modals today, so a
     document-wide match is unique only by luck: a modal a preceding phase left
-    open would be clicked instead, with no diagnostic. The footer's buttons
+    open would be clicked instead, with no diagnostic. The dock's buttons
     sit outside the collapsed Export body, so no section has to be opened."""
     return page.locator(f"{_FOOTER} button:visible",
                         has_text=re.compile(r"^\s*Save\s*$")).first
 
 
 def download_btn(page):
-    """The dashed *Build alert files* tile (``.defo-build-tile``), in the
-    Export section's body (open it first). Only before a build: it hides once
-    a build left files, and *Rebuild files* is another button
-    (``.defo-rebuild``). Found by its class, not its label: "(save first)"
-    shows in the label until the alert is saved."""
+    """The build row (``.defo-build-tile``), the last row of the Export
+    section's file list (open it first). The same row before and after a
+    build: *Build files*, then *Rebuild files*, *Building files…* while one
+    runs. Found by its class, not its title, which changes with the state."""
     return page.locator('.defo-analysis-right .defo-build-tile:visible').first
 
 
@@ -143,7 +143,7 @@ def _alternatives(texts, slot) -> str:
 
 def prepare_labels(forms, ready, running, stop):
     """The labels ``run_all`` reads, in one language: ``forms`` the plural
-    forms of ``steps.prepare.run_all`` (each with ``{n}``), ``ready`` the
+    forms of ``steps.harmonize.run_all`` (each with ``{n}``), ``ready`` the
     ``steps.prepare.state_ready`` text, ``running`` the texts of
     ``RUNNING_KEYS`` (``{pct}`` matches any percent): a pattern, ``stop`` the
     ``steps.prepare.footer_stop`` text of the button that replaces Run while a
@@ -158,10 +158,22 @@ def en_prepare():
     if EN_PREPARE is None:
         from tools.walk.walklib import MESSAGES_EN
 
-        node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["prepare"]["run_all"]
+        node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["harmonize"]["run_all"]
         EN_PREPARE = prepare_labels(node.values(), en("steps.prepare.state_ready"), [en(k) for k in RUNNING_KEYS],
                                     en("steps.prepare.footer_stop"))
     return EN_PREPARE
+
+
+def en_download():
+    """The Alerts step's labels, as ``en_prepare``: "Download {n} pending",
+    a downloaded row's "Downloaded" and the running texts (a file reads
+    "Reading")."""
+    from tools.walk.walklib import MESSAGES_EN
+
+    node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["alerts"]["download_all"]
+    return prepare_labels(node.values(), en("steps.alerts.state_downloaded"),
+                          [en(k) for k in RUNNING_KEYS] + [en("steps.alerts.state_reading")],
+                          en("steps.prepare.footer_stop"))
 
 
 def run_button(page, labels=None):
@@ -205,7 +217,7 @@ def prepare_state(page, labels=None):
 
 
 def save_grid(page, *, resolution="30"):
-    goto_step(page, "prepare", 2000)
+    goto_step(page, "harmonize", 2000)
     page.locator(".mdi-crosshairs-gps:visible").first.click()
     page.wait_for_timeout(500)
     page.locator('.right-panel .v-text-field:has(label:has-text("Resolution")) input').first.fill(resolution)
@@ -214,22 +226,35 @@ def save_grid(page, *, resolution="30"):
     page.wait_for_timeout(1500)
 
 
-def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_done", labels=None):
-    """Click "Run N pending" and wait for the job: it must start (a row reads
-    running, Stop shows, or nothing is pending any more) and end (no running
-    cell, Stop gone again) with ``expect_ready`` "Ready" status cells (one per
-    source row and one per mask row on the panel, whatever its origin) and no
-    error toast. ``labels`` (``prepare_labels``) for a language other than
-    English."""
-    goto_step(page, "prepare", 2000)
+def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_done", labels=None,
+            step="harmonize"):
+    """Click Harmonize's "Harmonize N pending" and wait for the job: it must
+    start (a row reads running, Stop shows, or nothing is pending any more)
+    and end (no running cell, Stop gone again) with ``expect_ready`` "Ready"
+    status cells (one per source row and one per mask row on the panel,
+    whatever its origin) and no error toast. ``labels`` (``prepare_labels``)
+    for a language other than English. ``step="alerts"`` with ``en_download``
+    labels runs Alerts' "Download N pending" instead (``download_all``)."""
+    goto_step(page, step, 2000)
     run = run_button(page, labels)
     t_run = now_ms(page)
-    run.click()
+
+    def started():
+        # Stop replaces Run while the job lasts, so "nothing pending" is only
+        # true once Stop is not shown either
+        return (prepare_state(page, labels)["running"] or job_running(page, labels)
+                or pending_count(page, labels) == 0)
+
+    meta_loading = en("steps.alerts.meta_loading")
+    for _ in range(20):  # a GLAD-L download right after opening: its band list may still be loading
+        t_click = now_ms(page)
+        run.click()
+        wait_for(lambda: started() or any(x["msg"] == meta_loading for x in toasts_since(page, t_click)),
+                 30, "the job to start", poll=0.3)
+        if started():
+            break
+        page.wait_for_timeout(3000)
     t0 = time.time()
-    # Stop replaces Run while the job lasts, so "nothing pending" is only true
-    # once Stop is not shown either
-    wait_for(lambda: prepare_state(page, labels)["running"] or job_running(page, labels)
-             or pending_count(page, labels) == 0, 30, "the job to start", poll=0.3)
     while time.time() - t0 < timeout:
         st = prepare_state(page, labels)
         idle = not st["running"] and not job_running(page, labels)
@@ -238,15 +263,26 @@ def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_d
         if errors(toasts_since(page, t_run)) and idle:
             break
         page.wait_for_timeout(3000)
-    rec["prepare_seconds"] = round(time.time() - t0)
-    rec["prepare_panel"] = panel_text(page)[:1500].replace("\n", " | ")
-    rec["prepare_toasts"] = [f"{x['kind']}: {x['msg']}" for x in toasts_since(page, t_run)]
+    tag = "prepare" if step == "harmonize" else step
+    rec[f"{tag}_seconds"] = round(time.time() - t0)
+    rec[f"{tag}_panel"] = panel_text(page)[:1500].replace("\n", " | ")
+    rec[f"{tag}_toasts"] = [f"{x['kind']}: {x['msg']}" for x in toasts_since(page, t_run)]
     shot(page, out, shot_name)
-    assert prepare_state(page, labels)["ready"] >= expect_ready, rec["prepare_panel"]
-    assert not errors(toasts_since(page, t_run)), rec["prepare_toasts"]
+    assert prepare_state(page, labels)["ready"] >= expect_ready, rec[f"{tag}_panel"]
+    assert not errors(toasts_since(page, t_run)), rec[f"{tag}_toasts"]
+
+
+def download_all(page, rec, *, out, expect_ready=2, timeout=900):
+    """Alerts' "Download N pending", until ``expect_ready`` rows read Downloaded."""
+    run_all(page, rec, out=out, expect_ready=expect_ready, timeout=timeout, shot_name="download_done",
+            labels=en_download(), step="alerts")
+    assert pending_count(page, en_download()) == 0, rec["alerts_panel"]
 
 
 def prepare_grid_and_run_all(page, rec, *, out, resolution="30", expect_ready=2, timeout=900):
+    """Download the sources in Alerts, then save the grid and harmonize them in
+    Harmonize (``expect_ready``: the source rows plus any mask rows)."""
+    download_all(page, rec, out=out, expect_ready=0, timeout=timeout)
     save_grid(page, resolution=resolution)
     run_all(page, rec, out=out, expect_ready=expect_ready, timeout=timeout)
 
@@ -297,7 +333,7 @@ def integrate_and_land(page, rec, *, out, timeout=600, replace=False):
 def review_and_save(page, rec, *, out):
     """Block B: answer the verdict question, pick a loss driver in the
     Questions section (collapsed by default, so opened first), then **Save**
-    (not *Save & next*: the assertions below read the alert that was saved).
+    (not *Next*: the assertions below read the alert that was saved).
     There is no default answer any more -- an unanswered Save is refused -- so
     the verdict button is pressed here."""
     page.wait_for_timeout(2000)
@@ -324,7 +360,7 @@ def review_and_save(page, rec, *, out):
     # answer and not the button that was pressed.
     assert (rec["status_after_save"] or "").startswith("Reviewed"), rec["facts_after_save"]
     open_section(page, "Export this alert")
-    assert not download_btn(page).is_disabled(), "Build alert files still disabled after the Save"
+    assert not download_btn(page).is_disabled(), "Build files still disabled after the Save"
 
 
 def _lane_options(page):
@@ -367,6 +403,15 @@ def pick_images(page, rec, *, out):
 
 
 def download_with_images(page, rec, *, out, folder):
+    """Build the alert's files with the images on screen. A pick is an
+    unsaved change, and Build files waits for a Save (the save/export dock)."""
+    if save_btn(page).is_enabled():
+        t_ms = now_ms(page)
+        save_btn(page).click()
+        wait_for(lambda: any("saved" in x["msg"].lower() or x["kind"] in ("toast-error", "toast-warning")
+                             for x in toasts_since(page, t_ms)), 120, "save outcome toast")
+        assert not errors(toasts_since(page, t_ms)), toasts_since(page, t_ms)
+        page.wait_for_timeout(1500)
     open_section(page, "Export this alert")
     before = set(os.listdir(folder))
     t_ms = now_ms(page)
@@ -559,8 +604,11 @@ def select_only(page, label, option, scope=MODAL):
             if wanted == keep and selected != wanted:
                 item.click()
                 page.wait_for_timeout(300)
-    page.locator(f'{scope} .v-select:has(label:text-is("{label}")) .v-select__slot').last.click()  # close it
+    # close it: Escape, as a long menu can cover its own field; a dialog with
+    # an open menu leaves Escape to the menu (Vuetify's open dependents)
+    page.keyboard.press("Escape")
     page.wait_for_timeout(400)
+    assert dialog_open(page), f"Escape closed the dialog, not the {label} menu"
 
 
 def type_asset(page, asset_id, scope=MODAL):
@@ -600,14 +648,14 @@ def row_button(page, name, icon, scope=".right-panel"):
     """A row action by its icon (ProductTable): mdi-map-plus / mdi-map-minus (show / hide),
     mdi-information-outline (details), mdi-dots-vertical (a mask's menu),
     mdi-pencil-outline, mdi-delete-outline, mdi-radiobox-blank /
-    mdi-radiobox-marked (select). Not a Download & harmonize row's run: that
+    mdi-radiobox-marked (select). Not a download/harmonize row's run: that
     is its verb pill (``row_pill``), and mdi-refresh is both the source's
     Download again (``row_action``) and the pill's Retry."""
     return row(page, name, scope).locator(f"button:has(.{icon})").first
 
 
 def row_pill(page, name, verb, scope=".right-panel"):
-    """The verb pill of a Download & harmonize row's Status cell, by its label:
+    """The verb pill of a download/harmonize row's Status cell, by its label:
     ``verb`` is ``download`` / ``harmonize`` / ``align`` / ``retry`` (the
     ``steps.prepare.verb_*`` texts). A row that is ready, running, queued,
     blocked or on a review copy shows a state, not a pill: ``.count()`` is 0."""
@@ -673,8 +721,8 @@ def wait_toast(page, t0_ms, text, timeout=60, kind=None):
 
 
 def add_mask(page, rec, *, name, origin, ref, band, mode="Keep", out):
-    """Download & harmonize → Masks card → Add mask, validated and listed (spec §7.3)."""
-    goto_step(page, "prepare", 2000)
+    """Harmonize → Masks card → Add mask, validated and listed (spec §7.3)."""
+    goto_step(page, "harmonize", 2000)
     visible_btn(page, "Add mask", ".right-panel").click()
     wait_for(lambda: dialog_open(page), 15, "the mask modal")
     modal_field(page, "Name").fill(name)
@@ -742,6 +790,7 @@ def run_phases(page, phases, report, report_path):
         except Exception as e:  # noqa: BLE001
             rec.update(ok=False, error=f"{e.__class__.__name__}: {e}", trace=traceback.format_exc()[-1500:])
             ok = False
+            page.screenshot(path=str(Path(report_path).parent / f"FAILED_{name}.png"))
         rec["toasts"] = toasts_since(page, t0)
         report.setdefault("phases", {})[name] = rec
         with open(report_path, "w") as f:

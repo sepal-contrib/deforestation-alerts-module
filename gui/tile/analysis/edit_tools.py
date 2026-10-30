@@ -116,10 +116,10 @@ from pysepal import sepalwidgets as sw
 from pysepal.solara.notifications import notify
 
 from deforestation_alerts import gdal_env
+from deforestation_alerts.project import review_groups
 from deforestation_alerts.scripts.cnn_worker import apply_dl_model
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import (
-    calculate_total_area,
     convertir_formato3,
     filter_features_by_color,
     geojson_to_geodataframe,
@@ -221,11 +221,17 @@ def found_text(analysis, model) -> str:
              area=format_number(area, 1))
 
 
+def _union_area(gdf, crs) -> float:
+    """Hectares of the union of ``gdf``'s features, as the save measures it."""
+    return review_groups.polygon_area_ha(gdf.geometry.union_all(), crs, source=gdf.crs or "EPSG:4326")
+
+
 def wire_refine_badge(analysis, set_badge, crs_of=lambda: None, *, labels=None):
     """Keep a section badge reading the drawn polygon: *nothing drawn*, or the
-    shape count and the area -- the same ``calculate_total_area`` in the same
-    CRS (``crs_of()``, the project's ``state.area_crs``) the save stores as
-    ``area_ha``, so the badge and the column can never disagree.
+    shape count and the area -- the area of the features' union, measured by
+    the same ``review_groups.polygon_area_ha`` in the same CRS (``crs_of()``,
+    the project's ``state.area_crs``) the save stores as ``area_ha`` (spec
+    2026-10-26 §4.3), so the badge and the column can never disagree.
 
     ``labels`` is the screen's ``Labels``: ``_show`` is registered in it, so
     the badge follows a language switch (it reads ``defo_layer`` afresh)."""
@@ -238,7 +244,7 @@ def wire_refine_badge(analysis, set_badge, crs_of=lambda: None, *, labels=None):
         # through ``reset_alert`` and ``view_actual_alert`` -- out of the
         # badge and into navigation. Every production writer holds the
         # GeoDataFrame-or-``None`` invariant ``len`` and
-        # ``calculate_total_area`` need (``state.reset_alert`` sets ``None``,
+        # ``_union_area`` need (``state.reset_alert`` sets ``None``,
         # ``view_actual_alert`` a ``multipolygon_to_geodataframe``,
         # ``_save_edition`` a ``geojson_to_geodataframe``), so this never
         # fires today; a summary line is not worth betting the queue on it
@@ -250,7 +256,7 @@ def wire_refine_badge(analysis, set_badge, crs_of=lambda: None, *, labels=None):
                 return
             set_badge(t("analysis_tile.sections.refine_summary",
                         shapes=tn("analysis_tile.sections.shapes", len(gdf)),
-                        area=format_number(calculate_total_area(gdf, crs_of()), 1)), color="primary")
+                        area=format_number(_union_area(gdf, crs_of()), 1)), color="primary")
         except Exception:
             logger.exception("Analysis: the refine badge could not be written")
 

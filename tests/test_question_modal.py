@@ -5,7 +5,6 @@ import ipyvuetify as v
 import pytest
 import reacton
 import solara
-from pysepal.i18n import set_locale
 
 from deforestation_alerts.project.models import default_questions
 from gui.i18n import t
@@ -15,10 +14,7 @@ from gui.widget.enter_key import ENTER_DEFAULT
 LOSS = default_questions()[0]
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _draft(**kw):

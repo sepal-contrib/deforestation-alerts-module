@@ -258,9 +258,6 @@ def test_an_empty_project_fetches_the_index_and_caches_it(data_root, monkeypatch
                              ("SCENES", date(2026, 3, 3), date(2026, 4, 2))]
             _, manifest = scene_cache.read_index(paths.project_dir("sl"))
             assert manifest is not None  # it went to disk, so the next session is free
-            # and the manifest records them, in the order they landed
-            assert [(c.start, c.end, c.ok) for c in manifest.chunks] == [
-                (s, e, True) for _, s, e in asked]
             # A project that never had an index is not "rebuilding" one: that
             # word is reserved for a cache that was there and unreadable.
             assert _toasts("info") == [] and _toasts("error") == []
@@ -1095,8 +1092,7 @@ def test_a_chunk_that_fails_part_way_leaves_the_chunks_that_landed(
     there was no partial result: a payload too large meant the index never
     built and "Try again" repeated the same oversized call. Now the months
     that did come back are on disk and published, the failure is still
-    reported, and the manifest records which window did not land -- so an
-    empty month reads as "never successfully asked" rather than "no images".
+    reported, and the coverage does not grow over the window that failed.
     """
     asked = []
 
@@ -1120,11 +1116,6 @@ def test_a_chunk_that_fails_part_way_leaves_the_chunks_that_landed(
             assert len(state.scene_index.value.scenes) == 1
             _, on_disk = scene_cache.read_index(paths.project_dir("sl"))
             assert on_disk.covered == state.scene_manifest.value.covered
-            # the third chunk is recorded as the one that did not land
-            assert [(c.start, c.end, c.ok) for c in on_disk.chunks] == [
-                (date(2026, 9, 2), date(2026, 10, 2), True),
-                (date(2026, 8, 2), date(2026, 9, 2), True),
-                (date(2026, 7, 2), date(2026, 8, 2), False)]
             # and the reviewer is told, once
             assert _toasts("error") == [t("imagery.index_failed",
                                           error="Request payload size exceeds the limit")]

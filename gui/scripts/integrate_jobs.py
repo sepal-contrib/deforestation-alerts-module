@@ -37,6 +37,7 @@ from typing import Optional
 import pandas as pd
 
 from deforestation_alerts.engine import pmtiles as pmt
+from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.engine.integrate import run_integration
 from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project import io, paths
@@ -97,14 +98,15 @@ def max_alerts_error(text) -> Optional[str]:
     return None if s.isascii() and s.isdigit() and int(s) >= 1 else "steps.integrate.error_max_alerts"
 
 
-def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_only=()):
+def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_only=(), keep_small_growth=True):
     """The form's values as ``(AlertSetParams, None)``, or ``(None, message key)``.
 
     ``max_alerts``: the limit as typed, or None for no limit (stored as 0).
     ``attribute_layers``: the attribute-layer configs in order (None: none). A
     new set writes them as ``attribute_layers``, never as the legacy
     ``attribute_config`` (spec D3). ``confirmed_only``: sources whose probable
-    alerts are left out. The area is always the whole AOI.
+    alerts are left out. ``keep_small_growth``: clusters under the minimum
+    that touch earlier loss stay. The area is always the whole AOI.
     """
     try:
         ha = float(str(min_size).strip())
@@ -122,6 +124,7 @@ def params_from_form(min_size, sorting, max_alerts, attribute_layers, confirmed_
         attribute_config=None,
         attribute_layers=list(attribute_layers or []),
         confirmed_only=list(confirmed_only or []),
+        keep_small_growth=bool(keep_small_growth),
     ), None
 
 
@@ -145,7 +148,7 @@ def scope_changed(project, period_id: str, scope: tuple) -> Optional[str]:
     """What ``project`` no longer shares with a job started on ``period_id``
     and ``scope`` (``run_scope``): ``"period"``, ``"aoi"`` or ``"grid"``, else
     None (the job's results may be recorded). Both job layers use it
-    (Integrate and Download & harmonize)."""
+    (Integrate and download/harmonize)."""
     if period_id not in project.periods:
         return "period"
     digest, signature = run_scope(project)
@@ -165,6 +168,18 @@ def changed_since(job, project) -> Optional[str]:
 class _ProjectChanged(Exception):
     """Raised inside the ``update_project`` callback: nothing is recorded or
     published (``update_project`` publishes only when the callback returns)."""
+
+
+def small_growth_note(project, period) -> Optional[str]:
+    """Why a run of ``period`` can link nothing to earlier loss, as a message
+    key: no earlier period has a set, or none of their alerts is reviewed.
+    None when some is, and a link is possible. Reads the manifest only."""
+    earlier = earlier_sets(project, period)
+    if not earlier:
+        return "steps.integrate.small_growth_no_earlier"
+    if not any(s.n_reviewed for s in earlier):
+        return "steps.integrate.small_growth_no_reviewed"
+    return None
 
 
 def reviewed_in(project, set_id: str) -> int:
@@ -292,23 +307,6 @@ def _record_in_own_project(job, result) -> None:
     delete_orphans(job.pdir, orphans)
 
 
-def _publish_alerts(app_state, name: str, result) -> bool:
-    """Hand the new set's alerts to Analysis while it is still the open, active set.
-
-    ``actual_alert_id`` goes to -1 first, so Analysis's auto-select picks the
-    first alert as a real change even when alert 0 of the replaced set was
-    showing (ruling #76). Under ``AppState``'s lock, as the shell loader's
-    publish of the same set (``set_store.publish_set_alerts``).
-    """
-    with app_state._lock:
-        live = app_state.project.value
-        if live is None or live.name != name or live.active_set != result.alert_set.id:
-            return False  # switched or closed right after the record
-        app_state.actual_alert_id.set(-1)
-        app_state.alerts_gdf.set(result.alerts)
-        return True
-
-
 def outcome_lines(outcomes: dict, left_out: dict, confirmed_only=()) -> list:
     """What each source gave an empty set (spec §7.4), by source name, then
     the sources left out of the run (not covered, or no data for the period).
@@ -410,7 +408,9 @@ def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = 
             if notifier is not None:
                 notifier.warning(t("steps.integrate.project_changed"))
             return
-        if not _publish_alerts(app_state, name, result):
+        # The new set goes to Analysis while it is still the open, active set
+        # (else the project was switched or closed right after the record).
+        if not set_store.publish_set_alerts(app_state, name, result.alert_set, result.alerts):
             return
         if notifier is not None:
             if n:

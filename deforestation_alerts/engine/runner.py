@@ -1,4 +1,4 @@
-"""One Download & harmonize row, run on a worker thread (spec §7.3).
+"""One download/harmonize row, run on a worker thread (spec §7.3).
 
 The coverage guard comes first (spec §7.2): a row whose source does not cover
 the AOI, has no data for the window, or has no coverage record for this AOI is
@@ -18,10 +18,12 @@ downloads. The harmonize stats are recorded on the harmonized artifact.
 
 The worker gets a deep copy of the project and returns the artifacts it wrote;
 the UI applies them to the live project (``apply_artifacts``) only if that
-project is still open. A harmonize that fails after a new download raises
-``HarmonizeFailed``, which carries the raw artifact so the caller records it
-the same way: the next run then harmonizes from the file on disk instead of
-downloading again. Nothing here touches Solara.
+project is still open. A source row either downloads or harmonizes, never
+both (option C, user decision 2026-10-30). A harmonize (a mask's alignment)
+that fails after this run wrote a new file (a mask's download, the AOI raster)
+raises ``HarmonizeFailed``, which carries those artifacts so the caller
+records them the same way: the next run then starts from the file on disk
+instead of writing it again. Nothing here touches Solara.
 """
 
 from dataclasses import dataclass
@@ -49,7 +51,7 @@ from deforestation_alerts.project.models import Artifact, Period, Project
 
 __all__ = [
     "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "MaskFileMissing", "MaskJob", "MaskNativeUnknown",
-    "MaskNotReady",
+    "MaskNotReady", "RawNotReady",
     "SourceJob",
     "apply_artifacts", "ensure_aoi_raster", "plan_prepare", "run_mask_row", "run_source_row",
 ]
@@ -98,6 +100,13 @@ class MaskNativeUnknown(KeyedError, ValueError):
         super().__init__(f"{name}: its native grid is unknown; edit the mask", name=name)
 
 
+class RawNotReady(ProjectRuleError):
+    """A harmonize-only run found the raw download missing or out of date: it
+    never downloads, so the source is downloaded in Alerts first."""
+
+    key = "errors.raw_not_ready"
+
+
 class HarmonizeFailed(KeyedError, RuntimeError):
     """Harmonizing (or a mask's alignment) failed after this run downloaded a
     new raw file (or rebuilt the AOI raster).
@@ -123,6 +132,7 @@ class SourceJob:
     meta: Optional[dict]  # GLAD-L's evaluated catalogue.meta_request; None for the other sources
     aoi: Any  # ee.FeatureCollection
     force: bool = False
+    mode: str = "download"  # "download" (the raw file only) or "harmonize" (never downloads)
 
 
 def _drop_superseded(p: Project, pdir: Path, key: str, new_path: Optional[Path]) -> None:
@@ -183,24 +193,29 @@ def ensure_aoi_raster(p: Project, pdir: Path) -> Optional[Artifact]:
 
 
 def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, Artifact]:
-    """Download (when the raw file is missing, out of date or ``force``d) and
-    harmonize (when the harmonized file is not current) one source for one
-    period. Returns the artifacts written, keyed like ``project.artifacts``.
+    """One source for one period. Returns the artifacts written, keyed like
+    ``project.artifacts``.
+
+    ``mode="download"`` downloads (when the raw file is missing, out of date or
+    ``force``d) and needs no grid and no aligned masks; it returns the raw
+    artifact alone, never harmonizing (spec §2, option C: the Harmonize step
+    harmonizes on its own click). ``mode="harmonize"`` never downloads: a raw file
+    that is not current raises ``RawNotReady``; it harmonizes (when the
+    harmonized file is not current, or ``force``d) once the grid and the
+    period's masks are ready, else ``MaskNotReady``/``MaskFileMissing``.
 
     The row's coverage is read first: a blocked row raises ``CoverageRefused``,
     a custom source without its native grid ``ValueError``, a custom GeoTIFF
     that is gone ``FileNotFoundError``, and a GLAD-L download without its
-    catalogue metadata ``ValueError``, before anything else. Everything the
-    harmonize step needs (the masks, the free space, a GeoTIFF's AOI raster)
-    is checked or built before a download starts, so a row that cannot finish
-    fails before hours of downloading. Each free-space
+    catalogue metadata ``ValueError``, before anything else. Each free-space
     check asks for twice the file's compressed size estimate
     (``raster_io.compressed_estimate``): the ``.part`` and the old file it
-    replaces. If harmonizing still fails after a download or an AOI-raster
-    build, ``HarmonizeFailed`` carries the new artifacts.
+    replaces. If harmonizing fails after a GeoTIFF's AOI-raster build,
+    ``HarmonizeFailed`` carries the new AOI-raster artifact.
     """
     p, pdir, period = job.project, Path(job.pdir), job.period
-    if p.aoi is None or p.grid is None:
+    harmonizing = job.mode == "harmonize"
+    if p.aoi is None or (harmonizing and p.grid is None):
         raise ProjectRuleError("the project needs an AOI and a grid before a download", key="errors.no_aoi_or_grid")
     src = p.sources[job.source]
     win_start, win_end = period.search_window()
@@ -219,23 +234,20 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     out: dict[str, Artifact] = {}
 
     raw_in = raw_alert_inputs(p, job.source, period)
-    downloading = job.force or status(p, pdir, rkey, raw_in) in (Status.MISSING, Status.STALE)
-    # Before the AOI raster and the free-space gates, so a NotEnoughSpaceError cannot hide it.
+    raw_status = status(p, pdir, rkey, raw_in)
+    if harmonizing:
+        if raw_status is not Status.CURRENT:
+            raise RawNotReady(f"{job.source}: download it before harmonizing it")
+        _require_masks_ready(p, pdir, period, job.source)
+    downloading = not harmonizing and (job.force or raw_status in (Status.MISSING, Status.STALE))
+    # Before the free-space gate, so a NotEnoughSpaceError cannot hide it.
     if downloading and src.kind == "predefined" and src.catalogue_key == "GLAD-L" and job.meta is None:
         raise ProjectRuleError(
             "GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment",
             key="errors.bands_not_loaded", source="GLAD-L")
-    # Every precondition of the harmonize is checked before a download (spec §7.3).
-    _require_masks_ready(p, pdir, period, job.source)
-    if file_source:
-        aoi_art = ensure_aoi_raster(p, pdir)
-        if aoi_art is not None:
-            out[AOI_KEY] = p.artifacts[AOI_KEY] = aoi_art
     if downloading:
         raw_path = paths.raw_path(pdir, period.id, job.source, win_start, win_end)
         ensure_free_space(raw_path.parent, 2 * compressed_estimate(_raw_estimate(p, src)))
-        # A download is always followed by a harmonize: check its room now too.
-        ensure_free_space(harm_path.parent, _harmonize_space(p))
         if src.kind == "predefined":
             image = catalogue.build_image(src.catalogue_key, win_start, win_end, job.aoi, job.meta or {})
             export_native(image, src.catalogue_key, job.aoi, raw_path, on_tiles=on_tiles, on_wait=on_wait)
@@ -246,16 +258,21 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
         else:
             normalize.normalize_file(src, p.aoi.bounds, win_start, win_end, raw_path)
         _drop_superseded(p, pdir, rkey, raw_path)
-        # recorded in the job's copy too, so harmonized_inputs sees the new content_id
-        out[rkey] = p.artifacts[rkey] = make_artifact(rkey, "raw_alert", pdir, raw_path, raw_in)
+        out[rkey] = make_artifact(rkey, "raw_alert", pdir, raw_path, raw_in)
+    if not harmonizing:
+        return out  # the row waits in Harmonize for its click (option C: no chain)
 
     try:
+        if file_source:
+            aoi_art = ensure_aoi_raster(p, pdir)
+            if aoi_art is not None:
+                out[AOI_KEY] = p.artifacts[AOI_KEY] = aoi_art
         harm_in = harmonized_inputs(p, job.source, period)
-        # Defensive: the mask check above (aligned masks, a GeoTIFF mask's AOI
+        # Defensive: the mask check (aligned masks, a GeoTIFF mask's AOI
         # raster on disk) and the AOI-raster build leave every input recorded.
         if harm_in is None:
             raise RuntimeError(f"{job.source}: its harmonize inputs are not recorded")
-        if rkey in out or status(p, pdir, hkey, harm_in) is not Status.CURRENT:
+        if job.force or status(p, pdir, hkey, harm_in) is not Status.CURRENT:
             ensure_free_space(harm_path.parent, _harmonize_space(p))
             masks = [
                 (paths.resolve(pdir, p.artifacts[mask_key(n)].rel_path), mode)
@@ -268,7 +285,7 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
             _drop_superseded(p, pdir, hkey, harm_path)
             out[hkey] = make_artifact(hkey, "harmonized", pdir, harm_path, harm_in, stats=stats)
     except Exception as exc:
-        if rkey in out or AOI_KEY in out:
+        if AOI_KEY in out:  # the AOI raster is built: record it
             raise HarmonizeFailed(exc, dict(out)) from exc
         raise
     return out

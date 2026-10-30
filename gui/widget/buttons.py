@@ -11,7 +11,8 @@ The workflow panel, its dialogs and the Overview draw their buttons with
 The analysis screen is not a Solara tree, so ``btn`` builds the same buttons
 as ``ipyvuetify.Btn``, with the icon first, where ``solara.Button(icon_name=…)``
 puts it. ``set_label`` rewrites the words of one of them (a language switch)
-and keeps its icons.
+and keeps its icons. ``icon_btn`` builds an icon-only one, whose words
+``set_tip`` writes as its tooltip.
 """
 
 import ipyvuetify as v
@@ -35,6 +36,17 @@ def btn(role: str, label: str = "", *, icon: str = None, icon_right: str = None,
     if icon_right:
         children.append(v.Icon(right=True, children=[icon_right]))
     return cls(**{**ROLES[role], **kwargs}, children=children)
+
+
+def icon_btn(role: str, icon: str, **kwargs):
+    """An icon-only ``role`` button: ``set_tip`` writes its words, as its
+    tooltip and its accessible name."""
+    return v.Btn(**{**ROLES[role], **kwargs}, children=[v.Icon(children=[icon])])
+
+
+def set_tip(button, text: str) -> None:
+    """Write ``text`` as the tooltip and the accessible name of an ``icon_btn``."""
+    button.attributes = {**(button.attributes or {}), "title": text, "aria-label": text}
 
 
 def label_of(button) -> str:

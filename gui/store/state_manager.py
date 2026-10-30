@@ -115,6 +115,10 @@ class AppState:
         # Overview's Go into another set (spec §9.3): (set id, alert id) to
         # select once that set's alerts are published; None otherwise
         self.goto_alert = solara.reactive(None)
+        # ``guard(move)`` runs an alert change: at once, or after the Analysis
+        # dock's "discard unsaved work?" once that layout set it (its
+        # ``footer.guard``). Every caller that changes the alert goes through it.
+        self.guard = lambda move: move()
         # legends: published by MapLayers exactly while each layer is on the
         # map (spec §9.4)
         self.layer_legends = solara.reactive(())
@@ -276,6 +280,17 @@ class AppState:
             self.go_to(self.actual_alert_id.value + 1)
             return
         target = af.next_match(self.alert_mask(), self.actual_alert_id.value)
+        if target is not None:
+            self.go_to(target)
+
+    def next_unreviewed(self):
+        """The next unreviewed alert among the filter's matches (every alert
+        without one), wrapping round; None when there is none."""
+        return af.next_unreviewed_match(self.alerts_gdf.value, self.alert_mask(), self.actual_alert_id.value)
+
+    def go_next_unreviewed(self):
+        """The next unreviewed alert (``next_unreviewed``); with none, stay."""
+        target = self.next_unreviewed()
         if target is not None:
             self.go_to(target)
 

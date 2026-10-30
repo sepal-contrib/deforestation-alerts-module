@@ -59,6 +59,9 @@ def store_lock(path) -> threading.RLock:
         return lock
 
 
+_FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+
+
 def save_gdf_to_csv(gdf, path, geometry_cols):
     """Write a gdf to a LOCAL CSV, encoding each named geometry column as WKT.
 
@@ -75,6 +78,12 @@ def save_gdf_to_csv(gdf, path, geometry_cols):
                 if g is not None and not (isinstance(g, float) and pd.isna(g))
                 else ""
             )
+    # Evaluator free text must not run as a spreadsheet formula (CSV injection,
+    # OWASP). The app never reads this CSV back, so the "'" prefix costs nothing.
+    for col in out.select_dtypes(include=["object", "string"]).columns:
+        out[col] = out[col].map(
+            lambda v: "'" + v if isinstance(v, str) and v.startswith(_FORMULA_STARTS) else v
+        )
     out.to_csv(path, index=False)
     return path
 

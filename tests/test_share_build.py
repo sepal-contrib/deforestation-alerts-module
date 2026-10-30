@@ -376,6 +376,29 @@ def test_a_package_with_no_earlier_loss_has_no_snapshot(data_root, tmp_path):
     assert share.EARLIER_MEMBER not in zip_members(_build(p, pdir, tmp_path / "out", set_id=SET2))
 
 
+def test_the_snapshot_carries_review_group(data_root, tmp_path):
+    """Group review (spec 2026-10-26 §7.2): a copy builds the creator's member-main edges."""
+    groups = pd.array([0, pd.NA, 0, pd.NA], dtype="Int64")
+    p, pdir = make_growth_creator(data_root, earlier_extra={"review_group": groups})
+    rows = _snapshot(_build(p, pdir, tmp_path / "out", set_id=SET2), tmp_path)
+    assert [(r.key, r.node.review_group) for r in rows] == [(f"{SET1}#0", 0), (f"{SET1}#2", 0)]
+
+
+def test_an_old_snapshot_reads_no_groups(tmp_path):
+    import geopandas as gpd
+
+    from deforestation_alerts.project import growth
+
+    node = growth.Node(set_id="a", alert_id=1, period_id="p", period_start=P1.start, period_end=P1.end,
+                       status="Confirmed", area_ha=1.0, date_min=None, date_max=None,
+                       shape=alerts_frame(["x"]).geometry.iloc[0], links=(), review_group=1)
+    path = growth.write_snapshot([growth.Candidate(node, "r")], tmp_path / "snap.parquet")
+    frame = gpd.read_parquet(path)
+    assert str(frame["review_group"].dtype) == "Int64"
+    frame.drop(columns=["review_group"]).to_parquet(path, index=False)
+    assert [r.node.review_group for r in growth.read_snapshot(path)] == [None]
+
+
 def test_a_return_carries_the_links(data_root, tmp_path):
     p, pdir = make_copy(data_root, statuses=["Confirmed", "Not reviewed"], assigned=["Ana", "Ana"],
                         extra={"grows_from": [["a#1@r"], []]})

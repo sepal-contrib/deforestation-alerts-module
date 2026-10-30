@@ -184,16 +184,18 @@ def rezip(src, dst, *, replace=None, drop=()) -> Path:
 EARLIER_STATUSES = ("Confirmed", "False Positive", "Need revision", "Not reviewed")
 
 
-def make_growth_creator(root, name=CREATOR, *, links=None, earlier_links=None, statuses=EARLIER_STATUSES):
+def make_growth_creator(root, name=CREATOR, *, links=None, earlier_links=None, statuses=EARLIER_STATUSES,
+                        earlier_extra=None):
     """A creator whose later set SET2 (P2) is split between Ana and Bo and
     active, its alerts ``links`` (``{alert_id: [link, ...]}``) into SET1, whose
-    store holds ``statuses`` and ``earlier_links``. Returns ``(project, pdir)``."""
+    store holds ``statuses``, ``earlier_links`` and the ``earlier_extra``
+    columns. Returns ``(project, pdir)``."""
     from deforestation_alerts.project.growth import run_id_of
 
     p, pdir = make_creator(root, name, statuses=statuses, assigned=("Ana", "Bo") * 2, template=False, imagery=False)
     run1 = run_id_of(p.alert_sets[SET1])
     store1 = pdir / "legacy" / "alert_db.parquet"
-    earlier = alerts_frame(statuses, ("Ana", "Bo") * 2)
+    earlier = alerts_frame(statuses, ("Ana", "Bo") * 2, extra=earlier_extra)
     earlier["grows_from"] = [[lk.format(run=run1) for lk in (earlier_links or {}).get(i, [])]
                              for i in range(len(statuses))]
     save_gdf_to_parquet(earlier, store1)

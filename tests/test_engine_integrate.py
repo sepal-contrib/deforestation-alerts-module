@@ -19,8 +19,10 @@ from deforestation_alerts.project.models import (
 
 from tests._integrate_helpers import GRID, blank, prepare, write  # noqa: E402
 
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
-DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025, 12, 31))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
+DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025, 12, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 # Spec §7.4 step 8 runs convert_to_geopandas on EPSG:4326, whose `point`
 # centroid geopandas flags for any geographic CRS (a pre-existing warning of
@@ -1054,6 +1056,19 @@ def test_small_growth_cluster_kept_next_to_confirmed_parent(tmp_path):
     assert (st[15, 10:12] == integrate.STATE_ANALYSABLE).all()
     with rasterio.open(tmp_path / res.alert_set.footprint_rel_path) as f:
         assert int(f.read(1).sum()) == 2
+    assert _leftovers(tmp_path) == []
+
+
+@_LONLAT_CENTROID
+def test_small_growth_cluster_dropped_when_not_kept(tmp_path):
+    """Unticked at Integrate: a small cluster touching confirmed loss is too small like any other."""
+    p, jan, dec_set = _december_reviewed(tmp_path, "Confirmed")
+    _january(p, tmp_path, jan)
+    res = _run(p, tmp_path, jan, AlertSetParams(min_size_ha=0.1, keep_small_growth=False))
+    assert len(gpd.read_parquet(tmp_path / res.alert_set.store_rel_path)) == 0
+    assert res.n_growth == 0 and res.n_growth_small == 0
+    st, _, _ = _state(tmp_path, res.alert_set)
+    assert (st[15, 10:12] == integrate.STATE_TOO_SMALL).all()
     assert _leftovers(tmp_path) == []
 
 

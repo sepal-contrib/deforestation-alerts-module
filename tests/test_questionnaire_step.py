@@ -196,7 +196,7 @@ def test_without_an_active_set_the_step_says_to_integrate_first(tmp_path, monkey
     s.project.set(_with_set(s.project.value.model_copy(deep=True), active=False))
     _box, rc = reacton.render(qstep.QuestionnaireStep(app_state=s), handle_error=False)
     try:
-        assert t("workflow.lock_analysis") in _strings(rc.container)
+        assert t("workflow.lock_review") in _strings(rc.container)
         assert t("steps.questionnaire.add") not in _strings(rc.container)
         assert not [w for w in rc.find(v.Btn).widgets if "defo-start-analysis" in (w.class_ or "")]
     finally:

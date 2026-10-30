@@ -66,7 +66,7 @@ def _setup(monkeypatch, *, project=None, view=_view):
 
     def fake_view(p, set_id, gdf, alert_id, links, auto, radius_m, **kw):
         calls.append({"set_id": set_id, "alert_id": alert_id, "links": tuple(links),
-                      "auto": tuple(auto), "radius_m": radius_m})
+                      "auto": tuple(auto), "radius_m": radius_m, "shape": kw.get("shape")})
         return view(links, auto)
 
     monkeypatch.setattr(earlier.growth_index, "earlier_view", fake_view)
@@ -98,7 +98,7 @@ def test_rows_grouped_by_period_with_states(monkeypatch):
     analysis.auto_links.set((SEP12.link,))
     section = earlier.build_earlier_controls(widgets, app_state, analysis)
     earlier.refresh_earlier(widgets, analysis, app_state)
-    assert calls[-1]["alert_id"] == 1 and calls[-1]["set_id"] == "oct" and calls[-1]["radius_m"] == 1000.0
+    assert calls[-1]["alert_id"] == 1 and calls[-1]["set_id"] == "oct" and calls[-1]["radius_m"] == 100.0
     groups = [(g.period_id, [r.key for r in g.rows]) for g in section.groups]
     assert groups == [(SEP.id, ["sep#12", "sep#15"]), (AUG.id, ["aug#4", "aug#7"])]
     rows = {r.key: r for g in section.groups for r in g.rows}
@@ -113,7 +113,7 @@ def test_rows_grouped_by_period_with_states(monkeypatch):
     assert rows["aug#7"].note.children == [earlier.t("analysis_tile.earlier.broken_rerun")]
     assert section.badge.children == [earlier.t("analysis_tile.earlier.badge_off")]  # the switch is off
     section.switch.v_model = True
-    assert section.badge.children == [earlier.tn("analysis_tile.earlier.badge_nearby", 3, km="1", linked=1)]
+    assert section.badge.children == [earlier.tn("analysis_tile.earlier.badge_nearby", 3, distance="100 m", linked=1)]
 
 
 def test_distance_and_broken_notes():
@@ -198,13 +198,14 @@ def _open(analysis, links):
 def test_switch_turns_on_for_growth_alert_only(monkeypatch):
     """Spec §6.3: a growth alert opens with its parents on the maps; any other
     alert keeps the user's last choice."""
-    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
     section = earlier.build_earlier_controls(widgets, app_state, analysis)
     assert section.switch.v_model is False
     _open(analysis, (SEP12.link,))  # a growth alert, its link manual (no auto links)
     assert section.switch.v_model is True and analysis.show_earlier_reviews.value is True
     _open(analysis, ())  # the next New alert: back to the user's choice, off
     assert section.switch.v_model is False and analysis.show_earlier_reviews.value is False
+    assert calls == []  # the seeded switch is not a refresh of its own
     section.switch.v_model = True  # the user's own choice
     _open(analysis, ())
     assert section.switch.v_model is True
@@ -214,33 +215,6 @@ def test_switch_turns_on_for_growth_alert_only(monkeypatch):
     assert section.switch.v_model is False and analysis.show_earlier_reviews.value is False
     _open(analysis, (SEP12.link,))
     assert section.switch.v_model is True
-
-
-def test_the_seeded_switch_is_not_a_refresh_of_its_own(monkeypatch):
-    widgets, analysis, app_state, calls = _setup(monkeypatch)
-    earlier.build_earlier_controls(widgets, app_state, analysis)
-    _open(analysis, (SEP12.link,))
-    _open(analysis, ())
-    assert calls == []
-
-
-def test_opening_a_growth_alert_refreshes_once(monkeypatch):
-    widgets, analysis, app_state, calls = _setup(monkeypatch)
-    spawned = []
-
-    def spawn(target, args=()):
-        spawned.append(target)
-        target(*args)
-
-    monkeypatch.setattr(earlier, "spawn_in_context", spawn)
-    earlier.build_earlier_controls(widgets, app_state, analysis)
-    # what view_actual_alert does: seed the links and the switch, then refresh in the background
-    analysis.links.set((SEP12.link,))
-    analysis.auto_links.set((SEP12.link,))
-    earlier.seed_switch(analysis, True)
-    earlier.refresh_in_background(widgets, analysis, app_state)
-    assert len(spawned) == 1 and len(calls) == 1
-    assert analysis.show_earlier_reviews.value is True and _features(widgets)
 
 
 def test_periods_menu_hides_rows_and_features(monkeypatch):
@@ -366,6 +340,29 @@ def test_a_stale_result_is_dropped(monkeypatch):
     assert analysis.history.value is None
 
 
+def test_a_move_after_the_token_is_read_does_not_drop_the_new_alerts_links(monkeypatch):
+    """The token is read with the links, before the position: a move made
+    between those reads leaves this refresh stale; the new alert's draft (here
+    with a link the fake view calls broken) is not trimmed by it."""
+    widgets, analysis, app_state, _ = _setup(monkeypatch)
+    moved = []
+
+    class _MovesOnRead:
+        @property
+        def value(self):
+            if not moved:  # A -> B, as ``view_actual_alert`` does it
+                moved.append(True)
+                analysis.reset_alert()
+                analysis.links.set((SEP12.link, AUG7.link))
+            return 1
+
+    app_state.actual_alert_id = _MovesOnRead()
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert moved
+    assert analysis.links.value == (SEP12.link, AUG7.link)
+    assert analysis.history.value is None
+
+
 def test_an_older_load_does_not_overwrite_a_newer_one(monkeypatch):
     widgets, analysis, app_state, _ = _setup(monkeypatch)
     gates, radii = [], []
@@ -382,7 +379,7 @@ def test_an_older_load_does_not_overwrite_a_newer_one(monkeypatch):
     old = threading.Thread(target=earlier.refresh_earlier, args=(widgets, analysis, app_state))
     old.start()
     _wait_for(lambda: len(gates) == 1)
-    analysis.earlier_radius_km.set(5)
+    analysis.earlier_radius_m.set(5000.0)
     new = threading.Thread(target=earlier.refresh_earlier, args=(widgets, analysis, app_state))
     new.start()
     _wait_for(lambda: len(gates) == 2)
@@ -427,23 +424,22 @@ def test_bad_distance_shows_the_error_and_keeps_the_last_value(monkeypatch):
     widgets, analysis, app_state, _ = _setup(monkeypatch)
     controls = earlier.build_earlier_controls(widgets, app_state, analysis)
     field = controls.field
-    for bad in ("0", "abc", "51"):
+    assert field.v_model == "100" and field.suffix == "m"
+    for bad in ("0", "9.5", "abc", "50001", "inf"):
         field.v_model = bad
-        assert field.error_messages and analysis.earlier_radius_km.value == 1.0
-    field.v_model = "2,5"
-    assert not field.error_messages and analysis.earlier_radius_km.value == 2.5
+        assert field.error_messages and analysis.earlier_radius_m.value == 100.0
+    field.v_model = "2500,5"
+    assert not field.error_messages and analysis.earlier_radius_m.value == 2500.5
 
 
 def test_the_section_badge():
     view = _view((SEP12.link,))
-    assert earlier.badge_text(False, view, 1.0) == earlier.t("analysis_tile.earlier.badge_off")
-    assert earlier.badge_text(True, None, 1.0) == ""
+    assert earlier.badge_text(False, view, 100.0) == earlier.t("analysis_tile.earlier.badge_off")
+    assert earlier.badge_text(True, None, 100.0) == ""
     empty = EarlierView((), 0, 0, ())
-    assert earlier.badge_text(True, empty, 2.5) == earlier.t("analysis_tile.earlier.badge_none", km="2.5")
-    assert earlier.badge_text(True, view, 1.0) == earlier.tn("analysis_tile.earlier.badge_nearby", 3,
-                                                             km="1", linked=1)
+    assert earlier.badge_text(True, empty, 2500.0) == "none within 2.5 km"
+    assert earlier.badge_text(True, view, 100.0) == "3 within 100 m · 1 linked"
     assert earlier.t("analysis_tile.earlier.title") == "Earlier alerts"
-    assert earlier.tn("analysis_tile.earlier.badge_nearby", 4, km="1", linked=1) == "4 within 1 km · 1 linked"
 
 
 def test_has_earlier_sets(monkeypatch):
@@ -478,3 +474,110 @@ def test_the_section_is_hidden_without_earlier_sets_and_switches_off(monkeypatch
     assert analysis.earlier_choice.value is True  # not the reviewer's flip: their choice stays
     earlier.seed_switch(analysis, False)  # the next New alert in a project with earlier sets
     assert analysis.show_earlier_reviews.value is True
+
+
+# ---- group review (spec 2026-10-26 §7) ------------------------------------------
+
+def test_a_grouped_alert_measures_from_its_group(monkeypatch):
+    import pandas as pd
+    import shapely
+
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    a, b, c = box(-55.0, -25.0, -54.999, -24.999), box(-54.99, -25.0, -54.989, -24.999), box(-54.9, -25.0, -54.899, -24.999)
+    gdf = gpd.GeoDataFrame({"alert_id": [0, 1, 2], "review_group": pd.array([0, 0, pd.NA], dtype="Int64")},
+                           geometry=[a, b, c], crs="EPSG:4326")
+    app_state.alerts_gdf.set(gdf)
+    on = {"value": None}
+    monkeypatch.setattr(earlier, "grouping_rules", SimpleNamespace(effective=lambda p, s: on["value"]))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["shape"] is None  # grouping off: the row's own
+    on["value"] = object()
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["shape"].equals(shapely.union_all([a, b]))  # row 1 is grouped
+    app_state.actual_alert_id.set(2)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["shape"] is None  # alone, nothing selected
+    analysis.selection.set(frozenset({0}))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert calls[-1]["shape"].equals(shapely.union_all([c, a]))
+
+
+def test_unticking_a_groups_main_drops_its_member_links(monkeypatch):
+    member = "sep#16@" + RUN
+
+    def view(links, auto):
+        item = EarlierItem(SEP12, 0.0, "linked", None, COLORS[SEP.id], links=(member, SEP12.link))
+        return EarlierView(items=(item,), n_within=1, n_linked=1, periods=((SEP.id, SEP.start),))
+
+    widgets, analysis, app_state, calls = _setup(monkeypatch, view=view)
+    analysis.links.set((member, SEP12.link))
+    section = earlier.build_earlier_controls(widgets, app_state, analysis)
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    assert analysis.links.value == (member, SEP12.link)  # the member link is kept
+    rows = {r.key: r for g in section.groups for r in g.rows}
+    rows["sep#12"].box.v_model = False
+    assert analysis.links.value == ()
+
+
+# ---- unlinking an alert Integrate kept only for its link -------------------------
+def _small_setup(monkeypatch, *, below_min=True):
+    widgets, analysis, app_state, calls = _setup(monkeypatch)
+    monkeypatch.setattr(earlier, "active_set",
+                        lambda p: SimpleNamespace(id="oct", params=SimpleNamespace(min_size_ha=0.5)))
+    gdf = gpd.GeoDataFrame({"alert_id": [0, 1], "area_ha": [1.0, 0.3], "below_min": [False, below_min]},
+                           geometry=[SHAPE, SHAPE], crs="EPSG:4326")
+    app_state.alerts_gdf.set(gdf)
+    asked = []
+    section = earlier.build_earlier_controls(widgets, app_state, analysis,
+                                             ask=lambda lines, on_ok, **kw: asked.append((lines, on_ok, kw)))
+    analysis.links.set((SEP12.link,))
+    analysis.auto_links.set((SEP12.link,))
+    earlier.refresh_earlier(widgets, analysis, app_state)
+    return SimpleNamespace(section=section, analysis=analysis, app_state=app_state, asked=asked, calls=calls)
+
+
+def _rows(section):
+    return {r.key: r for g in section.groups for r in g.rows}
+
+
+def test_unlinking_the_last_link_of_a_small_alert_asks_first(monkeypatch):
+    h = _small_setup(monkeypatch)
+    _rows(h.section)["sep#12"].box.v_model = False
+    assert h.analysis.links.value == (SEP12.link,)  # nothing unlinked yet
+    assert _rows(h.section)["sep#12"].box.v_model is True
+    [(lines, on_ok, kw)] = h.asked
+    assert lines == ["Alert #2 is 0.30 ha, under the 0.50 ha minimum. It is an alert only because it is "
+                     "linked to #12.", "Without the link it stays in the set as New · under minimum area."]
+    assert kw == {"title": "analysis_tile.earlier.unlink_title", "ok": "analysis_tile.earlier.unlink_ok"}
+    on_ok()
+    assert h.analysis.links.value == () and h.calls[-1]["links"] == ()
+    assert _rows(h.section)["sep#12"].box.v_model is False
+
+
+def test_a_cancelled_unlink_keeps_the_link(monkeypatch):
+    h = _small_setup(monkeypatch)
+    _rows(h.section)["sep#12"].box.v_model = False
+    assert len(h.asked) == 1  # Cancel only closes the dialog: on_ok never runs
+    assert h.analysis.links.value == (SEP12.link,) and h.analysis.dirty.value is False
+
+
+def test_an_unlink_confirmed_after_the_alert_changed_does_nothing(monkeypatch):
+    h = _small_setup(monkeypatch)
+    _rows(h.section)["sep#12"].box.v_model = False
+    h.analysis.reset_alert()  # another alert opened (a new token), linked to #12 too
+    h.analysis.links.set((SEP12.link,))
+    h.asked[0][1]()
+    assert h.analysis.links.value == (SEP12.link,)
+
+
+def test_an_alert_over_the_minimum_unlinks_at_once(monkeypatch):
+    h = _small_setup(monkeypatch, below_min=False)
+    _rows(h.section)["sep#12"].box.v_model = False
+    assert h.asked == [] and h.analysis.links.value == ()
+
+
+def test_unlinking_one_of_two_links_does_not_ask(monkeypatch):
+    h = _small_setup(monkeypatch)
+    _rows(h.section)["sep#15"].box.v_model = True
+    _rows(h.section)["sep#12"].box.v_model = False
+    assert h.asked == [] and h.analysis.links.value == (SEP15.link,)

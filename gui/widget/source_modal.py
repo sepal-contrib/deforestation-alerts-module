@@ -29,7 +29,7 @@ from deforestation_alerts.engine.user_raster import (
     read_header, suggest_bands, suggest_format,
 )
 from deforestation_alerts.project import paths
-from deforestation_alerts.project.models import PRESETS, BandMap, CustomSource, mapped_bands
+from deforestation_alerts.project.models import PRESETS, BandMap, CustomSource, mapped_bands, period_sources
 from deforestation_alerts.project.names import name_from_ref, suggest_name, validate_source_name
 from gui.i18n import t
 from gui.scripts import aoi_io, date_probes
@@ -52,23 +52,54 @@ MAX_CUSTOM = 6
 SOURCE_ORIGINS = ("gee", "file")
 
 
-def available_predefined(project) -> list:
-    return [k for k in catalogue.KEYS if project is None or k not in project.sources]
+def in_use(project) -> set:
+    """The sources of the active period (spec §2); every project source when there is none."""
+    period = project.periods.get(project.active_period) if project.active_period else None
+    return set(project.sources) if period is None else set(period_sources(project, period))
+
+
+def custom_in_use(project) -> int:
+    """The custom sources the cap counts: the active period's (spec §3)."""
+    return sum(project.sources[n].kind == "custom" for n in in_use(project))
+
+
+def available_sources(project) -> list:
+    """The predefined sources, then the project's custom ones, not in the active period."""
+    if project is None:
+        return list(catalogue.KEYS)
+    used = in_use(project)
+    return ([k for k in catalogue.KEYS if k not in used]
+            + [n for n, s in project.sources.items() if s.kind == "custom" and n not in used])
+
+
+def new_periods_default(project, mode: str, key) -> bool:
+    """The *Add to new periods* tick a pick starts with: a source the project
+    already has keeps its own setting; a new one is on (spec §3)."""
+    if mode == "predefined" and project is not None and key in project.sources:
+        return key in project.new_period_sources
+    return True
 
 
 def predefined_items(project, pending: bool) -> list:
-    """The predefined options with their coverage (spec §6.2 "Predefined")."""
+    """The source list's options with their coverage (spec §6.2 "Predefined",
+    §2): a project custom source is disabled once the period has 6."""
     items = []
-    for key in available_predefined(project):
-        label = t(catalogue.LABEL_KEYS[key])
+    capped = project is not None and custom_in_use(project) >= MAX_CUSTOM
+    for key in available_sources(project):
+        custom = key not in catalogue.KEYS
+        label = key if custom else t(catalogue.LABEL_KEYS[key])
         cov = record_for(project, key)
         if cov is None:
             status = t("coverage.chip_checking") if pending else t("coverage.chip_unchecked")
-            items.append({"text": f"{label} — {status}", "value": key, "disabled": False})
+            item = {"text": f"{label} — {status}", "value": key, "disabled": False}
         elif cov.fraction <= 0:
-            items.append({"text": t(NOT_COVERED_KEYS[key]), "value": key, "disabled": True})
+            text = f"{label} — {note_text(chip_note(cov))}" if custom else t(NOT_COVERED_KEYS[key])
+            item = {"text": text, "value": key, "disabled": True}
         else:
-            items.append({"text": f"{label} — {note_text(chip_note(cov))}", "value": key, "disabled": False})
+            item = {"text": f"{label} — {note_text(chip_note(cov))}", "value": key, "disabled": False}
+        if custom and capped:
+            item["disabled"] = True
+        items.append(item)
     return items
 
 
@@ -360,21 +391,26 @@ def use_raster_fields(gee_interface, app_state, open_, src0, origin, ref, asset_
 
 
 @solara.component
-def SourceModal(open_, app_state, gee_interface, on_add_predefined, on_add_custom, on_save_custom, editing=None):
+def SourceModal(open_, app_state, gee_interface, on_add_predefined, on_add_custom, on_save_custom, editing=None,
+                new_periods=None):
+    """``new_periods``: a reactive bool, the *Add to new periods* checkbox
+    under the source list (spec §2); read by the caller's add callbacks.
+    None: no checkbox."""
     # The form frame (gui/widget/form_dialog): persistent, an outside click
     # nudges it, ESC closes it. Its hooks run on every render, open or not.
     with use_form_dialog(open_, "560px"):
         if open_.value:  # mounted per opening: a clean form, and no asset listing while closed
             _SourceForm(open_=open_, app_state=app_state, gee_interface=gee_interface, editing=editing,
                         on_add_predefined=on_add_predefined, on_add_custom=on_add_custom,
-                        on_save_custom=on_save_custom)
+                        on_save_custom=on_save_custom, new_periods=new_periods)
 
 
 @solara.component
-def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_add_custom, on_save_custom):
+def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_add_custom, on_save_custom,
+                new_periods=None):
     p = app_state.project.value
     src0 = p.sources.get(editing) if p is not None and editing else None
-    n_custom = sum(1 for s in p.sources.values() if s.kind == "custom") if p is not None else 0
+    n_custom = custom_in_use(p) if p is not None else 0
     cap_reached = src0 is None and n_custom >= MAX_CUSTOM
     pending_cov = app_state.coverage_pending.value
     mode, set_mode = solara.use_state("custom" if src0 is not None else "predefined")
@@ -383,6 +419,12 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
     key, set_key = solara.use_state(selectable[0] if selectable else None)
     if key not in selectable:
         key = selectable[0] if selectable else None
+
+    def _reset_new_periods():
+        if new_periods is not None:
+            new_periods.set(new_periods_default(p, mode, key))
+
+    solara.use_effect(_reset_new_periods, [mode, key])
     name, set_name = solara.use_state(src0.name if src0 else "")
     origin, set_origin = solara.use_state(src0.origin if src0 else "gee")
     asset = solara.use_reactive({"asset_id": src0.ref, "type": src0.asset_type, "column": "ALL", "value": None}
@@ -535,3 +577,7 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
             if asset_type == "IMAGE_COLLECTION":  # it does not depend on the bands
                 solara.Text(t("steps.alerts.collection_help"), style=MUTED)
             raster.draw(busy)
+        if new_periods is not None and src0 is None:  # an edit changes it in the row's details
+            rv.Checkbox(label=t("steps.alerts.add_to_new_periods"), v_model=new_periods.value,
+                        on_v_model=lambda value: new_periods.set(bool(value)), dense=True, hide_details=True,
+                        disabled=busy)

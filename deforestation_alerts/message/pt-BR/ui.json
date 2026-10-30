@@ -41,6 +41,22 @@
     "growth_added": "Acrescentado por este conjunto (ha)",
     "growth_review": "Revisar",
     "growth_note": "Históricos que incluem um alerta deste conjunto, da maior área confirmada para a menor.",
+    "card_nearby": "Alertas próximos",
+    "nearby_note": "Alertas a menos de {radius} m uns dos outros, de borda a borda, se encadeiam em um grupo de alertas próximos. Ao dividir, cada grupo vai para um único avaliador.",
+    "nearby_headline": {
+      "one": "{n} grupo de alertas próximos",
+      "many": "{n} de grupos de alertas próximos",
+      "other": "{n} grupos de alertas próximos"
+    },
+    "nearby_headline_none": "Nenhum alerta a menos de {radius} m de outro",
+    "nearby_split": "Em um grupo: {grouped} de {alerts} alertas · Sozinhos: {alone} · O maior: {largest} alertas",
+    "nearby_saved": {
+      "one": "{n} grupo salvo na Análise ({alerts} alertas)",
+      "many": "{n} de grupos salvos na Análise ({alerts} alertas)",
+      "other": "{n} grupos salvos na Análise ({alerts} alertas)"
+    },
+    "nearby_saved_none": "Nenhum grupo salvo na Análise ainda",
+    "nearby_off": "Revisar juntos os alertas próximos está desativado: ative na etapa Avaliação.",
     "history_one_period": "Este projeto tem um único período de monitoramento. Adicione um segundo e a tendência aparecerá aqui.",
     "timing_note": "Pela semana em que cada alerta foi detectado pela primeira vez. As semanas em cinza são do período retrospectivo: são anteriores ao início deste período.",
     "answers_note": "Somente alertas revisados ({reviewed} de {total}). Um alerta com duas respostas é contado em cada uma, então as barras podem somar mais que o total revisado.",
@@ -154,13 +170,13 @@
       "basemap_sepal_dark": "SEPAL Escuro",
       "section_imagery": "Imagens",
       "section_alerts": "Alertas",
-      "section_optional": "Camadas opcionais"
+      "section_optional": "Camadas adicionais"
     }
   },
   "analysis_tile": {
     "description": "Revise cada alerta comparando as imagens de antes e depois: dê um veredito, responda às perguntas e então salve e passe para o próximo.",
     "info_header": "Sobre a análise",
-    "info_md": "A barra superior reúne o filtro de alertas, o seletor de conjuntos, o progresso da revisão e **Anterior** / **Próximo**; o contador entre os dois abre um menu para ir a um número de alerta ou ao próximo alerta não revisado. Os dois mapas mostram as imagens de antes e depois escolhidas na linha do tempo compartilhada abaixo deles. Em **Veredito**, responda com um dos três botões e então responda às perguntas do projeto em **Perguntas** (por padrão, o vetor da perda); **Salvar e próximo** grava a revisão na base de alertas do conjunto e abre o alerta seguinte — **Salvar** mantém você neste. **Refinar polígono** abre as ferramentas de desenho e os dois modelos de detecção automática. Depois que o alerta é salvo, **Exportar este alerta** oferece **Gerar arquivos do alerta**: o GeoPackage, as imagens de antes/depois e um relatório Word a partir do modelo de relatório do projeto, escolhido na etapa Questionário. Para um alerta verdadeiro, **Timelapse** anima as imagens de antes e depois com as duas imagens de cada lado, e o zip dos arquivos do alerta o inclui.",
+    "info_md": "A barra superior reúne o filtro de alertas, o seletor de conjuntos, o progresso da revisão e **Anterior** / **Próximo**; o contador entre os dois abre um menu para ir a um número de alerta ou ao próximo alerta não revisado. Os dois mapas mostram as imagens de antes e depois escolhidas na linha do tempo compartilhada abaixo deles. Em **Veredito**, responda com um dos três botões e então responda às perguntas do projeto em **Perguntas** (por padrão, o vetor da perda); **Salvar** grava a revisão na base de alertas do conjunto e **Próximo** abre o alerta seguinte; com alterações não salvas, Próximo pergunta se deve **Descartar** ou **Ficar**. **Refinar polígono** abre as ferramentas de desenho e os dois modelos de detecção automática. **Exportar este alerta**, embaixo com Salvar e Próximo, lista os arquivos do alerta; depois que o alerta é salvo, **Gerar arquivos** os cria: o GeoPackage, as imagens de antes/depois, um relatório Word a partir do modelo de relatório do projeto (escolhido na etapa Questionário) e, para um alerta verdadeiro, um **Timelapse** que anima as imagens de antes e depois com as duas imagens de cada lado, incluído também no zip.",
     "img_selection": {
       "prev_image_title": "Imagem de antes",
       "post_image_title": "Imagem de depois"
@@ -169,6 +185,12 @@
       "source": "Fonte",
       "detected": "Detectado",
       "status": "Status",
+      "group": "Grupo",
+      "group_of": {
+        "one": "grupo de {n}",
+        "many": "grupo de {n}",
+        "other": "grupo de {n}"
+      },
       "range": "{first} → {last}",
       "kind": "Tipo",
       "history": "Histórico",
@@ -215,9 +237,12 @@
       "true": "Alerta verdadeiro",
       "false": "Falso positivo",
       "revision": "Precisa de revisão",
-      "save_next": "Salvar e próximo",
       "unsaved": "Alterações não salvas neste alerta",
-      "saved_at": "Salvo às {time}"
+      "saved_at": "Salvo às {time}",
+      "unsaved_title": "Este alerta tem alterações não salvas",
+      "unsaved_hint": "Descartar as apaga e passa para outro alerta. Ficar mantém você neste.",
+      "discard": "Descartar",
+      "stay": "Ficar"
     },
     "questions": {
       "required_missing": "Responda “{question}” antes de salvar.",
@@ -246,7 +271,8 @@
         "many": "{n} de formas",
         "other": "{n} formas"
       },
-      "questions": "Perguntas"
+      "questions": "Perguntas",
+      "nearby": "Alertas próximos"
     },
     "edition_labels": {
       "start_edit_button": "Começar a desenhar",
@@ -282,8 +308,14 @@
     },
     "export_labels": {
       "save_btn": "Salvar",
-      "build_tile": "Gerar arquivos do alerta",
-      "save_first": "salve primeiro",
+      "save_for": {
+        "one": "Salvar para {n} alerta",
+        "many": "Salvar para {n} de alertas",
+        "other": "Salvar para {n} alertas"
+      },
+      "save_capture_failed": "Não foi possível ler o alerta para salvá-lo: {error}",
+      "build_tile": "Gerar arquivos",
+      "save_first": "Salve este alerta primeiro",
       "rebuild_tile": "Gerar arquivos novamente",
       "tile_zip": "Dados do alerta",
       "tile_zip_detail": "GeoPackage + GeoTIFF de antes/depois",
@@ -291,7 +323,6 @@
       "tile_docx_detail": "Word, a partir do modelo do projeto",
       "tile_gif": "Timelapse",
       "tile_gif_detail": "GIF animado",
-      "tile_gif_make": "GIF animado · clique para criá-lo",
       "save_task_title": "Salvando atributos do alerta",
       "save_step": "Gravando a base de alertas…",
       "save_done": "Atributos do alerta salvos.",
@@ -316,23 +347,25 @@
       "gif_same_image": "As imagens de antes e depois são a mesma imagem, então o GIF não mostraria nenhuma mudança. Escolha duas imagens diferentes na linha do tempo.",
       "gif_too_few": "Menos de duas imagens puderam ser renderizadas para este alerta, então nenhum GIF foi criado.",
       "gif_hint": "Salve-o como alerta verdadeiro, com as imagens na tela, para criá-lo",
-      "gif_task_title": "Exportando o GIF do alerta",
-      "gif_step": "Renderizando {count} imagens…",
-      "gif_done": "GIF do alerta pronto.",
-      "gif_stale": "O GIF terminou depois que você passou para outro alerta ou mudou as imagens dele, então não foi oferecido aqui.",
-      "gif_zip_skipped": "Os arquivos do alerta estão prontos, mas não foi possível criar o GIF, então o zip não contém o GIF."
+      "gif_zip_skipped": "Os arquivos do alerta estão prontos, mas não foi possível criar o GIF, então o zip não contém o GIF.",
+      "save_changes_first": "Salve suas alterações primeiro",
+      "build_detail": "Gera os arquivos acima a partir da revisão salva",
+      "rebuild_detail": "Gera-os novamente a partir da revisão salva",
+      "building": "Gerando arquivos…",
+      "building_detail": "Eles são liberados acima quando ficam prontos",
+      "tile_gif_true_only": "Apenas alertas verdadeiros"
     },
     "earlier": {
       "show": "Mostrar nos mapas",
       "radius": "Num raio de",
-      "radius_error": "Entre 0,1 e 50 km",
+      "radius_error": "Entre 10 m e 50 km",
       "title": "Alertas anteriores",
       "badge_off": "desativado",
-      "badge_none": "nenhum a menos de {km} km",
+      "badge_none": "nenhum a menos de {distance}",
       "badge_nearby": {
-        "one": "{n} a menos de {km} km · vínculos: {linked}",
-        "many": "{n} a menos de {km} km · vínculos: {linked}",
-        "other": "{n} a menos de {km} km · vínculos: {linked}"
+        "one": "{n} a menos de {distance} · vínculos: {linked}",
+        "many": "{n} a menos de {distance} · vínculos: {linked}",
+        "other": "{n} a menos de {distance} · vínculos: {linked}"
       },
       "touches": "encosta",
       "touches_unlinked": "encosta · não vinculado",
@@ -344,7 +377,11 @@
       "none_in_copy": "Nenhum alerta anterior nesta cópia",
       "legend_lines": "contínua: confirmado · tracejada: precisa de revisão · grossa: vinculado",
       "distance_m": "{m} m",
-      "distance_km": "{km} km"
+      "distance_km": "{km} km",
+      "unlink_title": "Desvincular do alerta anterior?",
+      "unlink_ok": "Desvincular",
+      "unlink_small": "O alerta #{n} tem {area} ha, abaixo do mínimo de {min} ha. Ele só é um alerta porque está vinculado a #{parent}.",
+      "unlink_small_after": "Sem o vínculo, ele continua no conjunto como Nova · abaixo da área mínima."
     },
     "filter": {
       "col_evaluator": "Avaliador",
@@ -363,6 +400,48 @@
       "chip": "{attribute}: {values}",
       "more": "{values} +{count}",
       "no_columns": "Nenhum atributo para filtrar"
+    },
+    "nearby": {
+      "mixed_evaluators": "Estes alertas estão atribuídos a avaliadores diferentes: um grupo precisa de um só.",
+      "foreign_rows": "Alguns destes alertas não estão atribuídos a você.",
+      "badge_selected": {
+        "one": "{n} selecionado",
+        "many": "{n} selecionados",
+        "other": "{n} selecionados"
+      },
+      "badge_within": {
+        "one": "{n} a menos de {radius} m",
+        "many": "{n} a menos de {radius} m",
+        "other": "{n} a menos de {radius} m"
+      },
+      "badge_none": "nenhum a menos de {radius} m",
+      "select_all": "Selecionar todos",
+      "clear": "Limpar",
+      "more": {
+        "one": "mais {n} no raio, não listado",
+        "many": "mais {n} no raio, não listados",
+        "other": "mais {n} no raio, não listados"
+      },
+      "outside": "Alguns alertas selecionados estão fora da área da imagem: escolha uma área maior na linha do tempo.",
+      "in_group": "neste grupo",
+      "group_of_main": "grupo nº {n}",
+      "assigned_to": "atribuído a {name}",
+      "distance": "{m} m",
+      "banner": {
+        "one": "Revisado em um grupo de {n} (alerta principal #{main})",
+        "many": "Revisado em um grupo de {n} (alerta principal #{main})",
+        "other": "Revisado em um grupo de {n} (alerta principal #{main})"
+      },
+      "remove": "Remover do grupo",
+      "saved_with_group": "O alerta #{n} foi salvo como parte de um grupo",
+      "confirm_title": "Salvar este grupo?",
+      "confirm_overwritten": "#{n} ({status}): sua revisão é substituída",
+      "confirm_moved": "#{n} ({status}): sai do grupo nº {group}",
+      "confirm_joined": "#{n} ({status}): junta-se ao grupo nº {group}",
+      "confirm_removed": "#{n} ({status}): sai do grupo e volta a não revisado",
+      "confirm_ok": "Salvar",
+      "confirm_remove_ok": "Remover",
+      "confirm_cancel": "Cancelar"
     }
   },
   "imagery": {

@@ -17,8 +17,17 @@ column: a record lost after the store landed shows as ``orphan_assignments``.
 import uuid
 from datetime import datetime
 
+from deforestation_alerts.project import grouping, review_groups
 from deforestation_alerts.project.models import EvaluatorSplit
-from deforestation_alerts.project.split import EVALUATOR_COLUMN, SplitError, assignments, deal, normalize_names
+from deforestation_alerts.project.review_status import is_reviewed
+from deforestation_alerts.project.split import (
+    EVALUATOR_COLUMN,
+    SplitError,
+    assignments,
+    deal,
+    normalize_names,
+    oversized,
+)
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet, store_lock
 from gui.scripts import set_store
 from gui.scripts.integrate_jobs import is_integrating
@@ -97,10 +106,15 @@ def apply_split(app_state, app_tile_model, evaluators: list[str], include_review
     meanwhile, or the set being re-run."""
     names = normalize_names(evaluators)
     p, target = _target(app_state, app_tile_model)
+    g = grouping.effective(p, target.alert_set)
 
     def _build(gdf):
         statuses = gdf["status"].tolist() if "status" in gdf.columns else [None] * len(gdf)
-        dealt = deal(statuses, names, include_reviewed)
+        units = None
+        if g is not None:
+            eligible = [i for i, st in enumerate(statuses) if include_reviewed or not is_reviewed(st)]
+            units = review_groups.neighbourhoods(gdf, g.radius_m, area_crs(p), eligible=eligible)
+        dealt = deal(statuses, names, include_reviewed, units=units)
         if not any(dealt):
             raise SplitError("evaluators.err.none_eligible")
         staged = gdf.copy()
@@ -109,9 +123,33 @@ def apply_split(app_state, app_tile_model, evaluators: list[str], include_review
 
     staged = _write(app_state, p, target, _build)
     split = EvaluatorSplit(split_id=uuid.uuid4().hex, evaluators=names, include_reviewed=bool(include_reviewed),
-                           created_at=datetime.now())
+                           created_at=datetime.now(), group_radius_m=g.radius_m if g else None,
+                           group_include_reviewed=g.include_reviewed if g else False)
     app_tile_model._update_set(staged, "split", split, target)
     return split
+
+
+def area_crs(p):
+    """The grid CRS the review measures distances and areas in (``None``
+    before there is a grid). Same rule as ``state.area_crs`` in the GUI."""
+    return p.grid.epsg if p is not None and p.grid is not None else None
+
+
+def largest_unit(app_state, n_evaluators: int) -> int:
+    """``oversized`` for the active set under its effective grouping, from the
+    store on hand: the neighbourhoods of the rows the split dealt. 0 when
+    grouping is off, there is no split or no alerts. Blocking (the
+    neighbourhoods): call from a worker thread."""
+    p = app_state.project.value
+    s = active_set(p)
+    g = grouping.effective(p, s)
+    gdf = app_state.alerts_gdf.value
+    if g is None or s is None or gdf is None or s.split is None or EVALUATOR_COLUMN not in gdf.columns:
+        return 0
+    eligible = [i for i, name in enumerate(assignments(gdf).tolist()) if name]
+    if not eligible:
+        return 0
+    return oversized(review_groups.neighbourhoods(gdf, g.radius_m, area_crs(p), eligible=eligible), n_evaluators)
 
 
 def remove_split(app_state, app_tile_model) -> None:

@@ -1,4 +1,4 @@
-"""Mask rows in the Download & harmonize jobs (spec §7.3): Run all aligns the
+"""Mask rows in the download/harmonize jobs (spec §7.3): Run all aligns the
 period's masks first, a source Run runs its stale masks first, mask keys share
 the period's Stop scope, a keep mask covering none of the AOI warns, and a mask
 switched while its period's Run all runs leaves the row in flight out of date
@@ -15,19 +15,20 @@ from types import SimpleNamespace
 import solara
 
 from deforestation_alerts.engine import fingerprint as fp
-from deforestation_alerts.engine.plan import plan_prepare
+from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.engine.runner import MaskNotReady
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
     AoiRecord, GridSpec, NativeGrid, Period, Project, add_mask, add_predefined_source, set_period_mask,
 )
 from gui.i18n import t
-from gui.scripts import prepare_jobs, raster_map, source_layers
+from gui.scripts import prepare_jobs, prepare_scope, raster_map, source_layers
 from gui.store.state_manager import AppState
 from gui.tile import prepare_step
 
 GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=30, height=20)
-FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 
 def _project(tmp_path, cover):
@@ -49,12 +50,23 @@ def _art(pdir, key, kind, inputs, stats=None):
     return fp.make_artifact(key, kind, pdir, f, inputs, stats=stats)
 
 
+def _run_all(p, pdir, period):
+    return prepare_step.run_all_items(plan_prepare(p, pdir, period), plan_masks(p, pdir, period))
+
+
+def _download(p, pdir, source="GLAD-L"):
+    """Record the source's raw file of February: Harmonize's Run all only runs downloaded sources."""
+    raw = _art(pdir, fp.raw_key(FEB.id, source), "raw_alert", fp.raw_alert_inputs(p, source, p.periods[FEB.id]))
+    p.artifacts = {**p.artifacts, raw.key: raw}
+
+
 def test_run_all_runs_the_periods_masks_first(tmp_path, cover):
     p = _project(tmp_path, cover)
-    assert prepare_step.run_all_items(p, tmp_path, p.periods[FEB.id]) == [("mask", "forest"), ("source", "GLAD-L")]
+    _download(p, tmp_path)
+    assert _run_all(p, tmp_path, p.periods[FEB.id]) == [("mask", "forest"), ("source", "GLAD-L")]
     set_period_mask(p, FEB.id, "forest", on=False)
     # an off mask is not run
-    assert prepare_step.run_all_items(p, tmp_path, p.periods[FEB.id]) == [("source", "GLAD-L")]
+    assert _run_all(p, tmp_path, p.periods[FEB.id]) == [("source", "GLAD-L")]
     assert prepare_step.items_for_source(p, tmp_path, p.periods[FEB.id], "GLAD-L") == [("source", "GLAD-L")]
     set_period_mask(p, FEB.id, "forest", on=True)
     assert prepare_step.items_for_source(p, tmp_path, p.periods[FEB.id], "GLAD-L") == [
@@ -67,14 +79,15 @@ def test_a_ready_mask_is_not_run_again(tmp_path, cover):
     p.artifacts = {raw.key: raw}
     aligned = _art(tmp_path, fp.mask_key("forest"), "mask", fp.mask_inputs(p, "forest"), stats={"on_pixels": 5})
     p.artifacts = {**p.artifacts, aligned.key: aligned}
+    _download(p, tmp_path)
     period = p.periods[FEB.id]
-    assert prepare_step.run_all_items(p, tmp_path, period) == [("source", "GLAD-L")]
+    assert _run_all(p, tmp_path, period) == [("source", "GLAD-L")]
     assert prepare_step.items_for_source(p, tmp_path, period, "GLAD-L") == [("source", "GLAD-L")]
 
 
 def test_mask_keys_share_the_stop_scope_of_the_period_that_started_them():
-    stops = prepare_step._StopEvents()
-    feb, mar = ("mj", "2026-02-01_2026-02-28"), ("mj", "2026-03-01_2026-03-31")
+    stops = prepare_scope.StopEvents()
+    feb, mar = ("mj", "2026-02-01_2026-02-28", "harmonize"), ("mj", "2026-03-01_2026-03-31", "harmonize")
     event = stops.add(feb, {"prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest"})
     stops.add(mar, {"prep:mj:2026-03-01_2026-03-31:RADD"})
     running = {"prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest", "prep:other:@mask:x",
@@ -343,4 +356,23 @@ def test_a_switch_during_run_all_leaves_the_row_in_flight_out_of_date(tmp_path, 
     row = plan_prepare(live, tmp_path, live.periods[FEB.id])[0]
     assert row.raw is fp.Status.CURRENT and row.harmonized is fp.Status.STALE and row.needs_run
     # the next Run all re-harmonizes it without a download (the raw file is current)
-    assert prepare_step.run_all_items(live, tmp_path, live.periods[FEB.id]) == [("source", "GLAD-L")]
+    assert _run_all(live, tmp_path, live.periods[FEB.id]) == [("source", "GLAD-L")]
+
+
+def test_source_rows_run_in_the_context_mode_and_report_its_stage(tmp_path, cover, monkeypatch):
+    """A harmonize-only run passes its mode to the runner and reads "harmonize"
+    from the start, even for a row listed in ``downloads``."""
+    state = AppState()
+    state.load_project_state(_project(tmp_path, cover))
+    stages = solara.reactive({})
+    seen = []
+
+    def source_row(job, **kw):
+        seen.append((job.mode, stages.value[prepare_jobs.progress_key("mj", FEB.id, "source", job.source)]))
+        return {}
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", source_row)
+    for mode in ("download", "harmonize"):
+        prepare_jobs.run_rows(_ctx(state, tmp_path, [], row_stage=stages, mode=mode,
+                                   downloads=frozenset({("source", "GLAD-L")})), [("source", "GLAD-L")])
+    assert seen == [("download", "download"), ("harmonize", "harmonize")]

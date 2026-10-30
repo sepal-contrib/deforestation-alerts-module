@@ -13,6 +13,7 @@ from gui.widget.multiview import (
     Holes,
     LayerMenu,
     MultiView,
+    Pick,
     PluginMixin,
     TileErrors,
     geojson_spec,
@@ -25,10 +26,10 @@ ROOT = Path(__file__).resolve().parents[1]
 URL = "https://example.invalid/{z}/{x}/{y}.png"
 
 CORE = {"views", "view_layout", "basemap", "theme", "labels", "layers", "plugins", "view"}
-MIXIN_TRAITS = {"layer_menu_toggles", "fit_bounds_bounds", "fit_bounds_views", "draw", "draw_edit_mode"}
+MIXIN_TRAITS = {"layer_menu_toggles", "fit_bounds_bounds", "fit_bounds_views", "draw", "draw_edit_mode", "pick_tag", "pick_event"}
 
 
-class AllViews(MultiView, LayerMenu, FitBounds, Draw, Holes, TileErrors):
+class AllViews(MultiView, LayerMenu, FitBounds, Draw, Holes, TileErrors, Pick):
     pass
 
 
@@ -72,7 +73,7 @@ def test_mixin_traits_are_synced_and_in_the_first_state():
     w = AllViews()
     assert CORE | MIXIN_TRAITS <= set(w.keys)
     state = w.get_state()
-    assert state["plugins"] == ["layerMenu", "fitBounds", "draw", "holes", "tileErrors"]
+    assert state["plugins"] == ["layerMenu", "fitBounds", "draw", "holes", "tileErrors", "pick"]
     assert state["layer_menu_toggles"] == {}
     assert state["fit_bounds_bounds"] is None and state["fit_bounds_views"] == "all"
     assert state["draw"] == {"fc": {"type": "FeatureCollection", "features": []}, "gen": 0, "seq": 0,
@@ -86,15 +87,16 @@ def test_a_class_without_a_mixin_has_none_of_its_traits():
 
     w = OnlyMenu()
     assert "layer_menu_toggles" in w.keys
-    assert not ({"fit_bounds_bounds", "fit_bounds_views", "draw", "draw_edit_mode"} & set(w.keys))
+    assert not ({"fit_bounds_bounds", "fit_bounds_views", "draw", "draw_edit_mode", "pick_tag", "pick_event"} & set(w.keys))
     assert w.plugins == ["layerMenu"]
 
 
 def test_every_mixin_names_its_js_plugin():
-    names = {m: m._plugin_name for m in (LayerMenu, FitBounds, Draw, Holes, TileErrors)}
+    names = {m: m._plugin_name for m in (LayerMenu, FitBounds, Draw, Holes, TileErrors, Pick)}
     assert names == {LayerMenu: "layerMenu", FitBounds: "fitBounds", Draw: "draw", Holes: "holes",
-                     TileErrors: "tileErrors"}
+                     TileErrors: "tileErrors", Pick: "pick"}
     assert Holes._plugin_requires == ("draw",)
+    assert Pick._plugin_requires == ("draw",)
     assert all(issubclass(m, PluginMixin) for m in names)
 
 
@@ -124,7 +126,7 @@ def test_a_subclass_inherits_its_parents_plugins():
     class Child(AllViews):
         pass
 
-    assert Child().plugins == ["layerMenu", "fitBounds", "draw", "holes", "tileErrors"]
+    assert Child().plugins == ["layerMenu", "fitBounds", "draw", "holes", "tileErrors", "pick"]
 
 
 def test_a_missing_requirement_fails_when_the_class_is_created():

@@ -1,4 +1,4 @@
-"""Optional layers step (spec §6.3): the project's visualization layers (an
+"""Additional layers step (spec §6.3): the project's visualization layers (an
 Earth Engine image, a GeoTIFF), each one shown on the shared map with its
 legend (§9.4) under ``vis:<name>``."""
 
@@ -10,7 +10,6 @@ from gui.i18n import t
 from gui.scripts import legend_specs, vis_layers
 from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.widget.confirm_dialog import ConfirmDialog
-from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.vis_layer_modal import VisLayerModal
 
@@ -44,7 +43,7 @@ def LayersStep(app_state, map_, gee_interface, layers):
     editing, set_editing = solara.use_state(None)
     pending_delete, set_pending_delete = solara.use_state(None)
     if p is None or p.aoi is None:
-        solara.Info(t("workflow.lock_layers"))
+        solara.Info(t("workflow.lock_review"))
         return
 
     # Runs in VisLayerModal's validation task (on the loop, never from an
@@ -106,7 +105,6 @@ def LayersStep(app_state, map_, gee_interface, layers):
                      ]})
 
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.layers.description"), t("steps.layers.info_header"), t("steps.layers.info_md"))
         solara.Button(t("steps.layers.add"), icon_name="mdi-plus", color="primary", small=True, block=True,
                       disabled=ro, on_click=_open_add)
         ProductTable(title=t("steps.layers.list_title"), columns=layer_columns(), rows=rows,

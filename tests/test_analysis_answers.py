@@ -11,23 +11,21 @@ from pysepal.i18n import set_locale
 from shapely.geometry import box
 
 from deforestation_alerts.project.models import Project, Question, QuestionOption, default_questions
+from deforestation_alerts.scripts import mosaics_helper
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export
 from gui.tile.analysis import review_save
 from gui.tile.analysis.state import AnalysisState, capture_alert
-from tests.test_set_context import _AdminLookups, _review_alerts, _state, _store
+from tests._review_helpers import stub_admin_lookups
+from tests.test_set_context import _review_alerts, _state, _store
 
 ROAD = Question(key="road_access", label="Road access", required=True,
                 options=[QuestionOption(code="yes", label="Yes"), QuestionOption(code="no", label="No")])
 LOSS = default_questions()[0]
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _set_questions(s, questions):
@@ -43,7 +41,7 @@ def _saved(tmp_path, monkeypatch, questions, status, answers):
     _set_questions(s, questions)
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
     analysis = AnalysisState()
     analysis.verdict.set(status)
@@ -140,7 +138,7 @@ def test_the_live_table_gets_the_new_column_too(tmp_path, monkeypatch):
     _set_questions(s, [ROAD])
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x"))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
     analysis.answers.set({"road_access": ["no"]})
@@ -160,7 +158,7 @@ def test_a_store_missing_a_non_answer_column_still_saves(tmp_path, monkeypatch):
     _set_questions(s, [ROAD])
     ctx = SetContext(s)
     s.alerts_gdf.set(_review_alerts("x").drop(columns=["area_ha"]))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
     analysis = AnalysisState()
     analysis.verdict.set("Confirmed")
     analysis.answers.set({"road_access": ["yes"]})
@@ -170,9 +168,9 @@ def test_a_store_missing_a_non_answer_column_still_saves(tmp_path, monkeypatch):
     assert export._save_attributes(SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None)),
                                    s, analysis, ctx) is True
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "q_road_access"])
-    assert saved.loc[0, "area_ha"] == pytest.approx(review_save.calculate_total_area(drawn))
+    assert saved.loc[0, "area_ha"] == pytest.approx(mosaics_helper.calculate_total_area(drawn))
     assert saved["q_road_access"].tolist() == ["yes", ""]
-    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(review_save.calculate_total_area(drawn))
+    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(mosaics_helper.calculate_total_area(drawn))
 
 
 def test_drafts_of_deleted_questions_are_ignored(tmp_path, monkeypatch):

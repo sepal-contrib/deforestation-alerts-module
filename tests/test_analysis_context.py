@@ -18,11 +18,7 @@ from gui.store.state_manager import AppState
 from gui.tile.analysis import context
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _state(tmp_path, monkeypatch):
@@ -149,7 +145,7 @@ def test_the_counter_opens_the_jump_menu_and_the_field_is_one_based(tmp_path, mo
     s = _state(tmp_path, monkeypatch)
     field = v.TextField(v_model=None)
     card = context.build_context(s, field)
-    _, _, jump, menu, go, _ = context.nav_widgets(card)
+    _, _, jump, menu, go = context.nav_widgets(card)
     counter, _, _ = context.queue_widgets(card)
     s.alerts_gdf.set(_alerts(["Not reviewed"] * 9))
 
@@ -184,18 +180,26 @@ def test_next_unreviewed_skips_reviewed_alerts_and_wraps(tmp_path, monkeypatch):
     assert context.next_unreviewed(_alerts(["Not reviewed", "Confirmed"]), 0) is None
     assert context.next_unreviewed(None, 0) is None
 
+
+def test_the_skip_icon_beside_next_goes_to_the_next_unreviewed_alert(tmp_path, monkeypatch):
     s = _state(tmp_path, monkeypatch)
     card = context.build_context(s, v.TextField(v_model=None))
-    *_, menu, _, unreviewed = context.nav_widgets(card)
-    s.alerts_gdf.set(gdf)
+    skip = context.next_unreviewed_widget(card)
+    nxt = context.nav_widgets(card)[1]
+    topnav = context.build_topnav(card, v.Select(items=[]))
+    nav = topnav.children[-1]
+    assert nav.children[-1].class_ == "defo-topnav-next" and nav.children[-1].children == [nxt, skip]
+    assert skip.attributes["title"] == skip.attributes["aria-label"] == t("analysis_tile.nav.next_unreviewed")
+    s.alerts_gdf.set(_alerts(["Not reviewed", "Confirmed", "False Positive", None, "Need revision"]))
     s.actual_alert_id.value = 0
-    assert not unreviewed.disabled
-    menu.v_model = True
-    unreviewed.fire_event("click", None)
-    assert s.actual_alert_id.value == 3 and menu.v_model is False
+    assert not skip.disabled
+    skip.fire_event("click", None)
+    assert s.actual_alert_id.value == 3
+    skip.fire_event("click", None)
+    assert s.actual_alert_id.value == 0  # wraps round
     s.alerts_gdf.set(_alerts(["Not reviewed", "Confirmed"]))
     s.actual_alert_id.value = 0
-    assert unreviewed.disabled, "nothing else left to review"
+    assert skip.disabled, "nothing else left to review"
 
 
 def _walk(w):
@@ -365,7 +369,7 @@ def test_old_set_has_the_new_kind(tmp_path, monkeypatch):
 def test_history_row_shows_summary(tmp_path, monkeypatch):
     from datetime import date
 
-    from gui.scripts.growth_index import HistorySummary
+    from deforestation_alerts.project.growth import HistoryArea
     from gui.tile.analysis.state import AnalysisState
 
     s = _state(tmp_path, monkeypatch)
@@ -373,10 +377,10 @@ def test_history_row_shows_summary(tmp_path, monkeypatch):
     card = context.build_context(s, v.TextField(v_model=None), analysis=analysis)
     slots = getattr(card, context._SLOTS)
     assert slots["history_row"].style_ == "display: none;"
-    analysis.history.set(HistorySummary(3, 12.4, 0.0, date(2026, 8, 1)))
+    analysis.history.set(HistoryArea(3, 12.4, 0.0, date(2026, 8, 1)))
     assert slots["history_row"].style_ == "display: contents;"
     assert "3 alerts · 12.4 ha confirmed since Aug 2026" in slots["history"].children[0]
-    analysis.history.set(HistorySummary(3, 12.4, 1.5, date(2026, 8, 1)))
+    analysis.history.set(HistoryArea(3, 12.4, 1.5, date(2026, 8, 1)))
     assert slots["history"].children[0].endswith("(+1.5 ha not reviewed)")
     analysis.history.set(None)
     assert slots["history_row"].style_ == "display: none;"
@@ -396,3 +400,26 @@ def test_kind_chip_colour_purple_for_growth_only(tmp_path, monkeypatch):
         colours[index] = chip.color
     assert colours[0] == colours[1] == context.GROWTH_PURPLE
     assert colours[2] != context.GROWTH_PURPLE and not (colours[2] or "").startswith("#")
+
+
+def test_the_facts_row_shows_group_of_n(tmp_path, monkeypatch):
+    """Group review §6.3: a row of a stored group of two or more reads
+    "group of N", after the status row and before the Kind row; a single row
+    and a group of one show no row."""
+    import pandas as pd
+
+    s = _state(tmp_path, monkeypatch)
+    card = context.build_context(s, v.TextField(v_model=None))
+    slots = getattr(card, context._SLOTS)
+    gdf = _alerts(["Confirmed", "Confirmed", "Confirmed", "Confirmed", "Not reviewed"])
+    gdf["review_group"] = pd.array([0, 0, 0, 3, None], dtype="Int64")
+    s.alerts_gdf.set(gdf)
+    for index, size in [(0, 3), (1, 3), (2, 3), (3, None), (4, None)]:
+        s.actual_alert_id.value = index
+        assert context.facts_of(gdf, index, s.project.value)["group"] == size
+        assert (slots["group_row"].style_ == "display: contents;") is (size is not None)
+        if size is not None:
+            assert slots["group"].children == [f"group of {size}"]
+    assert slots["group_row"].children[0].children == ["Group"]
+    rows = _walk(card)
+    assert rows.index(slots["group_row"]) < rows.index(slots["kind_row"])

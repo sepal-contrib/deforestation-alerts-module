@@ -1,4 +1,4 @@
-"""Download & harmonize source rows, option B: one status or verb, and a subtitle."""
+"""Download/harmonize source rows, option B: one status or verb, and a subtitle."""
 
 from datetime import datetime
 
@@ -10,14 +10,12 @@ from deforestation_alerts.engine.fingerprint import Status
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.why import Reason
 from deforestation_alerts.project.models import Artifact
-from gui.scripts.prepare_view import mask_status_label, reason_text, row_status_label, source_state, source_subtitle
+from gui.scripts.prepare_view import (
+    download_state, download_subtitle, mask_status_label, reason_text, row_status_label, source_state, source_subtitle,
+)
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _state(row, **over):
@@ -59,10 +57,13 @@ def test_a_ready_file_row_names_its_format_not_a_download():
     assert text == "GeoTIFF · 1 alert pixel"  # no size yet: no empty part
 
 
-def test_missing_catalogue_row_offers_download():
+def test_a_row_not_downloaded_offers_harmonize_disabled():
+    """A Harmonize row never downloads: it waits for its download in Alerts (spec §2)."""
+    cell = _state(PrepareRow("RADD", Status.MISSING, Status.MISSING))
+    assert _verb(cell) == ("Harmonize", "primary", "mdi-play") and cell["disabled"]
     clicks = []
-    cell = _state(PrepareRow("RADD", Status.MISSING, Status.MISSING), on_run=lambda: clicks.append(1))
-    assert _verb(cell) == ("Download", "primary", "mdi-play")
+    cell = _state(PrepareRow("RADD", Status.CURRENT, Status.MISSING), on_run=lambda: clicks.append(1))
+    assert not cell.get("disabled")
     cell["on_click"]()
     assert clicks == [1]
 
@@ -75,9 +76,10 @@ def test_missing_file_row_offers_harmonize():
     assert _subtitle(row, file_source=True, reason=Reason("not_read")) == ("not harmonized yet", None)
 
 
-def test_stale_raw_offers_download_in_warning():
+def test_stale_raw_waits_for_its_download_in_warning():
     row = PrepareRow("RADD", Status.STALE, Status.STALE)
-    assert _verb(_state(row)) == ("Download", "warning", "mdi-update")
+    cell = _state(row)
+    assert _verb(cell) == ("Harmonize", "warning", "mdi-update") and cell["disabled"]
     reason = Reason("window", (("old", "2025-10-03 – 2026-01-31"), ("new", "2025-11-02 – 2026-01-31")))
     assert _subtitle(row, reason=reason)[0] == (
         "the search window changed (2025-10-03 – 2026-01-31 → 2025-11-02 – 2026-01-31): download again")
@@ -114,13 +116,13 @@ def test_running_row_shows_stage_and_percent():
     cell = _state(row, stage="download", pct=42)
     assert (cell["type"], cell["label"], cell["progress"]) == ("state", "Downloading 42%", 42)
     assert cell["title"] == "Downloading 42%"  # whole on hover when the cell clips it
-    assert _subtitle(row, stage="download", pct=42) == ("downloading 42% · then harmonize", None)
+    assert _subtitle(row, stage="download", pct=42) == ("downloading 42%", None)  # it never chains
     assert _state(row, stage="download")["label"] == "Downloading"  # no percent yet
     cell = _state(row, stage="harmonize", pct=42)
     assert cell["label"] == "Harmonizing" and cell.get("progress") is None and cell["title"] == "Harmonizing"
     assert _subtitle(row, stage="harmonize")[0] == "harmonizing"
     # a GeoTIFF is read, not downloaded
-    assert _state(row, file_source=True, stage="download", pct=42)["label"] == "Harmonizing"
+    assert _state(row, file_source=True, stage="download", pct=42)["label"] == "Reading"
 
 
 def test_claimed_row_without_stage_reads_queued():
@@ -143,13 +145,56 @@ def test_blocked_and_missing_file_rows_read_their_status():
 
 
 def test_a_review_copy_reads_text_not_verbs():
-    assert _state(PrepareRow("RADD", Status.MISSING, Status.MISSING), locked=True)["label"] == "To download"
+    assert _state(PrepareRow("RADD", Status.MISSING, Status.MISSING), locked=True)["label"] == "To harmonize"
     cell = _state(PrepareRow("RADD", Status.CURRENT, Status.STALE), locked=True, failed=True)
     assert (cell["type"], cell["label"]) == ("state", "To harmonize")
     # a grey circle, not the play or update icon of a pill: nothing there looks clickable
     assert (cell["icon"], cell["color"]) == ("mdi-circle-outline", "grey")
     assert _state(PrepareRow("tif", Status.MISSING, Status.MISSING), locked=True, file_source=True)["label"] == (
         "To harmonize")
+
+
+def _dl(row, **over):
+    kw = dict(file_source=False, stage=None, queued=False, pct=None, failed=False, locked=False,
+              on_run=lambda: None)
+    kw.update(over)
+    return download_state(row, **kw)
+
+
+def test_the_alerts_status_cell_stops_at_the_download():
+    """Spec §2: a harmonized-missing row with a current raw file reads Downloaded, not Harmonize."""
+    assert _verb(_dl(PrepareRow("RADD", Status.MISSING, Status.MISSING))) == ("Download", "primary", "mdi-play")
+    assert _verb(_dl(PrepareRow("RADD", Status.STALE, Status.CURRENT))) == ("Download", "warning", "mdi-update")
+    cell = _dl(PrepareRow("RADD", Status.CURRENT, Status.MISSING))
+    assert (cell["type"], cell["label"]) == ("state", "Downloaded")
+    tif = PrepareRow("tif", Status.MISSING, Status.MISSING)
+    assert _verb(_dl(tif, file_source=True))[0] == "Read file"
+    assert _dl(tif, file_source=True, stage="download")["label"] == "Reading"
+    assert _dl(PrepareRow("tif", Status.CURRENT, Status.MISSING), file_source=True)["label"] == "Ready"
+
+
+def test_the_alerts_row_never_reads_harmonizing():
+    """Option C (retires ruling R14): an Alerts row shows download states only."""
+    row = PrepareRow("RADD", Status.CURRENT, Status.MISSING)
+    assert _dl(row, stage="harmonize")["label"] == "Downloaded"
+
+
+def test_a_user_file_the_alerts_step_reads_reads_reading_in_harmonize():
+    """It no longer reads Harmonizing: the read never chains (option C)."""
+    tif = PrepareRow("tif", Status.MISSING, Status.MISSING)
+    cell = source_state(tif, file_source=True, stage="download", queued=False, pct=None, failed=False, locked=False,
+                        on_run=lambda: None)
+    assert cell["label"] == "Reading"
+
+
+def test_the_alerts_subtitle_names_the_download():
+    row = PrepareRow("RADD", Status.CURRENT, Status.MISSING)
+    kw = dict(file_source=False, raw_art=_art("raw_alert", 3_000_000), reason=None, queued=False)
+    assert download_subtitle(row, **kw) == ("downloaded 2026-02-03 · 3.0 MB", None)
+    assert download_subtitle(PrepareRow("RADD", Status.MISSING, Status.MISSING), **{**kw, "raw_art": None})[0] == (
+        "not downloaded yet")
+    tif = PrepareRow("tif", Status.MISSING, Status.MISSING)
+    assert download_subtitle(tif, **{**kw, "file_source": True, "raw_art": None})[0] == "GeoTIFF"
 
 
 @pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])
@@ -163,6 +208,7 @@ def test_status_labels_fit_their_cell(locale):
             "to_harmonize", "to_align", "off"]
     labels = [t(f"steps.prepare.state_{k}") for k in keys]
     labels += [t(f"steps.prepare.verb_{k}") for k in ("download", "harmonize", "align", "retry")]
+    labels += [t(f"steps.alerts.{k}") for k in ("state_downloaded", "state_reading", "read_file")]
     assert all(len(label) <= 12 for label in labels), [x for x in labels if len(x) > 12]
     assert len(t("steps.prepare.state_downloading_pct", pct=100)) <= 16
 
@@ -197,7 +243,7 @@ def test_the_details_lead_of_a_row_in_flight_reads_its_running_state():
     assert row_status_label(row, False) == "To download"
     assert row_status_label(row, False, queued=True) == "Queued"
     assert row_status_label(row, False, stage="download", pct=42) == "Downloading 42%"
-    assert row_status_label(row, True, stage="download") == "Harmonizing"  # a user file is read
+    assert row_status_label(row, True, stage="download") == "Reading"  # a user file is read
     mask = MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")
     assert mask_status_label(mask) == "To download"
     assert mask_status_label(mask, stage="align") == "Aligning"

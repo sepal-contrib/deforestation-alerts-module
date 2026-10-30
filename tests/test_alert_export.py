@@ -67,6 +67,21 @@ def test_export_csv_keeps_columns_as_wkt(data_root):
     assert "POINT" in Path(path).read_text()  # point column preserved as WKT
 
 
+def test_export_csv_defuses_spreadsheet_formulas(data_root):
+    """Free-text answers starting with = + - @ (tab, CR) would run as formulas in
+    Excel/LibreOffice; text cells get a "'" prefix, numbers stay numbers."""
+    texts = ["=HYPERLINK(\"x\")", "+1", "-2", "@SUM(A1)", "\tx", "\rx", "fine", None]
+    gdf = gpd.GeoDataFrame(
+        {"note": texts, "area_ha": [-1.5] * len(texts)},
+        geometry=gpd.GeoSeries([Polygon([(0, 0), (1, 0), (1, 1)])] * len(texts), crs="EPSG:4326"),
+    )
+    path = export_alerts_gdf(gdf, data_root / "recipe_a", "csv", ["GLAD-L"], "2026-01-01", "2026-06-12")
+    back = pd.read_csv(path, keep_default_na=False)
+    assert list(back["note"]) == ["'" + t for t in texts[:6]] + ["fine", ""]
+    assert list(back["area_ha"]) == [-1.5] * len(texts)
+    assert back["geometry"].iloc[0].startswith("POLYGON")
+
+
 def test_export_rejects_unknown_format(data_root, data_files):
     with pytest.raises(ValueError):
         export_alerts_gdf(_gdf(), data_root / "recipe_a", "shp", [], "", "")

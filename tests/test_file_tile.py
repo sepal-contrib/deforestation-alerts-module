@@ -46,7 +46,7 @@ def test_a_file_gone_from_disk_still_links_without_a_size(tmp_path, monkeypatch)
 
 
 def test_a_path_outside_home_raises_and_offers_nothing(tmp_path, monkeypatch):
-    """``home_relative`` refuses a path the sandbox cannot serve; the export
+    """``served_relative`` refuses a path the sandbox cannot serve; the export
     worker turns that into a FAILED task, so the tile must not be left live."""
     import pytest
 
@@ -163,7 +163,7 @@ def test_a_refused_file_leaves_an_action_tile_its_action(monkeypatch):
     def _refuse(path):
         raise ValueError("outside the sandbox")
 
-    monkeypatch.setattr(local_files, "home_relative", _refuse)
+    monkeypatch.setattr(local_files, "served_relative", _refuse)
     tile = FileTile("gif", "Timelapse", "GIF")
     tile.set_action(False, "Save first")
     with pytest.raises(ValueError):

@@ -113,3 +113,26 @@ def test_questions_digest_is_the_canonical_json_hash():
     expected = hashlib.sha256(b'[["road",false,["no","yes"]]]').hexdigest()
     assert questions_digest([_q("road", codes=("yes", "no"))]) == expected
     assert questions_digest(default_questions()) == questions_digest(default_questions())
+
+
+def test_deal_without_units_is_unchanged():
+    assert deal(["Not reviewed", "Confirmed", "Not reviewed"], ["A", "B"], False) == ["A", "", "B"]
+    assert deal(["Not reviewed", "Confirmed"], ["A", "B"], True, units=None) == ["A", "B"]
+
+
+def test_units_go_whole_to_the_least_loaded_evaluator():
+    units = [(0, 1, 2), (3,), (4,), (5, 6)]
+    assert deal(["Not reviewed"] * 7, ["A", "B"], False, units=units) == ["A", "A", "A", "B", "B", "B", "B"]
+
+
+def test_units_leave_ineligible_rows_unassigned():
+    out = deal(["Not reviewed", "Confirmed", "Not reviewed"], ["A", "B"], False, units=[(0, 2)])
+    assert out == ["A", "", "A"]
+
+
+def test_oversized_reports_a_unit_above_an_even_share():
+    from deforestation_alerts.project.split import oversized
+
+    assert oversized([(0, 1, 2, 3), (4,)], 2) == 4
+    assert oversized([(0, 1), (2, 3)], 2) == 0
+    assert oversized([], 2) == 0

@@ -1,4 +1,4 @@
-"""Which Download & harmonize rows (sources and masks) need running for a period (spec §7.3)."""
+"""Which download/harmonize rows (sources and masks) need running for a period (spec §7.3)."""
 
 from dataclasses import dataclass
 from typing import Optional
@@ -8,7 +8,7 @@ from deforestation_alerts.engine.fingerprint import (
     Status, harm_key, mask_aligned_status, mask_file_missing, mask_key, mask_raw_inputs, mask_raw_key,
     period_harmonized_inputs, raw_alert_inputs, raw_key, status, user_file_missing,
 )
-from deforestation_alerts.project.models import Period, Project
+from deforestation_alerts.project.models import Period, Project, period_sources
 
 
 @dataclass(frozen=True)
@@ -92,12 +92,13 @@ def plan_masks(p: Project, pdir, period: Optional[Period]) -> list[MaskRow]:
 
 
 def plan_prepare(p: Project, pdir, period: Period) -> list[PrepareRow]:
+    period = p.periods.get(period.id, period)  # the project holds the period's current sources (as plan_masks)
     a, b = period.search_window()
     harmonized = period_harmonized_inputs(p, period)  # the period's mask checks once, not once per source
     rows = []
-    for name, src in sorted(p.sources.items(), key=lambda kv: kv[1].digit):
+    for name in period_sources(p, period):
         state, notes = window_coverage(record_for(p, name), name, a, b)
-        missing = user_file_missing(src)
+        missing = user_file_missing(p.sources[name])
         raw = Status.MISSING if missing else status(p, pdir, raw_key(period.id, name),
                                                     raw_alert_inputs(p, name, period))
         hkey = harm_key(period.id, name)
@@ -107,7 +108,3 @@ def plan_prepare(p: Project, pdir, period: Period) -> list[PrepareRow]:
                                file_missing=missing,
                                stats=dict(art.stats) if harm is Status.CURRENT and art is not None else None))
     return rows
-
-
-def ready_sources(p: Project, pdir, period: Period) -> list[str]:
-    return [r.source for r in plan_prepare(p, pdir, period) if r.ready]

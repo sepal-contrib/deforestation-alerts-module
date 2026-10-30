@@ -4,7 +4,8 @@ A walk script (``tools/walk/slice<N>_walk.py``) starts the app with
 ``start_server``, drives it with these helpers, writes a JSON report and
 screenshots under its ``--out`` folder, and always calls ``stop_server``.
 Selectors are the ones the slice-1 walks proved: ``[data-step-id=N]`` for
-rail items, ``[data-step-key=KEY]`` for the pipeline header, ``.right-panel``
+rail items, ``[data-step-key=KEY]`` for the pipeline header's bars (both
+levels'; ``[data-level-key=LEVEL]`` for the level labels), ``.right-panel``
 for the workflow panel (``PANEL``: that panel, or the analysis screen's
 console ``.defo-analysis-right`` while that screen shows), ``.dialog-card`` for
 rail dialogs and
@@ -41,6 +42,10 @@ REPO = Path(__file__).resolve().parents[2]
 # $DEFO_ALERTS_ENV_BIN, else the micromamba env the runbook creates.
 ENV_BIN = Path(os.environ.get("DEFO_ALERTS_ENV_BIN") or Path.home() / "micromamba" / "envs" / "defo-alerts" / "bin")
 MESSAGES_EN = REPO / "deforestation_alerts" / "message" / "en"
+#: Where the walks keep their data dirs (and the seed project they copy):
+#: $DEFO_WALK_ROOT, else ~/module_results. Keep it under $HOME: the file
+#: menus walk there from $HOME (``phases.pick_file``).
+ROOT = Path(os.environ.get("DEFO_WALK_ROOT") or Path.home() / "module_results")
 
 #: Every open dialog but MapApp's rail dialog (its v-dialog has the content
 #: class ``dialog-container``): a step's form, Manage projects, a confirmation.
@@ -141,8 +146,10 @@ def new_page(playwright, report: dict):
     page.on("console", lambda m: report["console"].append(f"{m.type}: {m.text[:400]}")
             if m.type in ("error", "warning") else None)
     page.on("pageerror", lambda e: report["page_errors"].append(str(e)[:400]))
+    # EE tile 429s are throttling the app's tile queue retries, not failures.
     page.on("response", lambda r: report["bad_responses"].append((r.status, r.url[:160]))
-            if r.status >= 400 else None)
+            if r.status >= 400 and not (r.status == 429 and "earthengine.googleapis.com" in r.url
+                                        and "/tiles/" in r.url) else None)
     return browser, page
 
 
@@ -301,25 +308,40 @@ def back_to_workflow(page, wait=1000):
 
 
 def step_active(page, key) -> bool:
-    """Whether the Workflow panel shows step ``key``: the pipeline header's
-    position reads "<its number> / <steps>" (any language)."""
+    """Whether the Workflow panel shows step ``key``. The strip holds both
+    levels' segments, each level's in its own row; the current one is
+    ``aria-current="step"``, and the badge reads "<its number> / <its level's
+    steps>" (any language), so it is checked too: the header re-renders the
+    mark and the badge together. An optional step left empty reads a word
+    instead of its place."""
     return page.evaluate("""key => {
-        const keys = [...document.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey);
-        const label = `${keys.indexOf(key) + 1} / ${keys.length}`;
-        return keys.includes(key) && [...document.querySelectorAll('.right-panel span')].some(e =>
-            e.childElementCount === 0 && e.textContent.trim() === label && e.getBoundingClientRect().width > 0);
+        const seg = [...document.querySelectorAll('.right-panel [data-step-key]')]
+            .find(e => e.dataset.stepKey === key);
+        if (!seg || seg.getAttribute('aria-current') !== 'step') return false;
+        const badge = [...document.querySelectorAll('.right-panel .defo-step-badge')]
+            .find(e => e.getBoundingClientRect().width > 0);
+        if (!badge) return false;
+        const text = badge.textContent.trim();
+        if (!/^\\d+ \\/ \\d+$/.test(text)) return true;
+        const keys = [...seg.parentElement.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey);
+        return text === `${keys.indexOf(key) + 1} / ${keys.length}`;
     }""", key)
+
+
+def _segment(page, key):
+    return page.locator(f'.right-panel [data-step-key="{key}"]')
 
 
 def goto_step(page, key, wait=1500):
     """A workflow step by key, from the workflow or from the analysis screen.
 
+    The strip shows both levels' steps, so any step is one click on its bar.
     ``"analysis"`` is not a step: it is the analysis screen, which
     Evaluation's *Start analysis* opens (enabled once an alert set exists).
     """
     back_to_workflow(page)
     if key == "analysis":
-        page.locator('[data-step-key="evaluators"]').first.click()
+        goto_step(page, "evaluators", wait=0)
         # The button is found once the panel shows Evaluation: one found on
         # the step before it hides before the click lands.
         wait_for(lambda: step_active(page, "evaluators"), 30, "the Evaluation step")
@@ -330,7 +352,11 @@ def goto_step(page, key, wait=1500):
         wait_for(lambda: page.locator(SCREEN_ON).count(), 30, "the analysis screen")
         page.wait_for_timeout(wait)
         return
-    page.locator(f'[data-step-key="{key}"]').first.click()
+    # A locked bar is aria-disabled, which Playwright will not click, and a
+    # walk clicks one to see that the step stays locked: force only that one,
+    # as force also skips the wait for a bar the header is re-rendering
+    bar = _segment(page, key).first
+    bar.click(force=bar.get_attribute("aria-disabled") == "true")
     page.wait_for_timeout(wait)
 
 

@@ -16,11 +16,7 @@ SQUARE = {"type": "Feature", "properties": {}, "geometry": {
     "type": "Polygon", "coordinates": [[[0, 0], [0, 0.01], [0.01, 0.01], [0.01, 0], [0, 0]]]}}
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def test_construction_sets_the_views_the_basemaps_the_sections_and_the_labels():
@@ -58,12 +54,12 @@ def test_the_basemap_and_section_labels_are_translated():
     assert english["basemapSwitcher.sepal_dark"] == "SEPAL Dark"
     assert english["layerMenu.section.imagery"] == "Imagery"
     assert english["layerMenu.section.alerts"] == "Alerts"
-    assert english["layerMenu.section.optional"] == "Optional layers"
+    assert english["layerMenu.section.optional"] == "Additional layers"
     set_locale("es-ES")
     spanish = pane_labels()
     assert spanish["basemapSwitcher.title"] == "Mapa base"
     assert spanish["basemapSwitcher.sepal_dark"] == "SEPAL Oscuro"
-    assert spanish["layerMenu.section.optional"] == "Capas opcionales"
+    assert spanish["layerMenu.section.optional"] == "Capas adicionales"
     for locale in ("fr", "pt-BR"):
         set_locale(locale)
         translated = pane_labels()
@@ -362,3 +358,42 @@ def test_earlier_alerts_draw_over_the_imagery_and_under_the_alert_box_and_polygo
     unsubscribe()
     imagery, overlay, polygon = (panes.spec(i)["z"] for i in ("after:tc", earlier.EARLIER_ID, DEFO_ID))
     assert imagery < overlay < ALERT_TOP_Z < polygon
+
+
+# ---- pick (group review) -----------------------------------------------------------
+
+def test_the_nearby_band_sits_between_earlier_alerts_and_the_alert_top():
+    assert Z_BASE["earlier"] < Z_BASE["nearby"] == 3_500_000 < Z_BASE["alert_top"]
+
+
+def test_layer_off_reads_the_layer_menu_toggles():
+    panes = make_panes()
+    panes.widget.layer_menu_toggles = {"before": {"analysis-nearby": False}}
+    assert panes.layer_off("before", "analysis-nearby") is True
+    assert panes.layer_off("after", "analysis-nearby") is False
+    assert panes.layer_off("before", "other") is False
+
+
+def test_set_pick_tag_writes_the_trait():
+    panes = make_panes()
+    panes.set_pick_tag("7:1")
+    assert panes.widget.pick_tag == "7:1"
+
+
+def test_on_pick_calls_back_and_unsubscribes():
+    panes = make_panes()
+    seen = []
+    off = panes.on_pick(seen.append)
+    event = {"tag": "7:1", "view": "after", "lat": 1.0, "lng": 2.0, "zoom": 14, "seq": 1}
+    panes.widget.set_state({"pick_event": event})
+    assert seen == [event]
+    off()
+    panes.widget.set_state({"pick_event": {**event, "seq": 2}})
+    assert seen == [event]
+
+
+def test_the_pick_unsubscribe_can_be_called_twice():
+    panes = make_panes()
+    off = panes.on_pick(lambda event: None)
+    off()
+    off()  # a second call does nothing (unobserve alone raises ValueError)

@@ -84,7 +84,7 @@
       "import_failed": "Falha ao importar {file}. {error}"
     },
     "aoi": {
-      "description": "Escolha a área a monitorar. Ela é salva com o projeto e todos os downloads são recortados por ela.",
+      "instruction": "Escolha a área a monitorar.",
       "info_header": "Sobre a área de interesse",
       "info_md": "Escolha a área que este projeto monitora: uma área administrativa, um polígono que você desenhar ou um recurso do Earth Engine. Ela é salva com o projeto assim que você a seleciona, e todos os downloads são recortados por ela.\n\n- A **cobertura** de cada fonte de alertas sobre esta área é verificada uma vez e salva no projeto; a etapa Alertas a exibe.\n- Assim que o projeto tem um conjunto de alertas, a AOI fica bloqueada: uma nova área invalidaria todos os downloads e todas as pegadas. Use **Duplicar** na janela Projeto para monitorar outra área com as mesmas fontes, máscaras, camadas e grade.",
       "saved": "AOI salva: {name}",
@@ -94,31 +94,27 @@
       "busy": "Uma tarefa está gravando neste projeto; altere a AOI quando ela terminar."
     },
     "alerts": {
-      "description": "Os conjuntos de dados de alertas que este projeto monitora, com a parte da AOI que cada um cobre. Cada um é baixado para todos os períodos, recortado pela AOI e pela janela de busca do período.",
+      "instruction": "Adicione fontes de alertas e baixe-as para este período.",
       "info_header": "Sobre as fontes de alertas",
-      "info_md": "Uma fonte de alertas é um conjunto de dados de alertas de perda florestal. Cada pixel de alerta é **confirmado** (alta confiança) ou **provável** (baixa confiança) e traz o dia em que foi detectado pela primeira vez.\n\n- **Predefinidas:** GLAD-L (Landsat, cerca de 30 m), GLAD-S2 (Sentinel-2, 10 m) e RADD (Sentinel-1, 10 m). O RADD só detecta em floresta tropical úmida primária; no restante de sua área, não reporta alertas.\n- **Personalizadas:** uma imagem ou coleção de imagens do Earth Engine, ou um GeoTIFF na sua pasta do SEPAL, lido por meio de um formato predefinido: *RADD* (banda de alerta 2 provável, 3 confirmado; data `yyddd`), *alertas CCDC do SEPAL* e *alertas PyEO do SEPAL* (1–2 detecções provável, 3 ou mais confirmado; data da primeira detecção em anos decimais) ou *somente data* (uma banda de data na codificação que você escolher; todo pixel com data é confirmado).\n\nO chip de cada linha é a **cobertura** da fonte: a parte da AOI dentro da sua pegada. Uma fonte que não cobre nada da AOI não pode ser adicionada; uma cobertura parcial é um aviso. Um projeto tem no máximo 3 fontes predefinidas e 6 personalizadas. Uma fonte personalizada pode ser editada até que um conjunto de alertas a use; depois disso, exclua-a e adicione uma nova.",
+      "info_md": "Uma fonte de alertas é um conjunto de dados de alertas de perda florestal. Cada pixel de alerta é **confirmado** (alta confiança) ou **provável** (baixa confiança) e traz o dia em que foi detectado pela primeira vez.\n\n- **Predefinidas:** GLAD-L (Landsat, cerca de 30 m), GLAD-S2 (Sentinel-2, 10 m) e RADD (Sentinel-1, 10 m). O RADD só detecta em floresta tropical úmida primária; no restante de sua área, não reporta alertas.\n- **Personalizadas:** uma imagem ou coleção de imagens do Earth Engine, ou um GeoTIFF na sua pasta do SEPAL, lido por meio de um formato predefinido: *RADD* (banda de alerta 2 provável, 3 confirmado; data `yyddd`), *alertas CCDC do SEPAL* e *alertas PyEO do SEPAL* (1–2 detecções provável, 3 ou mais confirmado; data da primeira detecção em anos decimais) ou *somente data* (uma banda de data na codificação que você escolher; todo pixel com data é confirmado).\n\nA lista mostra as fontes do **período ativo**. **Baixar** obtém uma fonte na janela de busca do período, na sua própria projeção e recortada pela AOI; uma fonte GeoTIFF é lida do seu arquivo em vez disso, e **Baixar … pendentes** obtém cada fonte que esteja faltando ou desatualizada. O chip de cada linha é a **cobertura** da fonte: a parte da AOI dentro da sua pegada. Uma fonte que não cobre nada da AOI não pode ser adicionada; uma cobertura parcial é um aviso.\n\n**Adicionar aos novos períodos** decide com quais fontes um novo período começa. Um período tem no máximo 3 fontes predefinidas e 6 personalizadas. O botão de lixeira de uma linha remove a fonte somente deste período: os arquivos baixados dela neste período são excluídos, e a fonte continua no projeto e pode ser adicionada de novo. Uma fonte personalizada pode ser editada até que um conjunto de alertas a use; depois disso, remova-a e adicione uma nova.",
       "list_title": "Fontes",
       "col_source": "Fonte",
-      "col_coverage": "Cobertura",
       "empty": "Ainda não há fonte de alertas. Adicione pelo menos uma.",
       "add": "Adicionar fonte",
       "add_title": "Adicionar uma fonte de alertas",
-      "predefined_label": "Fonte predefinida",
-      "all_added": "Todas as fontes predefinidas já estão neste projeto.",
-      "kind_predefined": "predefinida",
+      "predefined_label": "Fonte",
+      "all_added": "Todas as fontes já estão neste período.",
       "label_glad_l": "GLAD-L (Landsat, 30 m)",
       "label_radd": "RADD (Sentinel-1, 10 m)",
       "label_glad_s2": "GLAD-S2 (Sentinel-2, 10 m)",
       "meta_loading": "A lista de bandas do GLAD-L ainda está sendo carregada do Earth Engine; tente novamente em instantes.",
       "meta_failed": "Não foi possível carregar a lista de bandas do GLAD-L: {error}",
-      "delete_title": "Remover {name}?",
-      "delete_message": "Seus downloads e arquivos harmonizados são excluídos.",
       "delete_used": {
         "one": "Usada por {n} conjunto de alertas; ele mantém seus alertas e aparecerá como desatualizado.",
         "many": "Usada por {n} de conjuntos de alertas; eles mantêm seus alertas e aparecerão como desatualizados.",
         "other": "Usada por {n} conjuntos de alertas; eles mantêm seus alertas e aparecerão como desatualizados."
       },
-      "delete_busy": "Uma tarefa está gravando neste projeto; exclua a fonte quando ela terminar.",
+      "delete_busy": "Uma tarefa está gravando neste projeto; remova a fonte quando ela terminar.",
       "edit_busy": "Uma tarefa está gravando neste projeto; edite a fonte quando ela terminar.",
       "name_empty": "Dê um nome à fonte.",
       "name_too_long": "Use no máximo 24 caracteres.",
@@ -127,8 +123,30 @@
       "name_token_na": "Use pelo menos uma letra ou dígito (A–Z, 0–9).",
       "name_token_taken": "Este nome compartilharia nomes de arquivo com outra fonte; escolha outro.",
       "name_set_collision": "Com este nome, duas combinações de fontes diferentes compartilhariam um conjunto de alertas; escolha outro.",
+      "name_separator": "Não use \", \" nem a palavra isolada \"and\": elas unem os nomes de fontes nas listas.",
       "edit_used": "Um conjunto de alertas já usa esta fonte: adicione uma nova em vez disso.",
-      "cap_reached": "As 6 vagas de fontes personalizadas já estão em uso.",
+      "cap_reached": "Este período já tem 6 fontes personalizadas.",
+      "period_box": {
+        "one": "Período {start} → {end} · janela de busca desde {window} ({n} dia de busca retroativa)",
+        "many": "Período {start} → {end} · janela de busca desde {window} ({n} de dias de busca retroativa)",
+        "other": "Período {start} → {end} · janela de busca desde {window} ({n} dias de busca retroativa)"
+      },
+      "chip_aoi": "AOI {pct}%",
+      "chip_dates_ok": "✓ dados até {last}",
+      "chip_dates_part": "dados só até {last}",
+      "chip_dates_none": "✗ os dados terminam em {last}",
+      "remove_from_period_title": "Remover {name} deste período?",
+      "remove_from_period_message": "Os arquivos baixados e harmonizados deste período são excluídos. A fonte continua no projeto e pode ser adicionada de novo.",
+      "download_all": {
+        "one": "Baixar {n} pendente",
+        "many": "Baixar {n} pendentes",
+        "other": "Baixar {n} pendentes"
+      },
+      "read_file": "Ler arquivo",
+      "add_to_new_periods": "Adicionar aos novos períodos",
+      "state_downloaded": "Baixado",
+      "state_reading": "Lendo",
+      "action_remove": "Remover deste período",
       "err_unreadable": "O arquivo não pode ser lido como GeoTIFF.",
       "err_no_crs": "O arquivo não tem sistema de referência de coordenadas.",
       "err_no_images": "Nenhuma imagem da coleção tem todas as bandas mapeadas.",
@@ -137,7 +155,7 @@
       "err_date_format": "Este recurso CCDC armazena suas datas como dias julianos ou tempo Unix (propriedade dateFormat 0 ou 2); apenas anos fracionários (dateFormat 1) são suportados.",
       "err_not_covered": "Esta fonte não cobre a AOI.",
       "err_wrong_type": "Escolha uma imagem ou coleção de imagens do Earth Engine.",
-      "mode_predefined": "Predefinida",
+      "mode_predefined": "Predefinida ou do projeto",
       "mode_custom": "Personalizada ({n} de 6)",
       "name_label": "Nome",
       "save": "Salvar",
@@ -158,7 +176,6 @@
       "collection_help": "Todas as imagens da coleção são usadas, a mais recente por cima. Para uma coleção de instantâneos semanais (como a do próprio RADD), informe o id da imagem mais recente.",
       "err_band_map": "Escolha um formato e mapeie suas bandas.",
       "err_no_ref": "Escolha um recurso ou um arquivo.",
-      "kind_custom": "personalizada · {format}",
       "file_preview_after_harmonize": "Uma fonte GeoTIFF é exibida depois de harmonizada.",
       "err_aoi_not_ready": "A geometria da AOI ainda não está pronta; tente novamente em instantes.",
       "err_aoi_changed": "A AOI mudou durante a verificação; adicione a fonte novamente.",
@@ -182,8 +199,8 @@
       "encoding_help": "Como a banda de data armazena suas datas."
     },
     "layers": {
-      "description": "Camadas que apoiam a análise dos alertas: uma imagem do Earth Engine ou um GeoTIFF da sua pasta do SEPAL. Elas também podem ser exibidas nos dois mapas da Análise.",
-      "info_header": "Sobre as camadas opcionais",
+      "instruction": "Adicione camadas que ajudem a revisar os alertas.",
+      "info_header": "Sobre as camadas adicionais",
       "info_md": "As camadas de visualização apoiam a análise dos alertas; elas nunca os alteram.\n\n- **Imagem do Earth Engine** e **GeoTIFF** (na sua pasta do SEPAL). Lidas as bandas da imagem, uma banda é desenhada sozinha, duas são escolhidas em **Banda** e três ou mais perguntam **Bandas**: uma banda ou uma **Composição RGB** (sugerida quando os nomes das bandas dão vermelho, verde e azul). Uma banda recebe um **Tipo de raster**: *Contínuo*, uma rampa de cores entre um mínimo e um máximo (**Ajustar à AOI** os preenche com os percentis 2–98 % da banda na AOI); ou *Categórico*, uma cor e um rótulo por classe (**Encontrar as classes na AOI** lista os valores inteiros presentes, no máximo 50; oculte uma classe pelo seu olho; valores não listados e classes ocultas ficam transparentes; com só 0 e 1, o 1 recebe o nome da banda e o 0 começa oculto). **RGB** desenha três bandas a partir de uma **Composição** (cor verdadeira, infravermelho falsa-cor, SWIR / NIR / vermelho) ou com as bandas que você escolher (Personalizada), entre um mínimo e um máximo comuns.\n- Uma camada GeoTIFF: o app grava um arquivo de pirâmides ao lado dela, então a pasta precisa permitir gravação.\n\nExiba uma camada neste mapa com o botão de mapa da sua linha; a legenda aparece junto. Marque **Mostrar na Análise** para adicioná-la, desligada, aos dois mapas da Análise.",
       "list_title": "Camadas de visualização",
       "col_name": "Nome",
@@ -281,18 +298,18 @@
       "field_show_in_analysis": "Mostrar na Análise"
     },
     "raster_input": {
-      "file": "GeoTIFF",
+      "file": "GeoTIFF / VRT",
       "bands_loading": "Lendo as bandas…",
       "bands_failed": "Não foi possível ler as bandas: {error}",
       "field_source": "Fonte",
-      "source_hint": "Uma imagem do Earth Engine, ou um GeoTIFF na sua pasta do SEPAL.",
+      "source_hint": "Uma imagem do Earth Engine, ou um GeoTIFF ou VRT na sua pasta do SEPAL.",
       "source_gee": "Earth Engine",
-      "source_file": "GeoTIFF"
+      "source_file": "GeoTIFF / VRT"
     },
     "period": {
-      "description": "Cada período baixa todas as fontes nas suas datas mais os dias de busca retroativa anteriores. Os pixels já reportados pelos conjuntos de períodos anteriores são ignorados, então um alerta publicado com atraso entra no conjunto do período seguinte e nenhum pixel é reportado duas vezes.",
+      "instruction": "Defina o período de monitoramento.",
       "info_header": "Sobre os períodos",
-      "info_md": "Um período é uma rodada de monitoramento, normalmente um mês. Para cada período, todas as fontes são baixadas na sua **janela de busca**: as datas do período mais os dias de **busca retroativa** anteriores, para que alertas publicados com atraso ainda sejam encontrados.\n\n- Os pixels já reportados pelos conjuntos de alertas de períodos anteriores são removidos antes da vetorização, então um pixel nunca é reportado duas vezes.\n- **Novo período** começa no dia seguinte ao último período e copia as escolhas de máscara desse período.\n- As datas de um período não podem mudar depois que ele tem conjuntos de alertas. Um período pode ser excluído quando não tem conjuntos, ou quando é o último período; seus downloads e arquivos são excluídos com ele.\n- Selecione uma linha para torná-la o período ativo de Baixar e harmonizar e de Integrar e vetorizar.",
+      "info_md": "Um período é uma rodada de monitoramento, normalmente um mês. Cada fonte de um período é baixada na sua **janela de busca**: as datas do período mais os dias de **busca retroativa** anteriores, para que alertas publicados com atraso ainda sejam encontrados.\n\n- Os pixels já reportados pelos conjuntos de alertas de períodos anteriores são removidos antes da vetorização, então um pixel nunca é reportado duas vezes.\n- **Novo período** começa no dia seguinte ao último período e copia as escolhas de máscara desse período; começa com as fontes marcadas em **Adicionar aos novos períodos** (Alertas).\n- As datas de um período não podem mudar depois que ele tem conjuntos de alertas. Um período pode ser excluído quando não tem conjuntos, ou quando é o último período; seus downloads e arquivos são excluídos com ele.\n- Selecione uma linha para torná-la o período ativo de Alertas, Harmonizar e Integrar e vetorizar.",
       "list_title": "Períodos",
       "empty": "Ainda não há períodos.",
       "col_period": "Período",
@@ -309,7 +326,7 @@
       "new_title": "Novo período",
       "edit_title": "Alterar as datas de {period}",
       "edit_look_back_title": "Busca retroativa de {period}",
-      "masks_copied": "Ele começa com as escolhas de máscara do último período; altere-as em Baixar e harmonizar.",
+      "masks_copied": "Ele começa com as escolhas de máscara do último período; altere-as em Harmonizar.",
       "save": "Salvar",
       "created": "Período criado",
       "saved": "Período salvo",
@@ -317,9 +334,9 @@
       "state_stale": "desatualizado",
       "state_missing": "faltando",
       "note_sources_stale": {
-        "one": "{count} fonte desatualizada aqui: execute-a novamente em Baixar e harmonizar.",
-        "many": "{count} de fontes desatualizadas aqui: execute-as novamente em Baixar e harmonizar.",
-        "other": "{count} fontes desatualizadas aqui: execute-as novamente em Baixar e harmonizar."
+        "one": "{count} fonte desatualizada aqui: execute-a novamente em Alertas ou Harmonizar.",
+        "many": "{count} de fontes desatualizadas aqui: execute-as novamente em Alertas ou Harmonizar.",
+        "other": "{count} fontes desatualizadas aqui: execute-as novamente em Alertas ou Harmonizar."
       },
       "note_sets_stale": {
         "one": "{count} conjunto de alertas gerado a partir de entradas que mudaram desde então.",
@@ -350,10 +367,19 @@
       "error_bad_look_back": "A busca retroativa deve ser um número inteiro de dias, 0 ou mais.",
       "add": "Adicionar período"
     },
+    "harmonize": {
+      "instruction": "Alinhe os downloads à grade do projeto e aplique as máscaras.",
+      "info_header": "Sobre Harmonizar",
+      "info_md": "Esta etapa alinha todas as entradas do período ativo na **grade** do projeto: uma projeção em metros e um tamanho de pixel.\n\n1. **Grade:** um código EPSG (o botão de mira sugere a zona UTM da AOI) e uma resolução. Ela fica bloqueada assim que o projeto tem um conjunto de alertas.\n2. **Máscaras:** rasters definidos uma vez por projeto (uma imagem do Earth Engine ou um GeoTIFF, uma banda; um pixel está ativo onde seu valor não é zero). Cada período escolhe quais máscaras estão ativas e se cada uma **mantém** sua área (os alertas fora dela são removidos) ou a **exclui** (os alertas dentro dela são removidos). Uma máscara é baixada uma vez e alinhada à grade.\n3. **Fontes:** cada fonte baixada em Alertas (ou lida do seu próprio arquivo) é alinhada à grade e mascarada (harmonizada).\n\nNada cujas entradas não mudaram é executado duas vezes: uma nova grade ou uma troca de máscara apenas harmoniza de novo, sem baixar. **Harmonizar … pendentes** executa primeiro as máscaras, depois cada fonte baixada que esteja faltando ou desatualizada, e pula as linhas que mostram *Não coberta* ou *Sem dados para este período*. Cada linha precisa do dobro do seu tamanho compactado livre em disco.",
+      "download_first": "Baixe-a ou leia-a primeiro em Alertas",
+      "run_all": {
+        "one": "Harmonizar {n} pendente",
+        "many": "Harmonizar {n} pendentes",
+        "other": "Harmonizar {n} pendentes"
+      },
+      "job_title": "Harmonizar"
+    },
     "prepare": {
-      "description": "Baixe todas as máscaras e fontes do período ativo na própria projeção de cada uma, depois alinhe-as à grade do projeto e aplique as máscaras do período (harmonizar). Nada cujas entradas não mudaram é executado duas vezes.",
-      "info_header": "Sobre Baixar e harmonizar",
-      "info_md": "Esta etapa prepara todas as entradas do período ativo na **grade** do projeto: uma projeção em metros e um tamanho de pixel.\n\n1. **Grade:** um código EPSG (o botão de mira sugere a zona UTM da AOI) e uma resolução. Ela fica bloqueada assim que o projeto tem um conjunto de alertas.\n2. **Máscaras:** rasters definidos uma vez por projeto (uma imagem do Earth Engine ou um GeoTIFF, uma banda; um pixel está ativo onde seu valor não é zero). Cada período escolhe quais máscaras estão ativas e se cada uma **mantém** sua área (os alertas fora dela são removidos) ou a **exclui** (os alertas dentro dela são removidos). Uma máscara é baixada uma vez e alinhada à grade.\n3. **Fontes:** cada fonte é baixada na janela de busca do período na sua própria projeção, depois alinhada à grade e mascarada (harmonizada).\n\nNada cujas entradas não mudaram é executado duas vezes: uma nova grade ou uma troca de máscara apenas harmoniza de novo, sem baixar. **Executar … pendentes** executa primeiro as máscaras, depois cada fonte que esteja faltando ou desatualizada, e pula as linhas que mostram *Não coberta* ou *Sem dados para este período*. Cada linha precisa do dobro do seu tamanho compactado livre em disco.",
       "grid_title": "Grade do projeto",
       "grid_epsg": "EPSG",
       "grid_resolution": "Resolução",
@@ -371,11 +397,6 @@
       "list_title": "Fontes deste período",
       "col_source": "Fonte",
       "empty": "Adicione primeiro fontes de alertas.",
-      "run_all": {
-        "one": "Executar {n} pendente",
-        "many": "Executar {n} pendentes",
-        "other": "Executar {n} pendentes"
-      },
       "footer_strip": "{running} em execução · {queued} na fila",
       "footer_running": "{running} em execução",
       "footer_done": "{done} de {total} concluídas",
@@ -388,8 +409,7 @@
         "many": "Baixar tudo de novo ({n})",
         "other": "Baixar tudo de novo ({n})"
       },
-      "redownload_all_masks": "Execute primeiro as máscaras pendentes",
-      "job_title": "Baixar e harmonizar",
+      "job_title": "Baixar",
       "job_row": "Preparando {source}",
       "job_mask_row": "Preparando a máscara {mask}",
       "job_progress": "{title} · {pct}%",
@@ -402,7 +422,7 @@
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "A geometria da AOI ainda está sendo obtida; execute esta linha novamente em instantes.",
       "aoi_geometry_failed": "Não foi possível obter a geometria da AOI, então as linhas GeoTIFF não podem ser executadas; use Verificar novamente e depois execute-as.",
-      "mask_not_ready": "Uma máscara ativa neste período ainda não está alinhada à grade atual; Executar … pendentes alinha primeiro as máscaras.",
+      "mask_not_ready": "Uma máscara ativa neste período ainda não está alinhada à grade atual; Harmonizar … pendentes alinha primeiro as máscaras.",
       "mask_file_missing": "Máscara {name}: arquivo não encontrado ({path}). Coloque o arquivo de volta neste caminho para usar a máscara.",
       "mask_name_empty": "Dê um nome à máscara.",
       "mask_name_too_long": "Use no máximo 24 caracteres.",
@@ -426,7 +446,7 @@
       "masks_title": "Máscaras",
       "masks_empty": "Ainda não há máscaras.",
       "masks_note": "Uma máscara são os pixels em que sua banda é diferente de zero; zero e sem dados ficam fora dela. Manter remove os alertas fora da máscara; excluir remove os alertas dentro dela.",
-      "masks_switched": "As fontes deste período estão desatualizadas; Executar … pendentes as harmoniza de novo sem baixá-las.",
+      "masks_switched": "As fontes deste período estão desatualizadas; Harmonizar … pendentes as harmoniza de novo sem baixá-las.",
       "mask_add": "Adicionar máscara",
       "mask_add_title": "Adicionar uma máscara",
       "mask_edit_title": "Editar a máscara {name}",
@@ -475,7 +495,7 @@
       "verb_retry": "Repetir",
       "sub_downloaded": "baixada em {date}",
       "sub_file": "GeoTIFF",
-      "sub_downloading": "baixando {pct}% · depois harmonizar",
+      "sub_downloading": "baixando {pct}%",
       "sub_harmonizing": "harmonizando",
       "sub_downloading_align": "baixando {pct}% · depois alinhar",
       "sub_aligning": "alinhando",
@@ -502,15 +522,15 @@
       "action_nothing_to_fetch": "Nada a baixar de novo: lida de um arquivo",
       "action_delete_files": "Excluir arquivos",
       "redownload_title": "Baixar {source} de novo?",
-      "redownload_message": "O catálogo continua adicionando alertas a datas passadas. Isto busca os mais recentes para {window}, substitui o arquivo baixado em {date} e depois harmoniza.",
-      "redownload_message_new": "Isto busca os alertas para {window} e depois harmoniza.",
+      "redownload_message": "O catálogo continua adicionando alertas a datas passadas. Isto busca os mais recentes para {window} e substitui o arquivo baixado em {date}.",
+      "redownload_message_new": "Isto busca os alertas para {window}.",
       "redownload_label": "Baixar de novo",
       "redownload_all_title": {
         "one": "Baixar {n} fonte de novo?",
         "many": "Baixar {n} de fontes de novo?",
         "other": "Baixar {n} fontes de novo?"
       },
-      "redownload_all_message": "Estas fontes são baixadas de novo de seus catálogos e depois harmonizadas: {names}.",
+      "redownload_all_message": "Estas fontes são baixadas de novo de seus catálogos: {names}.",
       "delete_files_title": "Excluir os arquivos de {source}?",
       "delete_files_message": "Remove o download e o arquivo harmonizado deste período ({size}). A fonte continua no projeto; execute-a de novo para recriá-los.",
       "delete_files_message_nosize": "Remove o download e o arquivo harmonizado deste período. A fonte continua no projeto; execute-a de novo para recriá-los.",
@@ -562,48 +582,51 @@
       "d_pixels_masked": "{kept} ({before} antes das máscaras: {removed} removidos)"
     },
     "integrate": {
-      "description": "Combine as fontes baixadas, ignore os pixels que um período anterior já reportou e transforme os agrupamentos em alertas.",
+      "instruction": "Reúna os pixels de alerta em agrupamentos.",
       "info_header": "Sobre Integrar e vetorizar",
-      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os alertas que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Pixels vizinhos se tornam alertas. Os alertas menores que o **tamanho mínimo** são descartados; você pode limitar o número de alertas, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada alerta.\n\nOs pixels pequenos demais para formar um alerta, ou além do número máximo de alertas, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os alertas revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
-      "sources": "Fontes a combinar",
-      "min_size": "Tamanho mínimo do alerta",
-      "min_size_hint": "Os agrupamentos de alertas menores que isto ({px} pixels na grade) são descartados e ficam fora do conjunto, das suas exportações e do mapa.",
+      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os agrupamentos que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada pixel de alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Os pixels de alerta vizinhos são reunidos em **agrupamentos**; cada agrupamento guarda as fontes de todos os seus pixels. Os agrupamentos menores que o **tamanho mínimo** são descartados; você pode limitar o número de agrupamentos, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada agrupamento.\n\nOs agrupamentos menores que o tamanho mínimo ficam fora do conjunto, das suas exportações e do mapa. **Manter os agrupamentos menores que tocam uma perda confirmada anterior** os mantém como *Crescimento · abaixo da área mínima*, vinculados ao alerta a partir do qual crescem; desmarcado, são descartados como qualquer agrupamento pequeno.\n\nOs pixels de agrupamentos pequenos demais para serem mantidos, ou além do número máximo de agrupamentos, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os agrupamentos revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
+      "sources": "Fontes",
+      "min_size": "Tamanho mínimo do agrupamento",
+      "min_size_hint": "= {px} pixels na grade",
+      "small_growth": "Manter os agrupamentos menores que tocam uma perda confirmada anterior",
+      "small_growth_no_earlier": "Nenhum período anterior tem ainda um conjunto de alertas: nada se vincula nesta execução.",
+      "small_growth_no_reviewed": "Nenhum alerta de um período anterior foi revisado ainda: nada se vincula nesta execução.",
       "include_probable": "Incluir alertas prováveis (não confirmados)",
       "probable_per_source": "Definir por fonte",
       "probable_mixed": "Misto: as fontes abaixo diferem.",
       "probable_none": "{source}: só datas, sem nível provável",
       "sorting": "Ordem",
-      "sorting_1": "Alertas maiores primeiro",
-      "sorting_2": "Alertas menores primeiro",
-      "sorting_3": "Alertas recentes primeiro",
-      "sorting_4": "Alertas mais antigos primeiro",
-      "max_alerts": "Número máximo de alertas",
-      "limit_alerts": "Limitar o número de alertas",
+      "sorting_1": "Agrupamentos maiores primeiro",
+      "sorting_2": "Agrupamentos menores primeiro",
+      "sorting_3": "Agrupamentos recentes primeiro",
+      "sorting_4": "Agrupamentos mais antigos primeiro",
+      "max_alerts": "Número máximo de agrupamentos",
+      "limit_alerts": "Limitar o número de agrupamentos",
       "max_alerts_hint_1": {
-        "one": "Mantém {n} alerta: o maior.",
-        "many": "Mantém os {n} de alertas maiores.",
-        "other": "Mantém os {n} maiores alertas."
+        "one": "Mantém {n} agrupamento: o maior.",
+        "many": "Mantém os {n} de agrupamentos maiores.",
+        "other": "Mantém os {n} maiores agrupamentos."
       },
       "max_alerts_hint_2": {
-        "one": "Mantém {n} alerta: o menor.",
-        "many": "Mantém os {n} de alertas menores.",
-        "other": "Mantém os {n} menores alertas."
+        "one": "Mantém {n} agrupamento: o menor.",
+        "many": "Mantém os {n} de agrupamentos menores.",
+        "other": "Mantém os {n} menores agrupamentos."
       },
       "max_alerts_hint_3": {
-        "one": "Mantém {n} alerta: o mais recente.",
-        "many": "Mantém os {n} de alertas mais recentes.",
-        "other": "Mantém os {n} alertas mais recentes."
+        "one": "Mantém {n} agrupamento: o mais recente.",
+        "many": "Mantém os {n} de agrupamentos mais recentes.",
+        "other": "Mantém os {n} agrupamentos mais recentes."
       },
       "max_alerts_hint_4": {
-        "one": "Mantém {n} alerta: o mais antigo.",
-        "many": "Mantém os {n} de alertas mais antigos.",
-        "other": "Mantém os {n} alertas mais antigos."
+        "one": "Mantém {n} agrupamento: o mais antigo.",
+        "many": "Mantém os {n} de agrupamentos mais antigos.",
+        "other": "Mantém os {n} agrupamentos mais antigos."
       },
       "attr_name": "Nome da camada",
-      "attr_name_hint": "As colunas dos alertas se chamam <nome da camada>_<banda>.",
+      "attr_name_hint": "As colunas dos agrupamentos se chamam <nome da camada>_<banda>.",
       "attr_bands": "Bandas",
-      "attr_band_one": "Uma banda ({name}): sua estatística é adicionada a cada alerta.",
-      "attr_bands_pick": "{count} bandas. Escolha as que serão adicionadas aos alertas.",
+      "attr_band_one": "Uma banda ({name}): sua estatística é adicionada a cada agrupamento.",
+      "attr_bands_pick": "{count} bandas. Escolha as que serão adicionadas aos agrupamentos.",
       "attr_stat_majority": "Maioria",
       "attr_stat_mean": "Média",
       "attr_stat_min": "Mínimo",
@@ -615,43 +638,43 @@
       "run": "Integrar e vetorizar",
       "replace_title": "Substituir este conjunto de alertas?",
       "replace_message": {
-        "one": "{n} alerta revisado deste conjunto será descartado.",
-        "many": "{n} de alertas revisados deste conjunto serão descartados.",
-        "other": "{n} alertas revisados deste conjunto serão descartados."
+        "one": "{n} agrupamento revisado deste conjunto será descartado.",
+        "many": "{n} de agrupamentos revisados deste conjunto serão descartados.",
+        "other": "{n} agrupamentos revisados deste conjunto serão descartados."
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… e mais {n}",
       "replace_split": "A divisão entre avaliadores e suas devoluções pendentes serão descartadas.",
       "replace_links": {
-        "one": "{n} alerta de um período posterior está vinculado a este conjunto; seu vínculo será rompido.",
-        "many": "{n} de alertas de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos.",
-        "other": "{n} alertas de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos."
+        "one": "{n} agrupamento de um período posterior está vinculado a este conjunto; seu vínculo será rompido.",
+        "many": "{n} de agrupamentos de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos.",
+        "other": "{n} agrupamentos de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos."
       },
       "job_title": "Integrar e vetorizar",
       "step_combine": "Combinando as fontes",
       "step_vectorize": "Vetorizando os agrupamentos",
       "step_footprint": "Gravando a pegada",
-      "step_store": "Salvando os alertas",
+      "step_store": "Salvando os agrupamentos",
       "step_tiles": "Gerando os blocos do mapa",
       "no_tippecanoe": "O tippecanoe não está instalado: o mapa mostrará os pontos dos alertas sem polígonos.",
       "tiles_failed": "Não foi possível exibir os blocos do mapa ({error}): mostrando os pontos dos alertas sem polígonos.",
       "done": {
-        "one": "{n} alerta pronto para revisão",
-        "many": "{n} de alertas prontos para revisão",
-        "other": "{n} alertas prontos para revisão"
+        "one": "{n} agrupamento pronto para revisão",
+        "many": "{n} de agrupamentos prontos para revisão",
+        "other": "{n} agrupamentos prontos para revisão"
       },
       "growth_linked": {
-        "one": "{n} alerta vinculado a uma perda anterior ({small} abaixo da área mínima)",
-        "many": "{n} de alertas vinculados a perdas anteriores ({small} abaixo da área mínima)",
-        "other": "{n} alertas vinculados a perdas anteriores ({small} abaixo da área mínima)"
+        "one": "{n} agrupamento vinculado a uma perda anterior ({small} abaixo da área mínima)",
+        "many": "{n} de agrupamentos vinculados a perdas anteriores ({small} abaixo da área mínima)",
+        "other": "{n} agrupamentos vinculados a perdas anteriores ({small} abaixo da área mínima)"
       },
       "growth_linked_plain": {
-        "one": "{n} alerta vinculado a uma perda anterior",
-        "many": "{n} de alertas vinculados a perdas anteriores",
-        "other": "{n} alertas vinculados a perdas anteriores"
+        "one": "{n} agrupamento vinculado a uma perda anterior",
+        "many": "{n} de agrupamentos vinculados a perdas anteriores",
+        "other": "{n} agrupamentos vinculados a perdas anteriores"
       },
-      "done_empty": "Nenhum alerta novo neste período: o conjunto de alertas está vazio.",
-      "done_empty_detail": "Nenhum alerta novo neste período: o conjunto de alertas está vazio. {details}",
+      "done_empty": "Nenhum agrupamento novo neste período: o conjunto de alertas está vazio.",
+      "done_empty_detail": "Nenhum agrupamento novo neste período: o conjunto de alertas está vazio. {details}",
       "outcome_pixels": {
         "one": "{source}: {n} pixel de alerta (abaixo do tamanho mínimo, ou sob as pegadas de conjuntos anteriores)",
         "many": "{source}: {n} de pixels de alerta (todos abaixo do tamanho mínimo, ou sob as pegadas de conjuntos anteriores)",
@@ -663,7 +686,7 @@
         "many": "{source}: todos os {n} de pixels de alerta removidos pelas máscaras",
         "other": "{source}: todos os {n} pixels de alerta removidos pelas máscaras"
       },
-      "outcome_none": "{source}: 0 alertas encontrados",
+      "outcome_none": "{source}: 0 pixels de alerta encontrados",
       "outcome_left_out": "{source}: não coberta",
       "outcome_left_out_reason": "{source}: {reason}",
       "project_changed": "O período, a área de interesse ou a grade do projeto mudou durante a execução, então o conjunto de alertas não foi registrado. Execute Integrar e vetorizar novamente.",
@@ -682,7 +705,7 @@
       "attr_err_no_bands": "Mantenha pelo menos uma banda.",
       "attr_err_duplicate": "Outra camada de atributos já lê este raster.",
       "attr_list_title": "Camadas de atributos",
-      "attr_empty": "Nenhuma camada de atributos. Cada uma adiciona estatísticas de suas bandas a cada alerta.",
+      "attr_empty": "Nenhuma camada de atributos. Cada uma adiciona estatísticas de suas bandas a cada agrupamento.",
       "attr_col_raster": "Raster",
       "attr_columns": "Colunas: {columns}"
     },
@@ -705,6 +728,7 @@
       }
     },
     "questionnaire": {
+      "instruction": "Escreva as perguntas feitas para cada alerta.",
       "add_title": "Adicionar uma pergunta",
       "edit_title": "Editar pergunta",
       "add": "Adicionar pergunta",
@@ -725,7 +749,6 @@
       "err_option_duplicate": "Duas opções têm o mesmo nome.",
       "err_option_comma": "Uma opção não pode conter vírgula.",
       "err_ask_for": "Escolha pelo menos um veredito.",
-      "description": "Escolha as perguntas feitas para cada alerta na Análise e o modelo do Word a partir do qual o relatório é gerado.",
       "info_header": "O questionário",
       "info_md": "Cada pergunta aparece na seção Perguntas da Análise, nesta ordem. Suas respostas são salvas com o alerta (uma coluna por pergunta), exportadas com ele, exibidas em gráficos na Visão geral e disponíveis para o relatório como `{{marcador}}`. Excluir uma pergunta mantém as respostas já salvas, mas elas deixam de ser exibidas, exportadas ou incluídas nos gráficos.",
       "questions_title": "Perguntas",
@@ -761,7 +784,7 @@
       "template_missing": "O arquivo não existe mais: escolha-o novamente ou limpe o campo para usar o modelo padrão."
     },
     "evaluators": {
-      "description": "Revise sozinho ou divida os alertas entre avaliadores e mescle o que eles devolverem.",
+      "instruction": "Escolha quem revisa os alertas.",
       "info_header": "Avaliação",
       "info_md": "**Modo de revisão**: no modo **Individual**, você mesmo revisa todos os alertas; com **Vários avaliadores**, os alertas são divididos entre avaliadores.\n\n**Dividir alertas…** distribui em rodízio os alertas do conjunto ativo, na ordem do conjunto, entre os avaliadores que você contar ou nomear. Os alertas já revisados ficam sem atribuição, a menos que você os inclua. **Editar divisão** divide novamente ou remove a divisão.\n\n**Gerar pacotes** cria um zip por avaliador: os alertas do conjunto, o questionário, a AOI e o cache de cenas. O ícone de nuvem de cada linha então baixa o zip desse avaliador. O avaliador o importa na janela Projeto e revisa os alertas dele na Análise.\n\n**Mesclar cópia revisada…** mescla as revisões que um avaliador devolve. Só são considerados os alertas atribuídos a esse avaliador; quando você revisou um deles de forma diferente, você escolhe qual revisão manter."
     }
@@ -783,6 +806,20 @@
     "solo_note": "Você mesmo revisa todos os alertas.",
     "multi_note": "Divida os alertas entre avaliadores e envie a cada um deles um pacote de revisão.",
     "multi_locked": "Remova a divisão para passar para o modo individual.",
+    "group_label": "Revisar juntos os alertas próximos",
+    "group_radius_label": "Distância (m)",
+    "group_radius_error": "Entre 10 e 5.000 m",
+    "group_include_reviewed": "Incluir os alertas já revisados",
+    "group_include_reviewed_hint": "Desmarcado, os alertas revisados antes de ativar o agrupamento nunca são oferecidos.",
+    "group_note": "Na Análise, os alertas dentro desta distância podem ser revisados com um único veredito, um único conjunto de respostas e um único polígono.",
+    "group_locked_groups": {
+      "one": "{n} grupo está salvo: remova-o para desativar o agrupamento.",
+      "many": "{n} de grupos estão salvos: remova-os para desativar o agrupamento.",
+      "other": "{n} grupos estão salvos: remova-os para desativar o agrupamento."
+    },
+    "group_locked_split_on": "Os alertas foram divididos com agrupamento: remova a divisão para alterá-lo.",
+    "group_locked_split_off": "Os alertas foram divididos sem agrupamento: remova a divisão para alterá-lo.",
+    "group_copy_note": "Definido pelo criador do projeto.",
     "split_title": "Dividir os alertas",
     "mode_label": "Avaliadores por",
     "mode_count": "Quantidade",
@@ -799,6 +836,11 @@
       "one": "Alertas divididos entre {n} avaliador.",
       "many": "Alertas divididos entre {n} de avaliadores.",
       "other": "Alertas divididos entre {n} avaliadores."
+    },
+    "split_oversized": {
+      "one": "Um grupo de alertas próximos contém {n} alerta, mais do que uma parte igual.",
+      "many": "Um grupo de alertas próximos contém {n} de alertas, mais do que uma parte igual.",
+      "other": "Um grupo de alertas próximos contém {n} alertas, mais do que uma parte igual."
     },
     "removed": "Divisão removida.",
     "remove_unrecorded": "A divisão de {project} não foi removida: outro projeto foi aberto, ou seus alertas ainda não estavam carregados. Abra {project} e remova a divisão novamente.",

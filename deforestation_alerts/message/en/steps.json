@@ -78,7 +78,7 @@
       "import_failed": "Import of {file} failed. {error}"
     },
     "aoi": {
-      "description": "Pick the area to monitor. It is saved with the project and every download is cut to it.",
+      "instruction": "Choose the area to monitor.",
       "info_header": "About the area of interest",
       "info_md": "Pick the area this project monitors: an administrative area, a polygon you draw, or an Earth Engine asset. It is saved with the project as soon as you select it, and every download is cut to it.\n\n- The **coverage** of every alert source over this area is checked once and saved in the project; the Alerts step shows it.\n- Once the project has an alert set, the AOI is locked: a new area would invalidate every download and every footprint. Use **Duplicate** in the Project dialog to monitor another area with the same sources, masks, layers and grid.",
       "saved": "AOI saved: {name}",
@@ -88,30 +88,26 @@
       "busy": "A job is writing into this project; change the AOI once it has finished."
     },
     "alerts": {
-      "description": "The alert datasets this project monitors, with the share of the AOI each one covers. Each is downloaded for every period, cut to the AOI and the period's search window.",
+      "instruction": "Add alert sources and download them for this period.",
       "info_header": "About alert sources",
-      "info_md": "An alert source is a dataset of forest-loss alerts. Each alert pixel is **confirmed** (high confidence) or **probable** (low confidence) and carries the day it was first detected.\n\n- **Predefined:** GLAD-L (Landsat, about 30 m), GLAD-S2 (Sentinel-2, 10 m) and RADD (Sentinel-1, 10 m). RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.\n- **Custom:** an Earth Engine image or image collection, or a GeoTIFF in your SEPAL folder, read through a format preset: *RADD* (alert band 2 probable, 3 confirmed; date `yyddd`), *SEPAL CCDC alerts* and *SEPAL PyEO alerts* (1–2 detections probable, 3 or more confirmed; first detection date in decimal years) or *date only* (one date band in the encoding you choose; every dated pixel is confirmed).\n\nThe chip on each row is the source's **coverage**: the share of the AOI inside its footprint. A source that covers none of the AOI cannot be added; a partial coverage is a warning. A project holds at most 3 predefined and 6 custom sources. A custom source can be edited until an alert set uses it; after that, delete it and add a new one.",
+      "info_md": "An alert source is a dataset of forest-loss alerts. Each alert pixel is **confirmed** (high confidence) or **probable** (low confidence) and carries the day it was first detected.\n\n- **Predefined:** GLAD-L (Landsat, about 30 m), GLAD-S2 (Sentinel-2, 10 m) and RADD (Sentinel-1, 10 m). RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.\n- **Custom:** an Earth Engine image or image collection, or a GeoTIFF in your SEPAL folder, read through a format preset: *RADD* (alert band 2 probable, 3 confirmed; date `yyddd`), *SEPAL CCDC alerts* and *SEPAL PyEO alerts* (1–2 detections probable, 3 or more confirmed; first detection date in decimal years) or *date only* (one date band in the encoding you choose; every dated pixel is confirmed).\n\nThe list shows the **active period's** sources. **Download** fetches a source over the period's search window, in its own projection and cut to the AOI; a GeoTIFF source is read from its file instead, and **Download … pending** fetches every source that is missing or out of date. The chip on each row is the source's **coverage**: the share of the AOI inside its footprint. A source that covers none of the AOI cannot be added; a partial coverage is a warning.\n\n**Add to new periods** decides which sources a new period starts with. A period holds at most 3 predefined and 6 custom sources. The bin button of a row removes the source from this period only: its downloaded files of this period are deleted, and it stays in the project and can be added again. A custom source can be edited until an alert set uses it; after that, remove it and add a new one.",
       "list_title": "Sources",
       "col_source": "Source",
-      "col_coverage": "Coverage",
       "empty": "No alert source yet. Add at least one.",
       "add": "Add source",
       "add_title": "Add an alert source",
-      "predefined_label": "Predefined source",
-      "all_added": "Every predefined source is already in this project.",
-      "kind_predefined": "predefined",
+      "predefined_label": "Alert source",
+      "all_added": "Every source is already in this period.",
       "label_glad_l": "GLAD-L (Landsat, 30 m)",
       "label_radd": "RADD (Sentinel-1, 10 m)",
       "label_glad_s2": "GLAD-S2 (Sentinel-2, 10 m)",
       "meta_loading": "Still loading GLAD-L's band list from Earth Engine; try again in a moment.",
       "meta_failed": "Could not load GLAD-L's band list: {error}",
-      "delete_title": "Remove {name}?",
-      "delete_message": "Its downloads and harmonized files are deleted.",
       "delete_used": {
         "one": "Used by {n} alert set; it keeps its alerts and will show out of date.",
         "other": "Used by {n} alert sets; they keep their alerts and will show out of date."
       },
-      "delete_busy": "A job is writing into this project; delete the source once it has finished.",
+      "delete_busy": "A job is writing into this project; remove the source once it has finished.",
       "edit_busy": "A job is writing into this project; edit the source once it has finished.",
       "name_empty": "Give the source a name.",
       "name_too_long": "Use at most 24 characters.",
@@ -120,8 +116,28 @@
       "name_token_na": "Use at least one letter or digit (A–Z, 0–9).",
       "name_token_taken": "This name would share its file names with another source; choose another.",
       "name_set_collision": "With this name two different source combinations would share one alert set; choose another.",
+      "name_separator": "Don't use \", \" or the separate word \"and\": they join source names in lists.",
       "edit_used": "An alert set already uses this source: add a new one instead.",
-      "cap_reached": "All 6 custom source slots are in use.",
+      "cap_reached": "This period already has 6 custom sources.",
+      "period_box": {
+        "one": "Period {start} → {end} · search window from {window} ({n} day of look-back)",
+        "other": "Period {start} → {end} · search window from {window} ({n} days of look-back)"
+      },
+      "chip_aoi": "AOI {pct} %",
+      "chip_dates_ok": "✓ data to {last}",
+      "chip_dates_part": "data to {last} only",
+      "chip_dates_none": "✗ data ends {last}",
+      "remove_from_period_title": "Remove {name} from this period?",
+      "remove_from_period_message": "Its downloaded and harmonized files of this period are deleted. The source stays in the project and can be added again.",
+      "download_all": {
+        "one": "Download {n} pending",
+        "other": "Download {n} pending"
+      },
+      "read_file": "Read file",
+      "add_to_new_periods": "Add to new periods",
+      "state_downloaded": "Downloaded",
+      "state_reading": "Reading",
+      "action_remove": "Remove from this period",
       "err_unreadable": "The file cannot be read as a GeoTIFF.",
       "err_no_crs": "The file has no coordinate reference system.",
       "err_no_images": "No image of the collection has every mapped band.",
@@ -130,7 +146,7 @@
       "err_date_format": "This CCDC asset stores its dates as Julian days or Unix time (property dateFormat 0 or 2); only fractional years (dateFormat 1) are supported.",
       "err_not_covered": "This source does not cover the AOI.",
       "err_wrong_type": "Pick an Earth Engine image or image collection.",
-      "mode_predefined": "Predefined",
+      "mode_predefined": "Predefined or project source",
       "mode_custom": "Custom ({n} of 6)",
       "name_label": "Name",
       "save": "Save",
@@ -151,7 +167,6 @@
       "collection_help": "Every image of the collection is used, the newest on top. For a collection of weekly snapshots (like RADD's own), give the latest image's id.",
       "err_band_map": "Choose a format and map its bands.",
       "err_no_ref": "Pick an asset or a file.",
-      "kind_custom": "custom · {format}",
       "file_preview_after_harmonize": "A GeoTIFF source is shown once it is harmonized.",
       "err_aoi_not_ready": "The AOI geometry is not ready yet; try again in a moment.",
       "err_aoi_changed": "The AOI changed during the check; add the source again.",
@@ -175,8 +190,8 @@
       "encoding_help": "How the date band stores its dates."
     },
     "layers": {
-      "description": "Layers that support the analysis of the alerts: an Earth Engine image or a GeoTIFF from your SEPAL folder. They can also be shown on the two Analysis maps.",
-      "info_header": "About optional layers",
+      "instruction": "Add layers that help review the alerts.",
+      "info_header": "About additional layers",
       "info_md": "Visualization layers support the analysis of the alerts; they never change them.\n\n- **Earth Engine image** and **GeoTIFF** (in your SEPAL folder). Once the image's bands are read, one band is drawn on its own, two are picked from in **Band**, and three or more ask **Bands**: one band, or an **RGB composite** (suggested when the band names give red, green and blue). One band takes a **Raster type**: *Continuous*, a colour ramp between a minimum and a maximum (**Stretch to the AOI** fills them from the band's 2–98 % percentiles over the AOI); or *Categorical*, a colour and a label per class (**Find the classes in the AOI** lists the whole values present, at most 50; hide a class with its eye; values not listed and hidden classes are transparent; with only 0 and 1, 1 takes the band's name and 0 starts hidden). **RGB** draws three bands from a **Composite** (true colour, false-colour infrared, SWIR / NIR / red) or from bands you pick (Custom), between one shared minimum and maximum.\n- A GeoTIFF layer: the app writes an overview file next to it, so its folder must be writable.\n\nShow a layer on this map with its row's map button; its legend appears with it. Tick **Show in Analysis** to add it, switched off, to both Analysis maps.",
       "list_title": "Visualization layers",
       "col_name": "Name",
@@ -273,18 +288,18 @@
       "field_show_in_analysis": "Show in Analysis"
     },
     "raster_input": {
-      "file": "GeoTIFF",
+      "file": "GeoTIFF / VRT",
       "bands_loading": "Reading the bands…",
       "bands_failed": "Could not read the bands: {error}",
       "field_source": "Source",
-      "source_hint": "An Earth Engine image, or a GeoTIFF in your SEPAL folder.",
+      "source_hint": "An Earth Engine image, or a GeoTIFF or VRT in your SEPAL folder.",
       "source_gee": "Earth Engine",
-      "source_file": "GeoTIFF"
+      "source_file": "GeoTIFF / VRT"
     },
     "period": {
-      "description": "Each period downloads every source over its dates plus the look-back days before them. Pixels already reported by the sets of earlier periods are skipped, so a late-published alert lands in the next period's set and no pixel is reported twice.",
+      "instruction": "Set the monitoring period.",
       "info_header": "About periods",
-      "info_md": "A period is one monitoring round, usually a month. For each period every source is downloaded over its **search window**: the period's dates plus the **look-back** days before them, so that alerts published late are still found.\n\n- Pixels already reported by the alert sets of earlier periods are removed before vectorizing, so a pixel is never reported twice.\n- **New period** starts the day after the latest period and copies that period's mask choices.\n- A period's dates cannot change once it has alert sets. A period can be deleted when it has no sets, or when it is the latest period; its downloads and files are deleted with it.\n- Select a row to make it the active period of Download & harmonize and Integrate & vectorize.",
+      "info_md": "A period is one monitoring round, usually a month. Each source of a period is downloaded over its **search window**: the period's dates plus the **look-back** days before them, so that alerts published late are still found.\n\n- Pixels already reported by the alert sets of earlier periods are removed before vectorizing, so a pixel is never reported twice.\n- **New period** starts the day after the latest period and copies that period's mask choices; it starts with the sources ticked in **Add to new periods** (Alerts).\n- A period's dates cannot change once it has alert sets. A period can be deleted when it has no sets, or when it is the latest period; its downloads and files are deleted with it.\n- Select a row to make it the active period of Alerts, Harmonize and Integrate & vectorize.",
       "list_title": "Periods",
       "empty": "No periods yet.",
       "col_period": "Period",
@@ -301,7 +316,7 @@
       "new_title": "New period",
       "edit_title": "Change the dates of {period}",
       "edit_look_back_title": "Look-back of {period}",
-      "masks_copied": "It starts with the mask choices of the latest period; change them in Download & harmonize.",
+      "masks_copied": "It starts with the mask choices of the latest period; change them in Harmonize.",
       "save": "Save",
       "created": "Period created",
       "saved": "Period saved",
@@ -309,8 +324,8 @@
       "state_stale": "out of date",
       "state_missing": "missing",
       "note_sources_stale": {
-        "one": "{count} source out of date here: run it again in Download & harmonize.",
-        "other": "{count} sources out of date here: run them again in Download & harmonize."
+        "one": "{count} source out of date here: run it again in Alerts or Harmonize.",
+        "other": "{count} sources out of date here: run them again in Alerts or Harmonize."
       },
       "note_sets_stale": {
         "one": "{count} alert set built from inputs that have changed since.",
@@ -338,10 +353,18 @@
       "error_bad_look_back": "Look-back must be a whole number of days, 0 or more.",
       "add": "Add period"
     },
+    "harmonize": {
+      "instruction": "Align the downloads on the project grid and apply the masks.",
+      "info_header": "About Harmonize",
+      "info_md": "This step aligns every input of the active period on the project **grid**: one projection in metres and one pixel size.\n\n1. **Grid:** an EPSG code (the target button suggests the UTM zone of the AOI) and a resolution. It is locked once the project has an alert set.\n2. **Masks:** rasters defined once per project (an Earth Engine image or a GeoTIFF, one band; a pixel is on where its value is not zero). Each period chooses which masks are on and whether each **keeps** its area (alerts outside it are removed) or **excludes** it (alerts inside it are removed). A mask is downloaded once and aligned to the grid.\n3. **Sources:** each source downloaded in Alerts (or read from your own file) is aligned to the grid and masked (harmonized).\n\nNothing whose inputs are unchanged runs twice: a new grid or a mask switch only harmonizes again, without downloading. **Harmonize … pending** runs the masks first, then every downloaded source that is missing or out of date, and skips the rows that read *Not covered* or *No data for this period*. Each row needs twice its compressed size free on disk.",
+      "download_first": "Download or read it in Alerts first",
+      "run_all": {
+        "one": "Harmonize {n} pending",
+        "other": "Harmonize {n} pending"
+      },
+      "job_title": "Harmonize"
+    },
     "prepare": {
-      "description": "Download every mask and source of the active period in its own projection, then align them onto the project grid and apply the period's masks (harmonize). Nothing whose inputs are unchanged runs twice.",
-      "info_header": "About Download & harmonize",
-      "info_md": "This step prepares every input of the active period on the project **grid**: one projection in metres and one pixel size.\n\n1. **Grid:** an EPSG code (the target button suggests the UTM zone of the AOI) and a resolution. It is locked once the project has an alert set.\n2. **Masks:** rasters defined once per project (an Earth Engine image or a GeoTIFF, one band; a pixel is on where its value is not zero). Each period chooses which masks are on and whether each **keeps** its area (alerts outside it are removed) or **excludes** it (alerts inside it are removed). A mask is downloaded once and aligned to the grid.\n3. **Sources:** each source is downloaded over the period's search window in its own projection, then aligned to the grid and masked (harmonized).\n\nNothing whose inputs are unchanged runs twice: a new grid or a mask switch only harmonizes again, without downloading. **Run … pending** runs the masks first, then every source that is missing or out of date, and skips the rows that read *Not covered* or *No data for this period*. Each row needs twice its compressed size free on disk.",
       "grid_title": "Project grid",
       "grid_epsg": "EPSG",
       "grid_resolution": "Resolution",
@@ -359,10 +382,6 @@
       "list_title": "Sources for this period",
       "col_source": "Source",
       "empty": "Add alert sources first.",
-      "run_all": {
-        "one": "Run {n} pending",
-        "other": "Run {n} pending"
-      },
       "footer_strip": "{running} running · {queued} queued",
       "footer_running": "{running} running",
       "footer_done": "{done} of {total} done",
@@ -374,8 +393,7 @@
         "one": "Download all again ({n})",
         "other": "Download all again ({n})"
       },
-      "redownload_all_masks": "Run the pending masks first",
-      "job_title": "Download & harmonize",
+      "job_title": "Download",
       "job_row": "Preparing {source}",
       "job_mask_row": "Preparing mask {mask}",
       "job_progress": "{title} · {pct}%",
@@ -388,7 +406,7 @@
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "The AOI's geometry is still being fetched; run this row again in a moment.",
       "aoi_geometry_failed": "The AOI's geometry could not be fetched, so the GeoTIFF rows cannot run; use Check again, then run them.",
-      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Run … pending aligns the masks first.",
+      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Harmonize … pending aligns the masks first.",
       "mask_file_missing": "Mask {name}: file not found ({path}). Put the file back at this path to use the mask.",
       "mask_name_empty": "Give the mask a name.",
       "mask_name_too_long": "Use at most 24 characters.",
@@ -410,7 +428,7 @@
       "masks_title": "Masks",
       "masks_empty": "No masks yet.",
       "masks_note": "A mask is the pixels where its band is non-zero; zero and no-data are outside it. Keep removes alerts outside the mask; exclude removes alerts inside it.",
-      "masks_switched": "This period's sources are out of date; Run … pending harmonizes them again without downloading them.",
+      "masks_switched": "This period's sources are out of date; Harmonize … pending harmonizes them again without downloading them.",
       "mask_add": "Add mask",
       "mask_add_title": "Add a mask",
       "mask_edit_title": "Edit mask {name}",
@@ -458,7 +476,7 @@
       "verb_retry": "Retry",
       "sub_downloaded": "downloaded {date}",
       "sub_file": "GeoTIFF",
-      "sub_downloading": "downloading {pct}% · then harmonize",
+      "sub_downloading": "downloading {pct}%",
       "sub_harmonizing": "harmonizing",
       "sub_downloading_align": "downloading {pct}% · then align",
       "sub_aligning": "aligning",
@@ -485,14 +503,14 @@
       "action_nothing_to_fetch": "Nothing to download again: read from a file",
       "action_delete_files": "Delete files",
       "redownload_title": "Download {source} again?",
-      "redownload_message": "The catalogue keeps adding alerts to past dates. This fetches the latest ones for {window}, replaces the file downloaded on {date}, then harmonizes.",
-      "redownload_message_new": "This fetches the alerts for {window}, then harmonizes.",
+      "redownload_message": "The catalogue keeps adding alerts to past dates. This fetches the latest ones for {window}, and replaces the file downloaded on {date}.",
+      "redownload_message_new": "This fetches the alerts for {window}.",
       "redownload_label": "Download again",
       "redownload_all_title": {
         "one": "Download {n} source again?",
         "other": "Download {n} sources again?"
       },
-      "redownload_all_message": "These sources are downloaded again from their catalogues, then harmonized: {names}.",
+      "redownload_all_message": "These sources are downloaded again from their catalogues: {names}.",
       "delete_files_title": "Delete {source}'s files?",
       "delete_files_message": "Removes the download and the harmonized file of this period ({size}). The source stays in the project; run it again to rebuild them.",
       "delete_files_message_nosize": "Removes the download and the harmonized file of this period. The source stays in the project; run it again to rebuild them.",
@@ -543,44 +561,47 @@
       "d_pixels_masked": "{kept} ({before} before masks: {removed} removed)"
     },
     "integrate": {
-      "description": "Combine the downloaded sources, skip pixels an earlier period already reported, and turn the clusters into alerts.",
+      "instruction": "Group alert pixels into clusters.",
       "info_header": "About Integrate & vectorize",
-      "info_md": "This step turns the harmonized sources of the active period into an **alert set**: the alerts Analysis reviews.\n\n1. The chosen sources are combined pixel by pixel; each alert remembers which sources detected it.\n2. Pixels already reported by the sets of earlier periods (their **footprint**) are removed.\n3. Neighbouring pixels become alerts. Alerts smaller than the **minimum size** are dropped; you can limit the number of alerts, sorted as you choose.\n4. Each optional **attribute layer** (an Earth Engine image or a GeoTIFF) adds a statistic of its bands to every alert.\n\nPixels too small to be an alert, or beyond the maximum number of alerts, are kept as **not analysable**, and the next period's run reconsiders them inside its look-back. One **include probable alerts** switch covers every chosen source (**Set per source** to choose each one); off, their probable pixels are dropped. The **Show not-analysable pixels** layer draws them on the map.\n\nAn alert set is identified by its period and sources: running the same combination again **replaces** it, after a confirmation that lists the reviewed alerts it would discard. When the run ends, the new set becomes the active one: set up the questionnaire, then start Analysis.",
-      "sources": "Sources to combine",
-      "min_size": "Minimum alert size",
-      "min_size_hint": "Alert clusters smaller than this ({px} pixels on the grid) are dropped, and are left out of the set, its exports and the map.",
+      "info_md": "This step turns the harmonized sources of the active period into an **alert set**: the clusters Analysis reviews.\n\n1. The chosen sources are combined pixel by pixel; each alert pixel remembers which sources detected it.\n2. Pixels already reported by the sets of earlier periods (their **footprint**) are removed.\n3. Neighbouring alert pixels are grouped into **clusters**; each cluster keeps the sources of all its pixels. Clusters smaller than the **minimum size** are dropped; you can limit the number of clusters, sorted as you choose.\n4. Each optional **attribute layer** (an Earth Engine image or a GeoTIFF) adds a statistic of its bands to every cluster.\n\nClusters smaller than the minimum size are left out of the set, its exports and the map. **Keep smaller clusters that touch earlier confirmed loss** keeps them as *Growth · under minimum area*, linked to the alert they grow from; unticked, they are dropped like any small cluster.\n\nPixels of clusters too small to keep, or beyond the maximum number of clusters, are kept as **not analysable**, and the next period's run reconsiders them inside its look-back. One **include probable alerts** switch covers every chosen source (**Set per source** to choose each one); off, their probable pixels are dropped. The **Show not-analysable pixels** layer draws them on the map.\n\nAn alert set is identified by its period and sources: running the same combination again **replaces** it, after a confirmation that lists the reviewed clusters it would discard. When the run ends, the new set becomes the active one: set up the questionnaire, then start Analysis.",
+      "sources": "Sources",
+      "min_size": "Minimum cluster size",
+      "min_size_hint": "= {px} pixels on the grid",
+      "small_growth": "Keep smaller clusters that touch earlier confirmed loss",
+      "small_growth_no_earlier": "No earlier period has an alert set yet: nothing links in this run.",
+      "small_growth_no_reviewed": "No alert of an earlier period is reviewed yet: nothing links in this run.",
       "include_probable": "Include probable (unconfirmed) alerts",
       "probable_per_source": "Set per source",
       "probable_mixed": "Mixed: the sources below differ.",
       "probable_none": "{source}: dates only, no probable level",
       "sorting": "Order",
-      "sorting_1": "Bigger alerts first",
-      "sorting_2": "Smaller alerts first",
-      "sorting_3": "Recent alerts first",
-      "sorting_4": "Older alerts first",
-      "max_alerts": "Maximum number of alerts",
-      "limit_alerts": "Limit the number of alerts",
+      "sorting_1": "Bigger clusters first",
+      "sorting_2": "Smaller clusters first",
+      "sorting_3": "Recent clusters first",
+      "sorting_4": "Older clusters first",
+      "max_alerts": "Maximum number of clusters",
+      "limit_alerts": "Limit the number of clusters",
       "max_alerts_hint_1": {
-        "one": "Keeps {n} alert: the biggest.",
-        "other": "Keeps the {n} biggest alerts."
+        "one": "Keeps {n} cluster: the biggest.",
+        "other": "Keeps the {n} biggest clusters."
       },
       "max_alerts_hint_2": {
-        "one": "Keeps {n} alert: the smallest.",
-        "other": "Keeps the {n} smallest alerts."
+        "one": "Keeps {n} cluster: the smallest.",
+        "other": "Keeps the {n} smallest clusters."
       },
       "max_alerts_hint_3": {
-        "one": "Keeps {n} alert: the most recent.",
-        "other": "Keeps the {n} most recent alerts."
+        "one": "Keeps {n} cluster: the most recent.",
+        "other": "Keeps the {n} most recent clusters."
       },
       "max_alerts_hint_4": {
-        "one": "Keeps {n} alert: the oldest.",
-        "other": "Keeps the {n} oldest alerts."
+        "one": "Keeps {n} cluster: the oldest.",
+        "other": "Keeps the {n} oldest clusters."
       },
       "attr_name": "Layer name",
-      "attr_name_hint": "Alert columns are named <layer name>_<band>.",
+      "attr_name_hint": "Cluster columns are named <layer name>_<band>.",
       "attr_bands": "Bands",
-      "attr_band_one": "One band ({name}): its statistic is added to every alert.",
-      "attr_bands_pick": "{count} bands. Pick the ones to add to the alerts.",
+      "attr_band_one": "One band ({name}): its statistic is added to every cluster.",
+      "attr_bands_pick": "{count} bands. Pick the ones to add to the clusters.",
       "attr_stat_majority": "Majority",
       "attr_stat_mean": "Mean",
       "attr_stat_min": "Minimum",
@@ -592,38 +613,38 @@
       "run": "Integrate & vectorize",
       "replace_title": "Replace this alert set?",
       "replace_message": {
-        "one": "{n} reviewed alert in this set will be discarded.",
-        "other": "{n} reviewed alerts in this set will be discarded."
+        "one": "{n} reviewed cluster in this set will be discarded.",
+        "other": "{n} reviewed clusters in this set will be discarded."
       },
       "replace_line": "#{id} · {status} · {area} ha",
       "replace_more": "… and {n} more",
       "replace_split": "The evaluator split and its pending returns will be discarded.",
       "replace_links": {
-        "one": "{n} alert of a later period is linked to this set; its link will break.",
-        "other": "{n} alerts of later periods are linked to this set; their links will break."
+        "one": "{n} cluster of a later period is linked to this set; its link will break.",
+        "other": "{n} clusters of later periods are linked to this set; their links will break."
       },
       "job_title": "Integrate & vectorize",
       "step_combine": "Combining sources",
       "step_vectorize": "Vectorizing clusters",
       "step_footprint": "Writing the footprint",
-      "step_store": "Saving the alerts",
+      "step_store": "Saving the clusters",
       "step_tiles": "Building map tiles",
       "no_tippecanoe": "tippecanoe is not installed: the map will show alert points without polygons.",
       "tiles_failed": "The map tiles could not be shown ({error}): showing alert points without polygons.",
       "done": {
-        "one": "{n} alert ready for review",
-        "other": "{n} alerts ready for review"
+        "one": "{n} cluster ready for review",
+        "other": "{n} clusters ready for review"
       },
       "growth_linked": {
-        "one": "Linked {n} alert to earlier loss ({small} under the minimum area)",
-        "other": "Linked {n} alerts to earlier loss ({small} under the minimum area)"
+        "one": "Linked {n} cluster to earlier loss ({small} under the minimum area)",
+        "other": "Linked {n} clusters to earlier loss ({small} under the minimum area)"
       },
       "growth_linked_plain": {
-        "one": "Linked {n} alert to earlier loss",
-        "other": "Linked {n} alerts to earlier loss"
+        "one": "Linked {n} cluster to earlier loss",
+        "other": "Linked {n} clusters to earlier loss"
       },
-      "done_empty": "No new alerts in this period: the alert set is empty.",
-      "done_empty_detail": "No new alerts in this period: the alert set is empty. {details}",
+      "done_empty": "No new clusters in this period: the alert set is empty.",
+      "done_empty_detail": "No new clusters in this period: the alert set is empty. {details}",
       "outcome_pixels": {
         "one": "{source}: {n} alert pixel (below the minimum size, or under earlier sets' footprints)",
         "other": "{source}: {n} alert pixels (all below the minimum size, or under earlier sets' footprints)"
@@ -633,7 +654,7 @@
         "one": "{source}: the {n} alert pixel was removed by masks",
         "other": "{source}: all {n} alert pixels removed by masks"
       },
-      "outcome_none": "{source}: 0 alerts found",
+      "outcome_none": "{source}: 0 alert pixels found",
       "outcome_left_out": "{source}: not covered",
       "outcome_left_out_reason": "{source}: {reason}",
       "project_changed": "The project's period, area of interest or grid changed while the run was going, so the alert set was not recorded. Run Integrate & vectorize again.",
@@ -652,7 +673,7 @@
       "attr_err_no_bands": "Keep at least one band.",
       "attr_err_duplicate": "Another attribute layer already reads this raster.",
       "attr_list_title": "Attribute layers",
-      "attr_empty": "No attribute layer. Each one adds statistics of its bands to every alert.",
+      "attr_empty": "No attribute layer. Each one adds statistics of its bands to every cluster.",
       "attr_col_raster": "Raster",
       "attr_columns": "Columns: {columns}"
     },
@@ -673,6 +694,7 @@
       }
     },
     "questionnaire": {
+      "instruction": "Write the questions asked for each alert.",
       "add_title": "Add a question",
       "edit_title": "Edit question",
       "add": "Add question",
@@ -693,7 +715,6 @@
       "err_option_duplicate": "Two options have the same name.",
       "err_option_comma": "An option cannot contain a comma.",
       "err_ask_for": "Pick at least one verdict.",
-      "description": "Choose the questions asked for every alert in Analysis, and the Word template its report is built from.",
       "info_header": "The questionnaire",
       "info_md": "Each question appears in the Questions section of Analysis, in this order. Its answers are saved with the alert (one column per question), exported with it, charted in Overview and available to the report as `{{placeholder}}`. Deleting a question keeps the answers already saved, but they are no longer shown, exported or charted.",
       "questions_title": "Questions",
@@ -727,7 +748,7 @@
       "template_missing": "The file is gone: pick it again, or clear it to use the default template."
     },
     "evaluators": {
-      "description": "Review alone, or split the alerts between evaluators and merge what they send back.",
+      "instruction": "Choose who reviews the alerts.",
       "info_header": "Evaluation",
       "info_md": "**Review mode**: in **Solo** you review every alert yourself; with **Multiple evaluators** the alerts are split between evaluators.\n\n**Split alerts…** deals the active set's alerts round-robin, in the set's order, between the evaluators you count or name. Alerts already reviewed stay unassigned unless you include them. **Edit split** re-splits or removes the split.\n\n**Generate packages** builds one zip per evaluator: the set's alerts, the questionnaire, the AOI and the scene cache. Each row's cloud icon then downloads that evaluator's zip. The evaluator imports it in the Project dialog and reviews their alerts in Analysis.\n\n**Merge reviewed copy…** merges the reviews an evaluator sends back. Only alerts assigned to that evaluator are taken; when you reviewed one differently, you choose whose review to keep."
     }
@@ -749,6 +770,19 @@
     "solo_note": "You review every alert yourself.",
     "multi_note": "Split the alerts between evaluators and send each one a review package.",
     "multi_locked": "Remove the split to switch to solo.",
+    "group_label": "Review nearby alerts together",
+    "group_radius_label": "Distance (m)",
+    "group_radius_error": "Between 10 and 5,000 m",
+    "group_include_reviewed": "Include already reviewed alerts",
+    "group_include_reviewed_hint": "Unchecked, alerts reviewed before grouping was on are never offered.",
+    "group_note": "In Analysis, alerts within this distance can be reviewed with one verdict, one set of answers and one polygon.",
+    "group_locked_groups": {
+      "one": "{n} group is saved: remove it to turn grouping off.",
+      "other": "{n} groups are saved: remove them to turn grouping off."
+    },
+    "group_locked_split_on": "The alerts were split with grouping: remove the split to change it.",
+    "group_locked_split_off": "The alerts were split without grouping: remove the split to change it.",
+    "group_copy_note": "Set by the project's creator.",
     "split_title": "Split the alerts",
     "mode_label": "Evaluators by",
     "mode_count": "Count",
@@ -764,6 +798,10 @@
     "split_done": {
       "one": "Alerts split between {n} evaluator.",
       "other": "Alerts split between {n} evaluators."
+    },
+    "split_oversized": {
+      "one": "One group of nearby alerts holds {n} alert, more than an even share.",
+      "other": "One group of nearby alerts holds {n} alerts, more than an even share."
     },
     "removed": "Split removed.",
     "remove_unrecorded": "The split of {project} was not removed: another project was opened, or its alerts were not loaded yet. Open {project} and remove the split again.",

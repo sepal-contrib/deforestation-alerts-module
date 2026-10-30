@@ -9,7 +9,6 @@ from deforestation_alerts.scripts.report_builder import (
     get_unique_alerts,
     format_list,
     parse_formatted_string,
-    ensure_list,
 )
 
 
@@ -106,11 +105,42 @@ def test_parse_formatted_string_is_inverse_of_format_list():
     assert parse_formatted_string("") == []
 
 
-def test_ensure_list():
-    assert ensure_list("x") == ["x"]
-    assert ensure_list(["x", "y"]) == ["x", "y"]
-    with pytest.raises(ValueError):
-        ensure_list(123)
+@pytest.mark.parametrize("epsg, lat", [(3857, 0.0), (3857, 60.0), (32721, None)])
+def test_scale_bar_reads_crs_metres(tmp_path, monkeypatch, epsg, lat):
+    """The extent is in CRS metres, so dx is 1 m per unit; Web Mercator is
+    corrected to ground metres at the image centre (cos(lat))."""
+    import math
+
+    import numpy as np
+    import rasterio
+    from pyproj import Transformer
+    from rasterio.transform import from_origin
+
+    from deforestation_alerts.scripts import report_builder
+
+    if lat is None:  # a UTM image: plain metres
+        x, y = 500000.0, 7000000.0
+    else:
+        x, y = Transformer.from_crs(4326, epsg, always_xy=True).transform(-56.0, lat)
+    tif = tmp_path / "img.tif"
+    with rasterio.open(
+        tif, "w", driver="GTiff", width=10, height=10, count=3, dtype="uint8",
+        crs=f"EPSG:{epsg}", transform=from_origin(x - 50, y + 50, 10, 10),
+    ) as dst:
+        dst.write(np.zeros((3, 10, 10), dtype="uint8"))
+
+    bars = []
+
+    class _Spy(report_builder.ScaleBar):
+        def __init__(self, dx, *args, **kwargs):
+            bars.append(dx)
+            super().__init__(dx, *args, **kwargs)
+
+    monkeypatch.setattr(report_builder, "ScaleBar", _Spy)
+    report_builder.plot_tiff_with_overlay(str(tif), tmp_path / "out.jpg")
+
+    expected = 1.0 if lat is None else math.cos(math.radians(lat))
+    assert bars == [pytest.approx(expected, abs=1e-4)]
 
 
 # ---------------------------------------------------------------------------

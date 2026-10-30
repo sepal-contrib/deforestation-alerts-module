@@ -86,14 +86,6 @@ def served_relative(path) -> str:
     return resolved.relative_to(root).as_posix()
 
 
-def home_relative(path) -> str:
-    """``path`` relative to the served root, for a download link.
-
-    Kept as the name the UI already calls; :func:`served_relative` is the same
-    function under a name that no longer promises ``$HOME``."""
-    return served_relative(path)
-
-
 def download_url_for(relative: str) -> str:
     """The URL of a path already expressed relative to :func:`download_root`.
 

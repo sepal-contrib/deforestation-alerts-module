@@ -129,3 +129,15 @@ def test_no_question_key_or_attribute_column_takes_a_store_column():
     assert {"alert_id", "set_id", "evaluator"} <= RESERVED_COLUMNS
     assert RESERVED_COLUMNS <= RESERVED_KEYS
     assert RESERVED_COLUMNS <= ALERT_RESERVED_COLUMNS
+
+
+def test_review_group_is_reserved():
+    from deforestation_alerts.project.questions import RESERVED_KEYS
+    from deforestation_alerts.project.store_schema import REVIEW_AFTER, RESERVED_COLUMNS
+    from deforestation_alerts.scripts.raster_attribute import ALERT_RESERVED_COLUMNS
+
+    assert "review_group" in RESERVED_COLUMNS
+    assert "review_group" in RESERVED_KEYS
+    assert "review_group" in ALERT_RESERVED_COLUMNS
+    assert REVIEW_AFTER[-1] == "review_group"
+    assert "group_size" in RESERVED_KEYS and "group_alerts" in RESERVED_KEYS

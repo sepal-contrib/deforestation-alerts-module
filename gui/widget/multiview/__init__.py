@@ -6,7 +6,7 @@ A self-contained package: it imports nothing from ``gui.*`` or ``pysepal``
 
 from .draw_state import DrawState
 from .layer_store import LayerStore
-from .plugins import BasemapSwitcher, Draw, FitBounds, Holes, LayerMenu, PluginMixin, TileErrors, plugin_order
+from .plugins import BasemapSwitcher, Draw, FitBounds, Holes, LayerMenu, Pick, PluginMixin, TileErrors, plugin_order
 from .specs import ALL, geojson_spec, set_view, tile_spec
 from .widget import MultiView
 
@@ -20,6 +20,7 @@ __all__ = [
     "LayerMenu",
     "LayerStore",
     "MultiView",
+    "Pick",
     "PluginMixin",
     "TileErrors",
     "geojson_spec",

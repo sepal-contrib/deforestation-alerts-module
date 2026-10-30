@@ -35,7 +35,7 @@ def test_the_labels_the_walks_pick_exist():
     assert phases.MODE_OFF == walklib.en("steps.prepare.mask_mode_off")
     # the mask, attribute and visualization-layer forms: a Source select above the picker
     assert phases.FIELD_SOURCE == walklib.en("steps.raster_input.field_source") == "Source"
-    assert phases.SOURCE == {"gee": "Earth Engine", "file": "GeoTIFF"}
+    assert phases.SOURCE == {"gee": "Earth Engine", "file": "GeoTIFF / VRT"}
     assert phases.MASK_BAND == "Band" and phases.MASK_ONE_BAND == "One band ("
     # the alert-source form: Alert format and the band selects, Date encoding, the one-band line
     assert (phases.ALERT_FORMAT, phases.ALERT_BAND, phases.DATE_BAND) == ("Alert format", "Alert band", "Date band")
@@ -115,7 +115,7 @@ def test_the_walks_prepare_labels_are_the_ones_the_status_cells_show():
 
 # ----------------------------------------------------- the band pickers
 #: A stand-in for a form's Vuetify multi-select (the attribute form's Bands):
-#: the slot toggles the menu, an item toggles its ``aria-selected``.
+#: the slot toggles the menu, Escape closes it, an item toggles its ``aria-selected``.
 _BANDS = """<!doctype html><html><body>
 <div class="v-dialog--active"><div class="v-select"><label>Bands</label>
   <div class="v-select__slot" onclick="menu()">B1</div></div></div>
@@ -127,6 +127,9 @@ _BANDS = """<!doctype html><html><body>
 <script>
 window.picked = [];
 function menu() { document.getElementById('menu').classList.toggle('menuable__content__active'); }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('menu').classList.remove('menuable__content__active');
+});
 function pick(e) {
   e.setAttribute('aria-selected', String(e.getAttribute('aria-selected') !== 'true'));
   window.picked.push([...document.querySelectorAll('[aria-selected="true"]')].length);
@@ -197,11 +200,9 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <nav class="left-drawer"><div data-step-id="1">About</div></nav>
   <div id="map-container"></div>
   <div class="right-panel">
-    <button data-step-key="integrate" onclick="step('integrate')">integrate</button>
-    <button data-step-key="questionnaire" onclick="step('questionnaire')">questionnaire</button>
-    <button data-step-key="evaluators" onclick="step('evaluators')">evaluators</button>
-    <span id="badge">1 / 3</span>
-    <p id="showing">workflow on integrate</p>
+    <div id="strip"></div>
+    <span class="defo-step-badge" id="badge"></span>
+    <p id="showing"></p>
     <button class="defo-start-analysis" onclick="openScreen()">Start analysis</button>
   </div>
 </div></div>
@@ -210,10 +211,24 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <div class="defo-analysis-right"><p>the review console</p></div>
 </div>
 <script>
+// Two levels, as the pipeline header: one strip, per level its label over
+// its bars, the current bar aria-current="step"; the badge counts within the
+// level, and an empty optional step's badge reads a word.
+const LEVELS = {prepare: ['aoi', 'integrate'], review: ['questionnaire', 'evaluators']};
+const OPTIONAL = ['questionnaire'];
+let current = 'integrate';
+function level(key) { return Object.keys(LEVELS).find(l => LEVELS[l].includes(key)); }
 function step(key) {
+  current = key;
+  const steps = LEVELS[level(key)];
+  document.getElementById('strip').innerHTML = Object.keys(LEVELS).map(l =>
+    `<div><button data-level-key="${l}">${l}</button><div>` + LEVELS[l].map(k =>
+      `<button data-step-key="${k}" onclick="step('${k}')" aria-current="${k === key ? 'step' : 'false'}" style="display: block; width: 40px; padding: 7px 0;"><div style="height: 7px;"></div></button>`
+    ).join('') + '</div></div>'
+  ).join('');
   document.getElementById('showing').textContent = 'workflow on ' + key;
   document.getElementById('badge').textContent =
-    (['integrate', 'questionnaire', 'evaluators'].indexOf(key) + 1) + ' / 3';
+    OPTIONAL.includes(key) ? 'optional' : (steps.indexOf(key) + 1) + ' / ' + steps.length;
 }
 function openScreen() {
   const s = document.getElementById('screen');
@@ -223,6 +238,7 @@ function closeScreen() {
   const s = document.getElementById('screen');
   s.classList.remove('defo-analysis-screen--on'); s.style.display = 'none';
 }
+step('integrate');
 </script></body></html>"""
 
 
@@ -275,6 +291,34 @@ def test_goto_step_reaches_analysis_through_start_analysis(screens):
     assert "workflow on integrate" in walklib.panel_text(screens)
 
 
+def test_step_active_counts_within_the_level(screens):
+    """The badge counts the active level's steps: Integrate is "2 / 2" in
+    Prepare, and Evaluators' "2 / 2" in Review does not read as Integrate
+    (both levels' bars are in the strip; only the current one is marked)."""
+    assert walklib.step_active(screens, "integrate")
+    assert not walklib.step_active(screens, "aoi")
+    assert not walklib.step_active(screens, "evaluators")
+    screens.evaluate("() => step('evaluators')")
+    assert walklib.step_active(screens, "evaluators")
+    assert not walklib.step_active(screens, "integrate")
+
+
+def test_step_active_reads_an_empty_optional_step_by_its_mark(screens):
+    screens.evaluate("() => step('questionnaire')")
+    assert screens.locator("#badge").text_content() == "optional"
+    assert walklib.step_active(screens, "questionnaire")
+    assert not walklib.step_active(screens, "evaluators")
+
+
+def test_goto_step_crosses_levels_through_the_bar(screens):
+    walklib.goto_step(screens, "evaluators", 100)
+    assert walklib.step_active(screens, "evaluators")
+    walklib.goto_step(screens, "aoi", 100)  # back across, straight to the bar
+    assert walklib.step_active(screens, "aoi")
+    walklib.goto_step(screens, "integrate", 100)
+    assert walklib.step_active(screens, "integrate")
+
+
 def test_back_to_workflow_leaves_the_screen_and_is_a_no_op_elsewhere(screens):
     walklib.back_to_workflow(screens, wait=100)  # on the workflow: nothing to do
     assert not _screen_on(screens)
@@ -309,7 +353,7 @@ def test_prepare_footer_and_row_helpers_find_the_pills_actions_and_stop(_walk_br
             <div><button>Harmonize</button></div>
             <span title="Download again"><button disabled><i class="mdi-refresh"></i></button></span></div>
           <div style="display:grid;grid-template-columns:1fr 1fr"><div>RADD</div><div><i></i><div>Ready</div></div></div>
-          <button>Run 2 pending</button></div>""")
+          <button>Harmonize 2 pending</button></div>""")
         assert phases.row_pill(page, "GLAD-L", "harmonize").count() == 1
         assert phases.row_pill(page, "GLAD-L", "download").count() == 0
         assert phases.row_pill(page, "RADD", "harmonize").count() == 0

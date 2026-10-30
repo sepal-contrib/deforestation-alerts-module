@@ -8,7 +8,8 @@ Save may have landed since the preview), builds the merged frame and writes
 it with a guard that refuses when the generation moved or an Integrate job of
 the set is running. Then the live alerts are republished (the next Save must
 carry the merged rows), ``n_reviewed`` and ``split.returns`` are published
-through ``SetContext._update_set``, and an alert open in Analysis whose row
+through ``SetContext._update_set`` (``n_groups`` through ``record_groups``), and an alert open
+in Analysis whose row
 was written is reloaded from the store (``AnalysisState.reload_alert``).
 """
 
@@ -19,7 +20,7 @@ from deforestation_alerts.project.models import EvaluatorReturn
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.project.share import ReturnPreview, ShareError, apply_return, classify_return
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet, store_lock
-from gui.i18n import t
+from gui.i18n import t, tn
 from gui.scripts import set_store
 from gui.scripts.integrate_jobs import is_integrating
 from gui.store.project_writers import writing
@@ -103,6 +104,7 @@ def merge_return(app_state, app_tile_model, analysis, preview: ReturnPreview,
                              ignored=len(fresh.ignored))
     republished = written and _republish(app_state, target, merged)
     app_tile_model._update_set(merged, "n_reviewed", int(reviewed_mask(merged).sum()), target)
+    app_tile_model.record_groups(merged, target)
     live = app_state.project.value
     s = live.alert_sets.get(target.alert_set.id) if live is not None and live.name == target.project else None
     if s is not None and s.split is not None and s.split.split_id == fresh.header.split_id:
@@ -124,9 +126,23 @@ def selected_alert_written(app_state, preview: ReturnPreview, choice: str) -> Op
 
 def preview_lines(preview: ReturnPreview, selected: Optional[int] = None) -> list[str]:
     """The preview dialog's text (spec §7.3, §7.1, §7.4): the counts, then
-    the questionnaire warning, the ignored columns and the alert to reload."""
-    lines = [t("share.merge_summary", evaluator=preview.header.evaluator, new=len(preview.new),
-               conflicts=len(preview.conflicts), unchanged=len(preview.unchanged), ignored=len(preview.ignored))]
+    the questionnaire warning, the ignored columns and the alert to reload.
+    When groups are involved (``preview.n_groups``), a count whose rows touch
+    groups adds them: "3 conflicts (1 group)" (spec 2026-10-26 §8.4)."""
+    if preview.n_groups > 0:
+
+        def count(name: str, key: str) -> str:
+            text = tn(key, len(getattr(preview, name)))
+            groups = preview.class_groups.get(name, 0)
+            return f"{text} {tn('share.merge_count.groups', groups)}" if groups else text
+
+        summary = t("share.merge_summary_grouped", evaluator=preview.header.evaluator, new=count("new", "share.merge_count.new"),
+                    conflicts=count("conflicts", "share.merge_count.conflicts"),
+                    unchanged=count("unchanged", "share.merge_count.unchanged"), ignored=len(preview.ignored))
+    else:
+        summary = t("share.merge_summary", evaluator=preview.header.evaluator, new=len(preview.new),
+                    conflicts=len(preview.conflicts), unchanged=len(preview.unchanged), ignored=len(preview.ignored))
+    lines = [summary]
     if preview.questions_changed:
         lines.append(t("share.merge_questions_changed"))
     if preview.extra_columns:

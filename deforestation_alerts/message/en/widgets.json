@@ -48,13 +48,12 @@
     }
   },
   "workflow": {
-    "lock_alerts": "Select an area of interest first.",
+    "lock_alerts": "Add a period first.",
     "lock_project": "Open a project first.",
-    "lock_layers": "Select an area of interest first.",
-    "lock_period": "Add at least one alert source first.",
-    "lock_prepare": "Create or select a period first.",
+    "lock_review": "Build an alert set first.",
+    "lock_period": "Pick the AOI first.",
+    "lock_harmonize": "Download a source first.",
     "lock_integrate": "Download and harmonize at least one source first.",
-    "lock_analysis": "Run Integrate & vectorize first.",
     "count_sources": {
       "one": "{count} source",
       "other": "{count} sources"
@@ -75,13 +74,16 @@
       "one": "{count} ready",
       "other": "{count} ready"
     },
-    "count_alerts": {
-      "one": "{count} alert",
-      "other": "{count} alerts"
+    "count_clusters": {
+      "one": "{count} cluster",
+      "other": "{count} clusters"
     },
     "step_badge": "{n} / {total}",
     "count_empty": "nothing yet",
-    "count_none": "none",
+    "count_optional": "optional",
+    "optional": "optional",
+    "level_prepare": "Prepare alerts",
+    "level_review": "Set up review",
     "start_analysis": "Start analysis",
     "count_evaluators": {
       "one": "{count} evaluator",

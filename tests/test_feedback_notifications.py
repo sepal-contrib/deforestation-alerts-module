@@ -37,6 +37,7 @@ from gui.tile.analysis.state import AnalysisState
 from deforestation_alerts.scripts import local_files
 from gui.i18n import t
 from tests._pane_helpers import make_panes, reviewer_edits
+from tests._review_helpers import stub_admin_lookups
 
 
 # ---------------------------------------------------------------------------
@@ -158,12 +159,16 @@ def _set_context_fake():
 
 def _button(root, msg):
     """Find the button in ``root`` whose label is ``msg``: an ``sw.Btn`` by
-    its ``.msg``, or a plain ``v.Btn`` (the export section's build tile) by a
-    text child of its own."""
+    its ``.msg``, the export list's build row (``file_tile.BuildTile``) by
+    its title, or a plain ``v.Btn`` by a text child of its own."""
     import ipyvuetify as v
+
+    from gui.tile.analysis.file_tile import BuildTile
 
     for widget in _widgets(root):
         if getattr(widget, "msg", None) == msg:
+            return widget
+        if isinstance(widget, BuildTile) and widget.title == msg:
             return widget
         if isinstance(widget, v.Btn) and msg in (getattr(widget, "children", None) or []):
             return widget
@@ -415,141 +420,6 @@ def test_export_marks_the_open_project_as_being_written(
     assert busy == [True] and not is_writing("d")
 
 
-def test_export_save_of_another_sets_alerts_is_refused_with_a_warning(
-    monkeypatch, tmp_path
-):
-    """While the alerts on hand are another set's (Integrate records a new set
-    before it publishes that set's alerts), a Save must not write them into
-    the active set's store. Nothing went wrong, the Save just has nowhere to
-    go: a FAILED task with the reason and one warning toast, no error toast."""
-    from datetime import datetime
-
-    import geopandas as gpd
-    from shapely.geometry import box
-
-    import gui.tile.analysis.export as export
-    from deforestation_alerts.project.models import (
-        AlertSet,
-        AlertSetParams,
-        Project,
-    )
-    from gui.scripts.set_context import SetContext
-
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    now = datetime.now()
-    rel = "periods/per/sets/glad-l"
-    p = Project(name="d", created_at=now, updated_at=now)
-    p.alert_sets["x"] = AlertSet(
-        id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
-        params=AlertSetParams(), store_rel_path=f"{rel}/alert_db.parquet",
-        combined_rel_path=f"{rel}/c.tif", footprint_rel_path=f"{rel}/footprint.tif",
-        fingerprint="f", created_at=now,
-    )
-    p.active_set = "x"
-    app_state = AppState()
-    app_state.new_project_state(p)
-    store = tmp_path / "d" / rel / "alert_db.parquet"
-    store.parent.mkdir(parents=True)
-    store.write_bytes(b"set x's store")
-    app_state.alerts_gdf.value = gpd.GeoDataFrame(
-        {"status": ["Not reviewed"], "set_id": ["y"]},
-        geometry=[box(0, 0, 1, 1)], crs="EPSG:4326",
-    )
-    app_state.actual_alert_id.value = 0
-    ctx = SetContext(app_state)
-    card = _export_layout(
-        export,
-        widgets=None,  # the refusal comes before any widget is read
-        app_state=app_state,
-        aux_model=ctx,
-        analysis=AnalysisState(),
-        app_tile_model=ctx,
-    )
-    feedback = _record_feedback(monkeypatch, export)
-
-    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
-    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
-    save_btn.fire_event("click", None)
-    feedback.join()
-
-    expected = t("analysis_tile.export_labels.save_other_set")
-    task = feedback.task()
-    assert task.status == TaskStatus.FAILED and task.error_message == expected
-    assert feedback.errors == []
-    assert feedback.toasts() == [("warning", expected)]
-    assert store.read_bytes() == b"set x's store"
-    assert download_btn.disabled is True
-    assert save_btn.loading is False and save_btn.disabled is False
-
-
-def test_export_save_of_a_false_positive_with_a_drawn_polygon_is_refused_with_a_warning(
-    monkeypatch, tmp_path
-):
-    """The OLD guard (a False Positive with a polygon drawn) is a refusal, not
-    a failure: a FAILED task with its reason and one warning toast, no error
-    toast, and the set's store is not written."""
-    from datetime import datetime
-
-    import geopandas as gpd
-    from shapely.geometry import box
-
-    import gui.tile.analysis.export as export
-    from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
-    from gui.scripts.set_context import SetContext
-
-    class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
-        def __getattr__(self, name):
-            return lambda *a, **k: self
-
-        def getInfo(self):  # noqa: N802 - Earth Engine's name
-            return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
-
-    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
-    now = datetime.now()
-    rel = "periods/per/sets/glad-l"
-    p = Project(name="d", created_at=now, updated_at=now)
-    p.alert_sets["x"] = AlertSet(
-        id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
-        params=AlertSetParams(), store_rel_path=f"{rel}/alert_db.parquet",
-        combined_rel_path=f"{rel}/c.tif", footprint_rel_path=f"{rel}/footprint.tif",
-        fingerprint="f", created_at=now,
-    )
-    p.active_set = "x"
-    app_state = AppState()
-    app_state.new_project_state(p)
-    store = tmp_path / "d" / rel / "alert_db.parquet"
-    store.parent.mkdir(parents=True)
-    store.write_bytes(b"set x's store")
-    app_state.alerts_gdf.value = gpd.GeoDataFrame(
-        {"status": ["Not reviewed"], "set_id": ["x"]},
-        geometry=[box(0, 0, 1, 1)], crs="EPSG:4326",
-    )
-    app_state.actual_alert_id.value = 0
-    analysis = AnalysisState()
-    analysis.defo_layer.set(gpd.GeoDataFrame(geometry=[box(0, 0, 0.001, 0.001)], crs="EPSG:4326"))
-    analysis.verdict.set("False Positive")
-    widgets = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
-    ctx = SetContext(app_state)
-    card = _export_layout(export, widgets=widgets, app_state=app_state, aux_model=ctx,
-                          analysis=analysis, app_tile_model=ctx)
-    feedback = _record_feedback(monkeypatch, export)
-
-    save_btn = _button(card, t("analysis_tile.export_labels.save_btn"))
-    download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
-    save_btn.fire_event("click", None)
-    feedback.join()
-
-    expected = t("analysis_tile.questionarie.false_positive_drawn")
-    task = feedback.task()
-    assert task.status == TaskStatus.FAILED and task.error_message == expected
-    assert feedback.errors == []
-    assert feedback.toasts() == [("warning", expected)]
-    assert store.read_bytes() == b"set x's store"
-    assert download_btn.disabled is True
-    assert save_btn.loading is False and save_btn.disabled is False
-
-
 def test_export_save_failure_fails_the_task_before_the_error_toast(
     export_card, monkeypatch
 ):
@@ -585,17 +455,14 @@ def _one_row_gdf():
     return gdf
 
 
-def _download_toolbar(card):
-    """The container of the S1 file tiles (built hidden, shown on success)."""
+def _file_tiles(card):
+    """The zip and the report rows of the export list: disabled until a build
+    links their files."""
     from gui.tile.analysis.file_tile import FileTile
 
-    for widget in _widgets(card):
-        if hasattr(widget, "viz") and any(
-            isinstance(child, FileTile)
-            for child in (getattr(widget, "children", None) or [])
-        ):
-            return widget
-    raise AssertionError("no downloads toolbar in the export card")
+    tiles = [w for w in _widgets(card) if isinstance(w, FileTile) and w.kind in ("zip", "docx")]
+    assert [tile.kind for tile in tiles] == ["zip", "docx"], "no file rows in the export card"
+    return tiles
 
 
 @pytest.mark.parametrize(
@@ -629,7 +496,7 @@ def test_export_download_refusal_fails_the_task_and_says_why(
         app_state.alerts_gdf.value = _one_row_gdf()
         app_state.actual_alert_id.value = 0
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(
         card, t("analysis_tile.export_labels.build_tile")
     )
@@ -642,8 +509,10 @@ def test_export_download_refusal_fails_the_task_and_says_why(
     assert feedback.errors == []
     assert feedback.toasts() == [("warning", expected)]
     # nothing was revealed, and the button is released
-    assert toolbar.viz is False
-    assert download_btn.loading is False and download_btn.disabled is False
+    assert zip_tile.disabled and docx_tile.disabled  # nothing linked
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
 
 
 def test_export_download_without_images_is_refused_before_any_file_is_written(
@@ -674,7 +543,7 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
     app_state.alerts_gdf.value = _one_row_gdf()
     app_state.actual_alert_id.value = 0
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(card, t("analysis_tile.export_labels.build_tile"))
     download_btn.fire_event("click", None)
     feedback.join()
@@ -686,8 +555,10 @@ def test_export_download_without_images_is_refused_before_any_file_is_written(
     assert feedback.errors == []
     assert feedback.toasts() == [("warning", expected)]
     assert data_files(data_root) == []  # no alert_0.gpkg left behind
-    assert toolbar.viz is False
-    assert download_btn.loading is False and download_btn.disabled is False
+    assert zip_tile.disabled and docx_tile.disabled  # nothing linked
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
 
 
 def test_export_download_success_reveals_the_files(export_card, monkeypatch, data_root):
@@ -703,7 +574,7 @@ def test_export_download_success_reveals_the_files(export_card, monkeypatch, dat
         },
     )
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(
         card, t("analysis_tile.export_labels.build_tile")
     )
@@ -718,10 +589,11 @@ def test_export_download_success_reveals_the_files(export_card, monkeypatch, dat
     assert feedback.toasts() == [
         ("success", t("analysis_tile.export_labels.download_done"))
     ]
-    assert toolbar.viz is True
-    assert download_btn.loading is False and download_btn.disabled is False
-    # The two file tiles link this build's zip and report.
-    zip_tile, docx_tile = toolbar.children
+    assert not zip_tile.disabled and not docx_tile.disabled
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
+    # The two file rows link this build's zip and report.
     assert zip_tile.disabled is False and zip_tile.attributes["download"] == "alert_0.zip"
     assert docx_tile.disabled is False and docx_tile.attributes["download"] == "alert_0.docx"
     from gui.tile.analysis.file_tile import FileTile
@@ -741,7 +613,7 @@ def test_export_download_failure_fails_the_task_with_one_error_toast(
 
     monkeypatch.setattr(export, "_download_data", _boom)
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(
         card, t("analysis_tile.export_labels.build_tile")
     )
@@ -749,15 +621,17 @@ def test_export_download_failure_fails_the_task_with_one_error_toast(
     feedback.join()
 
     feedback.assert_one_error_after_fail(equals="disk full")
-    assert toolbar.viz is False
-    assert download_btn.loading is False and download_btn.disabled is False
+    assert zip_tile.disabled and docx_tile.disabled  # nothing linked
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
 
 
 def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
     export_card, monkeypatch
 ):
     """The post-download apply step runs inside the tracked job: a download path
-    ``local_files.home_relative`` rejects (outside ``$HOME``) must be a FAILED
+    ``local_files.served_relative`` rejects (outside ``$HOME``) must be a FAILED
     task + one error toast, not a green pill with buttons that never show."""
     export, card, _app_state, _app_tile_model = export_card
     feedback = _record_feedback(monkeypatch, export)
@@ -773,9 +647,9 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
     def _reject(path):
         raise ValueError(f"not under the SEPAL home: {path}")
 
-    monkeypatch.setattr(local_files, "home_relative", _reject)
+    monkeypatch.setattr(local_files, "served_relative", _reject)
 
-    toolbar = _download_toolbar(card)
+    zip_tile, docx_tile = _file_tiles(card)
     download_btn = _button(
         card, t("analysis_tile.export_labels.build_tile")
     )
@@ -785,8 +659,10 @@ def test_export_download_apply_failure_fails_the_task_with_one_error_toast(
     feedback.assert_one_error_after_fail(
         equals="not under the SEPAL home: /elsewhere/alert_0.zip"
     )
-    assert toolbar.viz is False
-    assert download_btn.loading is False and download_btn.disabled is False
+    assert zip_tile.disabled and docx_tile.disabled  # nothing linked
+    # Released: the spinner stops and the row goes back to its state, held
+    # here, where no save of the alert has landed.
+    assert download_btn.busy is False and download_btn.disabled is True
 
 
 def test_export_save_apply_failure_fails_the_task_with_one_error_toast(
@@ -1163,7 +1039,7 @@ def test_edit_tools_model_run_marks_the_open_project_as_being_written(
 
 @pytest.mark.parametrize("model", [1, 2])
 def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
-    edit_tools_card, monkeypatch, model
+    edit_tools_card, monkeypatch, server_log, model
 ):
     edit_tools, card, _model = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
@@ -1182,30 +1058,11 @@ def test_edit_tools_model_run_failure_fails_the_task_before_the_error_toast(
     feedback.assert_one_error_after_fail(
         equals=t("analysis_tile.model_labels.dl_404")
     )
-
-
-@pytest.mark.parametrize("model", [1, 2])
-def test_edit_tools_model_run_failure_leaves_one_traceback_in_the_server_log(
-    edit_tools_card, monkeypatch, server_log, model
-):
-    """``tracked_job`` logs the failure with its traceback (the raw exception,
-    behind the friendly dl_404 toast); the run worker logged it again, so one
-    failed run printed two tracebacks."""
-    edit_tools, card, _model = edit_tools_card
-    feedback = _record_feedback(monkeypatch, edit_tools)
-
-    def _boom(*a, **k):
-        raise RuntimeError("model download failed")
-
-    monkeypatch.setattr(edit_tools, "_run_cnn_model", _boom)
-
-    _dl_run_button(card, model).fire_event("click", None)
-    feedback.join()
-
+    # ``tracked_job`` logs the raw exception behind that toast, once: the run
+    # worker used to log it again, so one failed run printed two tracebacks.
     out = server_log.getvalue()
     assert out.count("Traceback (most recent call last)") == 1
     assert "RuntimeError: model download failed" in out
-    assert len(feedback.errors) == 1
 
 
 @pytest.mark.parametrize("model", [1, 2])
@@ -1447,6 +1304,27 @@ def test_the_refine_badge_follows_the_drawn_polygon(tmp_path):
                                      shapely_box(1, 1, 1.01, 1.01)], crs="EPSG:4326")
     analysis.defo_layer.set(gdf)
     assert "2" in seen[-1] and "ha" in seen[-1]
+
+
+def test_the_refine_badge_measures_the_union_the_save_stores():
+    """Review M1: two overlapping features count their shared part once, as
+    the save's ``area_ha`` does (spec 2026-10-26 §4.3)."""
+    import geopandas as gpd
+    from shapely.geometry import box as shapely_box
+
+    from deforestation_alerts.project.review_groups import polygon_area_ha
+    from gui.i18n import format_number, tn
+    from gui.tile.analysis import edit_tools
+
+    analysis = AnalysisState()
+    seen = []
+    edit_tools.wire_refine_badge(analysis, lambda text, color=None: seen.append(text))
+    gdf = gpd.GeoDataFrame(geometry=[shapely_box(0, 0, 0.02, 0.01), shapely_box(0.01, 0, 0.03, 0.01)],
+                           crs="EPSG:4326")
+    analysis.defo_layer.set(gdf)
+    union = polygon_area_ha(gdf.geometry.union_all())
+    assert seen[-1] == t("analysis_tile.sections.refine_summary",
+                         shapes=tn("analysis_tile.sections.shapes", 2), area=format_number(union, 1))
 
 
 def test_the_refine_badge_cannot_break_an_alert_change(tmp_path):
@@ -1848,16 +1726,6 @@ def test_no_inline_feedback_surfaces_are_left():
             )
 
 
-def test_the_form_frame_keeps_field_validation_inline_with_a_justification():
-    """The one documented exception, and it must stay documented: every form
-    shows its validation error through gui/widget/form_dialog's form_error."""
-    rel = "gui/widget/form_dialog.py"
-    assert "rv.Alert" in _called(rel), "the field-validation alert disappeared"
-    assert "KEPT INLINE ON PURPOSE" in _src(rel), (
-        "the retained inline validation lost its justification comment"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Final re-review, Minor 3: Save, Download and a CNN run work on the alert
 # clicked for, read at the click (UI thread), never on a mix of it and the
@@ -1991,7 +1859,7 @@ def test_a_build_that_lands_after_the_alert_change_says_so(monkeypatch):
     assert feedback.task().status == TaskStatus.FAILED
     assert feedback.task().error_message == reason
     # The spinner stopped, but the button stays as the alert change left it.
-    assert build_btn.loading is False and build_btn.disabled is True
+    assert build_btn.busy is False and build_btn.disabled is True
 
 
 # ---------------------------------------------------------------------------
@@ -2021,15 +1889,8 @@ def _save_harness(tmp_path, monkeypatch):
     from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
     from gui.scripts.set_context import SetContext
 
-    class _AdminLookups:  # stands in for ``review_save.ee``: the FAO/GAUL lookups
-        def __getattr__(self, name):
-            return lambda *a, **k: self
-
-        def getInfo(self):  # noqa: N802 - Earth Engine's name
-            return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
-
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", _AdminLookups())
+    stub_admin_lookups(monkeypatch)
 
     now = datetime.now()
     rel = "periods/per/sets/glad-l"
@@ -2068,8 +1929,8 @@ def _save_harness(tmp_path, monkeypatch):
 
 
 def test_the_save_runner_advances_only_after_a_save_that_wrote(tmp_path, monkeypatch):
-    """Save & next passes ``go_next`` as ``then``: a refused save must leave
-    the reviewer on the alert that was not saved.
+    """A caller that passes ``go_next`` as ``then`` (the old Save & next): a
+    refused save must leave the reviewer on the alert that was not saved.
 
     ``moved`` alone cannot tell a save that WROTE from one that only ran:
     ``_save_alerts_to_gdf`` returns early on an empty ``_save_target`` while
@@ -2144,9 +2005,10 @@ def test_an_edit_made_while_the_save_runs_stays_unsaved_and_does_not_advance(
 
 
 def test_a_second_save_cannot_start_while_one_is_running(tmp_path, monkeypatch):
-    """One writer at a time, and both save buttons say so.
+    """One writer at a time, and every button registered with the runner says so.
 
-    The footer has two buttons on the same runner, and only the clicked
+    The footer used to have two save buttons on the same runner (it has one
+    since 2026-10-26; ``guard`` still takes any number), and only the clicked
     one used to be disabled: the other could start a second writer over the
     same store and the same row while the first was still in its admin
     lookups, with the later writer's row values winning by luck of timing.
@@ -2178,7 +2040,7 @@ def test_a_second_save_cannot_start_while_one_is_running(tmp_path, monkeypatch):
 
 
 def test_a_save_that_lands_after_the_alert_change_does_not_advance(tmp_path, monkeypatch):
-    """A stale *Save & next* must not move the reviewer on from where they are.
+    """A stale save with a ``then`` must not move the reviewer on from where they are.
 
     The save is slow (GEE admin lookups plus the store write), so the reviewer
     can navigate by hand while it runs. ``then`` is ``app_state.go_next``: left

@@ -32,9 +32,21 @@ def _custom(p, name):
     ("GLAD-S2", "steps.alerts.name_reserved"),
     ("glad l", "steps.alerts.name_token_taken"),   # token glad-l is GLAD-L's
     ("森林", "steps.alerts.name_token_na"),
+    ("Cut and burn", "steps.alerts.name_separator"),  # format_list's joiners
+    ("and burn", "steps.alerts.name_separator"),
+    ("Cut, burn", "steps.alerts.name_separator"),
 ])
 def test_source_name_rules(name, key):
     assert names.validate_source_name(name, _p("GLAD-L")) == key
+
+
+@pytest.mark.parametrize("name", ["Cut And burn", "Sandy", "Cut,burn"])
+def test_source_names_that_survive_the_alert_sources_round_trip(name):
+    from deforestation_alerts.scripts.alert_codes import format_list, parse_formatted_string
+
+    assert names.validate_source_name(name, _p("GLAD-L")) is None
+    for items in ([name, "RADD"], ["RADD", name], ["RADD", name, "GLAD-L"]):
+        assert parse_formatted_string(format_list(items)) == items
 
 
 def test_ccdc_is_an_ordinary_name_now():

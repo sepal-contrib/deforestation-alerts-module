@@ -132,3 +132,20 @@ class BasemapSwitcher(PluginMixin):
     #: The shown basemap's id, written by the frontend on a click; Python may
     #: set it. Empty or unknown means the first basemap.
     basemap_switcher_selected = traitlets.Unicode("").tag(sync=True)
+
+
+class Pick(PluginMixin):
+    """A map click writes a tagged ``pick_event`` (``pick``)."""
+
+    _plugin_name = "pick"
+    _plugin_requires = ("draw",)
+    #: Set by Python; copied into the next ``pick_event`` so a reply can be
+    #: matched to the alert it was asked for.
+    pick_tag = traitlets.Unicode("").tag(sync=True)
+    #: ``{tag, view, lat, lng, zoom, seq}`` of the last click, written by the
+    #: frontend. Not picked while draw edit mode or a Geoman tool is on.
+    pick_event = traitlets.Dict().tag(sync=True)
+
+    @traitlets.default("pick_event")
+    def _default_pick_event(self):
+        return {}

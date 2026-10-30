@@ -37,6 +37,10 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/project/models.py", "ValueError", "is already a source"),
     # the question form always keeps one verdict ticked; this guards a hand-edited manifest
     ("deforestation_alerts/project/models.py", "ValueError", "asked for at least one verdict"),
+    # Analysis offers "Remove from group" only on a member of a group
+    ("deforestation_alerts/project/review_groups.py", "ValueError", "is not a member of a group"),
+    # a broken group invariant: share.apply_return refuses it as share.merge_err_groups
+    ("deforestation_alerts/project/review_groups.py", "GroupInvariantError", "group {value}"),
     # the environment: geedim is a dependency
     ("deforestation_alerts/scripts/raster_export.py", "ImportError", "Install geedim"),
     ("deforestation_alerts/scripts/alert_export.py", "ValueError", "Unsupported export format"),
@@ -154,7 +158,7 @@ def test_every_error_the_engine_raises_with_a_text_names_a_message():
                                  "errors.mask_not_as_asked", "errors.no_aoi_or_grid", "errors.file_not_found",
                                  "errors.not_a_source", "errors.not_ready", "errors.footprint_missing",
                                  "errors.no_sources", "errors.no_tippecanoe",
-                                 "errors.bands_not_loaded", "errors.project_unreadable",
+                                 "errors.bands_not_loaded", "errors.raw_not_ready", "errors.project_unreadable",
                                  "errors.project_not_a_manifest", "errors.project_newer_schema",
                                  "errors.project_invalid", "errors.no_images", "errors.folder_not_writable",
                                  "errors.source_native_unknown", "errors.attribute_band_missing",

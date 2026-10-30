@@ -35,6 +35,7 @@ from deforestation_alerts.project.growth import (
     kind_of,
     links_of,
 )
+from deforestation_alerts.project import review_groups
 from deforestation_alerts.project.review_status import STATUS_CODES
 from deforestation_alerts.project.review_status import NOT_REVIEWED, reviewed_mask
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM
@@ -47,7 +48,7 @@ from gui.store.workflow_steps import active_set
 from gui.tile.analysis.filter_menu import build_filter_menu
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE, panel_block
-from gui.widget.buttons import btn, set_label
+from gui.widget.buttons import btn, icon_btn, set_label, set_tip
 
 #: The panel's own slots, kept on the returned card so the tests (and nothing
 #: else) can reach them without re-deriving the tree's shape.
@@ -156,7 +157,9 @@ def status_color(status) -> str:
 
 
 def facts_of(gdf, alert_id, project):
-    """``{"source", "first", "last", "status", "kind"}`` of the selected alert, or
+    """``{"source", "first", "last", "status", "kind", "group"}`` of the
+    selected alert (``group``: the size of its review group, None outside a
+    group of two or more), or
     ``None`` when there is nothing to show: no table, no selection, an id out
     of range, or alerts of another set than the active one — Integrate records
     a new set before it publishes that set's alerts, and Overview skips them
@@ -175,7 +178,16 @@ def facts_of(gdf, alert_id, project):
         "status": status if isinstance(status, str) and status else NOT_REVIEWED,
         # an old set has neither column: kind_of(None, None) is "new"
         "kind": kind_of(links_of(row.get(GROWS_FROM)), row.get(BELOW_MIN)),
+        "group": _group_size(gdf, alert_id),
     }
+
+
+def _group_size(gdf, alert_id):
+    """The size of the review group the alert is in (group review §6.3), or
+    None for a row in no group or in a group of one."""
+    if review_groups.COLUMN not in gdf.columns or not review_groups.is_grouped(gdf, alert_id):
+        return None
+    return 1 + len(review_groups.group_of(gdf, alert_id)[1])
 
 
 #: the Kind chip's colour for the growth kinds (spec §6.1)
@@ -191,7 +203,7 @@ def history_text(summary) -> str:
     """The History row's sentence: the group's alerts, the area confirmed since
     its first period and, when there is some, the area not reviewed yet."""
     text = tn("analysis_tile.facts.history_text", summary.n, confirmed=format_number(summary.confirmed_ha, 1),
-              since=format_date(summary.since, "MMM y"))
+              since=format_date(summary.first_period_start, "MMM y"))
     if summary.unreviewed_ha > 0:
         text += t("analysis_tile.facts.history_unreviewed", ha=format_number(summary.unreviewed_ha, 1))
     return text
@@ -203,13 +215,18 @@ def queue_widgets(card):
     return slots["counter"], slots["tally"], slots["bar"]
 
 
+def next_unreviewed_widget(card):
+    """The icon-only *Next unreviewed alert* button beside Next of a card
+    built by ``build_context``."""
+    return getattr(card, _SLOTS)["skip"]
+
+
 def nav_widgets(card):
-    """``(prev, next, jump, menu, go, unreviewed)`` of a card built by
-    ``build_context``: ``jump`` is the counter's button, which opens ``menu``
-    (the number field with ``go``, and the next-unreviewed link)."""
+    """``(prev, next, jump, menu, go)`` of a card built by ``build_context``:
+    ``jump`` is the counter's button, which opens ``menu`` (the number field
+    with ``go``)."""
     slots = getattr(card, _SLOTS)
-    return (slots["prev"], slots["next"], slots["jump"], slots["menu"], slots["go"],
-            slots["unreviewed"])
+    return slots["prev"], slots["next"], slots["jump"], slots["menu"], slots["go"]
 
 
 def jump_refusal(card):
@@ -243,32 +260,40 @@ def facts_widgets(card):
 
 
 _NAV_WIDTH = "min-width: 124px;"
+#: an icon-only button as tall as the words beside it
+_SKIP_STYLE = "min-width: 0; padding: 0 6px;"
 
 
-def _build_nav(app_state, id_field, counter, labels):
-    """Previous / Next, and the counter as a button that opens a small menu:
-    "Go to alert number" (``id_field`` and ``go``) and "Next unreviewed
-    alert". The menu floats over the panel, so opening it moves nothing.
+def _build_nav(app_state, id_field, counter, labels, guard=None):
+    """Previous / Next, an icon-only "Next unreviewed alert" beside Next
+    (``skip``), and the counter as a button that opens a small menu: "Go to
+    alert number" (``id_field`` and ``go``).
+    The menu floats over the panel, so opening it moves nothing.
 
     The field takes the 1-based number the counter shows, so ``go_to`` takes
     ``value - 1``; ``go_to`` clamps and is safe with no alerts loaded
     (``max_alert_id`` is -1, so every press lands on 0). ``id_field`` is the
     ``v.TextField`` the tile owns, where the tests read and write
-    ``.v_model``."""
+    ``.v_model``. Every alert change goes through ``guard`` (see
+    ``build_context``)."""
+    guard = guard if guard is not None else (lambda move: move())
     # The app's secondary buttons (``gui.widget.buttons``), the words kept
     # beside the chevrons; the label hook below writes them. One width for
     # both, whatever their words ("Previous" is longer than "Next").
     prev = btn("secondary", icon="mdi-chevron-left", style_=_NAV_WIDTH)
     nxt = btn("secondary", icon_right="mdi-chevron-right", style_=_NAV_WIDTH)
-    prev.on_event("click", lambda *_: app_state.go_prev())
-    nxt.on_event("click", lambda *_: app_state.go_next())
+    prev.on_event("click", lambda *_: guard(app_state.go_prev))
+    nxt.on_event("click", lambda *_: guard(app_state.go_next))
+    # "Next unreviewed alert" one click away (user, 2026-10-27, option B);
+    # the dock's Next has its own.
+    skip = icon_btn("secondary", "mdi-skip-next", style_=_SKIP_STYLE)
+    skip.on_event("click", lambda *_: guard(app_state.go_next_unreviewed))
 
     # The counter is a chip, or a sentence, not a button's words: no capitals.
     jump = v.Btn(text=True, v_on="menu.on", class_="defo-jump-btn",
                  style_="height: 36px; padding: 0 6px 0 10px; text-transform: none; letter-spacing: normal;",
                  children=[counter, v.Icon(small=True, children=["mdi-menu-down"])])
     go = btn("primary", icon_right="mdi-arrow-right")
-    unreviewed = btn("tertiary", color="primary", x_small=True, small=False, class_="px-1 align-self-start")
     label = v.Html(tag="div", style_="font-size: 12px; opacity: 0.7;", children=[])
     # "Alert 12 is not in the current filter": a number the filter hides is
     # not jumped to (spec §8.3). Hidden until then; opening the menu hides it.
@@ -279,8 +304,6 @@ def _build_nav(app_state, id_field, counter, labels):
                       v.Html(tag="div", style_="display: flex; gap: 8px; align-items: center;",
                              children=[id_field, go]),
                       refusal,
-                      v.Divider(),
-                      unreviewed,
                   ])
     menu = v.Menu(v_model=False, offset_y=True, nudge_bottom=4, close_on_content_click=False,
                   v_slots=[{"name": "activator", "variable": "menu", "children": jump}],
@@ -316,21 +339,11 @@ def _build_nav(app_state, id_field, counter, labels):
             if target < len(mask) and not mask[target]:
                 _show_refusal(target + 1)
                 return
-        app_state.go_to(target)
+        guard(lambda: app_state.go_to(target))
         menu.v_model = False
 
     go.on_event("click", _on_go)
     id_field.on_event("keydown.enter", _on_go)
-
-    def _on_unreviewed(*_):
-        # Among the filter's matches (every alert without one), wrapping.
-        target = next_unreviewed_match(app_state.alerts_gdf.value, app_state.alert_mask(),
-                                       app_state.actual_alert_id.value)
-        if target is not None:
-            app_state.go_to(target)
-        menu.v_model = False
-
-    unreviewed.on_event("click", _on_unreviewed)
 
     def _label():
         set_label(prev, t("analysis_tile.nav.previous"))
@@ -338,7 +351,7 @@ def _build_nav(app_state, id_field, counter, labels):
         jump.attributes = {**jump.attributes, "aria-label": t("analysis_tile.nav.jump"),
                            "title": t("analysis_tile.nav.jump")}
         set_label(go, t("analysis_tile.nav.go"))
-        set_label(unreviewed, t("analysis_tile.nav.next_unreviewed"))
+        set_tip(skip, t("analysis_tile.nav.next_unreviewed"))
         label.children = [t("analysis_tile.nav.jump")]
         if refused[0] is not None:
             # A switch with the menu open on a refusal: the same sentence in
@@ -347,7 +360,7 @@ def _build_nav(app_state, id_field, counter, labels):
 
     labels.add(_label)
 
-    return {"prev": prev, "next": nxt, "jump": jump, "menu": menu, "go": go, "unreviewed": unreviewed,
+    return {"prev": prev, "next": nxt, "skip": skip, "jump": jump, "menu": menu, "go": go,
             "refusal": refusal}
 
 
@@ -378,6 +391,8 @@ def _build_facts(labels):
     # `display: contents` keeps a row's label and value in the grid, `none`
     # drops both from it
     kind_row = v.Html(tag="div", style_=_ROW_HIDDEN, children=[])
+    group = v.Html(tag="span", class_=f"{TYPE_BODY} dat-num", children=[])
+    group_row = v.Html(tag="div", style_=_ROW_HIDDEN, children=[])
     history_row = v.Html(tag="div", style_=_ROW_HIDDEN, children=[])
 
     row_labels = []  # (span, key): the row names, written again on a switch
@@ -395,9 +410,10 @@ def _build_facts(labels):
             _label("analysis_tile.facts.source"), source,
             _label("analysis_tile.facts.detected"), detected,
             _label("analysis_tile.facts.status"), v.Html(tag="div", children=[chip]),
-            kind_row, history_row,
+            group_row, kind_row, history_row,
         ],
     )
+    group_row.children = [_label("analysis_tile.facts.group"), group]
     kind_row.children = [_label("analysis_tile.facts.kind"), kind_value]
     history_row.children = [_label("analysis_tile.facts.history"), history]
 
@@ -407,22 +423,25 @@ def _build_facts(labels):
 
     labels.add(_label_rows)
     return grid, {"source": source, "detected": detected, "chip": chip,
-                  "swatch": swatch, "kind_row": kind_row, "kind_chip": kind_chip,
+                  "swatch": swatch, "group_row": group_row, "group": group, "kind_row": kind_row, "kind_chip": kind_chip,
                   "history_row": history_row, "history": history}
 
 
-def build_context(app_state, id_field, *, labels=None, analysis=None) -> v.Card:
+def build_context(app_state, id_field, *, labels=None, analysis=None, guard=None) -> v.Card:
     """Block A, built once per session; it subscribes to the alerts table and
     the current position and refreshes itself. ``labels`` is the screen's
     ``labels.Labels`` (a fresh one when none is given); ``analysis`` is the
-    session's ``AnalysisState``, whose ``history`` the History row shows."""
+    session's ``AnalysisState``, whose ``history`` the History row shows.
+    ``guard(move)`` runs each alert change the navigation starts (the dock's
+    ``footer.build_footer``: it asks first over unsaved work); without one
+    they run at once."""
     labels = labels if labels is not None else Labels()
     counter = v.Html(tag="span", class_=_COUNTER_CLASS, style_="white-space: nowrap;", children=[])
     tally = v.Html(tag="span", class_=TYPE_LABEL, style_="white-space: nowrap;", children=[])
     bar = v.ProgressLinear(value=0, height=4, color="primary", rounded=True)
 
     facts_grid, facts_slots = _build_facts(labels)
-    nav_slots = _build_nav(app_state, id_field, counter, labels)
+    nav_slots = _build_nav(app_state, id_field, counter, labels, guard=guard)
 
     shown = [None]  # the facts on screen, for a language switch
 
@@ -435,6 +454,9 @@ def build_context(app_state, id_field, *, labels=None, analysis=None) -> v.Card:
             color=status_color(facts["status"]))
         facts_slots["chip"].children = [facts_slots["swatch"],
                                         t(status_label_key(facts["status"]))]
+        size = facts.get("group")
+        facts_slots["group_row"].style_ = _ROW_HIDDEN if size is None else _ROW_SHOWN
+        facts_slots["group"].children = [] if size is None else [tn("analysis_tile.facts.group_of", size)]
         kind = facts["kind"]
         facts_slots["kind_row"].style_ = _ROW_HIDDEN if kind == KIND_NEW else _ROW_SHOWN
         # purple for the growth kinds only; a new alert under the minimum area
@@ -472,7 +494,7 @@ def build_context(app_state, id_field, *, labels=None, analysis=None) -> v.Card:
         stuck = filtered and not mask.any()
         nav_slots["prev"].disabled = stuck
         nav_slots["next"].disabled = stuck
-        nav_slots["unreviewed"].disabled = next_unreviewed_match(gdf, mask, index) is None
+        nav_slots["skip"].disabled = next_unreviewed_match(gdf, mask, index) is None
         id_field.placeholder = f"1 – {format_number(total)}" if total else ""
 
         # The queue line refreshes before this guard returns: another set's
@@ -526,7 +548,7 @@ def build_topnav(card, set_selector, *, labels=None):
     built (their handlers and subscriptions stay there): the filter control
     (``filter_menu``: the funnel button and the filter's chip), the alert-set
     selector, the review progress (tally over its bar), and Previous · the
-    counter (its jump menu) · Next.
+    counter (its jump menu) · Next and its next-unreviewed icon.
 
     The filter, the set and its progress (then the screen's help, which
     ``build_screen`` inserts before the navigation) sit right of the title,
@@ -543,7 +565,8 @@ def build_topnav(card, set_selector, *, labels=None):
     slots["filter"] = control
     progress = v.Html(tag="div", class_="defo-topnav-progress", children=[slots["tally"], slots["bar"]])
     middle = v.Html(tag="div", class_="defo-topnav-pos", children=[slots["menu"]])
-    nav = v.Html(tag="div", class_="defo-topnav-nav", children=[slots["prev"], middle, slots["next"]])
+    after = v.Html(tag="div", class_="defo-topnav-next", children=[slots["next"], slots["skip"]])
+    nav = v.Html(tag="div", class_="defo-topnav-nav", children=[slots["prev"], middle, after])
     return v.Html(tag="div", class_="defo-topnav", children=[
         v.Html(tag="span", style_="flex: 1 1 auto;", children=[]),
         *([control.root] if control is not None else []),

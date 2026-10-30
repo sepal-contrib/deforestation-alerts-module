@@ -1,4 +1,4 @@
-"""Download & harmonize rows for coverage and custom sources, offline."""
+"""Download/harmonize rows for coverage and custom sources, offline."""
 
 import dataclasses
 from datetime import date, datetime
@@ -22,7 +22,8 @@ from deforestation_alerts.project.models import (
 )
 
 GRID = GridSpec(epsg="EPSG:32721", resolution=10, xmin=500000, ymax=8900000, width=30, height=20)
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])  # the custom sources join it as they are added
 _W, _S, _E, _N = Transformer.from_crs(GRID.epsg, "EPSG:4326", always_xy=True).transform_bounds(
     GRID.xmin, GRID.ymax - 200, GRID.xmin + 300, GRID.ymax)
 BOUNDS = (_W - 0.001, _S - 0.001, _E + 0.001, _N + 0.001)
@@ -53,12 +54,19 @@ def _file_source(p, tmp_path):
     return add_custom_source(p, name="tif", origin="file", ref=str(path), asset_type="FILE", format="radd",
                              date_encoding="yyddd", band_map=BandMap(alert=1, date=2),
                              native=NativeGrid(crs=GRID.epsg, scale=10.0, transform=tuple(t)[:6],
-                                               bounds=BOUNDS))
+                                               bounds=BOUNDS), period_id=p.active_period)
 
 
-def _job(p, tmp_path, source, meta=None, force=False):
+def _job(p, tmp_path, source, meta=None, force=False, mode="download"):
     return runner.SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=JAN, source=source,
-                            meta=meta, aoi="AOI", force=force)
+                            meta=meta, aoi="AOI", force=force, mode=mode)
+
+
+def _both(p, tmp_path, source):
+    """The Alerts step's download, then the Harmonize step's run (option C: no chain)."""
+    arts = runner.run_source_row(_job(p, tmp_path, source))
+    runner.apply_artifacts(p, arts)
+    return {**arts, **runner.run_source_row(_job(p, tmp_path, source, mode="harmonize"))}
 
 
 @pytest.fixture
@@ -123,7 +131,7 @@ def test_a_geotiff_source_runs_locally_and_is_clipped_to_the_aoi_polygon(tmp_pat
     p = _project(tmp_path)
     _file_source(p, tmp_path)
     cover(p, "tif")
-    arts = runner.run_source_row(_job(p, tmp_path, "tif"))
+    arts = _both(p, tmp_path, "tif")
     assert no_ee == [] and set(arts) == {fp.AOI_KEY, fp.raw_key(JAN.id, "tif"), fp.harm_key(JAN.id, "tif")}
     runner.apply_artifacts(p, arts)
     harm = arts[fp.harm_key(JAN.id, "tif")]
@@ -133,7 +141,7 @@ def test_a_geotiff_source_runs_locally_and_is_clipped_to_the_aoi_polygon(tmp_pat
     assert harm.stats["alert_pixels"] == int((a > 0).sum()) and harm.stats["date_min"] == 2026010
     row = plan_prepare(p, tmp_path, JAN)[0]
     assert row.ready and row.stats == harm.stats
-    assert runner.run_source_row(_job(p, tmp_path, "tif")) == {}  # current: nothing to do
+    assert _both(p, tmp_path, "tif") == {}  # current: nothing to do
 
 
 def test_a_geotiff_row_waits_for_the_aoi_geometry(tmp_path, cover, no_ee):
@@ -141,9 +149,13 @@ def test_a_geotiff_row_waits_for_the_aoi_geometry(tmp_path, cover, no_ee):
     _file_source(p, tmp_path)
     cover(p, "tif")
     (tmp_path / paths.AOI_SIDECAR).unlink()
+    # the download needs no AOI raster; the harmonize waits for it
+    arts = runner.run_source_row(_job(p, tmp_path, "tif"))
+    assert set(arts) == {fp.raw_key(JAN.id, "tif")}
+    assert not paths.aoi_raster_path(tmp_path).exists()
+    runner.apply_artifacts(p, arts)
     with pytest.raises(runner.AoiGeometryMissing):
-        runner.run_source_row(_job(p, tmp_path, "tif"))
-    assert not list(tmp_path.glob("periods/**/*.tif"))
+        runner.run_source_row(_job(p, tmp_path, "tif", mode="harmonize"))
 
 
 def test_a_moved_user_file_reads_missing_not_stale(tmp_path, cover, no_ee):
@@ -162,7 +174,7 @@ def test_a_custom_earth_engine_source_downloads_at_its_native_grid(tmp_path, cov
     p = _project(tmp_path)
     add_custom_source(p, name="ee radd", origin="gee", ref="users/x/radd", asset_type="IMAGE", format="radd",
                       date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"),
-                      native=NativeGrid(crs="EPSG:4326", scale=10.0))
+                      native=NativeGrid(crs="EPSG:4326", scale=10.0), period_id=p.active_period)
     cover(p, "ee radd")
     calls = []
 
@@ -198,14 +210,14 @@ def test_an_aoi_change_rebuilds_the_aoi_raster_before_a_geotiff_row(tmp_path, co
     p = _project(tmp_path)
     _file_source(p, tmp_path)
     cover(p, "tif")
-    runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, "tif")))
+    runner.apply_artifacts(p, _both(p, tmp_path, "tif"))
     old_aoi = p.artifacts[fp.AOI_KEY].content_id
     # a new AOI, the eastern half, its sidecar in place as the loader stages it
     aoi_io.write_sidecar(tmp_path, gpd.GeoDataFrame(geometry=[box((_W + _E) / 2, _S, _E, _N)], crs="EPSG:4326"))
     p.aoi = p.aoi.model_copy(update={"digest": "g2"})
     cover(p, "tif")
     assert plan_prepare(p, tmp_path, JAN)[0].harmonized is fp.Status.STALE  # its AOI raster is the old AOI's
-    arts = runner.run_source_row(_job(p, tmp_path, "tif"))
+    arts = _both(p, tmp_path, "tif")
     assert arts[fp.AOI_KEY].content_id != old_aoi
     runner.apply_artifacts(p, arts)
     with rasterio.open(tmp_path / arts[fp.harm_key(JAN.id, "tif")].rel_path) as r:
@@ -215,9 +227,8 @@ def test_an_aoi_change_rebuilds_the_aoi_raster_before_a_geotiff_row(tmp_path, co
 
 def test_a_geotiff_row_asks_twice_the_compressed_estimate_before_each_write(tmp_path, cover, no_ee, monkeypatch):
     """Spec §13 "free-space gates ask for exactly twice the compressed
-    estimate" (user decision 2026-10-01): the AOI raster, the normalized raw,
-    then the harmonized file (checked before the raw is written and again
-    before the harmonize)."""
+    estimate" (user decision 2026-10-01): the normalized raw, then the AOI
+    raster and the harmonized file of the Harmonize step's run."""
     from deforestation_alerts.engine import grid as gridmod
     from deforestation_alerts.engine import normalize
     from deforestation_alerts.engine.raster_io import compressed_estimate
@@ -227,11 +238,11 @@ def test_a_geotiff_row_asks_twice_the_compressed_estimate_before_each_write(tmp_
     cover(p, "tif")
     seen = []
     monkeypatch.setattr(runner, "ensure_free_space", lambda folder, needed: seen.append(needed))
-    runner.run_source_row(_job(p, tmp_path, "tif"))
+    _both(p, tmp_path, "tif")
     aoi_raster = 2 * compressed_estimate(gridmod.estimate_bytes(GRID, bands=1))
     raw = 2 * compressed_estimate(normalize.estimate_bytes(src, BOUNDS))
     harm = runner._harmonize_space(p)
-    assert seen == [aoi_raster, raw, harm, harm]
+    assert seen == [raw, aoi_raster, harm]
 
 
 def test_a_source_not_covered_with_current_files_does_not_unlock_integrate(tmp_path, cover, no_ee, monkeypatch):
@@ -242,7 +253,7 @@ def test_a_source_not_covered_with_current_files_does_not_unlock_integrate(tmp_p
     p = _project(tmp_path)
     _file_source(p, tmp_path)
     cover(p, "tif")
-    runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, "tif")))
+    runner.apply_artifacts(p, _both(p, tmp_path, "tif"))
     monkeypatch.setattr(ws.paths, "project_dir", lambda name, root=None: tmp_path)
     integrate_step = ws.STEPS[ws.step_index("integrate")]
     assert integrate_step.unlocked(p)
@@ -253,7 +264,8 @@ def test_a_source_not_covered_with_current_files_does_not_unlock_integrate(tmp_p
 
 def _ee_source(p, native=NativeGrid(crs="EPSG:4326", scale=10.0)):
     return add_custom_source(p, name="ee radd", origin="gee", ref="users/x/radd", asset_type="IMAGE", format="radd",
-                             date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"), native=native)
+                             date_encoding="yyddd", band_map=BandMap(alert="Alert", date="Date"), native=native,
+                             period_id=p.active_period)
 
 
 @pytest.mark.parametrize("record, state", [
@@ -346,7 +358,7 @@ def test_a_deleted_aoi_raster_realigns_a_geotiff_mask_before_a_geotiff_row_harmo
                     runner.MaskJob(p.model_copy(deep=True), tmp_path, row.name, "AOI")))
         for row in plan_prepare(p, tmp_path, JAN):
             if row.needs_run:
-                runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, row.source)))
+                runner.apply_artifacts(p, _both(p, tmp_path, row.source))
 
     run_all()
     assert plan_prepare(p, tmp_path, JAN)[0].ready
@@ -354,8 +366,10 @@ def test_a_deleted_aoi_raster_realigns_a_geotiff_mask_before_a_geotiff_row_harmo
 
     row = plan_masks(p, tmp_path, JAN)[0]
     assert row.aligned is fp.Status.STALE and row.needs_run
+    # a forced download never waits for the mask, and builds no AOI raster
+    assert set(runner.run_source_row(_job(p, tmp_path, "tif", force=True))) == {fp.raw_key(JAN.id, "tif")}
     with pytest.raises(runner.MaskNotReady):
-        runner.run_source_row(_job(p, tmp_path, "tif", force=True))
+        runner.run_source_row(_job(p, tmp_path, "tif", mode="harmonize"))
     assert not paths.aoi_raster_path(tmp_path).exists()
 
     run_all()

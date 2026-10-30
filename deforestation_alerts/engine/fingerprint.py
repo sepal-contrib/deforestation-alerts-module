@@ -19,7 +19,9 @@ from typing import Optional
 from deforestation_alerts.engine import catalogue
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.review_copy import read_only
-from deforestation_alerts.project.models import AlertSet, AlertSetParams, Artifact, Period, Project
+from deforestation_alerts.project.models import (
+    AlertSet, AlertSetParams, Artifact, Period, Project, period_digit, period_sources,
+)
 
 
 class Status(str, Enum):
@@ -199,11 +201,11 @@ def harmonized_inputs(p: Project, source: str, period: Period) -> Optional[dict]
 
 
 def period_harmonized_inputs(p: Project, period: Period, sources=None) -> dict[str, Optional[dict]]:
-    """``harmonized_inputs`` of each of ``sources`` (default: every project
-    source) in ``period``, with the period's mask terms computed once rather
+    """``harmonized_inputs`` of each of ``sources`` (default: the period's
+    sources) in ``period``, with the period's mask terms computed once rather
     than once per source (a render's badges read every period)."""
     terms = _mask_terms(p, period)
-    names = p.sources if sources is None else [s for s in sources if s in p.sources]
+    names = period_sources(p, period) if sources is None else [s for s in sources if s in p.sources]
     return {s: _harmonized(p, s, period, terms) for s in names}
 
 
@@ -261,8 +263,9 @@ def carry_sets(p: Project, period: Period, sources) -> list:
         art = p.artifacts.get(combined_key(s.id))
         if other is None or other.end < win_start or art is None or not (art.stats or {}).get("states"):
             continue
-        remap = {int(d): p.sources[src].digit for d, src in s.digit_map.items()
-                 if src in sources and src in p.sources}
+        remap = {int(d): period_digit(p, period, src) for d, src in s.digit_map.items()
+                 if src in sources and src in p.sources
+                 and (p.sources[src].kind == "predefined" or src in period.digits)}  # gone from the period: no digit
         if remap:
             out.append((s, remap))
     return out
@@ -356,7 +359,9 @@ def period_set_statuses(p: Project, pdir, period: Period) -> dict[str, Status]:
         return {}
     if read_only(p):
         return {s.id: _copy_set_status(pdir, s) for s in sets}
-    harmonized, mask_gone = period_harmonized_inputs(p, period), _mask_file_gone(p, period)
+    # every source of the sets: one taken out of the period since leaves its set out of date, not a KeyError
+    harmonized = period_harmonized_inputs(p, period, {src for s in sets for src in s.sources})
+    mask_gone = _mask_file_gone(p, period)
     return {s.id: _set_status(p, pdir, s, period, harmonized, mask_gone) for s in sets}
 
 

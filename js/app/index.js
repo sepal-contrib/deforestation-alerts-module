@@ -22,6 +22,8 @@ import {holes} from "../leaflet-multiview/src/plugins/holes/index.js";
 import {tileErrors} from "../leaflet-multiview/src/plugins/tile-errors/index.js";
 import {basemapSwitcher} from "../leaflet-multiview/src/plugins/basemap-switcher/index.js";
 import * as basemapSwitcherWidget from "../leaflet-multiview/src/plugins/basemap-switcher/widget.js";
+import {pick} from "../leaflet-multiview/src/plugins/pick/index.js";
+import * as pickWidget from "../leaflet-multiview/src/plugins/pick/widget.js";
 import {resizeNudge} from "./resize_nudge.js";
 
 export default createWidget({
@@ -37,6 +39,7 @@ export default createWidget({
       bind: basemapSwitcherWidget.bind,
       options: basemapSwitcherWidget.options,
     },
+    pick: {plugin: pick, bind: pickWidget.bind},
   },
   always: [resizeNudge],
 });

@@ -1,4 +1,4 @@
-"""The Details dialog of a Download & harmonize row (spec "Details dialog"):
+"""The Details dialog of a download/harmonize row (spec "Details dialog"):
 what the row's files were made with, read-only.
 
 ``details`` is ``prepare_view.source_details`` / ``mask_details``: a title, a
@@ -44,8 +44,14 @@ def _Section(section: dict):
 
 
 @solara.component
-def DetailsDialog(open: bool, details: Optional[dict], on_close: Callable):
+def DetailsDialog(open: bool, details: Optional[dict], on_close: Callable, new_periods: Optional[bool] = None,
+                  on_new_periods: Optional[Callable] = None, on_edit: Optional[Callable] = None):
     """``open``: shown; ``on_close()``: Close, Esc or a click outside.
+
+    An Alerts row's dialog (spec §2) also holds what can change there:
+    ``new_periods`` (not None) the *Add to new periods* checkbox, calling
+    ``on_new_periods(bool)`` (None: read-only); ``on_edit`` an Edit button
+    (a custom source).
 
     ``eager``: a lazy dialog builds its content on the first open, after
     VDialog has tried to focus it, so that first open never heard Esc."""
@@ -67,5 +73,12 @@ def DetailsDialog(open: bool, details: Optional[dict], on_close: Callable):
                         rv.Html(tag="span", children=[details["why"]])])
                 for section in details["sections"]:
                     _Section(section=section)
+                if new_periods is not None:
+                    rv.Checkbox(label=t("steps.alerts.add_to_new_periods"), v_model=new_periods,
+                                on_v_model=lambda value: on_new_periods(bool(value)), dense=True, hide_details=True,
+                                disabled=on_new_periods is None)
             with rv.CardActions(style_="justify-content: flex-end;"):
+                if on_edit is not None:
+                    solara.Button(t("widgets.product_table.action_edit"), icon_name="mdi-pencil", on_click=on_edit, text=True, small=True,
+                                  color="primary")
                 solara.Button(t("common.close"), on_click=on_close, text=True, small=True)

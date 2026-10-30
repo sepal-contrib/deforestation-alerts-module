@@ -38,6 +38,20 @@
     "growth_added": "This set adds (ha)",
     "growth_review": "Review",
     "growth_note": "Histories that include an alert of this set, largest confirmed area first.",
+    "card_nearby": "Nearby alerts",
+    "nearby_note": "Alerts within {radius} m of each other, edge to edge, chain into one group of nearby alerts. A split gives each group to one evaluator.",
+    "nearby_headline": {
+      "one": "{n} group of nearby alerts",
+      "other": "{n} groups of nearby alerts"
+    },
+    "nearby_headline_none": "No alert within {radius} m of another",
+    "nearby_split": "In a group: {grouped} of {alerts} alerts · Alone: {alone} · Largest: {largest} alerts",
+    "nearby_saved": {
+      "one": "{n} group saved in Analysis ({alerts} alerts)",
+      "other": "{n} groups saved in Analysis ({alerts} alerts)"
+    },
+    "nearby_saved_none": "No group saved in Analysis yet",
+    "nearby_off": "Reviewing nearby alerts together is off: turn it on in the Evaluation step.",
     "history_one_period": "This project has one monitoring period. Add a second one and its trend is charted here.",
     "timing_note": "By the week an alert was first detected. Greyed weeks are look-back: they fall before this period started.",
     "answers_note": "Reviewed alerts only ({reviewed} of {total}). An alert with two answers is counted under each, so the bars can add up to more than the reviewed total.",
@@ -151,13 +165,13 @@
       "basemap_sepal_dark": "SEPAL Dark",
       "section_imagery": "Imagery",
       "section_alerts": "Alerts",
-      "section_optional": "Optional layers"
+      "section_optional": "Additional layers"
     }
   },
   "analysis_tile": {
     "description": "Review each alert against its before and after imagery: give a verdict, answer the questions, then save and move on.",
     "info_header": "About analysis",
-    "info_md": "The top bar holds the alert filter, the set selector, the review progress and **Previous** / **Next**; the counter between those two opens a menu to jump to an alert number or to the next unreviewed alert. The two maps show the before and after images picked on the shared timeline below them. Under **Verdict**, answer with one of the three buttons, then answer the project's questions under **Questions** (the loss driver by default); **Save & next** writes the review into the set's alert store and opens the following alert — **Save** keeps you on this one. **Refine polygon** opens the drawing tools and the two auto-detection models. Once the alert is saved, **Export this alert** offers **Build alert files**: its GeoPackage, its before/after images and a Word report from the project's report template, chosen in the Questionnaire step. For a true alert, **Timelapse** animates its before and after images with the two images on either side, and the zip of the alert files includes it.",
+    "info_md": "The top bar holds the alert filter, the set selector, the review progress and **Previous** / **Next**; the counter between those two opens a menu to jump to an alert number or to the next unreviewed alert. The two maps show the before and after images picked on the shared timeline below them. Under **Verdict**, answer with one of the three buttons, then answer the project's questions under **Questions** (the loss driver by default); **Save** writes the review into the set's alert store and **Next** opens the following alert; with unsaved changes, Next asks whether to **Discard** them or **Stay**. **Refine polygon** opens the drawing tools and the two auto-detection models. **Export this alert**, at the bottom with Save and Next, lists the alert's files; once the alert is saved, **Build files** makes them: its GeoPackage, its before/after images, a Word report from the project's report template (chosen in the Questionnaire step) and, for a true alert, a **Timelapse** that animates its before and after images with the two images on either side, also included in the zip.",
     "img_selection": {
       "prev_image_title": "Before image",
       "post_image_title": "After image"
@@ -166,6 +180,11 @@
       "source": "Source",
       "detected": "Detected",
       "status": "Status",
+      "group": "Group",
+      "group_of": {
+        "one": "group of {n}",
+        "other": "group of {n}"
+      },
       "range": "{first} → {last}",
       "kind": "Kind",
       "history": "History",
@@ -211,9 +230,12 @@
       "true": "True alert",
       "false": "False positive",
       "revision": "Needs review",
-      "save_next": "Save & next",
       "unsaved": "Unsaved changes on this alert",
-      "saved_at": "Saved {time}"
+      "saved_at": "Saved {time}",
+      "unsaved_title": "This alert has unsaved changes",
+      "unsaved_hint": "Discard drops them and moves on. Stay keeps you on this alert.",
+      "discard": "Discard",
+      "stay": "Stay"
     },
     "questions": {
       "required_missing": "Answer “{question}” before saving.",
@@ -240,7 +262,8 @@
         "one": "{n} shape",
         "other": "{n} shapes"
       },
-      "questions": "Questions"
+      "questions": "Questions",
+      "nearby": "Nearby alerts"
     },
     "edition_labels": {
       "start_edit_button": "Start drawing",
@@ -275,8 +298,13 @@
     },
     "export_labels": {
       "save_btn": "Save",
-      "build_tile": "Build alert files",
-      "save_first": "save first",
+      "save_for": {
+        "one": "Save for {n} alerts",
+        "other": "Save for {n} alerts"
+      },
+      "save_capture_failed": "The alert could not be read for saving: {error}",
+      "build_tile": "Build files",
+      "save_first": "Save this alert first",
       "rebuild_tile": "Rebuild files",
       "tile_zip": "Alert data",
       "tile_zip_detail": "GeoPackage + before/after GeoTIFF",
@@ -284,7 +312,6 @@
       "tile_docx_detail": "Word, from the project's template",
       "tile_gif": "Timelapse",
       "tile_gif_detail": "Animated GIF",
-      "tile_gif_make": "Animated GIF · click to create it",
       "save_task_title": "Saving alert attributes",
       "save_step": "Writing the alert store…",
       "save_done": "Alert attributes saved.",
@@ -309,22 +336,24 @@
       "gif_same_image": "The before and after images are the same image, so the GIF would show no change. Pick two different images on the timeline.",
       "gif_too_few": "Fewer than two images could be rendered for this alert, so no GIF was made.",
       "gif_hint": "Save as a true alert, with the images on screen, to create it",
-      "gif_task_title": "Exporting the alert GIF",
-      "gif_step": "Rendering {count} images…",
-      "gif_done": "Alert GIF ready.",
-      "gif_stale": "The GIF finished after you moved to another alert or changed its images, so it was not offered here.",
-      "gif_zip_skipped": "The alert files are ready, but the GIF could not be made, so the zip has no GIF."
+      "gif_zip_skipped": "The alert files are ready, but the GIF could not be made, so the zip has no GIF.",
+      "save_changes_first": "Save your changes first",
+      "build_detail": "Makes the files above from the saved review",
+      "rebuild_detail": "Makes them again from the saved review",
+      "building": "Building files…",
+      "building_detail": "They unlock above when they are ready",
+      "tile_gif_true_only": "True alerts only"
     },
     "earlier": {
       "show": "Show on the maps",
       "radius": "Within",
-      "radius_error": "Between 0.1 and 50 km",
+      "radius_error": "Between 10 m and 50 km",
       "title": "Earlier alerts",
       "badge_off": "off",
-      "badge_none": "none within {km} km",
+      "badge_none": "none within {distance}",
       "badge_nearby": {
-        "one": "{n} within {km} km · {linked} linked",
-        "other": "{n} within {km} km · {linked} linked"
+        "one": "{n} within {distance} · {linked} linked",
+        "other": "{n} within {distance} · {linked} linked"
       },
       "touches": "touches",
       "touches_unlinked": "touches · not linked",
@@ -336,7 +365,11 @@
       "none_in_copy": "No earlier alerts in this copy",
       "legend_lines": "solid: confirmed · dashed: needs revision · thick: linked",
       "distance_m": "{m} m",
-      "distance_km": "{km} km"
+      "distance_km": "{km} km",
+      "unlink_title": "Unlink from the earlier alert?",
+      "unlink_ok": "Unlink",
+      "unlink_small": "Alert #{n} is {area} ha, under the {min} ha minimum. It is an alert only because it is linked to #{parent}.",
+      "unlink_small_after": "Without the link it stays in the set as New · under minimum area."
     },
     "filter": {
       "col_evaluator": "Evaluator",
@@ -355,6 +388,44 @@
       "chip": "{attribute}: {values}",
       "more": "{values} +{count}",
       "no_columns": "No attribute to filter by"
+    },
+    "nearby": {
+      "mixed_evaluators": "These alerts are assigned to different evaluators: a group needs one.",
+      "foreign_rows": "Some of these alerts are not assigned to you.",
+      "badge_selected": {
+        "one": "{n} selected",
+        "other": "{n} selected"
+      },
+      "badge_within": {
+        "one": "{n} within {radius} m",
+        "other": "{n} within {radius} m"
+      },
+      "badge_none": "none within {radius} m",
+      "select_all": "Select all",
+      "clear": "Clear",
+      "more": {
+        "one": "{n} more in range not listed",
+        "other": "{n} more in range not listed"
+      },
+      "outside": "Some selected alerts are outside the image area: pick a larger area on the timeline.",
+      "in_group": "in this group",
+      "group_of_main": "group #{n}",
+      "assigned_to": "assigned to {name}",
+      "distance": "{m} m",
+      "banner": {
+        "one": "Reviewed as a group of {n} (main alert #{main})",
+        "other": "Reviewed as a group of {n} (main alert #{main})"
+      },
+      "remove": "Remove from group",
+      "saved_with_group": "Alert #{n} was saved as part of a group",
+      "confirm_title": "Save this group?",
+      "confirm_overwritten": "#{n} ({status}): its review is replaced",
+      "confirm_moved": "#{n} ({status}): moves from group #{group}",
+      "confirm_joined": "#{n} ({status}): joins with group #{group}",
+      "confirm_removed": "#{n} ({status}): leaves the group and goes back to not reviewed",
+      "confirm_ok": "Save",
+      "confirm_remove_ok": "Remove",
+      "confirm_cancel": "Cancel"
     }
   },
   "imagery": {

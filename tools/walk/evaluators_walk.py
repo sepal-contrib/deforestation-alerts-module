@@ -34,8 +34,8 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 
 PROJECT = "repro_p"
-SEED = Path.home() / "module_results" / "deforestation_alerts" / PROJECT
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_evaluators"
+SEED = w.ROOT / "deforestation_alerts" / PROJECT
+DATA = w.ROOT / "deforestation_alerts_walk_evaluators"
 EVALUATOR = "Evaluator 1"
 NOT_REVIEWED = ("", "Not reviewed")
 RIGHT = ".right-panel"

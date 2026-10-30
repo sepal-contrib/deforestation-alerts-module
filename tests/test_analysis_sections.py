@@ -16,7 +16,6 @@ from types import SimpleNamespace
 
 import ipyvuetify as v
 import pytest
-from pysepal.i18n import set_locale
 
 from deforestation_alerts.project.models import Project
 from gui.i18n import t
@@ -28,11 +27,7 @@ from gui.widget.buttons import label_of
 from tests._pane_helpers import make_panes
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def test_a_section_starts_collapsed_with_its_body_in_the_tree():
@@ -111,15 +106,15 @@ def _controls(tmp_path, monkeypatch):
 
 def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, monkeypatch):
     """The six stacked always-open cards are gone: what is left is the head
-    (help, set selector, set-status banner), block A, block B and the three
-    collapsible sections -- Questions (spec D4), Refine, Export -- in the order
-    of the spec's §3-§6.
+    (help, set selector, set-status banner), block A, block B and the
+    collapsible sections -- Questions (spec D4), Refine, Earlier alerts -- in
+    the order of the spec's §3-§6; Export is the dock's (user, 2026-10-26).
     """
     from gui.tile.analysis import context, review_panel
     from gui.tile.analysis.footer import footer_widgets
 
     panel = _controls(tmp_path, monkeypatch)
-    banner, block_a, block_b, questions, refine, earlier, footer = panel.controls.children
+    banner, block_a, block_b, questions, refine, earlier, _nearby = panel.controls.children
     # the help, the set selector and the navigation went to the top bar
     assert panel.sections.topnav is not None
     assert earlier is panel.sections.earlier.root
@@ -135,13 +130,15 @@ def test_the_panel_is_the_head_the_two_blocks_and_the_three_sections(tmp_path, m
     # The three statuses the store, the PMTiles paint values and Overview's
     # counts all read -- the verdict IS the stored string, never a label.
     assert set(buttons) == {"Confirmed", "False Positive", "Need revision"}
-    # The Save buttons sit in the sticky footer (spec D6), under the Export
-    # section. The literal English (the fixture pins the locale), not ``t()``
-    # of the same key, which passes on the ``⟦key⟧`` placeholder too.
-    save_next, save, _ = footer_widgets(footer)
-    assert label_of(save) == "Save" and label_of(save_next) == "Save & next"
-    assert [questions, refine, footer] == [panel.sections.questions.root, panel.sections.refine.root,
-                                           panel.sections.footer.root]
+    # Save and Next sit in the dock, under the Export section; the dock is
+    # not one of the scrolling controls (``build_screen`` places it). The
+    # literal English (the fixture pins the locale), not ``t()`` of the same
+    # key, which passes on the ``⟦key⟧`` placeholder too.
+    footer = panel.sections.footer.root
+    assert footer not in panel.controls.children
+    save, nxt, _ = footer_widgets(footer)
+    assert label_of(save) == "Save" and label_of(nxt) == "Next"
+    assert [questions, refine] == [panel.sections.questions.root, panel.sections.refine.root]
     assert footer.children[0] is panel.sections.export.root
 
 
@@ -185,10 +182,11 @@ def test_each_section_got_its_own_badge_setter(tmp_path, monkeypatch):
 def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkeypatch):
     """Ruling 28: there is ONE save runner in the panel, the export section's.
 
-    Its ``apply_save`` is what enables *Build alert files* and moves the
-    export badge on; a footer that made a second runner would leave that
-    button dark for ever, with nothing to say why. So the footer's Save must
-    run the runner the tile passed in, and the panel must build only that one.
+    Its ``apply_save`` is what enables *Build files* and moves the export
+    badge on; a footer that made a second runner would leave that row dark
+    for ever, with nothing to say why. So the footer's Save must run the
+    runner the tile passed in, and the panel must build only that one, and
+    run it on every save.
     """
     from gui.tile.analysis import export as export_mod
     from gui.tile.analysis.footer import footer_widgets
@@ -210,11 +208,7 @@ def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkey
     panel.app_state.alerts_gdf.value = _alerts_gdf()
     panel.app_state.actual_alert_id.value = 0
     build_btn = _build_button(panel.sections.export_parts.body)
-    # Unpacked by name, as the sibling test above does: with an index an
-    # insertion into the panel reads another widget instead and fails with
-    # ``AttributeError: _defo_footer_slots``, saying nothing about what moved.
-    *_, footer = panel.controls.children
-    save_next, save, _ = footer_widgets(footer)
+    save, _next, _ = footer_widgets(panel.sections.footer.root)
 
     assert build_btn.disabled is True
     save.fire_event("click", None)
@@ -225,16 +219,14 @@ def test_the_verdict_save_drives_the_export_sections_own_runner(tmp_path, monkey
     # placeholder a missing or misshapen key renders.
     assert panel.sections.export.badge.children == ["ready to build"]
 
-    # And so does *Save & next*: BOTH buttons drive that one runner. Not
-    # ``save_next is not save`` -- ``build_footer`` constructs them
-    # separately, so no reachable implementation makes them one object and the
-    # assertion cannot fail. Driven from the section's empty state, so the two
-    # effects below are this click's and not the previous one's still standing.
+    # And again on the next alert: the same runner, not one made per alert.
+    # Driven from the section's empty state, so the two effects below are
+    # this click's and not the previous one's still standing.
     panel.analysis.reset_alert()           # the reviewer moved on
     assert build_btn.disabled is True
     assert panel.sections.export.badge.children == ["available after save"]
 
-    save_next.fire_event("click", None)
+    save.fire_event("click", None)
 
     assert made == [1]
     assert build_btn.disabled is False
@@ -272,7 +264,7 @@ def test_the_top_bar_navigation_holds_the_selector_the_queue_and_the_buttons(tmp
 
     panel = _controls(tmp_path, monkeypatch)
     block_a = panel.controls.children[1]
-    prev, nxt, jump, menu, _go, _unreviewed = context.nav_widgets(block_a)
+    prev, nxt, jump, menu, _go = context.nav_widgets(block_a)
     counter, tally, bar = context.queue_widgets(block_a)
 
     def walk(w):

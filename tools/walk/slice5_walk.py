@@ -23,7 +23,7 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 from tools.walk.seed_project import seed
 
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_slice5"
+DATA = w.ROOT / "deforestation_alerts_walk_slice5"
 USER = DATA / "user"  # the walk's "SEPAL folder" files: under $HOME, like a user's
 PROJECT = "s5"
 AMAZON = (-55.10, -10.10, -55.00, -10.00)
@@ -74,6 +74,7 @@ def legend_chips(page, value) -> list:
 
 
 def a_first_month(page, rec, *, out):
+    ph.download_all(page, rec, out=out, expect_ready=1)  # GLAD-L, in Alerts
     ph.save_grid(page)
     ph.add_mask(page, rec, name="south", origin="file", ref=USER / "south.tif", band="south", mode="Keep", out=out)
     ph.run_all(page, rec, out=out, expect_ready=2)  # the mask (aligned), then GLAD-L: one Ready cell each
@@ -108,7 +109,9 @@ def b_second_period(page, rec, *, out):
     p = ph.manifest(DATA, PROJECT)  # the new period copied the latest period's mask choices
     rec["july_masks_at_creation"] = p["periods"][JULY]["masks"]
     assert p["periods"][JULY]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JULY]["masks"]
-    w.goto_step(page, "prepare", 2000)
+    # Harmonize opens once a source of the period is downloaded
+    ph.download_all(page, rec, out=out, expect_ready=1)  # July starts with GLAD-L (Add to new periods)
+    w.goto_step(page, "harmonize", 2000)
     rec["july_mask_row"] = ph.row_text(page, "south")
     rec["july_mask_mode"] = ph.row_mode_value(page, "south")
     assert rec["july_mask_mode"] == "Keep", rec["july_mask_row"]
@@ -171,11 +174,14 @@ def d_rules(page, rec, *, out):
     folder = DATA / PROJECT / "periods" / JUNE
     before = sorted(str(f) for f in folder.rglob("*"))
     w.goto_step(page, "period", 2000)
-    t0 = w.now_ms(page)
+    # a period with sets opens for its look-back only: the dates are disabled
     ph.row_button(page, JUNE_ROW, "mdi-pencil-outline").click()
-    ph.wait_toast(page, t0, "This period has alert sets; its dates can't change.", kind="warning")
-    page.wait_for_timeout(1000)
-    assert not ph.dialog_open(page), "the period modal opened"
+    w.wait_for(lambda: ph.dialog_open(page), 15, "the look-back modal")
+    dates = page.locator(f"{ph.MODAL} input")
+    rec["june_dates_disabled"] = [dates.nth(i).is_disabled() for i in range(2)]
+    assert rec["june_dates_disabled"] == [True, True], rec["june_dates_disabled"]
+    ph.modal_button(page, "Cancel").click()
+    w.wait_for(lambda: not ph.dialog_open(page), 15, "the modal closed")
     t1 = w.now_ms(page)
     ph.row_button(page, JUNE_ROW, "mdi-delete-outline").click()
     ph.wait_toast(page, t1, "This period has alert sets and a later period exists", kind="warning")
@@ -237,12 +243,13 @@ def e_sets(page, rec, *, out):
     selected = page.locator('.v-select:has(label:text-is("Alert set")) .v-select__selection:visible').first
     w.wait_for(lambda: selected.inner_text().startswith(JUNE_START), 60, "Analysis's selector on June's set")
     rec["analysis_set"] = selected.inner_text()
-    _, field = ph.analysis_jump_field(page)
-    # Block A's jump field holds the alert's position in the set's store
-    # (``actual_alert_id``), 1-based as its counter shows it, not its ``alert_id``.
-    w.wait_for(lambda: field.input_value() == str(pos + 1), 60,
-               f"the jump field at position {pos + 1}")
-    rec["id_field"] = field.input_value()
+    # The queue counter ("2 / 2", the button that opens the jump menu) shows the
+    # alert's position in the set's store (``actual_alert_id``), 1-based, not its
+    # ``alert_id``. Not the jump field: opening the menu empties it on purpose.
+    counter = page.locator('button[aria-label="Jump to alert number"]:visible').first
+    w.wait_for(lambda: counter.inner_text().split("/")[0].strip() == str(pos + 1), 60,
+               f"the counter at position {pos + 1}")
+    rec["counter"] = counter.inner_text()
     w.shot(page, out, "go_analysis")
     ph.open_overview(page)
     ph.choose(page, "Alert set", JULY_START, scope=".dialog-card")
@@ -268,8 +275,8 @@ def f_replace_list(page, rec, *, out):
     page.wait_for_timeout(1000)
     rec["replace_dialog"] = ph.modal_text(page)
     w.shot(page, out, "replace_dialog")
-    # A plural node since 734b8cb: "1 reviewed alert", no "(s)".
-    assert "1 reviewed alert in this set will be discarded." in rec["replace_dialog"], rec["replace_dialog"]
+    # A plural node since 734b8cb: "1 reviewed cluster", no "(s)" (clusters since 65f50e3).
+    assert "1 reviewed cluster in this set will be discarded." in rec["replace_dialog"], rec["replace_dialog"]
     # each listed alert on a line of its own (ConfirmDialog's details are blocks)
     assert re.search(r"^#\d+ · Reviewed: confirmed · [\d.]+ ha$", rec["replace_dialog"], re.M), rec["replace_dialog"]
     ph.modal_button(page, "Cancel").click()

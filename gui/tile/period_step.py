@@ -46,7 +46,6 @@ from gui.i18n import t, tn
 from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store.project_writers import is_writing
 from gui.widget.confirm_dialog import ConfirmDialog
-from gui.widget.help import StepIntro
 from gui.widget.period_modal import PeriodModal
 from gui.widget.product_table import ProductTable
 
@@ -136,7 +135,7 @@ def hide_dropped_layers(layers, content_ids, set_ids=()) -> None:
 def PeriodStep(app_state, layers):
     """Hook-free gate: every hook lives in the keyed child below."""
     p = app_state.project.value
-    if p is None or not p.sources:
+    if p is None or p.aoi is None:
         solara.Info(t("workflow.lock_period"))
         return
     _PeriodList(app_state=app_state, layers=layers).key(
@@ -248,7 +247,6 @@ def _PeriodList(app_state, layers):
             notifications.success(t("steps.period.deleted"))
 
     with solara.Column(style="gap:12px;"):
-        StepIntro(t("steps.period.description"), t("steps.period.info_header"), t("steps.period.info_md"))
         solara.Button(t("steps.period.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
                       disabled=read_only(p), on_click=_new)
         ProductTable(

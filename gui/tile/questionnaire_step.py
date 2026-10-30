@@ -8,6 +8,7 @@ from pathlib import Path
 import reacton.ipyvuetify as rv
 import solara
 
+from deforestation_alerts.project import io
 from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, attribute_columns, column
 from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.review_status import VERDICT_LABEL_KEYS
@@ -18,7 +19,6 @@ from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store.workflow_steps import active_set
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.copy_chip import CopyChipWidget
-from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.question_modal import QuestionModal
 from gui.widget.report_template import ReportTemplateField, template_state
@@ -96,7 +96,7 @@ def _TemplateCard(app_state, questions):
     cleared. Whether it is open is this card's own state, never the project's."""
     p = app_state.project.value
     expanded, set_expanded = solara.use_state(False)
-    state = template_state(p.report_template)
+    state = template_state(io.template_path(p))
     shown = expanded or state == "missing"
     name = Path(p.report_template).name if p.report_template else t("steps.questionnaire.template_default")
     chip_key, chip_color = _TEMPLATE_CHIPS[state]
@@ -130,7 +130,7 @@ def QuestionnaireStep(app_state):
         solara.Info(t("workflow.lock_project"))
         return
     if active_set(p) is None:  # the step's gate (workflow_steps): after Integrate & vectorize
-        solara.Info(t("workflow.lock_analysis"))
+        solara.Info(t("workflow.lock_review"))
         return
     name = p.name
 
@@ -191,8 +191,6 @@ def QuestionnaireStep(app_state):
     doomed = next((q for q in p.questions if q.key == pending_delete), None)
 
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.questionnaire.description"), t("steps.questionnaire.info_header"),
-                  t("steps.questionnaire.info_md"))
         with rv.Card(outlined=True, class_="pa-3"):
             solara.Button(t("steps.questionnaire.add"), icon_name="mdi-plus", color="primary", small=True, outlined=True,
                           block=True, disabled=ro, on_click=_open_add)

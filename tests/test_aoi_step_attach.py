@@ -264,7 +264,7 @@ def test_an_aoi_change_hides_the_layers_of_the_files_it_deletes_first(data_root,
 
 
 def test_an_aoi_change_is_refused_while_a_job_writes_into_the_project(data_root, no_aoiview, sync_layers):
-    """Review A I1: a Download & harmonize (or Integrate) job runs before any
+    """Review A I1: a download/harmonize (or Integrate) job runs before any
     set locks the AOI; a change under it would delete the files it reads and
     let it write old-AOI files. The change is refused with a reason."""
     p, old = _project_with_files()

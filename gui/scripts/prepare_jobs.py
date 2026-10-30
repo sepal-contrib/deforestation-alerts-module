@@ -1,4 +1,4 @@
-"""Run Download & harmonize rows on a worker thread (spec §7.3).
+"""Run download/harmonize rows on a worker thread (spec §7.3).
 
 One job runs its rows one at a time: mask rows (``("mask", name)``: download
 and align a project mask) and source rows (``("source", name)``), in the
@@ -38,12 +38,14 @@ message (``error_text``), any other error its own text.
 A download says how far it has got (bug 2026-10-16): pysepal's pill draws no
 progress bar, so each whole percent of the tiles goes into the task's title
 and into ``row_progress``, which the row's Download cell reads. Both go back
-when the download is done, and a milestone says the harmonize (alignment)
+when the download is done, and for a mask a milestone says its alignment
 has begun.
 
 Each row also says which stage it is in (``row_stage``): ``download`` while an
-item of ``downloads`` fetches its tiles, then ``harmonize`` (a mask:
-``align``); a row that downloads nothing starts at that second stage. The
+item of ``downloads`` fetches its tiles, then a mask goes on to ``align``; a
+source row of a download job stays ``download`` to its end (option C: a
+download never chains into harmonizing) and one of a harmonize job reads
+``harmonize`` throughout; a mask that downloads nothing starts at ``align``. The
 stage goes when the row ends, and ``on_row_end`` is called for every row the
 run reached, whether it succeeded, failed or was skipped: the step's footer
 counts the running, queued and done rows from them.
@@ -107,6 +109,7 @@ class PrepareContext:
     row_stage: Optional[solara.Reactive] = None  # {progress_key: "download"|"harmonize"|"align"}; None in tests
     downloads: frozenset = frozenset()  # the items (``("source", name)`` / ``("mask", name)``) that download
     on_row_end: Optional[Callable[[], None]] = None  # called once each row the run reached is over
+    mode: str = "download"  # the source rows' SourceJob.mode: "download" or "harmonize"
 
 
 def progress_key(project: str, period_id: str, kind: str, name: str) -> tuple:
@@ -335,7 +338,8 @@ def _row_reporter(ctx: PrepareContext, task, title: str, key: tuple, done_step: 
             _set_progress(ctx, key, 100)
             _set_stage(ctx, key, then)
             task.update(title)
-            task.step(done_step)
+            if done_step:  # None: the run ends with the download
+                task.step(done_step)
             return
         _set_progress(ctx, key, pct)
         task.update(t("steps.prepare.job_progress", title=title, pct=pct))
@@ -355,7 +359,7 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
     refuse_if_read_only(ctx.app_state.project.value)
     scope = run_scope(ctx.app_state.project.value)
     items = _items(rows)
-    title = t("steps.prepare.job_title")
+    title = t("steps.harmonize.job_title" if ctx.mode == "harmonize" else "steps.prepare.job_title")
     with writing(ctx.name), tracked_job(ctx.notifier, title, total_steps=len(items)) as task:
         for kind, name in items:
             if ctx.cancel.is_set():
@@ -391,12 +395,18 @@ def _run_item(ctx: PrepareContext, task, title: str, scope: tuple, live, kind: s
             return True  # removed from the project meanwhile
         task.step(t("steps.prepare.job_row", source=name))
         job = SourceJob(project=live.model_copy(deep=True), pdir=ctx.pdir, period=ctx.period,
-                        source=name, aoi=ctx.aoi, force=force,
+                        source=name, aoi=ctx.aoi, force=force, mode=ctx.mode,
                         meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L"
                         else None)
         run, error_key = run_source_row, name
-        done_step, then = t("steps.prepare.job_harmonize_row", source=name), "harmonize"
-    _set_stage(ctx, key, "download" if (kind, name) in ctx.downloads else then)
+        # a download never chains into harmonizing (option C): its row never reads harmonizing
+        if ctx.mode == "harmonize":
+            done_step, then = t("steps.prepare.job_harmonize_row", source=name), "harmonize"
+        else:
+            done_step, then = None, "download"
+    # a harmonize-only source row never downloads, whatever ``downloads`` says
+    downloads = (kind, name) in ctx.downloads and (kind == "mask" or ctx.mode == "download")
+    _set_stage(ctx, key, "download" if downloads else then)
     try:
         arts = run(job, on_tiles=_row_reporter(ctx, task, title, key, done_step, then))
     except Exception as exc:  # noqa: BLE001 - one failed row must not stop the others (spec §12)

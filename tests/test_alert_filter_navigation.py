@@ -1,6 +1,6 @@
 """Navigation over the Analysis filter (spec §8.1, §8.3, §8.4): the filter
 lives on ``AnalysisState`` and is bound into ``AppState``; Previous / Next,
-Save & next, the counter, the jump menu, Next unreviewed, the start position
+the dock's Next, the counter, the jump menu, Next unreviewed, the start position
 and Overview's Go all follow it. A real ``AppState`` and ``AnalysisState``,
 stand-in widgets, as tests/test_analysis_context.py drives block A."""
 
@@ -15,7 +15,7 @@ from gui.scripts import set_store
 from gui.scripts.alert_filter import AlertFilter
 from gui.scripts.set_context import SetContext
 from gui.tile.analysis import analysis_tile, context
-from gui.tile.analysis.footer import build_footer, footer_widgets
+from gui.tile.analysis.footer import build_footer, footer_widgets, prompt_widgets
 from gui.tile.analysis.state import AnalysisState, apply_start_filter
 from tests.test_analysis_context import _alerts, _state
 from tests.test_set_store import _project_with_set, _session
@@ -23,11 +23,7 @@ from tests.test_set_store import _project_with_set, _session
 ANA = AlertFilter("evaluator", frozenset({"Ana"}))
 
 
-@pytest.fixture(autouse=True)
-def _english():
-    set_locale("en")
-    yield
-    set_locale("en")
+pytestmark = pytest.mark.usefixtures("english_locale")
 
 
 def _six(set_id="x"):
@@ -275,13 +271,14 @@ def test_the_counter_counts_the_matches_with_the_total_as_a_hint(tmp_path, monke
 
 def test_no_match_says_so_and_disables_the_navigation(tmp_path, monkeypatch):
     s, analysis, card, _ = _block_a(tmp_path, monkeypatch)
-    prev, nxt, *_, unreviewed = context.nav_widgets(card)
+    prev, nxt, *_ = context.nav_widgets(card)
+    skip = context.next_unreviewed_widget(card)
     counter, tally, _ = context.queue_widgets(card)
     s.actual_alert_id.set(1)
     analysis.alert_filter.set(AlertFilter("evaluator", frozenset({"Carla"})))
     assert counter.children == ["No alerts match this filter"]
     assert tally.children == ["filtered · 6 total"]
-    assert prev.disabled and nxt.disabled and unreviewed.disabled
+    assert prev.disabled and nxt.disabled and skip.disabled
     assert s.actual_alert_id.value == 1
     analysis.alert_filter.set(None)
     assert not prev.disabled and not nxt.disabled
@@ -300,7 +297,7 @@ def test_the_nav_buttons_follow_the_filter(tmp_path, monkeypatch):
 
 def test_the_jump_refuses_a_number_outside_the_filter(tmp_path, monkeypatch):
     s, analysis, card, field = _block_a(tmp_path, monkeypatch)
-    _, _, _, menu, go, _ = context.nav_widgets(card)
+    _, _, _, menu, go = context.nav_widgets(card)
     refusal = context.jump_refusal(card)
     s.actual_alert_id.set(0)
     analysis.alert_filter.set(ANA)
@@ -330,7 +327,7 @@ def test_a_refusal_on_screen_follows_the_language(tmp_path, monkeypatch):
     field, labels = v.TextField(v_model=None), Labels()
     card = context.build_context(s, field, labels=labels)
     s.alerts_gdf.set(_six())
-    _, _, _, menu, go, _ = context.nav_widgets(card)
+    _, _, _, menu, go = context.nav_widgets(card)
     refusal = context.jump_refusal(card)
     s.actual_alert_id.set(0)
     analysis.alert_filter.set(ANA)
@@ -350,27 +347,32 @@ def test_a_refusal_on_screen_follows_the_language(tmp_path, monkeypatch):
 
 def test_next_unreviewed_keeps_to_the_matches(tmp_path, monkeypatch):
     s, analysis, card, _ = _block_a(tmp_path, monkeypatch)
-    *_, menu, _, unreviewed = context.nav_widgets(card)
+    skip = context.next_unreviewed_widget(card)
     s.actual_alert_id.set(2)
     analysis.alert_filter.set(ANA)
-    menu.v_model = True
-    unreviewed.fire_event("click", None)
+    skip.fire_event("click", None)
     assert s.actual_alert_id.value == 4      # not Bruno's 3
-    unreviewed.fire_event("click", None)
+    skip.fire_event("click", None)
     assert s.actual_alert_id.value == 2      # wraps round, past the reviewed 0
     s.alerts_gdf.set(_six().assign(status=["Confirmed", "", "Not reviewed", "", "Confirmed", ""]))
-    assert unreviewed.disabled, "Ana has nothing else left to review"
+    assert skip.disabled, "Ana has nothing else left to review"
 
 
-# ---- the footer: Save & next -----------------------------------------------------------
+# ---- the dock: Next ---------------------------------------------------------------------
 
-def test_save_and_next_advances_to_the_next_match(tmp_path, monkeypatch):
+def test_the_docks_next_advances_to_the_next_match(tmp_path, monkeypatch):
     s, analysis = _bound(tmp_path, monkeypatch)
-    footer = build_footer(lambda button=None, then=None: then() if then else None,
-                          v.Html(tag="div"), s, analysis)
-    save_next, _, _ = footer_widgets(footer.root)
+    footer = build_footer(lambda button=None, then=None: None, v.Html(tag="div"), s, analysis)
+    _save, nxt, _ = footer_widgets(footer.root)
     s.alerts_gdf.set(_six())
     s.actual_alert_id.set(0)
     analysis.alert_filter.set(ANA)
-    save_next.fire_event("click", None)
+    nxt.fire_event("click", None)
     assert s.actual_alert_id.value == 2
+    # Over unsaved work it asks first; Discard takes the same filtered step.
+    analysis.dirty.set(True)
+    nxt.fire_event("click", None)
+    assert s.actual_alert_id.value == 2
+    _prompt, discard, _stay = prompt_widgets(footer.root)
+    discard.fire_event("click", None)
+    assert s.actual_alert_id.value == 4

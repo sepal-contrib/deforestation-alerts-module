@@ -23,7 +23,7 @@ from deforestation_alerts.project.models import AlertSet, AlertSetParams, AoiRec
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from gui.scripts import set_store
 from gui.i18n import t as t_
-from gui.scripts.integrate_jobs import _publish_alerts, apply_result
+from gui.scripts.integrate_jobs import apply_result
 from gui.store.state_manager import AppState
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -180,7 +180,7 @@ def test_integrates_first_set_is_kept_as_published_and_the_render_happens_on_its
     def _integrate():
         try:
             assert loader.state.update_project("b", lambda p: apply_result(p, result))
-            assert _publish_alerts(loader.state, "b", result)
+            assert set_store.publish_set_alerts(loader.state, "b", result.alert_set, result.alerts)
             loader.state.actual_alert_id.set(1)  # Analysis selected an alert meanwhile
         except BaseException as exc:  # noqa: BLE001 - reported below
             errors.append(exc)
@@ -213,12 +213,12 @@ class _WatchedLock:
 
 
 @pytest.mark.parametrize("where", ["mid-publish", "after-the-check"])
-def test_integrates_publish_racing_the_loader_leaves_integrates_alerts_and_no_selection(loader, monkeypatch, where):
+def test_integrates_publish_racing_the_loader_leaves_integrates_alerts_at_their_start(loader, monkeypatch, where):
     """Integrate records its set (which starts the loader's read) and then
     publishes the set's alerts; the loader's publish of the same set races
     that publish. Whichever order they land in, the session ends with
-    Integrate's alerts and ``actual_alert_id`` -1 (Analysis re-selects from
-    there), never the alerts of one and the saved position of the other.
+    Integrate's alerts at the position Integrate's publish chose, never the
+    alerts of one and the position of the other.
 
     The bad interleavings are forced, not waited for: Integrate's publish runs
     on its own thread at the given point of the loader's, and the loader goes
@@ -237,7 +237,7 @@ def test_integrates_publish_racing_the_loader_leaves_integrates_alerts_and_no_se
 
     def _publish():
         try:
-            assert _publish_alerts(state, "b", result)
+            assert set_store.publish_set_alerts(state, "b", result.alert_set, result.alerts)
         except BaseException as exc:  # noqa: BLE001 - reported below
             errors.append(exc)
         finally:
@@ -272,7 +272,7 @@ def test_integrates_publish_racing_the_loader_leaves_integrates_alerts_and_no_se
 
     assert errors == []
     assert state.alerts_gdf.value is published
-    assert state.actual_alert_id.value == -1
+    assert state.actual_alert_id.value == 2  # Integrate's own publish: its alerts at its set's saved position
 
 
 def test_a_set_whose_store_is_missing_is_reported_and_left_unloaded(loader, monkeypatch):

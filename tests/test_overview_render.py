@@ -21,6 +21,7 @@ from types import SimpleNamespace
 
 import geopandas as gpd
 import ipyvuetify as v
+import pandas as pd
 import pytest
 import reacton
 import solara
@@ -37,6 +38,7 @@ from deforestation_alerts.project.models import (
     AlertSet,
     AlertSetParams,
     Artifact,
+    GroupReview,
     Period,
     Project,
     Question,
@@ -862,5 +864,83 @@ def test_growth_card_review_button_waits_for_the_alerts(ov, tmp_path):
     map_, layers, rc = ov.render(_state(p, None))  # the session holds no alerts yet
     try:
         assert _btn(rc, t("overview_tile.growth_review")).disabled is True
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# The Nearby alerts card: how the alerts chain at the grouping distance
+# ---------------------------------------------------------------------------
+def _nearby_store(p, tmp_path):
+    """January's four alerts with the first three in a chain about 111 m apart
+    edge to edge and the last one far away; alerts 0 and 1 saved as a group."""
+    s = p.alert_sets[p.active_set]
+    gdf = _alerts()
+    gdf.geometry = [box(0, 0, 0.0005, 0.0005), box(0.0015, 0, 0.002, 0.0005),
+                    box(0.003, 0, 0.0035, 0.0005), box(3, 3, 3.01, 3.01)]
+    gdf["review_group"] = pd.array([0, 0, None, None], dtype="Int64")  # main alert 0
+    _write_store(tmp_path, "d", s, gdf)
+    return gdf
+
+
+def _card_texts(rc, title):
+    [card] = [c for c in rc.find(v.Card).widgets if title in _strings(c)]
+    return _strings(card)
+
+
+def test_nearby_card_counts_chains_and_saved_groups(ov, tmp_path):
+    p = _project(tmp_path)
+    p.group_review = GroupReview(enabled=True, radius_m=300.0)
+    _nearby_store(p, tmp_path)
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        texts = _card_texts(rc, t("overview_tile.card_nearby"))
+        assert t("overview_tile.nearby_note", radius="300") in texts
+        assert "1 group of nearby alerts" in texts
+        assert "In a group: 3 of 4 alerts · Alone: 1 · Largest: 3 alerts" in texts
+        assert "1 group saved in Analysis (2 alerts)" in texts
+        assert t("overview_tile.nearby_off") not in texts
+    finally:
+        rc.close()
+
+
+def test_nearby_card_recounts_when_the_distance_changes(ov, tmp_path):
+    p = _project(tmp_path)
+    p.group_review = GroupReview(enabled=True, radius_m=300.0)
+    _nearby_store(p, tmp_path)
+    state = _state(p, None)
+    map_, layers, rc = ov.render(state)
+    try:
+        state.project.set(p.model_copy(update={"group_review": GroupReview(enabled=True, radius_m=50.0)}))
+        ov.settle()
+        texts = _card_texts(rc, t("overview_tile.card_nearby"))
+        assert t("overview_tile.nearby_note", radius="50") in texts
+        # the saved group stays one unit; alert 2 is now alone
+        assert "In a group: 2 of 4 alerts · Alone: 2 · Largest: 2 alerts" in texts
+    finally:
+        rc.close()
+
+
+def test_nearby_card_while_grouping_is_off_says_so(ov, tmp_path):
+    p = _project(tmp_path)  # grouping off, the default 300 m; the alerts are far apart
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        texts = _card_texts(rc, t("overview_tile.card_nearby"))
+        assert t("overview_tile.nearby_headline_none", radius="300") in texts
+        assert t("overview_tile.nearby_saved_none") in texts
+        assert t("overview_tile.nearby_off") in texts
+    finally:
+        rc.close()
+
+
+def test_nearby_card_survives_a_failed_count(ov, tmp_path, monkeypatch):
+    p = _project(tmp_path)
+    monkeypatch.setattr(overview_data, "nearby_of", lambda *a: 1 / 0)
+    monkeypatch.setattr(overview_tile.logger, "exception", lambda *a, **k: None)
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        texts = _texts(rc)
+        assert t("overview_tile.card_nearby") not in texts
+        assert t("overview_tile.card_numbers") in texts
     finally:
         rc.close()

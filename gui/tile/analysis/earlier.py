@@ -31,7 +31,8 @@ import ipyvuetify as v
 import shapely
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
-from deforestation_alerts.project import review_copy
+from deforestation_alerts.project import grouping as grouping_rules
+from deforestation_alerts.project import growth, review_copy, review_groups
 from deforestation_alerts.project.review_status import CONFIRMED, FALSE_POSITIVE
 from gui.i18n import format_date, format_number, t, tn
 from gui.scripts import growth_index
@@ -42,13 +43,15 @@ from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, build_section
 from gui.tile.analysis.state import set_links
+from gui.tile.analysis.widgets import replace_children
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 EARLIER_LAYER_NAME = "Earlier alerts"
 #: The overlay's spec id on the views.
 EARLIER_ID = "earlier"
-MIN_KM, MAX_KM = 0.1, 50.0
+#: the distance field's range, in metres
+MIN_M, MAX_M = 10.0, 50_000.0
 #: the states whose item is linked to the current alert (a tick)
 _LINKED = ("auto", "linked")
 #: the period legend while the overlay is on (inline: Vuetify's ``d-flex`` is
@@ -56,15 +59,6 @@ _LINKED = ("auto", "linked")
 _LEGEND_SHOWN = "display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center;"
 #: the width, in pixels, a row's zoom fits the alert's box into (about half a view)
 _ZOOM_PX = 200
-
-
-def parse_km(text):
-    """The distance typed in the field as a float within 0.1-50, else None."""
-    try:
-        km = float(str(text).strip().replace(",", "."))
-    except (TypeError, ValueError):
-        return None
-    return km if MIN_KM <= km <= MAX_KM else None
 
 
 def has_earlier_sets(p) -> bool:
@@ -144,13 +138,39 @@ def _alert_id(gdf, pos) -> int:
     return int(gdf.iloc[pos]["alert_id"]) if "alert_id" in gdf.columns else int(pos)
 
 
+def unlink_warning(app_state, item, remaining) -> list:
+    """The lines the reviewer confirms before an untick that leaves the alert
+    on screen with no link (``remaining`` empty) when Integrate kept it only
+    for its link: it is under the set's minimum area (``below_min``). Empty
+    when no warning is due."""
+    if remaining:
+        return []
+    gdf = app_state.alerts_gdf.value
+    pos = app_state.actual_alert_id.value
+    p = app_state.project.value
+    s = active_set(p) if p is not None else None
+    if gdf is None or s is None or pos is None or not 0 <= pos < len(gdf):
+        return []
+    row = gdf.iloc[pos]
+    if not growth.below_min_of(row):
+        return []
+    try:
+        area = format_number(float(row.get("area_ha")), 2)
+    except (TypeError, ValueError):
+        area = "?"
+    return [t("analysis_tile.earlier.unlink_small", n=pos + 1, area=area,
+              min=format_number(s.params.min_size_ha, 2), parent=item.cand.node.alert_id),
+            t("analysis_tile.earlier.unlink_small_after")]
+
+
 def _kept_links(p, view, links) -> tuple:
     """The draft ``links`` without those broken by a re-run of their set or
     that cannot resolve at all (their set is gone). A link to a parent that has
     since become a false positive stays, greyed and out of the totals (spec
     §11.5). In a review copy whose package has no snapshot, nothing earlier
-    resolves: those links are kept as they are."""
-    items = {it.cand.link: it for it in view.items}
+    resolves: those links are kept as they are. A link to a member of an
+    earlier review group resolves to the group's main item (its ``links``)."""
+    items = {lk: it for it in view.items for lk in (it.cand.link, *it.links)}
     rc = getattr(p, "review_copy", None)
     drop_missing = rc is None or getattr(rc, "snapshot_at", None) is not None
 
@@ -161,6 +181,21 @@ def _kept_links(p, view, links) -> tuple:
         return item.state != "broken" or item.cand.node.status == FALSE_POSITIVE
 
     return tuple(lk for lk in links if _kept(lk))
+
+
+def search_shape(gdf, pos, p, s, selection):
+    """What the distances are measured from (spec 2026-10-26 §7.1): with
+    grouping effective, on a grouped row or one with a selection, the group's
+    shape (``review_groups.group_shape``) with the selected rows'; else None
+    (the row's own)."""
+    selected = [q for q in selection if 0 <= q < len(gdf)]
+    if not selected and not review_groups.is_grouped(gdf, pos):
+        return None
+    if grouping_rules.effective(p, s) is None:
+        return None
+    shapes = [review_groups.group_shape(gdf, pos), *(gdf.geometry.iloc[q] for q in selected)]
+    shapes = [g for g in shapes if g is not None and not g.is_empty]
+    return shapely.union_all(shapes) if shapes else None
 
 
 def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:
@@ -174,6 +209,12 @@ def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:
         # every refresh, the switch-off included, supersedes the ones in flight
         analysis.earlier_seq += 1
         seq = analysis.earlier_seq
+        # Read with the token, before the position: the token moves after
+        # ``actual_alert_id`` does (``reset_alert``), so a position read later
+        # is this token's alert or a newer one, whose result is then dropped.
+        token = analysis.alert_token.value
+        links = tuple(analysis.links.value)
+        auto = tuple(analysis.auto_links.value)
     if on_result:
         on_result(None)  # the previous alert's / distance's list is stale
     if not analysis.show_earlier_reviews.value:
@@ -185,12 +226,10 @@ def refresh_earlier(widgets, analysis, app_state, *, on_result=None) -> None:
     if gdf is None or pos is None or not 0 <= pos < len(gdf) or s is None:
         remove_earlier_layer(widgets)
         return
-    token = analysis.alert_token.value
-    links = tuple(analysis.links.value)
-    auto = tuple(analysis.auto_links.value)
-    km = analysis.earlier_radius_km.value
+    radius_m = analysis.earlier_radius_m.value
     alert_id = _alert_id(gdf, pos)
-    view = growth_index.earlier_view(p, s.id, gdf, alert_id, links, auto, km * 1000.0)
+    shape = search_shape(gdf, pos, p, s, frozenset(analysis.selection.value or ()))
+    view = growth_index.earlier_view(p, s.id, gdf, alert_id, links, auto, radius_m, shape=shape)
     summary = growth_index.history_summary(p, s.id, gdf, alert_id, links, graph=view.graph)
     windows = growth_index.parent_windows(view)
     hidden = analysis.earlier_hidden_periods.value
@@ -244,7 +283,7 @@ def refresh_in_background(widgets, analysis, app_state) -> None:
     spawn_in_context(_refresh_logged, (widgets, analysis, app_state))
 
 
-def badge_text(on, view, km):
+def badge_text(on, view, radius_m):
     """The section's badge: "off", what the last refresh found, or nothing
     while a refresh is running (``view`` is None)."""
     if not on:
@@ -252,8 +291,8 @@ def badge_text(on, view, km):
     if view is None:
         return ""
     if view.n_within == 0 and view.n_linked == 0:
-        return t("analysis_tile.earlier.badge_none", km=f"{km:g}")
-    return tn("analysis_tile.earlier.badge_nearby", view.n_within, km=f"{km:g}",
+        return t("analysis_tile.earlier.badge_none", distance=distance_text(radius_m))
+    return tn("analysis_tile.earlier.badge_nearby", view.n_within, distance=distance_text(radius_m),
               linked=format_number(view.n_linked))
 
 
@@ -270,21 +309,23 @@ def _status_chip(status):
     return v.Chip(x_small=True, outlined=True, children=[swatch, t(status_label_key(status))])
 
 
-def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
+def build_earlier_controls(widgets, app_state, analysis, *, labels=None, ask=None):
     """The *Earlier alerts* section: the switch, the distance, the *Periods*
     menu, the list and the period legend, under a header whose badge says what
     was found. Returns the ``build_section`` namespace plus ``switch``,
     ``field``, ``periods`` (the menu), ``items`` (the list's container),
     ``groups`` (the rows on screen, by period) and ``copy_lines``. ``labels``
     is the screen's ``labels.Labels`` (a fresh one when none is given): the
-    section's words follow a language switch."""
+    section's words follow a language switch. ``ask(lines, on_ok, title=...,
+    ok=...)`` (the footer's confirmation) asks before an untick that
+    ``unlink_warning`` warns about; without it the untick unlinks at once."""
     labels = labels if labels is not None else Labels()
     section = build_section(t("analysis_tile.earlier.title"), v.Html(tag="div"))
     switch = v.Switch(v_model=bool(analysis.show_earlier_reviews.value), dense=True,
                       class_="mt-0 pt-0", hide_details=True, inset=True,
                       label=t("analysis_tile.earlier.show"))
-    field_ = v.TextField(v_model=str(analysis.earlier_radius_km.value), type="number",
-                         suffix="km", dense=True, hide_details="auto", outlined=True,
+    field_ = v.TextField(v_model=f"{analysis.earlier_radius_m.value:g}", type="number",
+                         suffix="m", dense=True, hide_details="auto", outlined=True,
                          style_="max-width: 110px;", error_messages=[])
     radius = v.Html(tag="span", class_=TYPE_BODY, children=[t("analysis_tile.earlier.radius")])
     distance = v.Html(tag="div", class_="d-flex align-center mt-3", style_="gap: 12px;",
@@ -297,18 +338,44 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
     section.body_box.children = [v.Html(tag="div", children=[switch, distance, periods, copy_lines, items,
                                                              legend])]
     last = {"view": None, "token": None}
-    syncing = {"menu": False, "switch": False}
+    syncing = {"menu": False, "switch": False, "box": False}
 
     def _sync_badge():
         on = bool(analysis.show_earlier_reviews.value)
-        section.set_badge(badge_text(on, last["view"], analysis.earlier_radius_km.value))
+        section.set_badge(badge_text(on, last["view"], analysis.earlier_radius_m.value))
 
     def _refresh():
         _refresh_logged(widgets, analysis, app_state, on_result=_result)
 
-    def _on_tick(link, change):
+    def _unlink(item, token):
+        if analysis.alert_token.value != token:
+            return  # the alert changed while the reviewer was asked
+        set_links(analysis, growth_index.links_without(item, list(analysis.links.value)))
+        spawn_in_context(_refresh)
+
+    def _on_tick(item, change):
+        if syncing["box"]:
+            return
         current = list(analysis.links.value)
-        set_links(analysis, current + [link] if change["new"] else [lk for lk in current if lk != link])
+        if change["new"]:
+            set_links(analysis, current + [item.cand.link])
+        else:
+            # an untick drops every link that resolves to the row (a group's main and its members)
+            remaining = growth_index.links_without(item, current)
+            lines = unlink_warning(app_state, item, remaining) if ask is not None else []
+            if lines:
+                # ticked again until the reviewer confirms: the refresh after
+                # the unlink draws it unticked
+                syncing["box"] = True
+                try:
+                    change["owner"].v_model = True
+                finally:
+                    syncing["box"] = False
+                token = analysis.alert_token.value
+                ask(lines, lambda: _unlink(item, token), title="analysis_tile.earlier.unlink_title",
+                    ok="analysis_tile.earlier.unlink_ok")
+                return
+            set_links(analysis, remaining)
         spawn_in_context(_refresh)  # the view follows the draft (a cache hit)
 
     def _zoom(shape):
@@ -332,7 +399,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
             fp = it.state == "broken" and n.status == FALSE_POSITIVE
             box = v.Checkbox(v_model=it.state in _LINKED or fp, disabled=it.state == "broken" and not fp,
                              dense=True, hide_details=True, class_="ma-0 pa-0")
-            box.observe(lambda change, link=it.cand.link: _on_tick(link, change), names="v_model")
+            box.observe(lambda change, item=it: _on_tick(item, change), names="v_model")
             lead = box
         text = v.Html(tag="span", class_=f"{TYPE_BODY} dat-num", style_="cursor: pointer;",
                       children=[f"#{n.alert_id} · {format_number(n.area_ha, 1)} ha"])
@@ -364,7 +431,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
                 lines.append(t("analysis_tile.earlier.as_of", date=format_date(rc.snapshot_at.date())))
             if not view.periods:
                 lines.append(t("analysis_tile.earlier.none_in_copy"))
-        copy_lines.children = [v.Html(tag="div", class_=TYPE_LABEL, children=[line]) for line in lines]
+        replace_children(copy_lines, [v.Html(tag="div", class_=TYPE_LABEL, children=[line]) for line in lines])
         # the rows, under their period
         groups = []
         visible = [it for it in (view.items if view is not None else ()) if it.cand.node.period_id not in hidden]
@@ -374,18 +441,18 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
                             children=[period_label(group[0].cand.node.period_start)])
             groups.append(SimpleNamespace(period_id=pid, header=header, rows=[_row(it) for it in group]))
         section.groups = groups
-        items.children = [w for g in groups for w in [g.header, *(r.root for r in g.rows)]]
+        replace_children(items, [w for g in groups for w in [g.header, *(r.root for r in g.rows)]])
         # the legend: the periods drawn, while the overlay is on
         on = bool(analysis.show_earlier_reviews.value)
         drawn = [(pid, start) for pid, start in shown_periods if pid not in hidden]
         colours = growth_index.period_colors([pid for pid, _ in shown_periods])
-        legend.children = [
+        replace_children(legend, [
             *(v.Html(tag="span", class_=f"d-inline-flex align-center {TYPE_LABEL}", children=[
                 v.Html(tag="span", style_=f"width: 14px; border-top: 3px solid {colours[pid]};"
                                           " display: inline-block; margin-right: 5px;"),
                 period_label(start)]) for pid, start in drawn),
             v.Html(tag="span", class_=TYPE_LABEL, children=[t("analysis_tile.earlier.legend_lines")]),
-        ]
+        ])
         legend.style_ = _LEGEND_SHOWN if on and drawn else "display: none;"
         _sync_badge()
 
@@ -409,15 +476,15 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
             analysis.earlier_choice.set(bool(change["new"]))  # the reviewer's flip
             spawn_in_context(_refresh)
 
-    def _on_km(change):
-        km = parse_km(change["new"])
-        if km is None:
+    def _on_radius(change):
+        radius_m = grouping_rules.parse_metres(change["new"], MIN_M, MAX_M)
+        if radius_m is None:
             field_.error_messages = [t("analysis_tile.earlier.radius_error")]
             return
         field_.error_messages = []
-        if km == analysis.earlier_radius_km.value:
+        if radius_m == analysis.earlier_radius_m.value:
             return
-        analysis.earlier_radius_km.set(km)
+        analysis.earlier_radius_m.set(radius_m)
         spawn_in_context(_refresh)
 
     def _on_periods(change):
@@ -463,7 +530,7 @@ def build_earlier_controls(widgets, app_state, analysis, *, labels=None):
 
     widgets.earlier_on_result = _result
     switch.observe(_on_switch, names="v_model")
-    field_.observe(_on_km, names="v_model")
+    field_.observe(_on_radius, names="v_model")
     periods.observe(_on_periods, names="v_model")
     analysis.show_earlier_reviews.subscribe(_on_shown)
 

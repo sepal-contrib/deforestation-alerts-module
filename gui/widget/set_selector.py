@@ -48,18 +48,28 @@ def select_set(app_state, project_name: str, set_id: str) -> bool:
 
 
 @solara.component
-def SetSelector(app_state):
+def SetSelector(app_state, dismiss=None):
     p = app_state.project.value
+    redraw, set_redraw = solara.use_state(0)
     items = set_items(p)
     if not items:
         return
 
     def _picked(set_id):
-        if set_id:
-            select_set(app_state, p.name, set_id)
+        if not set_id:
+            return
+        moved = []
+        # A set switch changes the alert: it asks first over unsaved work.
+        app_state.guard(lambda: moved.append(select_set(app_state, p.name, set_id)))
+        if not moved:
+            # the prompt is in the Analysis dock, behind this dialog; the
+            # select goes back to the active set until the user answers
+            if dismiss is not None:
+                dismiss()
+            set_redraw(lambda n: n + 1)
 
     rv.Select(label=t("steps.sets.label"), items=items, v_model=p.active_set, on_v_model=_picked, dense=True,
-              outlined=True, hide_details=True)
+              outlined=True, hide_details=True).key(f"sets-{redraw}")
 
 
 def build_set_selector(app_state, *, labels=None) -> v.Select:
@@ -94,7 +104,10 @@ def build_set_selector(app_state, *, labels=None) -> v.Select:
         p = app_state.project.value
         if getattr(local, "syncing", False) or p is None or not change["new"]:
             return
-        select_set(app_state, p.name, change["new"])
+        set_id = change["new"]
+        # A set switch changes the alert: it asks first over unsaved work.
+        app_state.guard(lambda: select_set(app_state, p.name, set_id))
+        _sync()  # back on the active set while the prompt asks (or after *Stay*)
 
     select.observe(_picked, "v_model")
     app_state.project.subscribe(_sync)

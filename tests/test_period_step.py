@@ -23,6 +23,7 @@ from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.project import periods
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, Artifact, GridSpec, PeriodMask, Project, add_predefined_source,
+    set_period_source,
 )
 from gui.i18n import t, tn
 from gui.scripts import map_layers
@@ -73,6 +74,8 @@ def _project(pdir, name="per"):
     add_predefined_source(p, "GLAD-L")
     for a, b in (("2026-01-01", "2026-01-31"), ("2026-02-01", "2026-02-28")):
         assert periods.new_period(p, a, b) is None
+    for pid in (JAN_ID, FEB_ID):
+        set_period_source(p, pid, "GLAD-L", True)
     arts = {}
     for pid in (JAN_ID, FEB_ID):
         for key, kind, rel in ((fp.raw_key(pid, "GLAD-L"), "raw_alert", f"periods/{pid}/raw/raw.tif"),
@@ -332,6 +335,16 @@ def test_closing_the_open_project_unmounts_the_list_without_reading_it(env):
         state.close_project_state()
         assert rc.find(v.Btn).widgets == [] and "table" not in env.seen
         assert state.project_loaded_signal.value == 2 and state.active_step.value == 0
+    finally:
+        rc.close()
+
+
+def test_period_step_opens_without_sources(env):
+    p = Project(name="e", created_at=datetime.now(), updated_at=datetime.now())
+    p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="d", bounds=(0, 0, 1, 1))
+    layers, rc = _render(_state(p))
+    try:
+        assert p.sources == {} and rc.find(v.Btn).widgets
     finally:
         rc.close()
 

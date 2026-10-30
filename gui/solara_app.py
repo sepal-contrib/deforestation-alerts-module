@@ -1,10 +1,10 @@
 """Solara entry for the Forest Cover Loss Alerts app.
 
 Session bootstrap (pysepal solara pattern) + MapApp.element() shell: the rail
-(About, Project, Overview) and the project workflow in the right panel (AOI →
-Alerts → Optional layers → Period → Download & harmonize → Integrate &
-vectorize → Questionnaire → Evaluators), and beside MapApp the analysis
-screen (``app_state.screen``), which *Start analysis* opens.
+(About, Project, Overview) and the project workflow in the right panel, in
+two levels: Prepare data (AOI → Period → Alerts → Harmonize → Integrate &
+vectorize) and Review (Additional layers → Questionnaire → Evaluators); and
+beside MapApp the analysis screen (``app_state.screen``), which *Start analysis* opens.
 Run: ./run_ui.sh (Voila, as on SEPAL) or
 solara run gui/solara_app.py --port 8900 --no-open
 """
@@ -59,6 +59,7 @@ from gui.i18n import app_available_locales, format_number, t
 from gui.scripts import alert_layers, legend_specs, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
+from gui.scripts.prepare_scope import PrepareJobs
 from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.scene_loader import SceneIndexLoader
 from gui.scripts.set_context import SetContext
@@ -515,13 +516,17 @@ def _AlertLayers(app_state, layers, map_):
         row = alerts.iloc[i]
         alert_id = int(row.get("alert_id", i))
         go = v.Btn(small=True, color="primary", children=[t("steps.integrate.go")])
-        go.on_event("click", lambda *_: set_store.go_to_alert(app_state, project.name, target.id, alert_id, i))
+        # an alert change: it asks first over unsaved work in Analysis
+        go.on_event("click", lambda *_: app_state.guard(
+            lambda: set_store.go_to_alert(app_state, project.name, target.id, alert_id, i)))
         summary = t("steps.integrate.popup", id=alert_id, status=row.get("status", ""),
                     area=format_number(float(row.get("area_ha", 0)), 2))
         lines = [v.Html(tag="div", children=[summary])]
         if target.id != project.active_set:
             lines.append(v.Html(tag="div", children=[earlier_set_name(target)]))
-        popup = Popup(location=(lat, lon), child=v.Html(tag="div", children=[*lines, go]), close_button=True,
+        # ``defo-map-popup``: the bubble's theme (``_AppShell``'s style)
+        popup = Popup(location=(lat, lon), child=v.Html(tag="div", class_="defo-map-popup", children=[*lines, go]),
+                      close_button=True,
                       auto_close=True)
         # pysepal's key lookups read ``.key`` on every layer, and a Popup added
         # without one breaks them.
@@ -649,6 +654,15 @@ def _AppShell():
         # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
         # !important since an inline style beats any stylesheet rule.
         ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
+        # The workflow panel's step strip and title stay put while a step
+        # scrolls under them; same background pair as the footer above.
+        ".defo-workflow-header { position: sticky; top: 0; z-index: 3;"
+        " background-color: var(--v-background-base, #ffffff); }\n"
+        ".theme--dark .defo-workflow-header { background-color: #1a1a1a; }\n"
+        # MapApp pads its right panel's content (`pa-4`): on top of the
+        # header's own padding that left an empty band under the "Workflow"
+        # title. The header pads itself, so drop the panel's top padding.
+        ".right-panel .pa-4:has(.defo-workflow-header) { padding-top: 0 !important; }\n"
         # A file tile (gui/tile/analysis/file_tile.py) is a v-btn, whose
         # content is Vuetify's `flex: 1 0 auto` and never shrinks: a long
         # detail line (an out-of-date CSV) pushed the download icon out of
@@ -662,7 +676,26 @@ def _AppShell():
         "  left: var(--sepal-drawer-width, 0px) !important;\n"
         "  width: calc(100% - var(--sepal-drawer-width, 0px)) !important;\n"
         "}\n"
-        ".about-content { text-align: justify; }"
+        ".about-content { text-align: justify; }\n"
+        # Markdown `code` came out light-grey on light-grey on the dark theme
+        # (About, info buttons): a translucent box with the text's own colour
+        # reads on both themes.
+        ".about-content code, .defo-markdown code {"
+        " background: rgba(127, 127, 127, 0.2) !important; color: inherit !important; }\n"
+        # The map's click popup (``_on_map``): its content is a widget, which
+        # ipyvuetify wraps in its own themed `.v-application`, so on the dark
+        # theme a dark box sat inside Leaflet's white bubble. The wrap goes
+        # transparent and the bubble, its tip and its close cross take the
+        # theme: pysepal's dark surfaces (the drawer's #1a1a1a, #f3f3f3 ink).
+        ".leaflet-popup-content .v-application:has(.defo-map-popup),\n"
+        ".leaflet-popup-content .v-application:has(.defo-map-popup) .v-application--wrap {"
+        " background: transparent !important; min-height: 0 !important; }\n"
+        ".theme--dark .leaflet-popup-content-wrapper, .theme--dark .leaflet-popup-tip,\n"
+        ".pysepal-map-theme-dark .leaflet-popup-content-wrapper, .pysepal-map-theme-dark .leaflet-popup-tip {"
+        " background: #1a1a1a; color: #f3f3f3; box-shadow: 0 3px 14px rgba(0, 0, 0, 0.6); }\n"
+        ".theme--dark .leaflet-container a.leaflet-popup-close-button,\n"
+        ".pysepal-map-theme-dark .leaflet-container a.leaflet-popup-close-button { color: #c5c6c9; }\n"
+        ".defo-map-popup .v-btn { margin-top: 6px; }"
     )
 
     gee_interface = get_current_gee_interface()
@@ -682,7 +715,7 @@ def _AppShell():
     set_context = solara.use_memo(lambda: SetContext(app_state), dependencies=[])
 
     # The ONE shared map. Memoized so the SAME instance is handed to MapApp AND
-    # to every map-bearing step (AOI, Alerts, Download & harmonize, Integrate,
+    # to every map-bearing step (AOI, Alerts, Harmonize, Integrate,
     # Overview draw their layers + popups on it). Re-creating it per render
     # would desync the steps (which capture it once) from the map MapApp
     # renders. The SATELLITE basemap is added once here.
@@ -715,6 +748,8 @@ def _AppShell():
     # nav_model mirrors MapApp's rail step (see below); mapapp_ref holds the
     # rendered MapApp widget, resolved once it is mounted (_resolve_mapapp).
     # Both exist before the tiles so the Project dialog can close itself.
+    # The prepare jobs' state, one per session, shared by the steps that run them.
+    prepare_jobs = solara.use_memo(PrepareJobs, [])
     nav_model = solara.use_memo(lambda: _NavModel(), dependencies=[])
     mapapp_ref = solara.use_memo(lambda: {}, dependencies=[])
     about_widget = solara.use_memo(
@@ -735,13 +770,15 @@ def _AppShell():
                                                    layers=layers),
                                    t("app.drawer_item.aoi"))[0],
             "alerts": render_detached(lambda: AlertsStep(app_state=app_state, map_=map_,
-                                                         gee_interface=gee_interface, layers=layers),
+                                                         gee_interface=gee_interface, layers=layers,
+                                                         jobs=prepare_jobs),
                                       t("app.drawer_item.alerts"))[0],
             "period": render_detached(lambda: PeriodStep(app_state=app_state, layers=layers),
                                       t("app.drawer_item.period"))[0],
-            "prepare": render_detached(lambda: PrepareStep(app_state=app_state, map_=map_,
-                                                           gee_interface=gee_interface, layers=layers),
-                                       t("app.drawer_item.prepare"))[0],
+            "harmonize": render_detached(lambda: PrepareStep(app_state=app_state, map_=map_,
+                                                             gee_interface=gee_interface, layers=layers,
+                                                             jobs=prepare_jobs),
+                                         t("app.drawer_item.harmonize"))[0],
             "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
                                                                gee_interface=gee_interface, layers=layers),
                                          t("app.drawer_item.integrate"))[0],
@@ -807,10 +844,12 @@ def _AppShell():
     # widget slot, not a reacton child) and memoized so it is stable across
     # Page re-renders. It re-renders on its own when the AppState reactives it
     # reads change.
-    header_widget = solara.use_memo(
-        lambda: render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0],
-        dependencies=[],
-    )
+    def _header():
+        widget = render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0]
+        widget.class_ = "defo-workflow-header"  # sticky: on panel_host's own child, the tall step's sibling
+        return widget
+
+    header_widget = solara.use_memo(_header, dependencies=[])
     panel_host = solara.use_memo(
         lambda: v.Container(
             fluid=True,

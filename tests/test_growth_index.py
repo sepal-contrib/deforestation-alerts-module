@@ -132,7 +132,7 @@ def test_history_summary_uses_draft_links(project):
     load = _loader(_stores(p))
     assert growth_index.history_summary(p, "oct", _current(), 1, [], load=load) is None
     summary = growth_index.history_summary(p, "oct", _current(), 1, [_link(p, "sep", 12)], load=load)
-    assert summary.n == 3 and summary.since == AUG.start
+    assert summary.n == 3 and summary.first_period_start == AUG.start
     assert summary.confirmed_ha > 0 and summary.unreviewed_ha > 0
 
 
@@ -373,8 +373,8 @@ def test_one_refresh_builds_the_current_sets_nodes_at_most_once(project, monkeyp
         monkeypatch.setitem(fn.__kwdefaults__, "load", load)
     monkeypatch.setattr(earlier, "active_set", lambda p_: p_.alert_sets["oct"])
     graphs = []
-    real_build = growth_index.build_graph
-    monkeypatch.setattr(growth_index, "build_graph", lambda *a: graphs.append(1) or real_build(*a))
+    real_graph = growth_index.LinkGraph
+    monkeypatch.setattr(growth_index, "LinkGraph", lambda *a: graphs.append(1) or real_graph(*a))
 
     links = (_link(p, "sep", 12),)
     gdf = _gdf([_row(1, "Not reviewed", CUR, links=links), _row(2, "Not reviewed", SEP15)])
@@ -409,3 +409,57 @@ def test_the_current_sets_nodes_follow_the_store_generation(project):
     gdf.attrs[set_store.STORE_GENERATION] = (2, 2)
     summary = growth_index.history_summary(p, "oct", gdf, 1, [link], load=load)
     assert summary.n == 3 and summary.unreviewed_ha == 0
+
+
+# ---- group review (spec 2026-10-26 §7): a group is one patch -------------------
+
+def _grouped_stores(p):
+    """sep #12 the main of a group with #15 (undrawn)."""
+    import pandas as pd
+
+    stores = _stores(p)
+    sep = _gdf([_row(12, "Confirmed", SEP12), _row(15, "Confirmed", SEP15)])
+    sep["review_group"] = pd.array([12, 12], dtype="Int64")
+    stores["sep"] = sep
+    return stores
+
+
+def test_a_link_to_a_member_still_resolves(project):
+    p = project
+    links = [_link(p, "sep", 15)]
+    view = growth_index.earlier_view(p, "oct", _current(links), 1, links, [], 1000,
+                                     load=_loader(_grouped_stores(p)))
+    assert not view.graph.is_broken(links[0])
+    assert view.graph.component("oct#1") >= {"oct#1", "sep#12", "sep#15"}
+
+
+def test_a_link_to_a_member_shows_the_main_once(project):
+    from gui.tile.analysis.earlier import _kept_links
+
+    p = project
+    links = [_link(p, "sep", 15), _link(p, "sep", 12)]
+    view = growth_index.earlier_view(p, "oct", _current(links), 1, links, [], 1000,
+                                     load=_loader(_grouped_stores(p)))
+    sep = [it for it in view.items if it.cand.node.set_id == "sep"]
+    assert len(sep) == 1
+    item = sep[0]
+    assert item.cand.key == "sep#12" and item.cand.link == _link(p, "sep", 12) and item.state == "linked"
+    assert item.links == tuple(links)
+    assert view.n_linked == 1
+    assert _kept_links(p, view, tuple(links)) == tuple(links)  # the member link is not dropped
+    assert growth_index.links_without(item, links) == []       # unticking drops both
+    # a member link alone shows the main too
+    only = [_link(p, "sep", 15)]
+    view = growth_index.earlier_view(p, "oct", _current(only), 1, only, only, 1000,
+                                     load=_loader(_grouped_stores(p)))
+    sep = [it for it in view.items if it.cand.node.set_id == "sep"]
+    assert [(it.cand.key, it.state, it.links, it.touches) for it in sep] == [("sep#12", "auto", tuple(only), True)]
+
+
+def test_earlier_view_measures_from_the_given_shape(project):
+    p = project
+    far = box(-54.9000, -25.0000, -54.8995, -24.9995)  # AUG7's spot, ~10 km east
+    view = growth_index.earlier_view(p, "oct", _current(), 1, [], [], 1000, load=_loader(_stores(p)), shape=far)
+    assert [(it.cand.key, it.distance_m < 1) for it in view.items] == [("aug#7", True)]
+    near = growth_index.earlier_view(p, "oct", _current(), 1, [], [], 1000, load=_loader(_stores(p)))
+    assert "aug#7" not in {it.cand.key for it in near.items}

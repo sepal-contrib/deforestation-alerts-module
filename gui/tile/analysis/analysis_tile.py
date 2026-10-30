@@ -12,8 +12,8 @@ It establishes:
     ``app_state.actual_alert_id.subscribe`` (replacing the former ``use_effect``)
     plus one immediate call so a pre-selected alert renders on first build,
   * the right-panel review console (``build_controls``: the head, block A,
-    block B, the Questions and Refine sections and the sticky footer that
-    holds the Export section and the Save buttons),
+    block B, the Questions and Refine sections and the dock fixed under
+    them that holds the Export list and Save / Next),
   * and the sub-component builders (imagery / review / edit / export).
 
 WHY A RAW BUILDER (not a ``@solara.component``): the analysis screen is built
@@ -72,6 +72,7 @@ from deforestation_alerts.engine.fingerprint import Status, set_status
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
+from deforestation_alerts.project.review_groups import REMOVE
 from deforestation_alerts.project.review_status import LOSS_VERDICTS, is_reviewed
 from deforestation_alerts.project.store_schema import GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.mosaics_helper import (
@@ -87,15 +88,16 @@ from gui.tile.analysis.earlier import (
     remove_earlier_layer,
     seed_switch,
 )
+from gui.tile.analysis import nearby, original_alert
 from gui.tile.analysis.questions_panel import build_questions_section
 from gui.tile.analysis.review_panel import build_review_panel
 from gui.tile.analysis.edit_tools import build_edit_tools
 from gui.tile.analysis.export import build_export
 from gui.tile.analysis.review_save import REQUIRED_MISSING
-from gui.tile.analysis.footer import build_footer
+from gui.tile.analysis.footer import affected_line, build_footer
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
-from gui.tile.analysis.state import IMAGE_AREAS
+from gui.tile.analysis.state import IMAGE_AREAS, capture_alert
 from gui.tile.analysis.pane_layers import ALERT_TOP_Z, geojson_spec
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
@@ -105,6 +107,7 @@ from gui.i18n import t
 from gui.scripts import alert_filter
 from gui.scripts import questions
 from gui.scripts import set_store
+from gui.scripts.notify_bridge import current_notifier
 from gui.store.workflow_steps import active_set
 from gui.tile.analysis.widgets import AnalysisWidgets, info_button
 from gui.widget.buttons import btn, set_label
@@ -173,6 +176,7 @@ def _invalidate_alert_view(widgets, analysis) -> None:
             panes.clear("alert")
             panes.set_focus_bounds(None)
         remove_earlier_layer(widgets)
+        nearby.remove_layer(widgets)
         widgets.actual_bb = None
         widgets.actual_alert_grid = None
         widgets.actual_bb_geojson = None
@@ -242,10 +246,18 @@ def view_actual_alert(
     # chosen again by the imagery panes below) ---
     analysis.reset_alert()
 
+    # --- a grouped alert opens with its stored group ticked, and its review
+    # (verdict, answers, links, drawing) read from the group's main (group
+    # review §6.3): a member holds copies, the main the drawing. The images
+    # stay the row's own (members hold copies of them too). Not a change,
+    # like the seeding below. ---
+    group = nearby.seed_selection(analysis, app_state)
+    review_row = gdf.iloc[group[0]] if group is not None else alerta
+
     # --- a reviewed alert opens on its stored verdict; an unreviewed one on no
     # answer at all, so a default is never saved. After reset_alert, which
     # clears it; the seeding is not a change, so ``dirty`` stays False. ---
-    stored = alerta.get("status")
+    stored = review_row.get("status")
     analysis.verdict.set(stored if is_reviewed(stored) else None)
     # --- a reviewed alert opens on its stored answers (codes, read back; a
     # re-save stores them again as codes), an unreviewed one on none (spec
@@ -254,12 +266,14 @@ def view_actual_alert(
     # answer (``alerta.get`` gives None, ``codes`` of None is []). ---
     p = app_state.project.value
     reviewed = analysis.verdict.value is not None
-    analysis.answers.set({q.key: questions.codes(q, alerta.get(column(q))) for q in p.questions}
+    analysis.answers.set({q.key: questions.codes(q, review_row.get(column(q))) for q in p.questions}
                          if reviewed and p is not None else {})
     # --- the growth links the row stores, as the draft the reviewer edits and
-    # as what Integrate found; a set without the columns reads as none ---
-    analysis.links.set(tuple(links_of(alerta.get(GROWS_FROM))))
-    analysis.auto_links.set(tuple(links_of(alerta.get(GROWS_FROM_AUTO))))
+    # as what Integrate found (for a group: what Integrate found for any of
+    # its rows); a set without the columns reads as none ---
+    analysis.links.set(tuple(links_of(review_row.get(GROWS_FROM))))
+    analysis.auto_links.set(group_auto_links(gdf, (group[0], *group[1])) if group is not None
+                            else tuple(links_of(alerta.get(GROWS_FROM_AUTO))))
     analysis.dirty.set(False)
     # --- a growth alert opens with its parents on the maps; any other on the
     # reviewer's last choice (spec §6.3) ---
@@ -293,8 +307,10 @@ def view_actual_alert(
         # raster, which a period delete is removing (500s from the tile server)
         panes.clear("alert")
         # the earlier-alerts overlay is the previous alert's neighbourhood:
-        # ``refresh_in_background`` below draws this alert's
+        # ``refresh_in_background`` below draws this alert's; the nearby
+        # outlines likewise
         remove_earlier_layer(widgets)
+        nearby.remove_layer(widgets)
 
         # center/zoom: one write, every view follows (``AlertViews``)
         panes.set_view((alerta.point.y, alerta.point.x), 16)
@@ -304,16 +320,19 @@ def view_actual_alert(
         panes.add(geojson_spec(ALERT_BB_ID, "all", alerta_bb_geojson, name="Alert BB", group="alert",
                                style=_ALERT_BB_STYLE, hide_while_editing=True, section="alerts",
                                z=ALERT_TOP_Z))
+        # the alert's own polygons (its group's too), under the box
+        original_alert.draw_layer(widgets, app_state)
         # the after view's zoom-to-alert button goes back to this box
         panes.set_focus_bounds(alerta["bounding_box"].bounds)
 
         # re-add the saved defo polygon if this alert was already reviewed
+        # (a group's is its main's)
         if (
-            alerta["status"] in LOSS_VERDICTS
-            and alerta["alert_polygon"] is not None
+            review_row["status"] in LOSS_VERDICTS
+            and review_row["alert_polygon"] is not None
         ):
             analysis.defo_layer.set(multipolygon_to_geodataframe(
-                alerta["alert_polygon"]
+                review_row["alert_polygon"]
             ).set_crs(epsg="4326", allow_override=True, inplace=True))
 
         # ee bbox (buffer + bounds) + covering grid for downloads
@@ -359,6 +378,90 @@ def view_actual_alert(
         refresh_in_background(widgets, analysis, app_state)
     except Exception:
         logger.exception("Analysis: the earlier-alerts section failed")
+    # the nearby alerts this one can be reviewed with (a no-op while grouping is off)
+    try:
+        nearby.refresh_in_background(widgets, analysis, app_state)
+    except Exception:
+        logger.exception("Analysis: the nearby-alerts section failed")
+
+
+def group_auto_links(gdf, positions) -> tuple:
+    """The links Integrate found for any of the rows at ``positions``
+    (``grows_from_auto``), sorted, each once: a group's automatic links
+    (group review G12, a group is one patch)."""
+    if GROWS_FROM_AUTO not in gdf.columns:
+        return ()
+    found = set()
+    for p in positions:
+        found.update(links_of(gdf[GROWS_FROM_AUTO].iloc[p]))
+    return tuple(sorted(found))
+
+
+def make_after_save(widgets, app_state, analysis):
+    """The save runner's ``on_saved(alert, outpaced)`` (group review §5.3),
+    run on the worker after a save that wrote.
+
+    Nothing for a save without a plan (grouping off) or made in another set
+    than the active one. **Same visit** (the alert saved is still on
+    screen): a removal, or a save that detached the alert on screen, reloads
+    it from the store (``analysis.reload_alert``); otherwise the selection
+    becomes the saved group's members and the automatic links its union --
+    unless the reviewer changed the alert while the save ran (``outpaced``):
+    their later edits win. Then the Nearby and Earlier alerts look again.
+    **Another visit**: an alert on screen that the plan wrote is reloaded,
+    with a toast saying why; any other is left alone."""
+
+    def _active_set_id():
+        s = active_set(app_state.project.value)
+        return s.id if s is not None else None
+
+    def _reload():
+        analysis.reload_alert.set(analysis.reload_alert.value + 1)
+
+    def on_saved(alert, outpaced):
+        plan = getattr(alert, "plan", None)
+        if plan is None or _active_set_id() != getattr(alert, "set_id", None):
+            return
+        position = app_state.actual_alert_id.value
+        if analysis.alert_token.value == alert.token:
+            if plan.kind == REMOVE or position in plan.detached:
+                # Bumped outside the lock: the reload runs the whole per-alert
+                # orchestration (``reset_alert`` included), which must not
+                # hold it (as ``then`` in ``export.make_save_runner``).
+                if not outpaced and analysis.is_current(alert.token):
+                    _reload()
+                return
+
+            def _reseed():
+                if outpaced:
+                    return
+                gdf = app_state.alerts_gdf.value
+                analysis.selection.set(frozenset(plan.members))
+                if gdf is not None:
+                    analysis.auto_links.set(group_auto_links(gdf, (plan.main, *plan.members)))
+                original_alert.draw_layer(widgets, app_state)  # the saved group is the alert's now
+
+            if analysis.apply_if_current(alert.token, _reseed):
+                refresh_in_background(widgets, analysis, app_state)
+                nearby.refresh_in_background(widgets, analysis, app_state)
+            return
+        # Another alert is on screen: reload it if the plan wrote it. Decided
+        # under the lock, bumped outside it (the reload runs the per-alert
+        # orchestration, ``reset_alert`` included), and only while that alert
+        # is still the one on screen, so a move made meanwhile is not reloaded.
+        token = analysis.alert_token.value
+        written = []
+
+        def _decide():
+            if app_state.actual_alert_id.value in plan.positions():
+                written.append(app_state.actual_alert_id.value)
+
+        analysis.apply_if_current(token, _decide)
+        if written and analysis.is_current(token):
+            _reload()
+            current_notifier().info(t("analysis_tile.nearby.saved_with_group", n=written[0] + 1))
+
+    return on_saved
 
 
 def select_start_alert(app_state, app_tile_model):
@@ -485,7 +588,8 @@ _PANEL = "_defo_panel_sections"
 
 
 def panel_sections(controls):
-    """``SimpleNamespace(questions, refine, export, export_parts, footer)`` of
+    """``SimpleNamespace(questions, refine, export, export_parts, footer,
+    earlier, nearby, topnav)`` of
     a panel built by ``build_controls``: what ``build_questions_section``
     returned, the two ``section.build_section`` namespaces, what
     ``build_export`` returned and what ``footer.build_footer`` returned."""
@@ -503,17 +607,19 @@ def _open_questions_for(questions):
 
 
 def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field, *, labels=None) -> v.Html:
-    """The right panel: the head, the two blocks, two sections and the footer.
+    """The right panel: the head, the two blocks, two sections and the dock.
 
-    In order (spec §3-§6, D4, D6): the help text with its info popup, the
-    alert-set selector, the set-status banner, **block A** (the queue counter,
-    its progress, the navigation row and the facts grid with its status chip),
-    **block B** (the verdict buttons), the collapsible *Questions* (one
-    control per project question, the loss driver among them) and *Refine
-    polygon* sections, then the **sticky footer**: the collapsible *Export
-    this alert* section, *Save & next* / *Save* and the save-state line. The
-    six always-open cards of the old panel are gone with it, as is the
-    separate navigation card (block A absorbed it).
+    In order (spec §3-§6, D4): the set-status banner, **block A** (the facts
+    grid with its status chip; the queue and the navigation went to the top
+    bar), **block B** (the verdict buttons), the collapsible *Questions* (one
+    control per project question, the loss driver among them), *Refine
+    polygon*, *Earlier alerts* and *Nearby alerts* (shown while grouping is
+    effective) sections. These are ``controls``' children,
+    the part that scrolls. The **dock** (``footer.build_footer``: the
+    collapsible *Export this alert* list, *Save* / *Next* and the save-state
+    line) is NOT one of them: ``build_screen`` puts it under the scrolling
+    part, fixed to the panel's bottom edge (user, 2026-10-26, option B), and
+    finds it in ``panel_sections(controls).footer``.
 
     Built once per session with the rest of the layout, so every subscription
     the sub-builders register is registered once; the section bodies are
@@ -538,17 +644,21 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # section: a save refused for a required answer opens it.
     questions = build_questions_section(app_state, analysis, labels=labels)
 
-    # Built before the footer so the footer's two Save buttons drive the
-    # export section's ONE save runner: a save from either runs its post-save
-    # step, which is what enables its build tile and moves its badge on.
-    exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"), divided=False)
+    # Built before the footer so the footer's Save drives the export
+    # section's ONE save runner: a save runs its post-save step, which is
+    # what offers its build and moves its badge on. In the dock, its list
+    # opens upward: the closed chevron points there.
+    exports = build_section(t("analysis_tile.sections.export"), v.Html(tag="div"), divided=False,
+                            closed_icon="mdi-chevron-up")
     export_parts = build_export(
         widgets=widgets, app_state=app_state, aux_model=aux_model, analysis=analysis,
         app_tile_model=app_tile_model, set_badge=exports.set_badge,
         on_refused=_open_questions_for(questions), labels=labels,
+        on_saved=make_after_save(widgets, app_state, analysis),
     )
     exports.body_box.children = [export_parts.body]
-    footer = build_footer(export_parts.run_save, exports.root, app_state, analysis, labels=labels)
+    footer = build_footer(export_parts.run_save, exports.root, app_state, analysis, labels=labels,
+                          capture=lambda: capture_alert(analysis, widgets, app_state))
     # The two titles this builder owns (their badges and bodies have their own hooks).
     labels.add(lambda: refine.set_title(t("analysis_tile.sections.refine")))
     labels.add(lambda: exports.set_title(t("analysis_tile.sections.export")))
@@ -559,9 +669,45 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # Bound before block A is built, which subscribes to the bound filter
     # (``wire_alert_navigation`` binds the same reactive: a no-op twice).
     app_state.bind_alert_filter(analysis.alert_filter)
-    context = build_context(app_state, id_field, labels=labels, analysis=analysis)
+    # The top bar's alert changes ask first over unsaved work, as the dock's
+    # Next does: one prompt, in the dock.
+    context = build_context(app_state, id_field, labels=labels, analysis=analysis, guard=footer.guard)
+
+    def _guard(move):
+        # The set selector, the filter, Overview's and the map popup's Go ask
+        # too. The prompt is in the dock: a Go from another screen shows it.
+        if analysis.dirty.value:
+            app_state.current_page_view.value = "analysis_tile"
+        footer.guard(move)
+
+    app_state.guard = _guard
     topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
-    earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels)
+    earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels, ask=footer.confirm.ask)
+    near = nearby.build_nearby_section(widgets, app_state, analysis, labels=labels)
+    run_save = export_parts.run_save
+
+    def _remove_from_group():
+        # Only for a member of a group of two or more while grouping is
+        # effective (the button shows for nothing else); anything else here
+        # must not reach the runner, which would read a plan-less capture as
+        # a full save of the verdict on screen.
+        try:
+            alert = capture_alert(analysis, widgets, app_state, remove=True)
+        except ValueError:
+            logger.info("Analysis: Remove from group on an alert that is not a member, ignored")
+            return
+        if alert.plan is None:
+            logger.info("Analysis: Remove from group while grouping is off, ignored")
+            return
+        footer.confirm.ask([affected_line(a) for a in alert.plan.affected],
+                           lambda: run_save(near.remove_btn, alert=alert),
+                           title="analysis_tile.nearby.remove", ok="analysis_tile.nearby.confirm_remove_ok")
+
+    near.run_remove = _remove_from_group
+    # ``getattr`` because a test may inject a plain callable.
+    run_guard = getattr(run_save, "guard", None)
+    if run_guard is not None:
+        run_guard(near.remove_btn)
     controls = v.Html(
         tag="div",
         class_="pa-0 ma-0",
@@ -572,12 +718,12 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
             questions.root,
             refine.root,
             earlier.root,
-            footer.root,
+            near.root,
         ],
     )
     setattr(controls, _PANEL, SimpleNamespace(questions=questions, refine=refine, export=exports,
                                               export_parts=export_parts, footer=footer,
-                                              earlier=earlier, topnav=topnav))
+                                              earlier=earlier, nearby=near, topnav=topnav))
     return controls
 
 
@@ -642,12 +788,30 @@ SCREEN_CSS = (
     " justify-content: space-between; gap: 8px; padding: 0 16px; margin-right: -12px;"
     " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
     ".defo-analysis-screen .defo-topnav-pos { display: flex; align-items: center; gap: 8px; }\n"
+    ".defo-analysis-screen .defo-topnav-next { display: flex; align-items: center; gap: 6px; }\n"
     ".defo-analysis-body { flex: 1 1 auto; min-height: 0; display: flex; }\n"
     ".defo-analysis-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;"
     " padding: 8px; }\n"
-    # The review console, at the workflow panel's width (480 px) it was laid out at.
-    ".defo-analysis-right { flex: 0 0 480px; min-height: 0; overflow-y: auto; padding: 8px 16px 0 16px;"
+    # The review console, at the workflow panel's width (480 px) it was laid
+    # out at: the part that scrolls over the dock (``footer``), which stays on
+    # the bottom edge whatever the height of the sections above.
+    ".defo-analysis-right { flex: 0 0 480px; min-height: 0; display: flex; flex-direction: column;"
     " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
+    ".defo-analysis-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 16px 16px 16px; }\n"
+    # The Export list (``export.build_export``): the file rows and the build
+    # row as ONE bordered list with hairlines between the rows, not a tile
+    # each. Scoped to the screen: Overview's tiles stay tiles.
+    ".defo-analysis-screen .defo-file-list { border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 6px;"
+    " overflow: hidden; margin-bottom: 8px; }\n"
+    ".defo-analysis-screen .defo-file-list > .defo-file-tile { border: 0 !important; border-radius: 0 !important;"
+    " margin: 0 !important; }\n"
+    ".defo-analysis-screen .defo-file-list > .defo-file-tile + .defo-file-tile"
+    " { border-top: 1px solid rgba(128, 128, 128, 0.2) !important; }\n"
+    # A file row before its build: the badge greys with the text.
+    ".defo-analysis-screen .defo-file-list .v-btn--disabled .defo-file-badge { filter: grayscale(1); opacity: 0.5; }\n"
+    # The build row is an action: tinted, until it is disabled.
+    ".defo-analysis-screen .defo-build-tile:not(.v-btn--disabled) { background-color: rgba(91, 181, 42, 0.07); }\n"
+    ".defo-analysis-screen .defo-build-tile.v-btn--disabled .primary--text { color: inherit !important; }\n"
     # One header cell per view, in a row over the views: equal halves, as the
     # views split the width (``.mv-layout-row``). min-width:0 keeps a long
     # title from widening its half.
@@ -669,6 +833,14 @@ SCREEN_CSS = (
     "@container (max-width: 1250px) { .defo-analysis-screen .defo-tl-label { display: none; }"
     " .defo-analysis-screen .defo-tl-fold .v-icon--left { margin-right: 0; } }\n"
     "@container (max-width: 950px) { .defo-analysis-screen .defo-tl-divider { display: none; } }\n"
+    # Narrower still, the cloud slider's words give way to a cloud icon (its
+    # title keeps the words) and the fold buttons to their bare icons, so the
+    # image-area select stays on the chips' line on a ~650 px card.
+    ".defo-analysis-screen .v-icon.defo-tl-cloud-icon { display: none; }\n"
+    "@container (max-width: 820px) { .defo-analysis-screen .defo-tl-cloud-word { display: none; }"
+    " .defo-analysis-screen .v-icon.defo-tl-cloud-icon { display: inline-flex; }"
+    " .defo-analysis-screen .defo-cloud-slider { flex-basis: 130px !important; min-width: 130px !important; }"
+    " .defo-analysis-screen .defo-tl-fold { min-width: 0 !important; padding: 0 6px !important; } }\n"
     # The strip's outline follows the theme. The views are not bordered: they
     # draw their own limit with the basemap.
     ".defo-analysis-screen .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 4px; }\n"
@@ -684,15 +856,21 @@ SCREEN_CSS = (
     ".defo-analysis-screen .defo-tl-btn { text-transform: none; letter-spacing: normal; }\n"
     ".defo-analysis-screen .v-chip { letter-spacing: normal; }\n"
     # The status badges (``section.badge_classes``): the workflow's filled
-    # chips, grey for a state, light orange for what blocks the save, light
-    # green for what is done.
+    # chips, grey for a state, light orange for what blocks the save, a tint
+    # of the theme's primary for what is done. The done ink is the primary
+    # made readable as text: light's green (#5bb624) darkened, dark's gold
+    # (#76591e, too dark on the dark panel) as its ``primary_contrast``.
+    # The questions' checks and the dock's *Saved* line wear it too.
     ".defo-analysis-screen .v-chip.dat-badge { border: 0 !important; background: rgba(128, 128, 128, 0.2) !important; }\n"
     ".defo-analysis-screen .v-chip.dat-badge--warning { background: rgba(239, 138, 12, 0.16) !important;"
     " color: #b5650a !important; font-weight: 500; }\n"
     ".defo-analysis-screen.theme--dark .v-chip.dat-badge--warning { color: #ffb74d !important; }\n"
     ".defo-analysis-screen .v-chip.dat-badge--done { background: rgba(91, 182, 36, 0.16) !important;"
     " color: #3e8a14 !important; font-weight: 500; }\n"
-    ".defo-analysis-screen.theme--dark .v-chip.dat-badge--done { color: #8fd163 !important; }\n"
+    ".defo-analysis-screen.theme--dark .v-chip.dat-badge--done { background: rgba(191, 143, 45, 0.16) !important;"
+    " color: #bf8f2d !important; }\n"
+    ".defo-analysis-screen .dat-done-ink { color: #3e8a14 !important; }\n"
+    ".defo-analysis-screen.theme--dark .dat-done-ink { color: #bf8f2d !important; }\n"
     # The position counter (``context.build_context``), worn as the "5 / 8"
     # chip of the workflow's step header: the theme's primary (its
     # ``primary`` class, ``context.counter_chip_class``), grey while the
@@ -797,7 +975,11 @@ def build_screen(widgets, controls, app_state, theme_state=None, *, labels=None)
     panes_slot = v.Html(tag="div", class_="analysis-panes-slot", children=[widgets.panes_widget])
     strip = v.Html(tag="div", class_="analysis-strip", children=[widgets.timeline])
     left = v.Html(tag="div", class_="defo-analysis-left", children=[heads, panes_slot, strip])
-    right = v.Html(tag="div", class_="defo-analysis-right", children=[controls])
+    # The panel: the part that scrolls, then the dock, fixed under it.
+    footer = getattr(panel, "footer", None)
+    scroll = v.Html(tag="div", class_="defo-analysis-scroll", children=[controls])
+    right = v.Html(tag="div", class_="defo-analysis-right",
+                   children=[scroll, *([footer.root] if footer is not None else [])])
     body = v.Html(tag="div", class_="defo-analysis-body", children=[left, right])
     screen = v.Html(
         tag="div",
@@ -969,8 +1151,8 @@ def build_analysis_layout(
     analysis.image_area.subscribe(_on_area)
 
     # The review console -- the head, block A, block B, the Questions and
-    # Refine sections and the sticky footer (``build_controls``) -- in the
-    # screen's right column.
+    # Refine sections and the dock (``build_controls``) -- in the screen's
+    # right column.
     controls = build_controls(
         widgets=widgets,
         app_state=app_state,

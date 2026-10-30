@@ -194,14 +194,6 @@ def test_the_fixed_numbers_are_the_ones_the_spec_fixed():
                                   "Planet NICFI": "Planet"}
 
 
-def test_a_stripe_lands_on_its_own_date():
-    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), timeline.TRACK_PX)
-    style = timeline.stripe_hit_style(segs, date(2026, 3, 11), S2)
-    pct = 100 * scene_query.x_for(segs, date(2026, 3, 11)) / timeline.TRACK_PX
-    assert _left_pct(style) == pytest.approx(pct, abs=0.001)
-    assert "width: 11px" in style
-
-
 def test_a_stripes_percentage_is_its_own_share_of_the_view_not_a_pixel_count():
     """The whole widget is addressed in percentages. 10 days into a 61-day
     all-expanded view is 10/61 of the track; a builder that emitted ``x_for``'s
@@ -216,6 +208,7 @@ def test_a_stripes_percentage_is_its_own_share_of_the_view_not_a_pixel_count():
             - _left_pct(timeline.stripe_hit_style(segs, date(2026, 3, 6), S2)))
     assert step / 100 * timeline.TRACK_PX == pytest.approx(5 * timeline.TRACK_PX / 61, abs=0.1)
     assert step / 100 * timeline.TRACK_PX > timeline.HIT_PX
+    assert "width: 11px" in timeline.stripe_hit_style(segs, date(2026, 3, 11), S2)
 
 
 def test_a_collapsed_month_puts_every_one_of_its_dates_on_the_block():
@@ -303,23 +296,6 @@ def test_a_planet_bar_outside_the_view_is_not_drawn():
 
 
 # --------------------------------------------------------------- the locales
-
-def test_every_locale_has_the_timeline_keys():
-    import json
-    from pathlib import Path
-
-    import deforestation_alerts.message as msg
-
-    root = Path(msg.__file__).parent
-    keys = {"before", "after", "unset", "max_cloud", "one_more_month", "collapse_all", "expand_all",
-            "images", "no_images", "days_apart", "stale", "refresh_failed", "retry", "loading",
-            "legend", "legend_label", "lane_before", "lane_after",
-            "set_before", "set_after", "collapsed_month", "collapsed_group", "no_cloud_filter",
-            "swap_source"}
-    for locale in ("en", "es-ES", "fr", "pt-BR"):
-        data = json.loads((root / locale / "ui.json").read_text())
-        assert keys <= set(data["analysis"]["timeline"]), locale
-
 
 # ---------------------------------------------------------------- the widget
 
@@ -628,9 +604,12 @@ def test_repeated_widening_on_the_same_alert_is_cumulative(monkeypatch):
 
 
 def test_the_legend_is_reachable_from_the_toolbar():
+    """The button's hover text is its short name; the paragraph is the
+    popup's, not a tooltip the size of a paragraph."""
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
-    assert any((getattr(w, "attributes", None) or {}).get("title") == timeline.t(
-        "analysis.timeline.legend") for w in _walk(card))
+    titles = {(getattr(w, "attributes", None) or {}).get("title") for w in _walk(card)}
+    assert timeline.t("analysis.timeline.legend_label") in titles
+    assert timeline.t("analysis.timeline.legend") not in titles
 
 
 # ------------------------------------------------------------ the legend
@@ -644,13 +623,43 @@ def test_the_legend_is_a_button_that_opens_the_explanation():
                  if (getattr(w, "attributes", None) or {}).get("aria-expanded") is not None)
     assert badge.tag == "button"
     assert "tabindex" not in (badge.attributes or {})  # a button is focusable already
-    assert timeline.t("analysis.timeline.legend") not in _text(card)
-    badge.fire_event("click", None)
-    assert badge.attributes["aria-expanded"] == "true"
-    assert timeline.t("analysis.timeline.legend") in _text(card)
-    badge.fire_event("click", None)
     assert badge.attributes["aria-expanded"] == "false"
-    assert timeline.t("analysis.timeline.legend") not in _text(card)
+
+
+def test_the_legend_opens_in_a_popup_not_in_the_strip():
+    """User report: the explanation, shown inline, pushed the timeline down by
+    a paragraph. It is a menu's content now, opened by the browser."""
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    menu = next(w for w in _walk(card) if isinstance(w, timeline.v.Menu))
+    badge = menu.v_slots[0]["children"]
+    assert badge.v_on == "menu.on"
+    assert timeline.t("analysis.timeline.legend") in _text(menu)
+    menu.v_model = True
+    assert badge.attributes["aria-expanded"] == "true"
+    menu.v_model = False
+    assert badge.attributes["aria-expanded"] == "false"
+
+
+def test_the_fold_buttons_name_themselves_in_a_tooltip():
+    """User request: on a narrow card the fold buttons are bare icons, and
+    ``title`` showed their names late or not at all."""
+    from gui.tile.analysis.labels import Labels
+
+    labels = Labels()
+    set_locale("en")
+    try:
+        card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets(), labels=labels)
+        tips = [w for w in _walk(card) if isinstance(w, timeline.v.Tooltip)]
+        keys = ("analysis.timeline.collapse_all", "analysis.timeline.expand_all")
+        assert [_text(tip) for tip in tips] == [timeline.t(k) for k in keys]
+        for tip in tips:
+            btn = tip.v_slots[0]["children"]
+            assert btn.v_on == "tooltip.on" and "title" not in btn.attributes
+        set_locale("fr")
+        labels.run()
+        assert [_text(tip) for tip in tips] == [timeline.t(k) for k in keys]
+    finally:
+        set_locale("en")
 
 
 def test_the_legend_button_is_named_by_something_short():
@@ -725,7 +734,8 @@ def _text(widget) -> str:
 
 def _walk(widget):
     yield widget
-    for child in (getattr(widget, "children", None) or ()):
+    slotted = [slot["children"] for slot in (getattr(widget, "v_slots", None) or ())]
+    for child in [*(getattr(widget, "children", None) or ()), *slotted]:
         if not isinstance(child, str):
             yield from _walk(child)
 
@@ -944,8 +954,7 @@ def test_a_language_switch_relabels_a_rendered_strip_and_keeps_the_pick():
         ctx["token"] = analysis.alert_token.value
         widgets.imagery_ctx.set(ctx)
         card = timeline.build_timeline(state, analysis, widgets, labels=labels)
-        legend = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-controls")][0]
-        legend.fire_event("click", None)
+        next(w for w in _walk(card) if isinstance(w, timeline.v.Menu)).v_model = True  # the legend open
         before, after = analysis.before_info.value, analysis.after_info.value
         set_locale("fr")
         labels.run()

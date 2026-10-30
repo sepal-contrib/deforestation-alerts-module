@@ -60,7 +60,8 @@ def _title(q):
         required = v.Chip(x_small=True, outlined=True, class_="dat-q-required",
                           children=[t("analysis_tile.questions.required")])
         children.append(required)
-    mark = v.Icon(small=True, color="success", style_=_HIDDEN, children=["mdi-check-circle"])
+    # the screen's done ink (``analysis_tile.SCREEN_CSS``), not Vuetify's green success
+    mark = v.Icon(small=True, class_="dat-done-ink", style_=_HIDDEN, children=["mdi-check-circle"])
     children.append(mark)
     row = v.Html(tag="div", class_="d-flex align-center mb-2", style_="gap: 8px;", children=children)
     return row, number, mark, text, required

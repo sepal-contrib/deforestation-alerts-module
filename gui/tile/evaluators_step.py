@@ -39,7 +39,7 @@ import solara
 from pysepal.solara.components.inputs import FileInputComponent
 
 from deforestation_alerts.errors import KeyedError
-from deforestation_alerts.project import paths, share
+from deforestation_alerts.project import grouping, paths, share
 from deforestation_alerts.project import split as split_mod
 from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.review_status import reviewed_mask
@@ -54,7 +54,6 @@ from gui.store.project_writers import writing
 from gui.store.workflow_steps import active_set
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import field_group, form_card, use_form_dialog
-from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable, link_action
 from gui.widget.text_style import MUTED
 
@@ -473,7 +472,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     # under it. So a second click (or Enter on Merge) is dropped here, before
     # it can start a second split, merge or build over the first.
     inflight = solara.use_ref(False)
-    split = s.split
+    split = s.split if s is not None else None  # the panel outlives a switch to a set-less project
 
     def _reset():
         # Another project opened: its step starts from a fresh form, without
@@ -509,6 +508,9 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
             return
         if target is not None and split_recorded(app_state, live.name, target.id, made):
             current_notifier().success(tn("evaluators.split_done", len(made.evaluators)))
+            biggest = await to_thread_in_context(split_service.largest_unit, app_state, len(made.evaluators))
+            if biggest > 0:
+                current_notifier().warning(tn("evaluators.split_oversized", biggest))
         else:  # the store holds the split, the project lost the record: an orphan
             current_notifier().warning(t("evaluators.split_unrecorded", project=live.name if live else ""))
 
@@ -626,7 +628,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     # The set folder is read again only when what decides a zip's fate
     # changes: the project, the set, the split, the questionnaire or a run.
     found = solara.use_memo(lambda: found_links(package_files.package_zips(p, s)),
-                            [p.name, s.id, split.split_id if split is not None else None, digest, scans])
+                            [p.name, s.id if s is not None else None, split.split_id if split is not None else None, digest, scans])
     newest = max((f["built_at"] for f in found.values()), default=None)
     building_name = building_here(building, p, split) if generate_task.pending else None
     # Before its first build the run fetches the AOI: the button spins.
@@ -780,14 +782,15 @@ def _ReturnPanel(app_state):
 
 
 @solara.component
-def _ModeOption(key, icon, text, checked, disabled, on_change):
+def _ModeOption(key, icon, text, checked, disabled, on_change, prefix="defo-mode"):
     """One review-mode checkbox, its icon and text beside it. Not in the
     checkbox's label slot: a slotted label is dropped when the step
-    re-renders. A click on the text toggles the box, as a label would."""
+    re-renders. A click on the text toggles the box, as a label would.
+    ``prefix`` names its classes: ``{prefix}-{key}`` and ``{prefix}-label``."""
     with solara.Row(style="align-items:center;gap:0;flex-wrap:nowrap;"):
         rv.Checkbox(v_model=checked, on_v_model=on_change, disabled=disabled, dense=True, hide_details=True,
-                    class_=f"defo-mode-{key}", style_="margin-top:0;padding-top:0;")
-        label = rv.Html(tag="span", class_="defo-mode-label",
+                    class_=f"{prefix}-{key}", style_="margin-top:0;padding-top:0;")
+        label = rv.Html(tag="span", class_=f"{prefix}-label",
                         style_="display:inline-flex;align-items:center;gap:6px;"
                                + ("opacity:0.6;" if disabled else "cursor:pointer;"),
                         children=[rv.Icon(small=True, children=[icon]), text])
@@ -802,7 +805,8 @@ def _ReviewMode(app_state):
     A split holds it on Multiple: switching to solo would leave alerts
     assigned to evaluators the step no longer shows."""
     p = app_state.project.value
-    split = active_set(p).split
+    s = active_set(p)  # None for one render when a set-less project opens (the child renders before the step)
+    split = s.split if s is not None else None
     mode = p.multi_evaluator
 
     def _set(multi, checked):
@@ -831,6 +835,84 @@ def _ReviewMode(app_state):
             children=[note])
 
 
+def _radius_text(radius_m: float) -> str:
+    """The distance as the field shows it: no locale separators, so what is
+    shown parses back (``grouping.parse_metres`` reads a comma as decimal)."""
+    return f"{radius_m:g}"
+
+
+@solara.component
+def _GroupOption(app_state):
+    """*Review nearby alerts together* (spec 2026-10-26 §3.2, §3.3): the
+    checkbox, then once ticked the distance and *Include already reviewed
+    alerts*, and a note with what it does or why it is locked. A split holds
+    all three on its record (the set's effective grouping); saved groups in
+    any set hold the option on and the distance. A review copy shows its
+    split's record, read-only. A distance out of range stays in the field
+    with its error; the project keeps the last valid one."""
+    p = app_state.project.value
+    s = active_set(p)
+    copy = read_only(p)
+    lock = grouping.lock_state(p, s)
+    typed, set_typed = solara.use_state(None)
+    solara.use_effect(lambda: set_typed(None), [p.name])
+
+    if copy or lock.reason == "split":
+        eff = grouping.effective(p, s)
+        enabled = eff is not None
+        radius = eff.radius_m if eff is not None else p.group_review.radius_m
+        include = eff.include_reviewed if eff is not None else False
+    else:
+        g = p.group_review
+        # saved groups hold the option on (§3.3), whatever ``enabled`` holds
+        enabled, radius, include = g.enabled or lock.reason == "groups", g.radius_m, g.include_reviewed
+
+    if copy:
+        note = t("evaluators.group_copy_note")
+    elif lock.reason == "split":
+        note = t("evaluators.group_locked_split_on" if enabled else "evaluators.group_locked_split_off")
+    elif lock.reason == "groups":
+        note = tn("evaluators.group_locked_groups", lock.n_groups)
+    else:
+        note = t("evaluators.group_note")
+
+    def _write(**update):
+        def _apply(live):
+            if update.get("enabled") is False and grouping.saved_groups(live) > 0:
+                update.pop("enabled")  # saved groups hold it on (§3.3)
+            live.group_review = live.group_review.model_copy(update=update)
+        update_setup(app_state, p.name, _apply)
+
+    def _on_radius(text):
+        set_typed(text or "")
+        value = grouping.parse_metres(text or "")
+        if value is not None:
+            _write(radius_m=value)
+
+    # What was typed shows until it is valid and stored; a stored value that
+    # changed elsewhere replaces it.
+    parsed = grouping.parse_metres(typed) if typed is not None else None
+    bad = typed is not None and parsed is None
+    shown = typed if bad or (typed is not None and parsed == radius) else _radius_text(radius)
+
+    _ModeOption(key="option", prefix="defo-group", icon="mdi-vector-union", text=t("evaluators.group_label"),
+                checked=enabled, disabled=copy or lock.option,
+                on_change=lambda checked: _write(enabled=bool(checked)))
+    if enabled:
+        with rv.Html(tag="div", style_="padding-left:32px;"):
+            rv.TextField(label=t("evaluators.group_radius_label"), v_model=shown, on_v_model=_on_radius,
+                         suffix="m", dense=True, outlined=True, hide_details="auto", class_="defo-group-radius",
+                         style_="max-width:200px;margin-top:8px;", disabled=copy or lock.radius,
+                         error_messages=[t("evaluators.group_radius_error")] if bad else [])
+            rv.Checkbox(label=t("evaluators.group_include_reviewed"), v_model=include,
+                        on_v_model=lambda value: _write(include_reviewed=bool(value)), dense=True,
+                        hide_details=True, disabled=copy or lock.include, class_="defo-group-include")
+            rv.Html(tag="div", style_=MUTED + "font-size:0.75rem;",
+                    children=[t("evaluators.group_include_reviewed_hint")])
+    rv.Html(tag="div", class_="defo-group-note", style_="margin-top:4px;" + MUTED + "font-size:0.75rem;",
+            children=[note])
+
+
 @solara.component
 def _StartAnalysis(app_state, ready):
     """The workflow's one way into Analysis, after the last step's settings. It
@@ -841,7 +923,7 @@ def _StartAnalysis(app_state, ready):
                   disabled=not ready, classes=["defo-start-analysis"],
                   on_click=lambda: app_state.current_page_view.set("analysis_tile"))
     if not ready:
-        solara.Text(t("workflow.lock_analysis"), style=MUTED + "font-size:0.75rem;")
+        solara.Text(t("workflow.lock_review"), style=MUTED + "font-size:0.75rem;")
 
 
 @solara.component
@@ -852,18 +934,20 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
     p = app_state.project.value
     s = active_set(p)
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.evaluators.description"), t("steps.evaluators.info_header"),
-                  t("steps.evaluators.info_md"))
         if p is None:
             solara.Info(t("workflow.lock_project"))
         elif s is not None and read_only(p):
             # A review copy neither splits nor builds packages (§6.3): it returns.
             _ReturnPanel(app_state=app_state)
+            with rv.Card(outlined=True, class_="pa-3"):
+                _GroupOption(app_state=app_state)
         elif s is not None:
             with rv.Card(outlined=True, class_="pa-3"):
                 _ReviewMode(app_state=app_state)
+                with rv.Html(tag="div", class_="mt-3"):
+                    _GroupOption(app_state=app_state)
                 if p.multi_evaluator:
                     _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
                                   gee_interface=gee_interface)
-        # Without an active set, Start analysis says why (workflow.lock_analysis).
+        # Without an active set, Start analysis says why (workflow.lock_review).
         _StartAnalysis(app_state=app_state, ready=s is not None)

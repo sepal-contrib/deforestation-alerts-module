@@ -84,6 +84,29 @@ def test_the_component_follows_the_project_and_a_pick_selects():
         rc.close()
 
 
+def test_the_components_pick_asks_first_and_shows_the_active_set_meanwhile():
+    p, jan, feb_a, _ = _project()
+    state = AppState()
+    state.new_project_state(p)
+    held, dismissed = [], []
+    state.guard = held.append  # the Analysis prompt is up: the move waits
+
+    @solara.component
+    def Page():
+        set_selector.SetSelector(app_state=state, dismiss=lambda: dismissed.append(True))
+
+    _, rc = reacton.render(Page(), handle_error=False)
+    try:
+        rc.find(v.Select).widget.v_model = feb_a.id
+        assert state.project.value.active_set == jan.id and dismissed == [True]
+        assert rc.find(v.Select).widget.v_model == jan.id  # back on the active set
+        held.pop()()  # *Discard*
+        assert state.project.value.active_set == feb_a.id
+        assert rc.find(v.Select).widget.v_model == feb_a.id
+    finally:
+        rc.close()
+
+
 def test_the_raw_selector_follows_publishes_from_any_thread_and_never_picks_back(monkeypatch):
     p, jan, feb_a, feb_b = _project()
     state = AppState()
@@ -108,3 +131,18 @@ def test_the_raw_selector_follows_publishes_from_any_thread_and_never_picks_back
     assert picks == [feb_b.id]  # the worker's publish was shown, never picked back
     state.close_project_state()
     assert select.style_ == "display: none;" and select.v_model is None
+
+
+def test_the_raw_selectors_pick_goes_through_the_guard():
+    """A set switch changes the alert: it waits for ``app_state.guard`` (the
+    dock's unsaved-work prompt), and the select shows the active set meanwhile."""
+    p, jan, feb_a, _ = _project()
+    state = AppState()
+    held = []
+    state.guard = held.append  # the prompt asks: the move waits
+    select = set_selector.build_set_selector(state)
+    state.new_project_state(p)
+    select.v_model = feb_a.id
+    assert state.project.value.active_set == jan.id and select.v_model == jan.id
+    held.pop()()  # Discard
+    assert state.project.value.active_set == feb_a.id and select.v_model == feb_a.id

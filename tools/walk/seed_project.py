@@ -38,13 +38,14 @@ def seed(name: str, bbox, sources: Sequence[str] = (), period: Optional[tuple] =
         bounds=tuple(float(v) for v in gdf.total_bounds),
         geometry_file=paths.AOI_SIDECAR,
     )
-    for key in sources:
-        add_predefined_source(p, key)
+    pid = None
     if period:
         a, b = (date.fromisoformat(str(x)) for x in period)
         pid = period_id(a, b)
         p.periods = {pid: Period(id=pid, start=a, end=b, look_back_days=int(look_back))}
         p.active_period = pid
+    for key in sources:  # sources are per period: used in the period, and in new ones
+        add_predefined_source(p, key, pid)
     aoi_io.write_sidecar(paths.project_dir(name, root), gdf)
     io.save_project(p, root)
     return p

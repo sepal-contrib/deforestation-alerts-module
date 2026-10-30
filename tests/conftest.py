@@ -10,7 +10,7 @@ A test that is not marked ``ee`` and still reaches Earth Engine fails (the
 
 The app reads and writes plain files on the local sandbox disk (spec D14).
 The ``data_root`` fixture below points the data directory into ``tmp_path``
-(with ``HOME`` pinned there too, so ``local_files.home_relative`` -- which
+(with ``HOME`` pinned there too, so ``local_files.served_relative`` -- which
 resolves against ``Path.home()`` -- stays inside it).
 """
 
@@ -65,6 +65,18 @@ def _no_live_ee(request, monkeypatch):
                            "(use the `gee` fixture or @pytest.mark.ee)")
 
     monkeypatch.setattr(ee.data, "_execute_cloud_call", _refuse)
+
+
+@pytest.fixture()
+def english_locale():
+    """English for the test and after it (a test may switch the language).
+    A module that asserts English copy opts in with
+    ``pytestmark = pytest.mark.usefixtures("english_locale")``."""
+    from pysepal.i18n import set_locale
+
+    set_locale("en")
+    yield
+    set_locale("en")
 
 
 @pytest.fixture()
@@ -199,24 +211,15 @@ def _in(root):
 
 
 def _build_button(body):
-    """The dashed *Build alert files* tile in an export section body.
+    """The build row (``file_tile.BuildTile``) of an export section body: the
+    file list's last row, *Build files* / *Rebuild files* / *Building files…*.
 
-    Found by its class, not its label. The tile's label never changes: once
-    files are built the dashed tile hides and a separate *Rebuild* button
-    (``_rebuild_button``) appears.
+    Found by its class, not its label, which changes with the list's state.
     """
     for widget in _in(body):
         if "defo-build-tile" in (getattr(widget, "class_", "") or "").split():
             return widget
     raise AssertionError("no build tile in the export section body")
-
-
-def _rebuild_button(body):
-    """The small *Rebuild* text button under the file tiles (READY state)."""
-    for widget in _in(body):
-        if "defo-rebuild" in (getattr(widget, "class_", "") or "").split():
-            return widget
-    raise AssertionError("no rebuild button in the export section body")
 
 
 def _shown(root, target):

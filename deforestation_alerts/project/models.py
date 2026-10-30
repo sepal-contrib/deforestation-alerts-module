@@ -189,6 +189,8 @@ class Period(BaseModel):
     end: date
     look_back_days: int = 0
     masks: dict[str, PeriodMask] = {}  # a project mask absent here is off in this period
+    sources: list[str] = []  # the catalogue keys used in this period; read through period_sources
+    digits: dict[str, int] = {}  # each custom source's digit in this period (predefined: PREDEFINED_DIGITS)
 
     def search_window(self) -> tuple[date, date]:
         return self.start - timedelta(days=int(self.look_back_days)), self.end
@@ -245,17 +247,23 @@ class AlertSetParams(BaseModel):
     attribute_layers: list[dict] = Field(default_factory=list)
     #: sources whose probable (unconfirmed) pixels are left out (spec §5)
     confirmed_only: list[str] = Field(default_factory=list)
+    #: clusters under ``min_size_ha`` that touch earlier loss stay, as growth
+    #: under the minimum area; off, they are dropped like any small cluster
+    keep_small_growth: bool = True
 
     @model_serializer(mode="wrap")
     def _without_empty_layers(self, handler):
-        """Leave ``attribute_layers`` and ``confirmed_only`` out while empty. A set's
-        fingerprint hashes this dump (``fingerprint.set_inputs``), so every
-        set made before the list keeps its own, byte for byte."""
+        """Leave ``attribute_layers`` and ``confirmed_only`` out while empty, and
+        ``keep_small_growth`` while on. A set's fingerprint hashes this dump
+        (``fingerprint.set_inputs``), so every set made before them keeps its
+        own, byte for byte."""
         data = handler(self)
         if not data.get("attribute_layers"):
             data.pop("attribute_layers", None)
         if not data.get("confirmed_only"):
             data.pop("confirmed_only", None)
+        if data.get("keep_small_growth", True):
+            data.pop("keep_small_growth", None)
         return data
 
     def attribute_list(self) -> list[dict]:
@@ -288,6 +296,10 @@ class EvaluatorSplit(BaseModel):
     packaged: bool = False  # set once any package was built (re-split warns)
     questions_digest: str = ""  # the questionnaire's digest when packaged (spec §7.1)
     returns: dict[str, EvaluatorReturn] = Field(default_factory=dict)  # by evaluator name
+    #: the grouping this split was dealt under (None = grouping off); the
+    #: project setting no longer applies once a set is split
+    group_radius_m: Optional[float] = None
+    group_include_reviewed: bool = False
 
 
 class ReviewCopy(BaseModel):
@@ -304,6 +316,10 @@ class ReviewCopy(BaseModel):
     #: when the package's earlier-alerts snapshot was taken (spec 2026-10-20
     #: §6.6); None for a package from before the snapshot
     snapshot_at: Optional[datetime] = None
+    #: the evaluator's alert ids in a group of two or more when packaged, so a
+    #: return can say which it detached (spec 2026-10-26 §8.3); None for a copy
+    #: imported before the record
+    grouped_at_packaging: Optional[list[int]] = None
 
 
 class AlertSet(BaseModel):
@@ -321,6 +337,7 @@ class AlertSet(BaseModel):
     footprint_rel_path: str
     n_alerts: int = 0
     n_reviewed: int = 0
+    n_groups: int = 0  # review groups (>= 2 rows) saved in this set's store
     last_alert_index: int = 0
     fingerprint: str
     created_at: datetime
@@ -394,6 +411,15 @@ def default_questions() -> list[Question]:
     )]
 
 
+class GroupReview(BaseModel):
+    """The opt-in setting to review nearby alerts together (spec 2026-10-26).
+    ``radius_m`` is not range-validated here; ``grouping.effective`` clamps it."""
+
+    enabled: bool = False
+    radius_m: float = 300.0
+    include_reviewed: bool = False
+
+
 class Project(BaseModel):
     schema_version: int = SCHEMA_VERSION
     name: str
@@ -401,6 +427,9 @@ class Project(BaseModel):
     updated_at: datetime
     aoi: Optional[AoiRecord] = None
     sources: dict[str, AlertSource] = {}
+    #: the catalogue keys a new period starts with ("Add to new periods");
+    #: not a source field, since fingerprint._source_def hashes the whole source
+    new_period_sources: list[str] = []
     masks: dict[str, MaskLayer] = {}
     vis_layers: dict[str, VisLayer] = {}
     grid: Optional[GridSpec] = None
@@ -420,6 +449,8 @@ class Project(BaseModel):
     #: whether the Evaluators step splits the alerts between evaluators;
     #: False is a solo evaluation, None until the user picks a review mode
     multi_evaluator: Optional[bool] = None
+    #: review nearby alerts together (off by default)
+    group_review: GroupReview = Field(default_factory=GroupReview)
 
     @model_validator(mode="before")
     @classmethod
@@ -428,7 +459,9 @@ class Project(BaseModel):
         project's value, so its window (and every fingerprint) is unchanged.
         A project stored before the evaluator switch is multi-evaluator when
         any of its sets was split, so its Evaluators step keeps its panel;
-        without a split it has no review mode yet."""
+        without a split it has no review mode yet. A project stored before
+        sources were per period uses every source in every period (and in
+        new periods), each custom one with the digit it was stored with."""
         if isinstance(data, dict):
             if "multi_evaluator" not in data:
                 sets = data.get("alert_sets") or {}
@@ -441,6 +474,26 @@ class Project(BaseModel):
                 data = {**data, "periods": {k: ({**v, "look_back_days": days}
                                                 if isinstance(v, dict) and "look_back_days" not in v else v)
                                             for k, v in periods_.items()}}
+            # Sources became per period: a period stored before uses every
+            # source, with the project-wide custom digits it was built with.
+            srcs = data.get("sources") or {}
+
+            def field(v, name):
+                return v.get(name) if isinstance(v, dict) else getattr(v, name, None)
+
+            ordered = sorted(srcs, key=lambda k: (field(srcs[k], "digit"), k))
+            custom = {k: field(v, "digit") for k, v in srcs.items() if field(v, "kind") == "custom"}
+
+            def with_sources(v):
+                if not isinstance(v, dict):
+                    return v
+                v = {"sources": ordered, **v}
+                return {"digits": {n: custom[n] for n in v["sources"] if n in custom}, **v}
+
+            if data.get("periods"):
+                data = {**data, "periods": {k: with_sources(v) for k, v in data["periods"].items()}}
+            if "new_period_sources" not in data:
+                data = {**data, "new_period_sources": ordered}
             # Planet NICFI was an optional layer kind; it is now the
             # timeline's Planet collection, shown when the Earth Engine
             # account has access, so a saved NICFI layer is dropped.
@@ -469,7 +522,54 @@ def set_id(period_id: str, sources: list[str]) -> str:
     return f"{period_id}__{sources_slug(sources)}"
 
 
-def add_predefined_source(p: Project, key: str) -> PredefinedSource:
+def period_digit(p: Project, period: Period, name: str) -> int:
+    """The digit ``name`` carries in ``period``'s combined raster: fixed for a
+    predefined source, the period's own for a custom one."""
+    src = p.sources[name]
+    return PREDEFINED_DIGITS[src.catalogue_key] if src.kind == "predefined" else period.digits[name]
+
+
+def period_sources(p: Project, period: Period) -> list[str]:
+    """The catalogue keys used in ``period`` that still exist, in digit order."""
+    return sorted((s for s in period.sources if s in p.sources), key=lambda s: period_digit(p, period, s))
+
+
+def _free_custom_digit(period: Period) -> int:
+    """The lowest custom digit free in ``period``; the cap of 6 custom sources is per period."""
+    used = {d for n, d in period.digits.items() if n in period.sources}
+    for d in CUSTOM_DIGITS:
+        if d not in used:
+            return d
+    raise ProjectRuleError(key="steps.alerts.cap_reached")  # this period already has 6 custom sources
+
+
+def set_period_source(p: Project, period_id: str, name: str, on: bool) -> None:
+    """Use ``name`` in ``period_id`` or not: replaces the Period and ``p.periods``
+    (published snapshots share them). On, a custom source takes the period's
+    lowest free digit; refused (``steps.alerts.cap_reached``) past 6 custom
+    sources in the period. Off drops its digit."""
+    period = p.periods[period_id]
+    if on and name in period.sources:
+        return
+    if not on:
+        update = {"sources": [s for s in period.sources if s != name],
+                  "digits": {k: d for k, d in period.digits.items() if k != name}}
+    elif p.sources[name].kind == "custom":
+        update = {"sources": [*period.sources, name], "digits": {**period.digits, name: _free_custom_digit(period)}}
+    else:  # a predefined source has its fixed digit, and there are only 3 of them
+        update = {"sources": [*period.sources, name]}
+    p.periods = {**p.periods, period_id: period.model_copy(update=update)}
+
+
+def set_new_period_source(p: Project, name: str, on: bool) -> None:
+    """Start new periods with ``name`` or not; existing periods are unchanged."""
+    rest = [s for s in p.new_period_sources if s != name]
+    p.new_period_sources = [*rest, name] if on else rest
+
+
+def add_predefined_source(p: Project, key: str, period_id: Optional[str] = None) -> PredefinedSource:
+    """Add ``key`` to the catalogue and to new periods, and use it in
+    ``period_id`` when given."""
     if key not in PREDEFINED_DIGITS:
         raise ValueError(f"unknown predefined source {key!r}")
     if key in p.sources:
@@ -478,36 +578,34 @@ def add_predefined_source(p: Project, key: str) -> PredefinedSource:
     # Replaced, not mutated: the app publishes shallow copies of the project
     # that share this dict with a render on another thread.
     p.sources = {**p.sources, key: src}
+    set_new_period_source(p, key, True)
+    if period_id is not None:
+        set_period_source(p, period_id, key, True)
     return src
 
 
-def next_custom_digit(p: Project) -> int:
-    used = {s.digit for s in p.sources.values()}
-    for d in CUSTOM_DIGITS:
-        if d not in used:
-            return d
-    raise ProjectRuleError("all 6 custom source slots are in use", key="steps.alerts.cap_reached")
-
-
 def add_custom_source(p: Project, *, name: str, origin: str, ref: str, asset_type: str, format: str,
-                      date_encoding: str, band_map: BandMap, native: Optional[NativeGrid]) -> CustomSource:
-    """Validate the name (spec §5.1), take the lowest free custom digit and add
-    the source. Raises ``ProjectRuleError`` (a ``ValueError``) whose text is a
-    message key: ``steps.alerts.*`` from ``validate_source_name``, or
-    ``steps.alerts.cap_reached`` once all 6 custom slots are in use (controller
-    ruling, Task 7; ``gui.scripts.error_text`` renders it)."""
+                      date_encoding: str, band_map: BandMap, native: Optional[NativeGrid],
+                      period_id: Optional[str] = None) -> CustomSource:
+    """Validate the name (spec §5.1) and add the definition to the catalogue
+    (no limit) and to new periods, and use it in ``period_id`` when given.
+    Raises ``ProjectRuleError`` (a ``ValueError``) whose text is a message key:
+    ``steps.alerts.*`` from ``validate_source_name``, or
+    ``steps.alerts.cap_reached`` when ``period_id`` already has 6 custom
+    sources -- before anything is added (``gui.scripts.error_text`` renders it)."""
     from deforestation_alerts.project.names import validate_source_name
 
     error = validate_source_name(name, p)
     if error:
         raise ProjectRuleError(key=error)
-    try:
-        digit = next_custom_digit(p)
-    except ProjectRuleError:
-        raise ProjectRuleError(key="steps.alerts.cap_reached") from None
+    # Only the legacy migration reads CustomSource.digit; per-period readers use period_digit.
+    digit = _free_custom_digit(p.periods[period_id]) if period_id is not None else CUSTOM_DIGITS[0]
     src = CustomSource(name=name.strip(), origin=origin, ref=ref, asset_type=asset_type, format=format,
                        date_encoding=date_encoding, band_map=band_map, native=native, digit=digit)
     p.sources = {**p.sources, src.name: src}  # replaced, not mutated (published snapshots share it)
+    set_new_period_source(p, src.name, True)
+    if period_id is not None:
+        set_period_source(p, period_id, src.name, True)
     return src
 
 
@@ -528,15 +626,6 @@ def update_custom_source(p: Project, name: str, **changes) -> CustomSource:
     new = src.model_copy(update=changes)
     p.sources = {**p.sources, name: new}
     return new
-
-
-def remove_source(p: Project, name: str) -> None:
-    """Drop the definition and, for a custom source, its coverage record. The
-    artifacts and their files go through ``project.cleanup`` (spec §5.2)."""
-    src = p.sources.get(name)
-    p.sources = {k: s for k, s in p.sources.items() if k != name}
-    if src is not None and src.kind == "custom" and name in p.coverage:
-        p.coverage = {k: c for k, c in p.coverage.items() if k != name}
 
 
 def sets_using_mask(p: Project, name: str) -> list[str]:

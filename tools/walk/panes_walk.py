@@ -78,7 +78,7 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 from tools.walk.questionnaire_walk import PROJECT, SEED, THEME_SWAP_ERROR, goto_analysis
 
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_panes"
+DATA = w.ROOT / "deforestation_alerts_walk_panes"
 HOST = ".analysis-views"
 
 #: The views' state, read through the debug handle ``_multiview`` the widget

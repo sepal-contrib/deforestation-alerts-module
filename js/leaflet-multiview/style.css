@@ -47,6 +47,15 @@
   border-color: var(--mv-control-border);
 }
 .mv-dark .leaflet-control-layers-toggle { filter: invert(0.9); }
+/* Leaflet's own rule is `.leaflet-container .leaflet-control-attribution`,
+   loaded after this sheet on the page: out-rank it. */
+.mv-dark .leaflet-container .leaflet-control-attribution,
+.mv-dark .leaflet-control-scale-line {
+  background: rgba(30, 30, 30, 0.8);
+  color: var(--mv-control-fg);
+}
+.mv-dark .leaflet-control-scale-line { border-color: #aaa; }
+.mv-dark .leaflet-control-attribution a { color: #8ab4f8; }
 .mv-error {
   position: absolute;
   left: 0;
@@ -78,8 +87,10 @@
 .mv-widget > .mv-widget-views { width: 100%; height: 100%; }
 
 /* --- basemapSwitcher (src/plugins/basemap-switcher) --- */
-/* Lifted above the attribution line, which a long credit stretches under it. */
-.leaflet-bottom .leaflet-control.mv-basemaps { display: flex; gap: 6px; margin-bottom: 22px; }
+/* The metric scale under the row is lifted above the attribution line, which a
+   long credit stretches under it; the row takes Leaflet's 5px scale margin-left. */
+.leaflet-bottom .leaflet-control.mv-basemaps { display: flex; gap: 6px; margin-bottom: 4px; margin-left: 5px; }
+.leaflet-bottom .leaflet-control-scale { margin-bottom: 22px; }
 .mv-root .mv-basemap {
   position: relative;
   width: 56px;

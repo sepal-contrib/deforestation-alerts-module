@@ -77,8 +77,9 @@ from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from gui.i18n import t
 from gui.scripts import detached, legend_specs, map_layers, set_store
 from gui.scripts.detached import render_detached
-from gui.scripts.integrate_jobs import _publish_alerts, apply_result
+from gui.scripts.integrate_jobs import apply_result
 from gui.scripts.map_layers import MapLayers
+from gui.scripts.prepare_scope import PrepareJobs
 from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.autosave import install_autosave
@@ -166,7 +167,7 @@ def _alerts(n, set_id):
 
 
 def _project():
-    """A project at the Download & harmonize step: AOI, two sources, the
+    """A project at the Harmonize step: AOI, two sources, the
     period and the grid, so every step tile renders its real form."""
     now = datetime.now()
     p = Project(name=NAME, created_at=now, updated_at=now)
@@ -176,12 +177,12 @@ def _project():
     p.periods[JAN.id] = JAN
     p.active_period = JAN.id
     p.grid = gridmod.build_grid(PARAGUAY, gridmod.auto_utm_epsg(PARAGUAY), 30.0)
-    # a project mask, off in the period: Download & harmonize renders its row
+    # a project mask, off in the period: download/harmonize renders its row
     # in the Masks card (switch and mode cells included) on every publish
     add_mask(p, name="forest", origin="gee", ref="UMD/x", asset_type="IMAGE", band="b",
              native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=JAN.id)
     set_period_mask(p, JAN.id, "forest", on=False)
-    # a visualization layer: the Optional layers step renders its row on every publish
+    # a visualization layer: the Additional layers step renders its row on every publish
     p.vis_layers = {"s2": GeeVisLayer(name="s2", asset="COPERNICUS/S2/x", bands=["B4", "B3", "B2"], min=0, max=3000)}
     p.coverage = {k: SourceCoverage(aoi_digest="d1", checked_on=date.today(), fraction=1.0,
                                     regions=[RegionCoverage(name=k, fraction=1.0, first=date(2000, 1, 1),
@@ -242,6 +243,7 @@ def shell(data_root, monkeypatch):
             lambda: MapLayers(map_, legends=state.layer_legends, selected=state.selected_legend), [])
         tiles["map_layers"] = layers
         layout = solara.use_memo(lambda: _Layout(), [])
+        jobs = solara.use_memo(PrepareJobs, [])
 
         def _build():
             _detached("about", lambda: AboutTile())
@@ -249,9 +251,11 @@ def shell(data_root, monkeypatch):
                 app_state=state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)))
             _detached("overview", lambda: OverviewTile(app_state=state, map_=map_, layers=layers))
             _detached("aoi", lambda: AoiStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
-            _detached("alerts", lambda: AlertsStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
+            _detached("alerts", lambda: AlertsStep(app_state=state, map_=map_, gee_interface=gee, layers=layers,
+                                                         jobs=jobs))
             _detached("period", lambda: PeriodStep(app_state=state, layers=layers))
-            _detached("prepare", lambda: PrepareStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
+            _detached("prepare", lambda: PrepareStep(app_state=state, map_=map_, gee_interface=gee, layers=layers,
+                                                      jobs=jobs))
             _detached("integrate", lambda: IntegrateStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("layers", lambda: LayersStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("header", lambda: WorkflowHeader(app_state=state))
@@ -338,7 +342,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         before = _roots(shell)
         assert len(before) == 11 and shell.reports == []
 
-        # Download & harmonize: a row's artifacts, applied by run_rows on its worker
+        # download/harmonize: a row's artifacts, applied by run_rows on its worker
         for source in ("GLAD-L", "RADD"):
             arts = _row_artifacts(source)
             await _wait(_publish(lambda a=arts: state.update_project(NAME, lambda live: apply_artifacts(live, a)),
@@ -354,7 +358,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
 
         def integrate():
             assert state.update_project(NAME, lambda live: apply_result(live, result))
-            assert _publish_alerts(state, NAME, result)
+            assert set_store.publish_set_alerts(state, NAME, result.alert_set, result.alerts)
             state.current_page_view.value = "analysis_tile"
 
         await _wait(_publish(integrate, errors))
@@ -365,7 +369,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         assert state.screen.value == "analysis"
         assert shell.tiles["layout"].shown[-1] is True
         assert state.active_step.value == 0, "entering the analysis screen moved the workflow"
-        assert state.alerts_gdf.value is result.alerts and state.actual_alert_id.value == -1
+        assert state.alerts_gdf.value is result.alerts and state.actual_alert_id.value == 0  # its start
 
         # A review Save: commit under the project's writer mark (record_review)
         def save():

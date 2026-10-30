@@ -22,11 +22,11 @@ from gui.store.state_manager import AppState
 def test_workflow_map_covers_the_eight_steps_in_order():
     assert PAGE_VIEW_TO_WORKFLOW == {
         "aoi_tile": 0,
-        "alerts_tile": 1,
-        "layers_tile": 2,
-        "period_tile": 3,
-        "prepare_tile": 4,
-        "integrate_tile": 5,
+        "period_tile": 1,
+        "alerts_tile": 2,
+        "harmonize_tile": 3,
+        "integrate_tile": 4,
+        "layers_tile": 5,
         "questionnaire_tile": 6,
         "evaluators_tile": 7,
     }
@@ -54,7 +54,7 @@ def test_resolve_unknown_view_returns_none():
 
 
 def test_resolve_workflow_rail_and_screen_targets():
-    assert resolve_navigation("integrate_tile") == ("workflow", 5)
+    assert resolve_navigation("integrate_tile") == ("workflow", 4)
     assert resolve_navigation("analysis_tile") == ("screen", "analysis")
     assert resolve_navigation("overview_tile") == ("rail", 3)
     assert resolve_navigation("project_tile") == ("rail", 2)
@@ -117,9 +117,9 @@ def test_apply_a_rail_target_only_activates_its_dialog_step(view, step):
 def test_apply_without_mapapp_still_moves_state():
     nav, state = _FakeNav(), AppState()
     apply_navigation(None, nav, state, resolve_navigation("integrate_tile"))
-    assert state.active_step.value == 5 and nav.current_step is None
+    assert state.active_step.value == 4 and nav.current_step is None
     apply_navigation(None, nav, state, resolve_navigation("overview_tile"))
-    assert nav.current_step == 3 and state.active_step.value == 5
+    assert nav.current_step == 3 and state.active_step.value == 4
     apply_navigation(None, nav, state, resolve_navigation("analysis_tile"))
     assert state.screen.value == "analysis" and nav.current_step is None
 

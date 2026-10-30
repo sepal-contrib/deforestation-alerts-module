@@ -48,7 +48,7 @@ from deforestation_alerts.engine.vectorize import vectorize_alerts
 from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, Artifact, GridSpec, Period, Project, set_id as make_set_id,
+    AlertSet, AlertSetParams, Artifact, GridSpec, Period, Project, period_digit, set_id as make_set_id,
 )
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
@@ -308,7 +308,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     set's folder and returns the set and its artifacts; the caller records them.
     ``on_step`` gets a message key as each stage starts. Raises ``ValueError``
     when no source is chosen or one is chosen twice, when a source's download or harmonized file is not current
-    for the period (its Download & harmonize row is not ready), or an earlier
+    for the period (its download/harmonize row is not ready), or an earlier
     set's footprint is missing.
 
     The three files are built under staged names and moved onto the set's own
@@ -402,17 +402,18 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         ws = p.periods[s.period_id].search_window()[0]
         carry_paths.append((paths.resolve(pdir, art.rel_path), remap, ws.year * 1000 + ws.timetuple().tm_yday))
     harm_paths = [
-        (paths.resolve(pdir, p.artifacts[harm_key(period.id, s)].rel_path), p.sources[s].digit)
+        (paths.resolve(pdir, p.artifacts[harm_key(period.id, s)].rel_path), period_digit(p, period, s))
         for s in sources
     ]
-    digit_map = {p.sources[s].digit: s for s in sources}
+    digit_map = {period_digit(p, period, s): s for s in sources}
     try:
         combine(harm_paths, p.grid, base, footprints=fp_paths, carry=carry_paths,
                 carry_masks=carry_masks,
-                confirmed_only={p.sources[s].digit for s in job.params.confirmed_only if s in sources})
+                confirmed_only={period_digit(p, period, s) for s in job.params.confirmed_only if s in sources})
 
         step("steps.integrate.step_vectorize")
-        mask = burn_touch_mask(cands, p.grid, touch)
+        # Unticked at Integrate, no small cluster is kept for touching earlier loss.
+        mask = burn_touch_mask(cands, p.grid, touch) if job.params.keep_small_growth else None
         eligible = vectorize_alerts(
             base, min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution), touch_mask=mask
         )

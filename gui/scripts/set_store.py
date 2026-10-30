@@ -160,16 +160,17 @@ def publish_set_alerts(app_state, name: str, s, gdf, *, unless_held: bool = Fals
     False, touching nothing, once the project was switched or closed or
     another set became active, or, with ``unless_held``, when the alerts on
     hand already are ``s``'s (``holds_set``: Integrate published them).
+    Callers: the shell's loader and Integrate's worker (a new set).
 
-    ``actual_alert_id`` goes to -1 first, as Integrate's publish does:
-    Analysis re-selects only from -1, and ``view_actual_alert`` follows only
-    ``actual_alert_id``, so the same index in another set would otherwise keep
-    showing the previous set's alert.
+    ``actual_alert_id`` goes to -1 first: Analysis re-selects only from -1,
+    and ``view_actual_alert`` follows only ``actual_alert_id``, so the same
+    index in another set would otherwise keep showing the previous set's
+    alert (ruling #76).
 
-    The checks and the three sets run under ``AppState``'s lock, as
-    Integrate's publish does: the shell's loader reads the set Integrate just
-    recorded while Integrate publishes it, and unserialised the two would
-    interleave into one's alerts with the other's position.
+    The checks and the three sets run under ``AppState``'s lock: the shell's
+    loader reads the set Integrate just recorded while Integrate publishes
+    it, and unserialised the two would interleave into one's alerts with the
+    other's position.
 
     A Go from Overview into this set (``goto_alert``) selects that alert
     instead of the saved position. The wish is for the next set published

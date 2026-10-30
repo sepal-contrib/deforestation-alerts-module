@@ -3,7 +3,7 @@
 Picking an AOI with no project open creates one named <aoi>_<yyyymmdd>.
 Once the project has an alert set, the AOI is locked (D10): the view is shown
 read-only with a hint to duplicate the project instead. Before that, a change
-is refused while a job writes into the project (a Download & harmonize or
+is refused while a job writes into the project (a download/harmonize or
 Integrate run reads the AOI's files and would write old-AOI files after the
 change), as the other steps refuse their edits (spec §5.1).
 
@@ -39,7 +39,6 @@ from gui.scripts import aoi_io
 from gui.scripts.setup_guard import banner_text
 from gui.store.project_writers import is_writing, writing
 from gui.tile.project_dialog import create_project, names_on_disk
-from gui.widget.help import StepIntro
 
 
 class _Busy(Exception):
@@ -204,7 +203,6 @@ def AoiStep(app_state, map_, gee_interface, layers):
     )
 
     with solara.Column(style="gap:16px;").key(column_key):
-        StepIntro(t("steps.aoi.description"), t("steps.aoi.info_header"), t("steps.aoi.info_md"))
         if locked and not ro:
             # Inline on purpose: a persistent state description, not the outcome
             # of an action (spec §11 routes outcomes through notifications).

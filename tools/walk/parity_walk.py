@@ -23,7 +23,7 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 from tools.walk.seed_project import seed
 
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_parity"
+DATA = w.ROOT / "deforestation_alerts_walk_parity"
 USER = DATA / "user"  # the walk's "SEPAL folder" files: under $HOME, like a user's
 A, B = "parity_a", "parity_b"
 TMP = "parity_tmp"  # seeded to be deleted
@@ -184,13 +184,14 @@ def _fits(page, rec, key, names, *, out):
 
 
 def tables(page, rec, *, out):
-    """Sources, periods, Download & harmonize and masks rows at the panel width."""
+    """Sources, periods, Harmonize and masks rows at the panel width."""
     w.goto_step(page, "alerts", 2000)
     _fits(page, rec, "sources", SOURCES, out=out)
     w.goto_step(page, "period", 2000)
     _fits(page, rec, "periods", (PERIOD_ROW,), out=out)
+    ph.download_all(page, rec, out=out, expect_ready=len(SOURCES))  # Harmonize unlocks once a source is downloaded
     ph.save_grid(page)
-    _fits(page, rec, "prepare", SOURCES, out=out)
+    _fits(page, rec, "harmonize", SOURCES, out=out)
     ph.add_mask(page, rec, name=MASK, origin="file", ref=USER / "probability.tif", band="probability",
                 mode="Keep", out=out)
     _fits(page, rec, "masks", (MASK,), out=out)

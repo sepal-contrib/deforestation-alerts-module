@@ -3,14 +3,16 @@ from datetime import date, datetime
 import pytest
 
 from deforestation_alerts.engine import fingerprint as fp
-from deforestation_alerts.engine.plan import plan_prepare, ready_sources
+from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import io
 from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,
 )
 
-JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
-FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
+JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
+FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28),
+             sources=["GLAD-L", "RADD", "GLAD-S2"])
 
 
 @pytest.fixture
@@ -152,7 +154,7 @@ def test_plan_and_ready_sources(proj):
     assert [r.source for r in rows] == ["GLAD-L", "RADD"]  # digit order
     assert rows[0].ready and not rows[0].needs_run
     assert rows[1].raw is fp.Status.MISSING and rows[1].needs_run
-    assert ready_sources(p, pdir, JAN) == ["GLAD-L"]
+    assert [r.source for r in rows if r.ready] == ["GLAD-L"]
 
 
 def test_a_slice1_no_data_record_reads_missing(proj):
