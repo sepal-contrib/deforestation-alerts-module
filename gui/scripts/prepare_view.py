@@ -68,17 +68,20 @@ def _in_flight(stage: Optional[str], queued: bool, pct: Optional[int]) -> Option
     return None
 
 
-def _run_cell(verb: str, stale: bool, *, locked: bool, failed: bool, on_run: Callable) -> dict:
+def _run_cell(verb: str, stale: bool, *, locked: bool, failed: bool, on_run: Callable,
+              label: Optional[str] = None) -> dict:
     """The pill of the row's next run (``verb``; warning colour when it redoes
     an out-of-date file), Retry after a failure, or its words on a review copy
-    (a grey circle: nothing there looks clickable)."""
+    (a grey circle: nothing there looks clickable). ``label``: the pill's and
+    the words' text in place of the verb's."""
     if locked:  # a review copy runs nothing: the state, no pill
-        return _state(STATUS_ICONS["missing"], "grey", t(f"steps.prepare.state_to_{verb}"))
+        return _state(STATUS_ICONS["missing"], "grey", label or t(f"steps.prepare.state_to_{verb}"))
     icon, color = ("mdi-update", "warning") if stale else ("mdi-play", "primary")
     if failed:
         return {"type": "verb", "label": t("steps.prepare.verb_retry"), "icon": "mdi-refresh", "color": "error",
                 "on_click": on_run}
-    return {"type": "verb", "label": t(f"steps.prepare.verb_{verb}"), "icon": icon, "color": color, "on_click": on_run}
+    return {"type": "verb", "label": label or t(f"steps.prepare.verb_{verb}"), "icon": icon, "color": color,
+            "on_click": on_run}
 
 
 def source_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], queued: bool, pct: Optional[int],
@@ -186,6 +189,62 @@ def row_status_label(row: PrepareRow, file_source: bool, *, stage: Optional[str]
     if row.ready:
         return t("steps.prepare.state_ready")
     return t(f"steps.prepare.state_to_{_next(row, file_source)[0]}")
+
+
+# ---------------------------------------------------------------------------
+# Alerts step rows (spec §2): the same grammar, limited to the raw file. A
+# user file is read, not downloaded: its pill reads Read file.
+# ---------------------------------------------------------------------------
+
+def download_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], queued: bool, pct: Optional[int],
+                   failed: bool, locked: bool, on_run: Callable) -> dict:
+    """An Alerts row's Status cell: its state in a running job (a download
+    that chains reads Harmonizing), File missing, the blocked status,
+    Downloaded once the raw file is current, else the Download (Read file)
+    pill, in warning colour when the raw file is out of date."""
+    if stage == "download" and file_source:
+        label = t("steps.alerts.state_reading")
+        return _state(STATUS_ICONS["running"], "primary", label, title=label)
+    running = _in_flight(stage, queued, pct)
+    if running is not None:
+        return running
+    if row.file_missing:
+        return _state(STATUS_ICONS["failed"], "error", t("steps.prepare.state_file_missing"))
+    if row.blocked:
+        status = _BLOCKED_STATUS[row.coverage]
+        return _state(STATUS_ICONS[status], "grey", status_text(status))
+    if row.raw is Status.CURRENT:
+        return _state(STATUS_ICONS["ready"], "success",
+                      t("steps.prepare.state_ready" if file_source else "steps.alerts.state_downloaded"))
+    return _run_cell("download", row.raw is Status.STALE, locked=locked, failed=failed, on_run=on_run,
+                     label=t("steps.alerts.read_file") if file_source else None)
+
+
+def download_subtitle(row: PrepareRow, *, file_source: bool, raw_art: Optional[Artifact], reason: Optional[Reason],
+                      stage: Optional[str], queued: bool) -> tuple[str, Optional[str]]:
+    """The grey line under an Alerts row's name, and its tone: the download's
+    date and size once current, else why it must be downloaded (read) again.
+    ``reason``: ``engine.why.source_reason``; a harmonize-side reason reads as
+    the row's raw status."""
+    if stage == "harmonize":
+        return t("steps.prepare.sub_harmonizing"), None
+    if queued:
+        return t("steps.prepare.sub_queued"), None
+    if row.file_missing:
+        return t("steps.prepare.sub_file_missing"), "error"
+    if row.blocked:
+        return row_notes(row.coverage, row.notes)[0]["text"], None
+    if row.raw is Status.CURRENT:
+        origin = t("steps.prepare.sub_file") if file_source else (
+            t("steps.prepare.sub_downloaded", date=raw_art.created_at.date().isoformat()) if raw_art else "")
+        size = size_text(raw_art.size_bytes) if raw_art is not None else ""
+        return " · ".join(part for part in (origin, size) if part), None
+    if reason is None or reason.key not in _RAW_TERMS:
+        if file_source:  # never read: its pill says Read file, the line names its format
+            return t("steps.prepare.sub_file"), None
+        reason = Reason("not_downloaded")
+    # a user file is read again by its pill (Read file): its reason reads bare
+    return (reason_text(reason) if file_source else _reason_line(reason, False)), None
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,8 @@ import solara
 from affine import Affine
 
 from deforestation_alerts.project.models import (
-    AoiRecord, BandMap, CustomSource, NativeGrid, Project, RegionCoverage, SourceCoverage, add_predefined_source,
+    AoiRecord, BandMap, CustomSource, NativeGrid, Period, Project, RegionCoverage, SourceCoverage,
+    add_predefined_source,
 )
 from gui.i18n import t
 from gui.store.state_manager import AppState
@@ -650,11 +651,19 @@ def test_enter_finds_no_default_button_while_the_check_runs(monkeypatch):
     run_rendered(lambda: reacton.render(_modal(state, open_, added, saved), handle_error=False), main)
 
 
+def _customs(n):
+    return {f"c{i}": CustomSource(name=f"c{i}", origin="gee", ref=f"users/x/c{i}", format="radd",
+                                  native=NativeGrid(crs="EPSG:4326", scale=10.0), digit=3 + i) for i in range(n)}
+
+
 def test_at_the_cap_custom_is_offered_disabled_with_the_reason_as_its_hint():
+    """Spec §3: the cap counts the active period's custom sources, not the project's."""
     p = _p()
-    p.sources = {f"c{i}": CustomSource(name=f"c{i}", origin="gee", ref=f"users/x/c{i}", format="radd",
-                                       native=NativeGrid(crs="EPSG:4326", scale=10.0), digit=3 + i)
-                 for i in range(sm.MAX_CUSTOM)}
+    p.sources = _customs(sm.MAX_CUSTOM + 1)
+    p.periods = {"x": Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31),
+                             sources=[f"c{i}" for i in range(sm.MAX_CUSTOM)],
+                             digits={f"c{i}": 3 + i for i in range(sm.MAX_CUSTOM)})}
+    p.active_period = "x"
     state, open_, added, saved = _state(p), solara.reactive(True), [], []
 
     async def main(rc):
@@ -665,6 +674,33 @@ def test_at_the_cap_custom_is_offered_disabled_with_the_reason_as_its_hint():
         assert mode.v_model == "predefined"
 
     run_rendered(lambda: reacton.render(_modal(state, open_, added, saved), handle_error=False), main)
+
+
+def test_six_project_customs_outside_the_period_leave_custom_open():
+    p = _p()
+    p.sources = _customs(sm.MAX_CUSTOM)
+    p.periods = {"x": Period(id="x", start=date(2026, 1, 1), end=date(2026, 1, 31), sources=["c0"], digits={"c0": 3})}
+    p.active_period = "x"
+    assert sm.custom_in_use(p) == 1
+
+
+def test_the_add_form_holds_the_add_to_new_periods_checkbox():
+    state, open_, added = _state(_p()), solara.reactive(True), []
+    new_periods = solara.reactive(True)
+
+    def render():
+        return reacton.render(sm.SourceModal(open_=open_, app_state=state, gee_interface=object(),
+                                             on_add_predefined=added.append, on_add_custom=lambda f, c: None,
+                                             on_save_custom=lambda n, ch, c: None, new_periods=new_periods),
+                              handle_error=False)
+
+    async def main(rc):
+        box = rc.find(v.Checkbox, label=t("steps.alerts.add_to_new_periods")).widget
+        assert box.v_model is True
+        box.v_model = False
+        assert new_periods.value is False
+
+    run_rendered(render, main)
 
 
 # ---------------------------------------------------------------- the custom form (spec 2026-10-23-source-form)

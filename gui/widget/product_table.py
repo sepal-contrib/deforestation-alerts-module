@@ -237,6 +237,10 @@ def _render_cell(cell: dict, first: bool):
         with rv.Html(tag="div", style_=STACK_CELL + "gap:0;"):
             solara.Text(str(cell.get("value", "")), style=NAME_TEXT)
             rv.Html(tag="div", class_=tone, style_=SUBTITLE, attributes={"title": sub}, children=[sub])
+            if cell.get("chips"):  # e.g. an Alerts row's AOI and Dates chips, under its subtitle
+                with rv.Html(tag="div", style_=CHIP_LINE):
+                    for item in cell["chips"]:
+                        _render_chip(item)
         return
     if ctype == "state":
         attributes = {"title": cell["title"]} if cell.get("title") else {}

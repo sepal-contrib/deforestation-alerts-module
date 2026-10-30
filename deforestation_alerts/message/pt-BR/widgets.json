@@ -49,7 +49,7 @@
     }
   },
   "workflow": {
-    "lock_alerts": "Selecione primeiro uma área de interesse.",
+    "lock_alerts": "Selecione primeiro uma área de interesse e um período.",
     "lock_project": "Abra primeiro um projeto.",
     "lock_layers": "Selecione primeiro uma área de interesse.",
     "lock_period": "Adicione primeiro pelo menos uma fonte de alertas.",

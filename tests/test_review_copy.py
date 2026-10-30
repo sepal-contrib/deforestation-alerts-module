@@ -49,9 +49,9 @@ def _project(name="c", *, copy=True, aoi_digest="admin:2317"):
     p = Project(name=name, created_at=datetime.now(), updated_at=datetime.now())
     p.aoi = AoiRecord(spec={}, name="a", method="ADMIN1", digest=aoi_digest, bounds=(0, 0, 1, 1),
                       geometry_file=paths.AOI_SIDECAR)
-    add_predefined_source(p, "GLAD-L")
     p.periods = {PER.id: PER}
     p.active_period = PER.id
+    add_predefined_source(p, "GLAD-L", period_id=PER.id)
     add_mask(p, name="forest", origin="gee", ref="UMD/x", asset_type="IMAGE", band="b",
              native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=PER.id)
     p.vis_layers = {"s2": GeeVisLayer(name="s2", asset="x", bands=["B4", "B3", "B2"], show_in_analysis=True)}
@@ -202,7 +202,10 @@ def test_alerts_step_disables_and_refuses_source_changes(tmp_path, monkeypatch):
     @solara.component
     def Page():
         NotificationProvider()
-        alerts_step.AlertsStep(app_state=s, map_=SimpleNamespace(), gee_interface=None, layers=MapLayers(_Map()))
+        from gui.scripts.prepare_scope import PrepareJobs
+
+        alerts_step.AlertsStep(app_state=s, map_=SimpleNamespace(), gee_interface=None, layers=MapLayers(_Map()),
+                               jobs=solara.use_memo(PrepareJobs, []))
 
     _box, rc = reacton.render(Page(), handle_error=False)
     try:

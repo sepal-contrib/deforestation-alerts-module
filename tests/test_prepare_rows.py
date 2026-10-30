@@ -32,7 +32,7 @@ def _p():
 
 def _build(rows, p=None, **over):
     kw = dict(mine=set(), errors={}, on=set(), building=set(), run=lambda s: None, toggle=lambda s: None,
-              on_info=lambda s: None, on_refresh=lambda s: None, on_delete=lambda s: None)
+              on_info=lambda s: None, on_delete=lambda s: None)
     kw.update(over)
     return {r["key"]: r for r in prepare_step.build_rows(p or _p(), "/tmp/x", JAN, rows, **kw)}
 
@@ -63,7 +63,7 @@ def test_blocked_row_reads_its_status_and_no_verb():
     for r in out.values():
         assert r["cells"][1]["type"] == "state"
         acts = _acts(r)
-        assert acts["refresh"]["disabled"] and acts["delete"]["disabled"] and acts["map_toggle"]["disabled"]
+        assert acts["delete"]["disabled"] and acts["map_toggle"]["disabled"]
         assert not acts["info"].get("disabled", False)
 
 
@@ -86,30 +86,27 @@ def test_only_warning_and_error_notes_stay():
     assert not _acts(out["GLAD-L"])["map_toggle"]["disabled"]
 
 
-def test_four_action_slots_in_order():
+def test_three_action_slots_in_order():
     p = _p()
     add_custom_source(p, name="tif", origin="file", ref="/x/tif.tif", asset_type="FILE", format="radd",
                       date_encoding="yyddd", band_map=BandMap(alert=1, date=2), native=None)
-    rows = [PrepareRow("RADD", Status.CURRENT, Status.CURRENT), PrepareRow("tif", Status.MISSING, Status.MISSING)]
+    rows = [PrepareRow("RADD", Status.CURRENT, Status.CURRENT), PrepareRow("tif", Status.CURRENT, Status.MISSING)]
     out = _build(rows, p=p)
     for r in out.values():
-        assert [a["kind"] for a in r["actions"]] == ["map_toggle", "info", "refresh", "delete"]
-    radd, tif = _acts(out["RADD"]), _acts(out["tif"])
-    assert not radd["refresh"]["disabled"] and radd["refresh"]["title"] == "Download again"
-    assert tif["refresh"]["disabled"] and tif["refresh"]["title"] == "Nothing to download again: read from a file"
-    assert radd["delete"]["title"] == "Delete files"
-    assert out["tif"]["cells"][1]["label"] == "Harmonize"  # a GeoTIFF is never downloaded
+        assert [a["kind"] for a in r["actions"]] == ["map_toggle", "info", "delete"]
+    assert _acts(out["RADD"])["delete"]["title"] == "Delete files"
+    assert out["tif"]["cells"][1]["label"] == "Harmonize"
 
 
 def test_the_row_actions_call_back_with_their_source():
     calls = []
     record = lambda name: (lambda s: calls.append((name, s)))  # noqa: E731
-    out = _build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], run=record("run"), on_info=record("info"),
-                 on_refresh=record("refresh"), on_delete=record("delete"))["RADD"]
+    out = _build([PrepareRow("RADD", Status.CURRENT, Status.MISSING)], run=record("run"), on_info=record("info"),
+                 on_delete=record("delete"))["RADD"]
     out["cells"][1]["on_click"]()
-    for kind in ("info", "refresh", "delete"):
+    for kind in ("info", "delete"):
         _acts(out)[kind]["on_click"]()
-    assert calls == [("run", "RADD"), ("info", "RADD"), ("refresh", "RADD"), ("delete", "RADD")]
+    assert calls == [("run", "RADD"), ("info", "RADD"), ("delete", "RADD")]
     assert _acts(out)["info"]["is_on"] is False
     assert _acts(_build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], info_open="RADD")["RADD"])["info"][
         "is_on"]
@@ -124,10 +121,10 @@ def test_delete_needs_a_file():
 
 
 def test_a_review_copy_shows_text_not_verbs():
-    out = _build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], locked=True)["RADD"]
-    assert (out["cells"][1]["type"], out["cells"][1]["label"]) == ("state", "To download")
+    out = _build([PrepareRow("RADD", Status.CURRENT, Status.MISSING)], locked=True)["RADD"]
+    assert out["cells"][1]["type"] == "state"
     acts = _acts(out)
-    assert acts["refresh"]["disabled"] and acts["delete"]["disabled"] and not acts["info"].get("disabled", False)
+    assert acts["delete"]["disabled"] and not acts["info"].get("disabled", False)
 
 
 def test_a_failed_row_keeps_its_error_line():
@@ -136,15 +133,12 @@ def test_a_failed_row_keeps_its_error_line():
 
 
 @pytest.mark.parametrize("raw, harmonized, verb", [
-    (Status.MISSING, Status.MISSING, "Download"),  # a new period
-    (Status.STALE, Status.STALE, "Download"),  # the period's dates changed
     (Status.CURRENT, Status.STALE, "Harmonize"),  # downloaded: Run only harmonizes again
-    (Status.CURRENT, Status.CURRENT, None),  # downloaded and harmonized: only a forced refresh
+    (Status.CURRENT, Status.CURRENT, None),  # downloaded and harmonized: nothing to run
 ])
-def test_a_downloaded_source_offers_no_run_until_its_window_changes(raw, harmonized, verb):
+def test_a_harmonized_source_offers_no_run_until_an_input_changes(raw, harmonized, verb):
     row = _build([PrepareRow("GLAD-L", raw, harmonized)])["GLAD-L"]
     assert (row["cells"][1]["label"] if row["cells"][1]["type"] == "verb" else None) == verb
-    assert not _acts(row)["refresh"]["disabled"]
 
 
 def test_a_busy_row_reads_queued_or_its_stage():
@@ -152,7 +146,7 @@ def test_a_busy_row_reads_queued_or_its_stage():
     rows = [PrepareRow("RADD", Status.MISSING, Status.MISSING)]
     queued = _build(rows, mine={key})["RADD"]
     assert queued["cells"][1]["label"] == "Queued" and queued["cells"][0]["subtitle"] == "waiting for the row above"
-    assert _acts(queued)["refresh"]["disabled"] and _acts(queued)["delete"]["disabled"]
+    assert _acts(queued)["delete"]["disabled"]
     pkey = prepare_jobs.progress_key("r", JAN.id, "source", "RADD")
     running = _build(rows, mine={key}, stages={pkey: "download"}, progress={pkey: 37})["RADD"]
     assert running["cells"][1]["label"] == "Downloading 37%"
@@ -219,7 +213,7 @@ def test_harmonize_rows_need_the_download_first():
     from gui.i18n import t
 
     rows = [PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.MISSING)]
-    out = _build(rows, stage="harmonize")
+    out = _build(rows)
     glad, radd = out["GLAD-L"], out["RADD"]
     assert glad["notes"][0]["text"] == t("steps.harmonize.download_first")
     assert glad["cells"][1]["disabled"] and glad["cells"][1]["label"] == "Harmonize"
@@ -237,7 +231,7 @@ def test_harmonize_row_reads_running_while_downloading():
     rows = [PrepareRow("GLAD-L", Status.MISSING, Status.MISSING)]
     pkey = prepare_jobs.progress_key("r", JAN.id, "source", "GLAD-L")
     for stages in ({}, {pkey: "download"}):
-        cell = _build(rows, mine=set(jobs.inflight.value), stages=stages, stage="harmonize")["GLAD-L"]["cells"][1]
+        cell = _build(rows, mine=set(jobs.inflight.value), stages=stages)["GLAD-L"]["cells"][1]
         assert cell["type"] != "verb" or cell["disabled"]
 
 

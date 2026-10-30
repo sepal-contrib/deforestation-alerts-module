@@ -1,38 +1,53 @@
 """Coverage notes, chips and harmonize results as translated table content,
-and the Check again button of the Alerts and Download & harmonize steps."""
+and the Check again button of the Alerts and Harmonize steps."""
 
 import solara
 
 from deforestation_alerts.engine.coverage import (
-    NO_DATA, NOT_COVERED, UNCHECKED, chip_note, covering_dates, Note,
+    FULL, NO_DATA, NOT_COVERED, UNCHECKED, Note, covering_dates, pct_text, record_for, window_coverage,
 )
 from gui.i18n import t, tn
 
-#: a note's tone -> the chip colour
-TONE_COLORS = {"success": "success", "warning": "warning", "error": "error", "info": "info", None: None}
+#: a chip's tone -> its colour
+TONE_COLORS = {"ok": "success", "warning": "warning", "error": "error", None: None}
+_DATE_NOTES = ("coverage.partial_starts", "coverage.partial_until", "coverage.partial_gap")
 
 
 def note_text(note: Note) -> str:
     return t(note.key, **note.kwargs())
 
 
-def chip_cell(cov, pending: bool = False) -> dict:
-    if cov is None and pending:
-        return {"type": "chip", "value": t("coverage.chip_checking")}
-    note = chip_note(cov)
-    return {"type": "chip", "value": note_text(note), "color": TONE_COLORS.get(note.tone)}
-
-
-def dates_text(cov) -> str:
+def coverage_chips(p, name: str, period, pending: bool = False) -> list:
+    """An Alerts row's chips (spec §2): ``[{"label", "tone"}]``, tone ``ok`` /
+    ``warning`` / ``error``. AOI: the share of the AOI the source covers.
+    Dates: whether it has data for the period's search window, with its last
+    data date; none for a source with no catalogue dates (a custom one).
+    ``pending``: the coverage check runs, so a source without a record reads
+    checking, not unchecked."""
+    cov = record_for(p, name)
+    if cov is None:
+        label = t("coverage.chip_checking" if pending else "coverage.unchecked")
+        return [{"label": label, "tone": None if pending else "error"}]
+    tone = "error" if cov.fraction <= 0 else "ok" if cov.fraction >= FULL else "warning"
+    chips = [{"label": t("steps.alerts.chip_aoi", pct=pct_text(cov.fraction)), "tone": tone}]
     dated = covering_dates(cov)
-    if not dated:
-        return ""
-    spans = {(first, last) for _, first, last in dated}
-    if len(spans) == 1:
-        first, last = spans.pop()
-        return t("coverage.dates", first=first.isoformat(), last=last.isoformat())
-    return "; ".join(t("coverage.dates_region", region=r, first=a.isoformat(), last=b.isoformat())
-                     for r, a, b in dated)
+    if not dated or cov.fraction <= 0:
+        return chips
+    state, notes = window_coverage(cov, name, *period.search_window())
+    late = [n for n in notes if n.key in _DATE_NOTES]
+    if state == NO_DATA:
+        first = notes[0]
+        label = (t("steps.alerts.chip_dates_none", last=first.kwargs()["last"])
+                 if first.key == "coverage.no_data_until" else note_text(first))
+        chips.append({"label": label, "tone": "error"})
+    elif late:
+        until = next((n for n in late if n.key == "coverage.partial_until"), None)
+        label = t("steps.alerts.chip_dates_part", last=until.kwargs()["last"]) if until else note_text(late[0])
+        chips.append({"label": label, "tone": "warning"})
+    else:
+        chips.append({"label": t("steps.alerts.chip_dates_ok", last=max(d[2] for d in dated).isoformat()),
+                      "tone": "ok"})
+    return chips
 
 
 def row_notes(state: str, notes) -> list:

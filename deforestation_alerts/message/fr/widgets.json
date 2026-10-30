@@ -49,7 +49,7 @@
     }
   },
   "workflow": {
-    "lock_alerts": "Sélectionnez d'abord une zone d'intérêt.",
+    "lock_alerts": "Sélectionnez d'abord une zone d'intérêt et une période.",
     "lock_project": "Ouvrez d'abord un projet.",
     "lock_layers": "Sélectionnez d'abord une zone d'intérêt.",
     "lock_period": "Ajoutez d'abord au moins une source d'alertes.",

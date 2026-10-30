@@ -10,7 +10,9 @@ from deforestation_alerts.engine.fingerprint import Status
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.why import Reason
 from deforestation_alerts.project.models import Artifact
-from gui.scripts.prepare_view import mask_status_label, reason_text, row_status_label, source_state, source_subtitle
+from gui.scripts.prepare_view import (
+    download_state, download_subtitle, mask_status_label, reason_text, row_status_label, source_state, source_subtitle,
+)
 
 
 pytestmark = pytest.mark.usefixtures("english_locale")
@@ -148,6 +150,35 @@ def test_a_review_copy_reads_text_not_verbs():
         "To harmonize")
 
 
+def _dl(row, **over):
+    kw = dict(file_source=False, stage=None, queued=False, pct=None, failed=False, locked=False,
+              on_run=lambda: None)
+    kw.update(over)
+    return download_state(row, **kw)
+
+
+def test_the_alerts_status_cell_stops_at_the_download():
+    """Spec §2: a harmonized-missing row with a current raw file reads Downloaded, not Harmonize."""
+    assert _verb(_dl(PrepareRow("RADD", Status.MISSING, Status.MISSING))) == ("Download", "primary", "mdi-play")
+    assert _verb(_dl(PrepareRow("RADD", Status.STALE, Status.CURRENT))) == ("Download", "warning", "mdi-update")
+    cell = _dl(PrepareRow("RADD", Status.CURRENT, Status.MISSING))
+    assert (cell["type"], cell["label"]) == ("state", "Downloaded")
+    tif = PrepareRow("tif", Status.MISSING, Status.MISSING)
+    assert _verb(_dl(tif, file_source=True))[0] == "Read file"
+    assert _dl(tif, file_source=True, stage="download")["label"] == "Reading"
+    assert _dl(PrepareRow("tif", Status.CURRENT, Status.MISSING), file_source=True)["label"] == "Ready"
+
+
+def test_the_alerts_subtitle_names_the_download():
+    row = PrepareRow("RADD", Status.CURRENT, Status.MISSING)
+    kw = dict(file_source=False, raw_art=_art("raw_alert", 3_000_000), reason=None, stage=None, queued=False)
+    assert download_subtitle(row, **kw) == ("downloaded 2026-02-03 · 3.0 MB", None)
+    assert download_subtitle(PrepareRow("RADD", Status.MISSING, Status.MISSING), **{**kw, "raw_art": None})[0] == (
+        "not downloaded yet")
+    tif = PrepareRow("tif", Status.MISSING, Status.MISSING)
+    assert download_subtitle(tif, **{**kw, "file_source": True, "raw_art": None})[0] == "GeoTIFF"
+
+
 @pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])
 def test_status_labels_fit_their_cell(locale):
     """At most 12 characters in every language, so the 128 px Status cell
@@ -159,6 +190,7 @@ def test_status_labels_fit_their_cell(locale):
             "to_harmonize", "to_align", "off"]
     labels = [t(f"steps.prepare.state_{k}") for k in keys]
     labels += [t(f"steps.prepare.verb_{k}") for k in ("download", "harmonize", "align", "retry")]
+    labels += [t(f"steps.alerts.{k}") for k in ("state_downloaded", "state_reading", "read_file")]
     assert all(len(label) <= 12 for label in labels), [x for x in labels if len(x) > 12]
     assert len(t("steps.prepare.state_downloading_pct", pct=100)) <= 16
 

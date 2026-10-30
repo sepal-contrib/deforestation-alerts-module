@@ -184,30 +184,24 @@ def delete_confirm(p, period, source) -> tuple:
             t("steps.prepare.delete_files_sets", names=names) if sets else None)
 
 
-def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_delete, on_refresh=None,
-               stages=None, info_open=None, locked=False, progress=None, writing=False, masks_pend=False,
-               stopped=frozenset(), stage=None) -> list:
-    """The ``ProductTable`` rows of the sources table (spec "The sources
-    table", option B); pure.
-
-    ``stage="harmonize"``: the Harmonize step's rows (spec §2): no Download
-    again; a row whose raw file is not current reads
-    ``steps.harmonize.download_first`` and its pill is disabled. None: the
-    rows as before, download and harmonize in one (``on_refresh`` then
-    needed).
+def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_delete,
+               stages=None, info_open=None, locked=False, progress=None, writing=False,
+               stopped=frozenset()) -> list:
+    """The ``ProductTable`` rows of the Harmonize step's sources table (spec
+    §2, option B); pure. A row whose raw file is not current reads
+    ``steps.harmonize.download_first`` and its pill is disabled (Download
+    again is the Alerts step's: ``alerts_step.alert_rows``).
 
     ``mine``: this project's and period's in-flight keys; ``errors``: the row
     errors by source; ``on``/``building``: the map keys shown and being built;
-    ``run``/``toggle``/``on_info``/``on_refresh``/``on_delete``: the row's
+    ``run``/``toggle``/``on_info``/``on_delete``: the row's
     pill and actions, called with the source. ``stages``: the running job's
     stage (``download`` / ``harmonize``) by ``prepare_jobs.progress_key``: a
     row in flight without one waits for its turn (queued). ``info_open``: the
     source whose Details dialog is open. ``locked``: a review copy (spec
     §6.3): no pill, and nothing that writes. ``progress``: the downloads'
     percents, by ``progress_key``. ``writing``: a job writes into the
-    project (``is_writing``): Delete files waits, saying why. ``masks_pend``:
-    a mask on in the period needs a run: Download again waits for it, as
-    Download all again does (a forced row runs no mask first). ``stopped``:
+    project (``is_writing``): Delete files waits, saying why. ``stopped``:
     the in-flight keys of the jobs Stop reached: their rows waiting for their
     turn will not run, so they read their state again, not Queued (the pill
     disabled until the job gives them back).
@@ -219,13 +213,9 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
     cannot be run, shown or downloaded again; a row in flight cannot be
     started again (the claim would refuse it silently).
 
-    A source already downloaded for this window offers no Run again (user
-    decision 2026-10-15): it stays only while its harmonized file needs
-    building, and comes back when the raw file goes out of date, as a new
-    period or a change to the period's dates makes it. Download again stays: a
-    live catalogue changes under the same window (spec §5.3).
+    A source already harmonized offers no Run again (user decision
+    2026-10-15): it comes back when an input goes out of date.
     """
-    harmonize = stage == "harmonize"
     out = []
     for r in rows:
         busy = inflight_key(p.name, period.id, r.source) in mine
@@ -241,7 +231,7 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
             notes = []  # its coverage sentence is its subtitle
         else:
             notes = [n for n in row_notes(r.coverage, r.notes) if n["tone"] in ("warning", "error")]
-            if harmonize and r.raw is not Status.CURRENT:
+            if r.raw is not Status.CURRENT:
                 notes.insert(0, {"text": t("steps.harmonize.download_first"), "tone": "info"})
         result = result_note(r.stats) if not r.blocked else None
         if result is not None and result["tone"] == "warning":  # every pixel masked out
@@ -254,7 +244,7 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
             title["subtitle_tone"] = tone
         state = source_state(r, file_source=file_source, stage=running, queued=queued, pct=pct,
                              failed=r.source in errors, locked=locked, on_run=(lambda s=r.source: run(s)),
-                             harmonize_only=harmonize)
+                             harmonize_only=True)
         if busy and state["type"] == "verb":  # a stopped job still holds the row
             state["disabled"] = True
         key = f"src:{r.source}"
@@ -265,19 +255,12 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
             {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
              "disabled": (not r.ready or r.blocked) and key not in on, "on_click": (lambda s=r.source: toggle(s))},
             {"kind": "info", "is_on": info_open == r.source, "on_click": (lambda s=r.source: on_info(s))},
-            {"kind": "refresh", "disabled": busy or locked or r.blocked or file_source or masks_pend,
-             "title": t("steps.prepare.action_nothing_to_fetch" if file_source
-                        else "steps.prepare.redownload_all_masks" if masks_pend
-                        else "steps.prepare.action_download_again"),
-             "on_click": (lambda s=r.source: on_refresh(s))},
             # the confirm re-checks: a job can start while it is open
             {"kind": "delete", "disabled": busy or writing or locked or (raw_art is None and harm_art is None),
              "title": t("steps.prepare.delete_files_busy" if (busy or writing) and not locked
                         else "steps.prepare.action_delete_files"),
              "on_click": (lambda s=r.source: on_delete(s))},
         ]
-        if harmonize:  # Download again is the Alerts step's
-            del actions[2]
         out.append({"key": r.source, "cells": [title, state], "notes": notes, "error": errors.get(r.source),
                     "actions": actions})
     return out
@@ -400,7 +383,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
                             run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
                             on_info=_toggle_info, on_delete=set_pending_delete,
                             stages=stages, info_open=shown, locked=read_only(p), progress=row_progress.value,
-                            writing=is_writing(p.name), stopped=stopped, stage=stage)
+                            writing=is_writing(p.name), stopped=stopped)
 
     with solara.Column(style="gap:16px;"):
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))

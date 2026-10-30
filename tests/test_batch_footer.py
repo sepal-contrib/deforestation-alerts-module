@@ -79,7 +79,7 @@ def test_footer_counts_only_this_scope():
     assert stages == {}
     [row] = prepare_step.build_rows(p, "/tmp/x", JAN, [PrepareRow("RADD", Status.MISSING, Status.MISSING)],
                                     mine=mine, errors={}, on=set(), building=set(), run=None, toggle=None,
-                                    on_info=None, on_refresh=None, on_delete=None, stages=stages)
+                                    on_info=None, on_delete=None, stages=stages)
     assert row["cells"][1]["label"] == "Queued"
     rows = prepare_step.mine_rows(p, JAN, mine)
     assert rows == {prepare_jobs.progress_key("r", JAN.id, "source", "RADD")}

@@ -28,7 +28,6 @@ from deforestation_alerts.engine.coverage import Note
 from deforestation_alerts.engine.fingerprint import Status, harm_key, raw_key
 from deforestation_alerts.engine.plan import PrepareRow
 from deforestation_alerts.engine.runner import HarmonizeFailed
-from deforestation_alerts.errors import ProjectRuleError
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import (
     AoiRecord,
@@ -670,69 +669,6 @@ def test_a_grid_change_reharmonizes_without_catalogue_metadata_or_an_ee_aoi(step
         rc.close()
 
 
-def test_a_download_waits_for_the_catalogue_metadata(step, monkeypatch):
-    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
-    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING))
-    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
-    jobs = prepare_scope.PrepareJobs()
-
-    box, rc = _render(state, jobs=jobs)
-    try:
-        _download(state, jobs, "GLAD-L")  # downloads, so it needs the metadata
-        assert step.jobs == [] and _toasts("info") == [t("steps.alerts.meta_loading")]
-
-        state.catalogue_meta.value = {"GLAD-L": {"end": "2026-06-01"}}
-        _download(state, jobs, "GLAD-L")  # the refused claim was released
-        step.run_jobs()
-        [(ctx, sources, force)] = step.started
-        assert sources == ["GLAD-L"] and force is False
-        assert ctx.aoi == "AOI" and ctx.meta == {"GLAD-L": {"end": "2026-06-01"}}
-    finally:
-        rc.close()
-
-
-def test_a_download_without_an_aoi_geometry_is_refused(step, monkeypatch):
-    def no_aoi(result, pdir):
-        raise ProjectRuleError(key="steps.aoi.no_geometry")
-
-    monkeypatch.setattr(aoi_io, "ee_aoi", no_aoi)
-    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING))
-    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
-    jobs = prepare_scope.PrepareJobs()
-
-    box, rc = _render(state, jobs=jobs)
-    try:
-        _download(state, jobs, "GLAD-L")
-        assert step.jobs == [] and _toasts("error") == [t("steps.aoi.no_geometry")]
-        assert _offers_run(step.table[-1][0])  # the claim was released
-    finally:
-        rc.close()
-
-
-@pytest.mark.parametrize("error", [OSError("aoi.geojson: permission denied"), RuntimeError("")],
-                         ids=["OSError", "empty-message"])
-def test_a_download_whose_ee_aoi_fails_releases_its_rows(step, monkeypatch, error):
-    """Any failure building the Earth Engine AOI (a bad sidecar, an ee object
-    that cannot be wrapped), not only a missing geometry, must give the claimed
-    keys back: otherwise the rows read "running" for the rest of the session."""
-    def bad_aoi(result, pdir):
-        raise error
-
-    monkeypatch.setattr(aoi_io, "ee_aoi", bad_aoi)
-    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING))
-    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
-    jobs = prepare_scope.PrepareJobs()
-
-    box, rc = _render(state, jobs=jobs)
-    try:
-        _download(state, jobs, "GLAD-L")
-        assert step.jobs == [] and _toasts("error") == [str(error) or error.__class__.__name__]
-        assert _offers_run(step.table[-1][0])  # the claim was released
-        assert not _stop_shown(rc) and jobs.inflight.value == frozenset()
-    finally:
-        rc.close()
-
-
 def test_a_row_in_flight_disables_its_run_buttons_until_its_job_ends(step, monkeypatch):
     """A second click on a running row is refused by its in-flight key, so the
     row must say it: no pill (it reads queued until its turn). Only that row:
@@ -1225,58 +1161,8 @@ def _with_tif(tmp_path, *, sidecar):
     return p
 
 
-def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(step, monkeypatch, tmp_path):
-    """A GeoTIFF row is normalized locally (no Earth Engine AOI, no catalogue
-    metadata) and, when the AOI raster must be built first, claims the
-    project's AOI-raster key with its own, so two jobs never build it at once."""
-    def no_aoi(result, pdir):
-        pytest.fail("a GeoTIFF row must not build the Earth Engine AOI")
-
-    claims = []
-
-    class _Recording(prepare_scope.InflightKeys):
-        def claim(self, *keys, **kw):
-            claims.append(keys)
-            return super().claim(*keys, **kw)
-
-    monkeypatch.setattr(aoi_io, "ee_aoi", no_aoi)
-    monkeypatch.setattr(prepare_scope, "InflightKeys", _Recording)
-    step.plan(PrepareRow("tif", Status.MISSING, Status.MISSING))
-    state = _state(_with_tif(tmp_path, sidecar=True))
-    jobs = prepare_scope.PrepareJobs()
-
-    box, rc = _render(state, jobs=jobs)
-    try:
-        [row] = step.table[-1]
-        assert row["cells"][0]["value"] == "tif"  # a custom source by its name
-        _download(state, jobs, "tif")  # the Alerts step reads it
-        step.run_jobs()
-        [(ctx, sources, force)] = step.started
-        assert sources == ["tif"] and not force and ctx.aoi is None
-        assert claims == [(prepare_step.inflight_key("d", JAN.id, "tif"), prepare_step.aoi_key("d"))]
-        assert prepare_step.aoi_key("d") == "prep:d:@aoi" and _toasts("info") == []
-    finally:
-        rc.close()
-
-
 def _check_again_shown(rc):
     return bool([w for w in rc.find(v.Btn).widgets if t("coverage.check_again") in w.children])
-
-
-def test_a_geotiff_row_waits_for_the_aoi_geometry(step, tmp_path):
-    step.plan(PrepareRow("tif", Status.MISSING, Status.MISSING))
-    state = _state(_with_tif(tmp_path, sidecar=False))
-    state.sidecar_pending.set(True)  # the loader is fetching it
-    jobs = prepare_scope.PrepareJobs()
-
-    box, rc = _render(state, jobs=jobs)
-    try:
-        _download(state, jobs, "tif")
-        assert step.jobs == [] and _toasts("info") == [t("steps.prepare.aoi_geometry_missing")]
-        assert _offers_run(step.table[-1][0])  # nothing was claimed
-        assert not _check_again_shown(rc)  # nothing failed
-    finally:
-        rc.close()
 
 
 def test_a_failed_aoi_sidecar_refuses_only_the_geotiff_rows_and_offers_check_again(step, monkeypatch, tmp_path):
