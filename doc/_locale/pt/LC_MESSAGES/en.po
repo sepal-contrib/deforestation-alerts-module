@@ -745,8 +745,8 @@ msgstr "**Conjuntos**"
 msgid "The number of alert sets built for this period."
 msgstr "O número de conjuntos de alertas gerados para este período."
 
-msgid "**Status**"
-msgstr "**Situação**"
+msgid "**Status** column"
+msgstr "Coluna **Situação**"
 
 msgid "**out of date** when a source download or an alert set no longer matches the current settings (run it again in `Alerts <defo-alerts_>`_, `Harmonize <defo-harmonize_>`_ or `Integrate & vectorize <defo-integrate_>`_); **missing** when an alert set's files are gone; a dash when everything is current."
 msgstr "**desatualizado** quando o download de uma fonte ou um conjunto de alertas não corresponde mais às configurações atuais (execute-o de novo em `Alertas <defo-alerts_>`_, `Harmonizar <defo-harmonize_>`_ ou `Integrar e vetorizar <defo-integrate_>`_); **faltando** quando os arquivos de um conjunto de alertas sumiram; um traço quando está tudo em dia."
@@ -760,7 +760,7 @@ msgstr "o botão de opção torna o período *ativo*: `Alertas <defo-alerts_>`_,
 msgid "the pencil icon changes its dates or look-back; and"
 msgstr "o ícone de lápis altera as datas ou a busca retroativa; e"
 
-msgid "the bin icon deletes it."
+msgid "the bin icon deletes the period."
 msgstr "o ícone de lixeira exclui o período."
 
 msgid "Add a period"
@@ -871,6 +871,9 @@ msgstr "**AOI**: a parte da AOI que fica dentro da área de abrangência da font
 msgid "The dates: \"✓ data to 2026-10-30\" (green) when the source has data up to the end of the search window, \"data to … only\" (orange) when its data stop inside the window, or \"✗ data ends …\" (red) when it has none in the window."
 msgstr "As datas: \"✓ dados até 2026-10-30\" (verde) quando a fonte tem dados até o fim da janela de busca, \"dados só até …\" (laranja) quando os dados dela param dentro da janela, ou \"✗ os dados terminam em …\" (vermelho) quando ela não tem nenhum dado na janela."
 
+msgid "**Status**"
+msgstr "**Status**"
+
 msgid "The row's state, or a button to download it (see `Download the sources <defo-alerts-download_>`_)."
 msgstr "O estado da linha, ou um botão para baixá-la (veja `Baixar as fontes <defo-alerts-download_>`_)."
 
@@ -887,7 +890,7 @@ msgid "Opens the source's **Details** (see `The Details dialog <defo-harmonize-d
 msgstr "Abre os **Detalhes** da fonte (veja `A janela de detalhes <defo-harmonize-details_>`_), com a caixa de seleção **Adicionar aos novos períodos** e, para uma fonte personalizada, o botão **Editar**."
 
 msgid "**Download again**"
-msgstr "**Baixar de novo**"
+msgstr "**Baixar novamente**"
 
 msgid "Downloads the source again (see below)."
 msgstr "Baixa a fonte de novo (veja abaixo)."
@@ -926,7 +929,7 @@ msgid "Adding a predefined source"
 msgstr "Como adicionar uma fonte predefinida"
 
 msgid "Choose a source in the **Alert source** dropdown menu, then select **Add source**. The list holds the predefined sources and the project's own sources that are not in this period yet. Each entry shows its coverage of the AOI. A source that does not cover the AOI at all is listed as disabled, with the reason."
-msgstr "Escolha uma fonte no menu suspenso **Fonte** e selecione **Adicionar fonte**. A lista contém as fontes predefinidas e as fontes do próprio projeto que ainda não estão neste período. Cada item mostra a sua cobertura da AOI. Uma fonte que não cobre nada da AOI aparece desativada, com o motivo."
+msgstr "Escolha uma fonte no menu suspenso **Fonte de alertas** e selecione **Adicionar fonte**. A lista contém as fontes predefinidas e as fontes do próprio projeto que ainda não estão neste período. Cada item mostra a sua cobertura da AOI. Uma fonte que não cobre nada da AOI aparece desativada, com o motivo."
 
 msgid "Source"
 msgstr "Fonte"
@@ -1100,7 +1103,7 @@ msgid "Meaning"
 msgstr "Significado"
 
 msgid "\"Downloaded\""
-msgstr "\"Baixado\""
+msgstr "\"Baixada\""
 
 msgid "Downloaded for the current search window. The line under the name gives the download date and the size on disk."
 msgstr "Baixada para a janela de busca atual. A linha abaixo do nome dá a data do download e o tamanho em disco."
@@ -1130,7 +1133,7 @@ msgid "The row is running, or waits for its turn (\"waiting for the row above\")
 msgstr "A linha está em execução, ou espera a vez dela (\"aguardando a linha acima\")."
 
 msgid "\"not covered\", \"no data\""
-msgstr "\"não coberto\", \"sem dados\""
+msgstr "\"não coberta\", \"sem dados\""
 
 msgid "The source cannot run for this period: it does not cover the AOI, or it has no data for the search window (its dates chip is red)."
 msgstr "A fonte não pode ser executada para este período: ela não cobre a AOI, ou não tem dados para a janela de busca (o chip de datas dela está vermelho)."
@@ -1145,13 +1148,13 @@ msgid "A blue button runs a row for the first time; an orange one redoes a file 
 msgstr "Um botão azul executa uma linha pela primeira vez; um laranja refaz um arquivo desatualizado. A linha abaixo do nome diz então o motivo: por exemplo \"a janela de busca mudou (…): baixar de novo\" ou \"a AOI mudou: baixar de novo\". Numa `cópia de revisão <defo-evaluation-return_>`_ de um avaliador, nada é executado: a coluna mostra \"A baixar\" em vez de um botão."
 
 msgid "A downloaded row has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source (\"Nothing to download again: read from a file\")."
-msgstr "Uma linha baixada não tem botão: uma fonte já baixada para a janela de busca do período não é baixada de novo sozinha. Para buscar os alertas mais recentes de um catálogo que continua adicionando alertas a datas passadas, use **Baixar de novo**. O app pergunta antes, mostrando a janela e a data do arquivo que será substituído. Isso não é oferecido para uma fonte GeoTIFF (\"Nada a baixar de novo: lida de um arquivo\")."
+msgstr "Uma linha baixada não tem botão: uma fonte já baixada para a janela de busca do período não é baixada de novo sozinha. Para buscar os alertas mais recentes de um catálogo que continua adicionando alertas a datas passadas, use **Baixar novamente**. O app pergunta antes, mostrando a janela e a data do arquivo que será substituído. Isso não é oferecido para uma fonte GeoTIFF (\"Nada a baixar de novo: lida de um arquivo\")."
 
 msgid "The footer under the table downloads in batch. Select **Download … pending** (e.g. **Download 3 pending**) to download every source that needs it, one row at a time. Rows that read \"not covered\" or \"no data\" are skipped; a row that fails shows its error in red under it, and the run goes on with the next row. While it lasts, the footer counts its rows (\"1 running · 2 queued\", then \"1 of 3 done\", with a progress bar) and the button turns into **Stop**, which stops after the row in progress (\"Stopping…\"). The arrow beside the button (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, after you confirm."
-msgstr "O rodapé abaixo da tabela baixa em lote. Selecione **Baixar … pendentes** (por exemplo, **Baixar 3 pendentes**) para baixar todas as fontes que precisam disso, uma linha por vez. As linhas que mostram \"não coberto\" ou \"sem dados\" são puladas; uma linha que falha mostra o erro em vermelho abaixo dela, e a execução segue para a próxima linha. Enquanto isso dura, o rodapé conta as linhas (\"1 em execução · 2 na fila\" e depois \"1 de 3 concluídas\", com uma barra de progresso) e o botão vira **Parar**, que para depois da linha em andamento (\"Parando…\"). A seta ao lado do botão (**Mais ações em lote**) abre **Baixar tudo de novo (…)**: cada fonte que não está bloqueada e não é um GeoTIFF é baixada de novo, depois que você confirma."
+msgstr "O rodapé abaixo da tabela baixa em lote. Selecione **Baixar … pendentes** (por exemplo, **Baixar 3 pendentes**) para baixar todas as fontes que precisam disso, uma linha por vez. As linhas que mostram \"não coberta\" ou \"sem dados\" são puladas; uma linha que falha mostra o erro em vermelho abaixo dela, e a execução segue para a próxima linha. Enquanto isso dura, o rodapé conta as linhas (\"1 em execução · 2 na fila\" e depois \"1 de 3 concluídas\", com uma barra de progresso) e o botão vira **Parar**, que para depois da linha em andamento (\"Parando…\"). A seta ao lado do botão (**Mais ações em lote**) abre **Baixar tudo de novo (…)**: cada fonte que não está bloqueada e não é um GeoTIFF é baixada de novo, depois que você confirma."
 
 msgid "The download also shows as a task notification titled **Download**, with the source it is on and its percentage."
-msgstr "O download também aparece como uma notificação de tarefa com o título **Baixar**, com a fonte em que está e a porcentagem."
+msgstr "O download também aparece como uma notificação de tarefa com o título **Download**, com a fonte em que está e a porcentagem."
 
 msgid "Remove a source from a period"
 msgstr "Remover uma fonte de um período"
@@ -1352,7 +1355,7 @@ msgid "the **More actions** menu (three dots) holds:"
 msgstr "o menu **Mais ações** (três pontos) contém:"
 
 msgid "**Download again** (GEE masks only), for an asset that changed. The app asks first: \"This fetches the mask again from Earth Engine, replaces its download, then aligns it.\";"
-msgstr "**Baixar de novo** (só para máscaras do GEE), para um recurso que mudou. O app pergunta antes: \"Isto busca a máscara de novo no Earth Engine, substitui o download e depois a alinha.\";"
+msgstr "**Baixar novamente** (só para máscaras do GEE), para um recurso que mudou. O app pergunta antes: \"Isto busca a máscara de novo no Earth Engine, substitui o download e depois a alinha.\";"
 
 msgid "**Edit**, which opens **Edit mask** *name*: the raster and band can change, the name cannot. Once an alert set used the mask, it can no longer be edited (**An alert set already uses this mask: add a new one instead.**); and"
 msgstr "**Editar**, que abre **Editar a máscara** *nome*: o raster e a banda podem mudar, o nome não. Depois que um conjunto de alertas usou a máscara, ela não pode mais ser editada (**Um conjunto de alertas já usa esta máscara: adicione uma nova em vez disso.**); e"
@@ -1418,7 +1421,7 @@ msgid "the information icon opens the row's **Details** (see below); and"
 msgstr "o ícone de informação abre os **Detalhes** da linha (veja abaixo); e"
 
 msgid "**Delete files** removes this period's download and harmonized file of the source, after you confirm. The source stays in the period: download it again in `Alerts <defo-alerts-download_>`_ and harmonize it to rebuild them. The alert sets of this period built from the source read out of date; their alerts and reviews stay."
-msgstr "**Excluir arquivos** remove o download e o arquivo harmonizado da fonte neste período, depois que você confirma. A fonte continua no período: baixe-a de novo em `Alertas <defo-alerts-download_>`_ e harmonize-a para recriá-los. Os conjuntos de alertas deste período feitos com a fonte passam a estar desatualizados; os alertas e as revisões deles são mantidos."
+msgstr "**Excluir arquivos** remove o download e o arquivo harmonizado da fonte neste período, depois que você confirma. A fonte continua no período: baixe-a novamente em `Alertas <defo-alerts-download_>`_ e harmonize-a para recriá-los. Os conjuntos de alertas deste período feitos com a fonte passam a estar desatualizados; os alertas e as revisões deles são mantidos."
 
 msgid "The Details dialog"
 msgstr "A janela de detalhes"
@@ -1463,7 +1466,7 @@ msgid "The footer under the table runs the rows in batch. Select **Harmonize …
 msgstr "O rodapé da tabela executa as linhas em lote. Selecione **Harmonizar … pendentes** (por exemplo, **Harmonizar 4 pendentes**). Primeiro ele alinha as máscaras ativas no período que precisam disso e depois harmoniza cada fonte baixada que precisa disso, uma linha por vez:"
 
 msgid "rows that read \"not covered\" or \"no data\", and rows still to download, are skipped;"
-msgstr "as linhas que mostram \"não coberto\" ou \"sem dados\", e as linhas ainda a baixar, são puladas;"
+msgstr "as linhas que mostram \"não coberta\" ou \"sem dados\", e as linhas ainda a baixar, são puladas;"
 
 msgid "a row that fails shows its error in red under it, and the run goes on with the next row."
 msgstr "uma linha que falha mostra o erro em vermelho logo abaixo, e a execução segue para a próxima linha."
@@ -2164,6 +2167,9 @@ msgstr "as setas sobem ou descem a pergunta: a Análise faz as perguntas nesta o
 msgid "the pencil icon edits it; and"
 msgstr "o ícone de lápis a edita; e"
 
+msgid "the bin icon deletes it."
+msgstr "o ícone de lixeira a exclui."
+
 msgid "With no questions, the list reads **No questions: Analysis will only ask for the verdict.**"
 msgstr "Sem nenhuma pergunta, a lista diz **Nenhuma pergunta: a Análise pedirá apenas o veredito.**"
 
@@ -2488,8 +2494,8 @@ msgstr "**Atribuídos**"
 msgid "The number of alerts the evaluator has."
 msgstr "O número de alertas que o avaliador tem."
 
-msgid "**Reviewed**"
-msgstr "**Revisados**"
+msgid "**Reviewed** column"
+msgstr "Coluna **Revisados**"
 
 msgid "The number of them that are reviewed in *your* project (by you, or merged from the evaluator)."
 msgstr "Quantos deles estão revisados no *seu* projeto (por você ou mesclados a partir do avaliador)."
@@ -3049,6 +3055,9 @@ msgstr "**Detectado**"
 msgid "Its first and last detection dates."
 msgstr "A primeira e a última data de detecção."
 
+msgid "**Status** row"
+msgstr "Linha **Status**"
+
 msgid "Its review status, with its colour: **Not reviewed**, **Reviewed: confirmed**, **Reviewed: false positive** or **Reviewed: needs revision**."
 msgstr "O status de revisão, com a sua cor: **Não revisado**, **Revisado: confirmado**, **Revisado: falso positivo** ou **Revisado: precisa de revisão**."
 
@@ -3468,6 +3477,9 @@ msgstr "**Detectado no total**"
 
 msgid "The area (or number) of all the set's alerts, whatever their status."
 msgstr "A área (ou o número) de todos os alertas do conjunto, qualquer que seja o status."
+
+msgid "**Reviewed**"
+msgstr "**Revisados**"
 
 msgid "The share of alerts that have a verdict, and \"16 of 48 alerts\". It always counts alerts."
 msgstr "A proporção de alertas que têm veredito, e \"16 de 48 alertas\". Conta sempre alertas."

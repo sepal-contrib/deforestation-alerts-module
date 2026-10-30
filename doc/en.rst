@@ -498,14 +498,14 @@ Each row of **Periods** shows:
         -   The period's dates ("start → end"), with notes under them: its search window and any warnings.
     *   -   **Sets**
         -   The number of alert sets built for this period.
-    *   -   **Status**
+    *   -   **Status** column
         -   **out of date** when a source download or an alert set no longer matches the current settings (run it again in `Alerts <defo-alerts_>`_, `Harmonize <defo-harmonize_>`_ or `Integrate & vectorize <defo-integrate_>`_); **missing** when an alert set's files are gone; a dash when everything is current.
 
 The icons on the right side of each row:
 
 -   the radio button makes the period *active*: `Alerts <defo-alerts_>`_, `Harmonize <defo-harmonize_>`_ and `Integrate & vectorize <defo-integrate_>`_ work on the active period;
 -   the pencil icon changes its dates or look-back; and
--   the bin icon deletes it.
+-   the bin icon deletes the period.
 
 .. _defo-period-add:
 
@@ -1713,7 +1713,7 @@ The evaluators table
         -   The evaluator's name. A last row, **Unassigned**, counts the alerts no evaluator got.
     *   -   **Assigned**
         -   The number of alerts the evaluator has.
-    *   -   **Reviewed**
+    *   -   **Reviewed** column
         -   The number of them that are reviewed in *your* project (by you, or merged from the evaluator).
     *   -   **Merged**
         -   The date their reviewed copy was last merged, or a dash.
@@ -2079,7 +2079,7 @@ The top of the panel shows what the alert table says:
         -   The sources that detected the alert.
     *   -   **Detected**
         -   Its first and last detection dates.
-    *   -   **Status**
+    *   -   **Status** row
         -   Its review status, with its colour: **Not reviewed**, **Reviewed: confirmed**, **Reviewed: false positive** or **Reviewed: needs revision**.
     *   -   **Kind**
         -   Whether the alert grows from earlier loss (see `Growth of earlier loss <defo-integrate-growth_>`_): **Growth** (a purple chip), **Growth · under minimum area**, or **New · under minimum area** (a small alert whose links were all removed). Hidden for a new alert.

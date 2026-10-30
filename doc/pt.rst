@@ -488,7 +488,7 @@ Cada linha de **Períodos** mostra:
         -   As datas do período ("início → fim"), com notas abaixo: a janela de busca e eventuais avisos.
     *   -   **Conjuntos**
         -   O número de conjuntos de alertas gerados para este período.
-    *   -   **Situação**
+    *   -   Coluna **Situação**
         -   **desatualizado** quando o download de uma fonte ou um conjunto de alertas não corresponde mais às configurações atuais (execute-o de novo em `Alertas <defo-alerts_>`_, `Harmonizar <defo-harmonize_>`_ ou `Integrar e vetorizar <defo-integrate_>`_); **faltando** quando os arquivos de um conjunto de alertas sumiram; um traço quando está tudo em dia.
 
 Os ícones à direita de cada linha:
@@ -1667,7 +1667,7 @@ A tabela de avaliadores
         -   O nome do avaliador. Uma última linha, **Sem atribuição**, conta os alertas que não foram para nenhum avaliador.
     *   -   **Atribuídos**
         -   O número de alertas que o avaliador tem.
-    *   -   **Revisados**
+    *   -   Coluna **Revisados**
         -   Quantos deles estão revisados no *seu* projeto (por você ou mesclados a partir do avaliador).
     *   -   **Mesclado**
         -   A data em que a cópia revisada dele foi mesclada pela última vez, ou um traço.
@@ -2023,7 +2023,7 @@ O topo do painel mostra o que a tabela de alertas diz:
         -   As fontes que detectaram o alerta.
     *   -   **Detectado**
         -   A primeira e a última data de detecção.
-    *   -   **Status**
+    *   -   Linha **Status**
         -   O status de revisão, com a sua cor: **Não revisado**, **Revisado: confirmado**, **Revisado: falso positivo** ou **Revisado: precisa de revisão**.
     *   -   **Tipo**
         -   Se o alerta cresce a partir de uma perda anterior (veja `Crescimento de perdas anteriores <defo-integrate-growth_>`_): **Crescimento** (uma etiqueta roxa), **Crescimento · abaixo da área mínima** ou **Nova · abaixo da área mínima** (um alerta pequeno cujos vínculos foram todos removidos). Oculta para um alerta novo.

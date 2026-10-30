@@ -745,8 +745,8 @@ msgstr "**Conjuntos**"
 msgid "The number of alert sets built for this period."
 msgstr "El número de conjuntos de alertas generados para este período."
 
-msgid "**Status**"
-msgstr "**Estado**"
+msgid "**Status** column"
+msgstr "Columna **Estado**"
 
 msgid "**out of date** when a source download or an alert set no longer matches the current settings (run it again in `Alerts <defo-alerts_>`_, `Harmonize <defo-harmonize_>`_ or `Integrate & vectorize <defo-integrate_>`_); **missing** when an alert set's files are gone; a dash when everything is current."
 msgstr "**desactualizada** cuando la descarga de una fuente o un conjunto de alertas ya no corresponde a la configuración actual (vuelve a ejecutarlo en `Alertas <defo-alerts_>`_, `Armonizar <defo-harmonize_>`_ o `Integrar y vectorizar <defo-integrate_>`_); **falta** cuando los archivos de un conjunto de alertas han desaparecido; un guion cuando todo está al día."
@@ -760,8 +760,8 @@ msgstr "el botón de opción convierte el período en el período *activo*: `Ale
 msgid "the pencil icon changes its dates or look-back; and"
 msgstr "el icono de lápiz cambia sus fechas o su retrospección; y"
 
-msgid "the bin icon deletes it."
-msgstr "el icono de papelera lo elimina."
+msgid "the bin icon deletes the period."
+msgstr "el icono de papelera elimina el período."
 
 msgid "Add a period"
 msgstr "Añadir un período"
@@ -809,7 +809,7 @@ msgid "Under the fields, the dialog previews the search window (\"Search window:
 msgstr "Debajo de los campos, el diálogo muestra una vista previa de la ventana de búsqueda (\"Ventana de búsqueda: inicio → fin\"). Selecciona **Añadir período**: el período se crea y pasa a ser el período activo."
 
 msgid "A new period starts with the mask choices of the latest period. Change them in `Harmonize <defo-harmonize_>`_. Its alert sources are the ones marked **Add to new periods** in `Alerts <defo-alerts-new-periods_>`_; add or remove sources there."
-msgstr "Un período nuevo empieza con las opciones de máscara del último período. Cámbialas en `Armonizar <defo-harmonize_>`_. Sus fuentes de alertas son las marcadas con **Añadir a los nuevos periodos** en `Alertas <defo-alerts-new-periods_>`_; añade o quita fuentes allí."
+msgstr "Un período nuevo empieza con las opciones de máscara del último período. Cámbialas en `Armonizar <defo-harmonize_>`_. Sus fuentes de alertas son las marcadas con **Añadir a los nuevos períodos** en `Alertas <defo-alerts-new-periods_>`_; añade o quita fuentes allí."
 
 msgid "For the set-aside clusters to come back, the look-back must reach into the previous period. With a look-back of 0, the search window starts on the period's own first day and nothing set aside earlier is reconsidered."
 msgstr "Para que los grupos dejados de lado vuelvan, la retrospección debe llegar hasta el período anterior. Con una retrospección de 0, la ventana de búsqueda empieza el primer día del propio período y no se vuelve a considerar nada de lo que se dejó de lado antes."
@@ -845,7 +845,7 @@ msgid "The **Alerts** step lists the sources of the active `period <defo-period_
 msgstr "El paso **Alertas** muestra las fuentes del `período <defo-period_>`_ activo, indica qué parte de la AOI y del período cubre cada una, y las descarga. Cada período tiene sus propias fuentes: una fuente añadida aquí se añade solo al período activo."
 
 msgid "Open the **Alerts** step of the **Workflow** panel. It unlocks once the project has a `period <defo-period_>`_. It works on the active period: to work on another period, make it active in the `Period <defo-period_>`_ step first. The box at the top of the step names the period and its search window, e.g. \"Period 2026-09-01 → 2026-09-30 · search window from 2026-06-03 (90 days of look-back)\"."
-msgstr "Abre el paso **Alertas** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene un `período <defo-period_>`_. Trabaja sobre el período activo: para trabajar en otro período, primero hazlo activo en el paso `Período <defo-period_>`_. El recuadro de la parte superior del paso indica el período y su ventana de búsqueda, por ejemplo, \"Periodo 2026-09-01 → 2026-09-30 · ventana de búsqueda desde el 2026-06-03 (90 días de período previo)\"."
+msgstr "Abre el paso **Alertas** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene un `período <defo-period_>`_. Trabaja sobre el período activo: para trabajar en otro período, primero hazlo activo en el paso `Período <defo-period_>`_. El recuadro de la parte superior del paso indica el período y su ventana de búsqueda, por ejemplo, \"Período 2026-09-01 → 2026-09-30 · ventana de búsqueda desde el 2026-06-03 (90 días de retrospección)\"."
 
 msgid "The Alerts step with three downloaded sources"
 msgstr "El paso Alertas con tres fuentes descargadas"
@@ -871,6 +871,9 @@ msgstr "**AOI**: la parte de la AOI dentro de la huella de la fuente, por ejempl
 msgid "The dates: \"✓ data to 2026-10-30\" (green) when the source has data up to the end of the search window, \"data to … only\" (orange) when its data stop inside the window, or \"✗ data ends …\" (red) when it has none in the window."
 msgstr "Las fechas: \"✓ datos hasta 2026-10-30\" (verde) cuando la fuente tiene datos hasta el final de la ventana de búsqueda, \"datos solo hasta …\" (naranja) cuando sus datos terminan dentro de la ventana, o \"✗ los datos terminan el …\" (rojo) cuando no tiene ninguno en la ventana."
 
+msgid "**Status**"
+msgstr "**Estado**"
+
 msgid "The row's state, or a button to download it (see `Download the sources <defo-alerts-download_>`_)."
 msgstr "El estado de la fila, o un botón para descargarla (consulta `Descargar las fuentes <defo-alerts-download_>`_)."
 
@@ -884,7 +887,7 @@ msgid "Information icon"
 msgstr "Icono de información"
 
 msgid "Opens the source's **Details** (see `The Details dialog <defo-harmonize-details_>`_), with the **Add to new periods** checkbox and, for a custom source, the **Edit** button."
-msgstr "Abre los **Detalles** de la fuente (consulta `El diálogo de detalles <defo-harmonize-details_>`_), con la casilla **Añadir a los nuevos periodos** y, para una fuente personalizada, el botón **Editar**."
+msgstr "Abre los **Detalles** de la fuente (consulta `El diálogo de detalles <defo-harmonize-details_>`_), con la casilla **Añadir a los nuevos períodos** y, para una fuente personalizada, el botón **Editar**."
 
 msgid "**Download again**"
 msgstr "**Descargar de nuevo**"
@@ -893,7 +896,7 @@ msgid "Downloads the source again (see below)."
 msgstr "Descarga la fuente de nuevo (ver más abajo)."
 
 msgid "**Remove from this period**"
-msgstr "**Quitar de este periodo**"
+msgstr "**Quitar de este período**"
 
 msgid "Removes the source from the active period (see `Remove a source from a period <defo-alerts-remove_>`_)."
 msgstr "Quita la fuente del período activo (consulta `Quitar una fuente de un período <defo-alerts-remove_>`_)."
@@ -917,7 +920,7 @@ msgid "A period holds at most three predefined and six custom sources. The proje
 msgstr "Un período admite como máximo tres fuentes predefinidas y seis personalizadas. El proyecto conserva todas las fuentes que ha usado, sin límite."
 
 msgid "Under the source, the **Add to new periods** checkbox (selected by default) decides whether the periods created later start with this source. It never changes the existing periods. To change it later, open the source's **Details** with its information icon."
-msgstr "Bajo la fuente, la casilla **Añadir a los nuevos periodos** (marcada por defecto) decide si los períodos creados después empiezan con esta fuente. Nunca cambia los períodos existentes. Para cambiarla más tarde, abre los **Detalles** de la fuente con su icono de información."
+msgstr "Bajo la fuente, la casilla **Añadir a los nuevos períodos** (marcada por defecto) decide si los períodos creados después empiezan con esta fuente. Nunca cambia los períodos existentes. Para cambiarla más tarde, abre los **Detalles** de la fuente con su icono de información."
 
 msgid "Predefined sources"
 msgstr "Fuentes predefinidas"
@@ -926,7 +929,7 @@ msgid "Adding a predefined source"
 msgstr "Añadir una fuente predefinida"
 
 msgid "Choose a source in the **Alert source** dropdown menu, then select **Add source**. The list holds the predefined sources and the project's own sources that are not in this period yet. Each entry shows its coverage of the AOI. A source that does not cover the AOI at all is listed as disabled, with the reason."
-msgstr "Elige una fuente en el menú desplegable **Fuente** y selecciona **Añadir fuente**. La lista contiene las fuentes predefinidas y las fuentes propias del proyecto que todavía no están en este período. Cada opción muestra su cobertura de la AOI. Una fuente que no cubre nada de la AOI aparece desactivada, con el motivo."
+msgstr "Elige una fuente en el menú desplegable **Fuente de alertas** y selecciona **Añadir fuente**. La lista contiene las fuentes predefinidas y las fuentes propias del proyecto que todavía no están en este período. Cada opción muestra su cobertura de la AOI. Una fuente que no cubre nada de la AOI aparece desactivada, con el motivo."
 
 msgid "Source"
 msgstr "Fuente"
@@ -1037,7 +1040,7 @@ msgid "Only for **Date only**. Suggested from the date band's values (see below)
 msgstr "Solo para **Solo fecha**. Se sugiere a partir de los valores de la banda de fecha (ver más abajo)."
 
 msgid "For a **Date only** source, the app reads the lowest and highest values of the date band over the AOI (\"Reading the date values…\") and suggests the encoding they fit, for example \"Values from 24001 to 24366: they read as yyddd.\" Check the suggestion: the app reads only the two ends of the range. When the values do not look like dates (\"… don't look like dates. Check the Date band.\"), or when no pixel over the AOI has a date (\"No dated pixel over the AOI: pick the encoding.\"), choose the encoding yourself."
-msgstr "Para una fuente **Solo fecha**, la aplicación lee los valores mínimo y máximo de la banda de fecha sobre la AOI (\"Leyendo los valores de fecha…\") y sugiere la codificación que les corresponde, por ejemplo \"Valores de 24001 a 24366: se leen como yyddd.\" Comprueba la sugerencia: la aplicación solo lee los dos extremos del rango. Cuando los valores no parecen fechas (\"… no parecen fechas. Revisa la banda de fecha.\"), o cuando ningún píxel de la AOI tiene fecha (\"Ningún píxel con fecha en el AOI: elige la codificación.\"), elige tú la codificación."
+msgstr "Para una fuente **Solo fecha**, la aplicación lee los valores mínimo y máximo de la banda de fecha sobre la AOI (\"Leyendo los valores de fecha…\") y sugiere la codificación que les corresponde, por ejemplo \"Valores de 24001 a 24366: se leen como yyddd.\" Comprueba la sugerencia: la aplicación solo lee los dos extremos del rango. Cuando los valores no parecen fechas (\"… no parecen fechas. Revisa la banda de fecha.\"), o cuando ningún píxel de la AOI tiene fecha (\"Ningún píxel con fecha en la AOI: elige la codificación.\"), elige tú la codificación."
 
 msgid "The four formats:"
 msgstr "Los cuatro formatos:"
@@ -1100,7 +1103,7 @@ msgid "Meaning"
 msgstr "Significado"
 
 msgid "\"Downloaded\""
-msgstr "\"Descargado\""
+msgstr "\"Descargada\""
 
 msgid "Downloaded for the current search window. The line under the name gives the download date and the size on disk."
 msgstr "Descargada para la ventana de búsqueda actual. La línea bajo el nombre da la fecha de descarga y el tamaño en disco."
@@ -1142,7 +1145,7 @@ msgid "The file of a GeoTIFF source is gone (see `Common messages <defo-harmoniz
 msgstr "El archivo de una fuente GeoTIFF ha desaparecido (consulta `Mensajes frecuentes <defo-harmonize-messages_>`_)."
 
 msgid "A blue button runs a row for the first time; an orange one redoes a file that is out of date. The line under the name then says why: for example \"the search window changed (…): download again\" or \"the AOI changed: download again\". In an evaluator's `review copy <defo-evaluation-return_>`_, nothing runs: the column reads \"To download\" instead of a button."
-msgstr "Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo desactualizado. La línea bajo el nombre indica entonces el motivo: por ejemplo, \"la ventana de búsqueda cambió (…): descargar de nuevo\" o \"el AOI cambió: descargar de nuevo\". En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica \"A descargar\"."
+msgstr "Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo desactualizado. La línea bajo el nombre indica entonces el motivo: por ejemplo, \"la ventana de búsqueda cambió (…): descargar de nuevo\" o \"la AOI cambió: descargar de nuevo\". En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica \"A descargar\"."
 
 msgid "A downloaded row has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source (\"Nothing to download again: read from a file\")."
 msgstr "Una fila descargada no tiene botón: una fuente ya descargada para la ventana de búsqueda del período no se vuelve a descargar por sí sola. Para obtener las últimas alertas de un catálogo que sigue añadiendo alertas a fechas pasadas, usa **Descargar de nuevo**. La aplicación pregunta antes, indicando la ventana y la fecha del archivo que reemplaza. No se ofrece para una fuente GeoTIFF (\"Nada que descargar de nuevo: se lee de un archivo\")."
@@ -1151,13 +1154,13 @@ msgid "The footer under the table downloads in batch. Select **Download … pend
 msgstr "El pie bajo la tabla descarga en lote. Selecciona **Descargar … pendientes** (por ejemplo, **Descargar 3 pendientes**) para descargar cada fuente que lo necesite, una fila tras otra. Las filas que indican \"no cubierta\" o \"sin datos\" se omiten; una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente. Mientras dura, el pie cuenta sus filas (\"1 en curso · 2 en cola\", luego \"1 de 3 terminadas\", con una barra de progreso) y el botón se convierte en **Detener**, que se detiene después de la fila en curso (\"Deteniendo…\"). La flecha junto al botón (**Más acciones por lotes**) abre **Descargar todo de nuevo (…)**: cada fuente que no está bloqueada y no es un GeoTIFF se descarga de nuevo, después de confirmar."
 
 msgid "The download also shows as a task notification titled **Download**, with the source it is on and its percentage."
-msgstr "La descarga también aparece como una notificación de tarea titulada **Descargar**, con la fuente en la que está y su porcentaje."
+msgstr "La descarga también aparece como una notificación de tarea titulada **Descarga**, con la fuente en la que está y su porcentaje."
 
 msgid "Remove a source from a period"
 msgstr "Quitar una fuente de un período"
 
 msgid "Select the bin icon (**Remove from this period**), then confirm. The source's downloaded and harmonized files of this period are deleted. Alert sets of this period that already used it keep their alerts and show as out of date."
-msgstr "Selecciona el icono de papelera (**Quitar de este periodo**) y confirma. Se eliminan los archivos descargados y armonizados de la fuente en este período. Los conjuntos de alertas de este período que ya la usaban conservan sus alertas y aparecen como desactualizados."
+msgstr "Selecciona el icono de papelera (**Quitar de este período**) y confirma. Se eliminan los archivos descargados y armonizados de la fuente en este período. Los conjuntos de alertas de este período que ya la usaban conservan sus alertas y aparecen como desactualizados."
 
 msgid "The source stays in the project: other periods keep it, and it can be added back with **Add source**. A source is never deleted from the whole project."
 msgstr "La fuente sigue en el proyecto: los demás períodos la conservan, y se puede volver a añadir con **Añadir fuente**. Una fuente nunca se elimina de todo el proyecto."
@@ -1184,7 +1187,7 @@ msgid "Only CCDC outputs dated in fractional years are supported."
 msgstr "Solo se admiten resultados de CCDC fechados en años fraccionarios."
 
 msgid "\"This period already has 6 custom sources.\""
-msgstr "\"Este periodo ya tiene 6 fuentes personalizadas.\""
+msgstr "\"Este período ya tiene 6 fuentes personalizadas.\""
 
 msgid "Remove a custom source from the period before adding another one."
 msgstr "Quita una fuente personalizada del período antes de añadir otra."
@@ -1430,7 +1433,7 @@ msgid "The information icon of a source or a mask opens a read-only summary of w
 msgstr "El icono de información de una fuente o de una máscara abre un resumen de solo lectura de con qué se hicieron sus archivos. Empieza con el estado de la fila y, para una fuente, el período. Cuando la fila está desactualizada, una línea naranja **Motivo:** dice qué cambió."
 
 msgid "In `Alerts <defo-alerts_>`_, the information icon of a source opens the same dialog, with two more controls: the **Add to new periods** checkbox (see `Add a source <defo-alerts-new-periods_>`_) and, for a custom source, **Edit**."
-msgstr "En `Alertas <defo-alerts_>`_, el icono de información de una fuente abre el mismo diálogo, con dos controles más: la casilla **Añadir a los nuevos periodos** (consulta `Añadir una fuente <defo-alerts-new-periods_>`_) y, para una fuente personalizada, **Editar**."
+msgstr "En `Alertas <defo-alerts_>`_, el icono de información de una fuente abre el mismo diálogo, con dos controles más: la casilla **Añadir a los nuevos períodos** (consulta `Añadir una fuente <defo-alerts-new-periods_>`_) y, para una fuente personalizada, **Editar**."
 
 msgid "Section"
 msgstr "Sección"
@@ -1979,13 +1982,13 @@ msgid "0 and 1. Both must be numbers, **Min** below **Max**."
 msgstr "0 y 1. Ambos deben ser números, con **Mín** menor que **Máx**."
 
 msgid "**Stretch to the AOI (2–98 %)**"
-msgstr "**Ajustar al AOI (2–98 %)**"
+msgstr "**Ajustar a la AOI (2–98 %)**"
 
 msgid "*Continuous*: fills **Min** and **Max** with the band's 2nd and 98th percentiles over the AOI's bounding box."
 msgstr "*Continuo*: rellena **Mín** y **Máx** con los percentiles 2 y 98 de la banda sobre el rectángulo que envuelve la AOI."
 
 msgid "**Find the classes in the AOI**"
-msgstr "**Buscar las clases en el AOI**"
+msgstr "**Buscar las clases en la AOI**"
 
 msgid "*Categorical*: lists the whole values present over the AOI, each with a colour, its value, a **Label** and an eye icon that hides or shows it. When the image names its classes and their colours (as ESA WorldCover does), the classes take them; otherwise each class is labelled with its value."
 msgstr "*Categórico*: enumera los valores enteros presentes sobre la AOI, cada uno con un color, su valor, una **Etiqueta** y un icono de ojo que lo oculta o lo muestra. Cuando la imagen nombra sus clases y sus colores (como ESA WorldCover), las clases los toman; si no, cada clase se etiqueta con su valor."
@@ -2009,7 +2012,7 @@ msgid "*Categorical*: recolours every class from a palette: **Set1**, **Set2**, 
 msgstr "*Categórico*: vuelve a colorear todas las clases con una paleta: **Set1**, **Set2**, **Tab10** o **Paired**. Selecciona el cuadrado de color de una clase para elegir su color a mano."
 
 msgid "When a band holds only 0 and 1 over the AOI, the classes found name 1 after the band and start with 0 hidden: \"Only 0 and 1 in the AOI: 1 is named after the band and 0 starts hidden (transparent).\" Select the eye icon of 0 to draw it too."
-msgstr "Cuando una banda solo contiene 0 y 1 sobre la AOI, las clases encontradas nombran el 1 como la banda y empiezan con el 0 oculto: \"Solo 0 y 1 en el AOI: 1 lleva el nombre de la banda y 0 empieza oculto (transparente).\" Selecciona el icono de ojo del 0 para dibujarlo también."
+msgstr "Cuando una banda solo contiene 0 y 1 sobre la AOI, las clases encontradas nombran el 1 como la banda y empiezan con el 0 oculto: \"Solo 0 y 1 en la AOI: 1 lleva el nombre de la banda y 0 empieza oculto (transparente).\" Selecciona el icono de ojo del 0 para dibujarlo también."
 
 msgid "RGB composite"
 msgstr "Compuesto RGB"
@@ -2042,7 +2045,7 @@ msgid "Fills **Min** and **Max** with one range across the three bands, from the
 msgstr "Rellena **Mín** y **Máx** con un solo rango para las tres bandas, a partir de sus percentiles 2 y 98 sobre el rectángulo que envuelve la AOI."
 
 msgid "Set **Min** and **Max** to the real range of the data (e.g. 0 to 3000 for a Sentinel-2 surface-reflectance image), or select **Stretch to the AOI (2–98 %)**. With the default 0 to 1, most images draw all white."
-msgstr "Ajusta **Mín** y **Máx** al rango real de los datos (por ejemplo, de 0 a 3000 para una imagen Sentinel-2 de reflectancia de superficie), o selecciona **Ajustar al AOI (2–98 %)**. Con el rango predeterminado de 0 a 1, la mayoría de las imágenes se ven completamente blancas."
+msgstr "Ajusta **Mín** y **Máx** al rango real de los datos (por ejemplo, de 0 a 3000 para una imagen Sentinel-2 de reflectancia de superficie), o selecciona **Ajustar a la AOI (2–98 %)**. Con el rango predeterminado de 0 a 1, la mayoría de las imágenes se ven completamente blancas."
 
 msgid "Show in Analysis"
 msgstr "Mostrar en Análisis"
@@ -2075,7 +2078,7 @@ msgid "\"This band has non-integer values: draw it as Continuous.\""
 msgstr "\"Esta banda tiene valores no enteros: dibújala como Continua.\""
 
 msgid "**Find the classes in the AOI** found decimal values: the band is not a set of classes. Set **Raster type** to **Continuous: a colour ramp**."
-msgstr "**Buscar las clases en el AOI** encontró valores decimales: la banda no es un conjunto de clases. Pon **Tipo de raster** en **Continuo: una rampa de color**."
+msgstr "**Buscar las clases en la AOI** encontró valores decimales: la banda no es un conjunto de clases. Pon **Tipo de raster** en **Continuo: una rampa de color**."
 
 msgid "\"More than 50 values: this band looks continuous.\""
 msgstr "\"Más de 50 valores: esta banda parece continua.\""
@@ -2084,7 +2087,7 @@ msgid "Draw the band as **Continuous: a colour ramp**, or add the classes you ne
 msgstr "Dibuja la banda como **Continuo: una rampa de color**, o añade a mano las clases que necesites con **Añadir un valor**."
 
 msgid "\"No values in the AOI.\" or \"The band has no spread of values in the AOI.\""
-msgstr "\"No hay valores en el AOI.\" o \"La banda no tiene dispersión de valores en el AOI.\""
+msgstr "\"No hay valores en la AOI.\" o \"La banda no tiene dispersión de valores en la AOI.\""
 
 msgid "The band has no data over the AOI, or the same value everywhere. Check the image and the band, or enter **Min** and **Max** yourself."
 msgstr "La banda no tiene datos sobre la AOI, o tiene el mismo valor en todas partes. Revisa la imagen y la banda, o escribe tú **Mín** y **Máx**."
@@ -2163,6 +2166,9 @@ msgstr "las flechas suben o bajan la pregunta: Análisis hace las preguntas en e
 
 msgid "the pencil icon edits it; and"
 msgstr "el icono de lápiz la edita; y"
+
+msgid "the bin icon deletes it."
+msgstr "el icono de papelera la elimina."
 
 msgid "With no questions, the list reads **No questions: Analysis will only ask for the verdict.**"
 msgstr "Sin preguntas, la lista indica **Sin preguntas: Análisis solo pedirá el veredicto.**"
@@ -2488,8 +2494,8 @@ msgstr "**Asignadas**"
 msgid "The number of alerts the evaluator has."
 msgstr "El número de alertas que tiene el evaluador."
 
-msgid "**Reviewed**"
-msgstr "**Revisadas**"
+msgid "**Reviewed** column"
+msgstr "Columna **Revisadas**"
 
 msgid "The number of them that are reviewed in *your* project (by you, or merged from the evaluator)."
 msgstr "Cuántas de ellas están revisadas en *tu* proyecto (por ti, o integradas desde el evaluador)."
@@ -2558,7 +2564,7 @@ msgid "The package opens as a review copy in Analysis, filtered to the evaluator
 msgstr "El paquete se abre como una copia de revisión en Análisis, filtrada a las alertas del evaluador, con los pasos de configuración bloqueados."
 
 msgid "A package needs the AOI's shape. Until it is loaded, the step reads **Packages wait for the AOI geometry: open the AOI step to load it.**"
-msgstr "Un paquete necesita la forma de la AOI. Hasta que esté cargada, el paso indica **Los paquetes esperan la geometría del AOI: abre el paso AOI para cargarla.**"
+msgstr "Un paquete necesita la forma de la AOI. Hasta que esté cargada, el paso indica **Los paquetes esperan la geometría de la AOI: abre el paso AOI para cargarla.**"
 
 msgid "If the `questionnaire <defo-questionnaire_>`_ changes after the packages are built, the cloud icons turn amber (\"Built before the questionnaire changed: generate the packages again.\"). Select **Regenerate packages** and send the new ones."
 msgstr "Si el `cuestionario <defo-questionnaire_>`_ cambia después de generar los paquetes, los iconos de nube se vuelven ámbar (\"Creado antes de que cambiara el cuestionario: genera los paquetes de nuevo.\"). Selecciona **Regenerar paquetes** y envía los nuevos."
@@ -3049,6 +3055,9 @@ msgstr "**Detectada**"
 msgid "Its first and last detection dates."
 msgstr "Sus fechas de primera y última detección."
 
+msgid "**Status** row"
+msgstr "Fila **Estado**"
+
 msgid "Its review status, with its colour: **Not reviewed**, **Reviewed: confirmed**, **Reviewed: false positive** or **Reviewed: needs revision**."
 msgstr "Su estado de revisión, con su color: **No revisada**, **Revisada: confirmada**, **Revisada: falso positivo** o **Revisada: necesita revisión**."
 
@@ -3469,6 +3478,9 @@ msgstr "**Detectado en total**"
 msgid "The area (or number) of all the set's alerts, whatever their status."
 msgstr "La superficie (o el número) de todas las alertas del conjunto, sea cual sea su estado."
 
+msgid "**Reviewed**"
+msgstr "**Revisadas**"
+
 msgid "The share of alerts that have a verdict, and \"16 of 48 alerts\". It always counts alerts."
 msgstr "La proporción de alertas que tienen veredicto, y \"16 de 48 alertas\". Siempre cuenta alertas."
 
@@ -3497,10 +3509,10 @@ msgid "One bar split by status, and the value of each status."
 msgstr "Una barra dividida por estado y el valor de cada estado."
 
 msgid "**Across monitoring periods**"
-msgstr "**A lo largo de los periodos de seguimiento**"
+msgstr "**A lo largo de los períodos de seguimiento**"
 
 msgid "One column per monitoring period of the project, split by status, from its newest alert set. A period still under review shows its unreviewed share hatched. With one period only, it reads \"This project has one monitoring period. Add a second one and its trend is charted here.\""
-msgstr "Una columna por período de monitoreo del proyecto, dividida por estado, a partir de su conjunto de alertas más reciente. Un período que aún está en revisión muestra rayada su parte sin revisar. Con un solo período, indica \"Este proyecto tiene un solo periodo de seguimiento. Añade otro y aquí se dibujará su tendencia.\""
+msgstr "Una columna por período de monitoreo del proyecto, dividida por estado, a partir de su conjunto de alertas más reciente. Un período que aún está en revisión muestra rayada su parte sin revisar. Con un solo período, indica \"Este proyecto tiene un solo período de seguimiento. Añade otro y aquí se dibujará su tendencia.\""
 
 msgid "**How big the alerts are**"
 msgstr "**Tamaño de las alertas**"
@@ -3560,7 +3572,7 @@ msgid "Its table lists the histories that include an alert of this set, the larg
 msgstr "Su tabla enumera los historiales que incluyen una alerta de este conjunto, primero el de mayor superficie confirmada:"
 
 msgid "**Monitoring periods**"
-msgstr "**Periodos de monitoreo**"
+msgstr "**Períodos de monitoreo**"
 
 msgid "The first and the last period of the history."
 msgstr "El primer y el último período del historial."
@@ -3887,7 +3899,7 @@ msgid "Alerts"
 msgstr "Alertas"
 
 msgid "In `Alert sources <defo-alerts_>`_, the coordinator adds the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**, each with **Add to new periods** left selected, so that the next periods start with them. Each one covers the whole AOI. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts. Then **Download 3 pending** in the footer downloads the three sources over the search window."
-msgstr "En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos periodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, **Descargar 3 pendientes** en el pie descarga las tres fuentes en la ventana de búsqueda."
+msgstr "En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos períodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, **Descargar 3 pendientes** en el pie descarga las tres fuentes en la ventana de búsqueda."
 
 msgid "In `Harmonize <defo-harmonize_>`_, the coordinator:"
 msgstr "En `Armonizar <defo-harmonize_>`_, la coordinadora:"
@@ -4058,7 +4070,7 @@ msgid "The October round"
 msgstr "La ronda de octubre"
 
 msgid "At the start of the next round, the coordinator selects **New period** in `Monitoring period <defo-period-add_>`_. The dialog is pre-filled: from 2026-10-01 (the day after September ends) to today, with the 90 days of look-back used last time. The coordinator sets the end to 2026-10-20, the day of this round. **Add period** makes it the active period, with the September period's mask choices and the three sources marked **Add to new periods**."
-msgstr "Al empezar la ronda siguiente, la coordinadora selecciona **Nuevo período** en `Período de monitoreo <defo-period-add_>`_. El diálogo viene completado: del 2026-10-01 (el día siguiente al fin de septiembre) a hoy, con los 90 días de retrospección usados la vez anterior. La coordinadora fija el final en 2026-10-20, el día de esta ronda. **Añadir período** lo convierte en el período activo, con las opciones de máscara del período de septiembre y las tres fuentes marcadas con **Añadir a los nuevos periodos**."
+msgstr "Al empezar la ronda siguiente, la coordinadora selecciona **Nuevo período** en `Período de monitoreo <defo-period-add_>`_. El diálogo viene completado: del 2026-10-01 (el día siguiente al fin de septiembre) a hoy, con los 90 días de retrospección usados la vez anterior. La coordinadora fija el final en 2026-10-20, el día de esta ronda. **Añadir período** lo convierte en el período activo, con las opciones de máscara del período de septiembre y las tres fuentes marcadas con **Añadir a los nuevos períodos**."
 
 msgid "Then:"
 msgstr "Después:"
@@ -4100,7 +4112,7 @@ msgid "The comparison needs care. **Confirmed loss** counts only the alerts revi
 msgstr "La comparación requiere cuidado. **Pérdida confirmada** solo cuenta las alertas revisadas como alertas verdaderas, y solo un tercio de las alertas de octubre están revisadas; la cifra de septiembre también cubre solo las alertas de septiembre revisadas hasta ahora. La flecha significa que por ahora se ha *confirmado* menos pérdida, no que se haya perdido menos bosque: la cifra crece a medida que el equipo sigue revisando."
 
 msgid "**Across monitoring periods** shows the two periods side by side, with the share still under review hatched (2870 ha detected in September, 1177 ha in October)."
-msgstr "**A lo largo de los periodos de seguimiento** muestra los dos períodos uno al lado del otro, con la parte aún en revisión rayada (2870 ha detectadas en septiembre, 1177 ha en octubre)."
+msgstr "**A lo largo de los períodos de seguimiento** muestra los dos períodos uno al lado del otro, con la parte aún en revisión rayada (2870 ha detectadas en septiembre, 1177 ha en octubre)."
 
 msgid "Further down:"
 msgstr "Más abajo:"

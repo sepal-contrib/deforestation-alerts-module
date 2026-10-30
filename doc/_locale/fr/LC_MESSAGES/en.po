@@ -41,7 +41,7 @@ msgid "The workflow steps, from the area of interest to the analysis"
 msgstr "Les étapes du flux de travail, de la zone d'intérêt à l'analyse"
 
 msgid "The **Workflow** panel holds the steps in two levels: **Prepare alerts** builds an alert set, and **Set up review** prepares its review. The other tools open from the left rail (see `The app window <defo-window_>`_)."
-msgstr "Le panneau **Flux de travail** range les étapes sur deux niveaux : **Préparer les alertes** construit un jeu d'alertes, et **Préparer la revue** prépare son examen. Les autres outils s'ouvrent depuis la barre latérale gauche (voir `La fenêtre de l'application <defo-window_>`_)."
+msgstr "Le panneau **Flux de travail** range les étapes sur deux niveaux : **Préparer les alertes** construit un jeu d'alertes, et **Configurer la revue** prépare son examen. Les autres outils s'ouvrent depuis la barre latérale gauche (voir `La fenêtre de l'application <defo-window_>`_)."
 
 msgid "Level"
 msgstr "Niveau"
@@ -95,7 +95,7 @@ msgid "Combine the sources into an alert set, one polygon per alert."
 msgstr "Combiner les sources en un jeu d'alertes, avec un polygone par alerte."
 
 msgid "**Set up review**"
-msgstr "**Préparer la revue**"
+msgstr "**Configurer la revue**"
 
 msgid "`Additional layers <defo-layers_>`_ (optional)"
 msgstr "`Couches supplémentaires <defo-layers_>`_ (facultatif)"
@@ -134,7 +134,7 @@ msgid "Export the files of one alert, or the alerts of a whole set."
 msgstr "Exporter les fichiers d'une alerte, ou les alertes de tout un jeu."
 
 msgid "**Set up review** stays locked until the project has an alert set: build one in **Prepare alerts** first."
-msgstr "**Préparer la revue** reste verrouillé tant que le projet n'a pas de jeu d'alertes : construisez-en d'abord un dans **Préparer les alertes**."
+msgstr "**Configurer la revue** reste verrouillé tant que le projet n'a pas de jeu d'alertes : construisez-en d'abord un dans **Préparer les alertes**."
 
 msgid "For a worked example from start to finish, see `Use case: alert review in Madre de Dios, Peru <defo-use-case_>`_."
 msgstr "Pour un exemple complet, du début à la fin, consultez `Cas d'usage : examen des alertes à Madre de Dios, au Pérou <defo-use-case_>`_."
@@ -173,7 +173,7 @@ msgid "The header of the **Workflow** panel stays in view while the step under i
 msgstr "L'en-tête du panneau **Flux de travail** reste visible pendant que l'étape en dessous défile :"
 
 msgid "One strip shows both levels side by side, **Prepare alerts** and **Set up review**, each with its name over one bar per step. A filled bar has outputs (an AOI, periods, sources…), a grey bar is still empty and a striped bar is locked: hover over it to read why (e.g. \"Build an alert set first.\"). The two optional steps, **Additional layers** and **Questionnaire**, have a dashed bar. A level's name gets a check mark once its last required step has outputs. Select a bar to open its step."
-msgstr "Une bande montre les deux niveaux côte à côte, **Préparer les alertes** et **Préparer la revue**, chacun avec son nom au-dessus d'une barre par étape. Une barre pleine a des résultats (une AOI, des périodes, des sources…), une barre grise est encore vide et une barre hachurée est verrouillée : survolez-la pour lire pourquoi (p. ex. « Construisez d'abord un ensemble d'alertes. »). Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une barre en pointillés. Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une barre pour ouvrir son étape."
+msgstr "Une bande montre les deux niveaux côte à côte, **Préparer les alertes** et **Configurer la revue**, chacun avec son nom au-dessus d'une barre par étape. Une barre pleine a des résultats (une AOI, des périodes, des sources…), une barre grise est encore vide et une barre hachurée est verrouillée : survolez-la pour lire pourquoi (p. ex. « Construisez d'abord un jeu d'alertes. »). Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une barre en pointillés. Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une barre pour ouvrir son étape."
 
 msgid "Under the strip, the step's position in its level (e.g. \"3 / 5\"), its name and what it holds (\"3 sources\"). An optional step that is still empty reads \"optional\". Select the name to jump to another step from a list, or use the arrows on each side to go to the step before or after."
 msgstr "Sous la bande, la position de l'étape dans son niveau (p. ex. « 3 / 5 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide indique « facultatif ». Sélectionnez le nom pour passer à une autre étape depuis une liste, ou utilisez les flèches de chaque côté pour aller à l'étape précédente ou suivante."
@@ -745,8 +745,8 @@ msgstr "**Jeux**"
 msgid "The number of alert sets built for this period."
 msgstr "Le nombre de jeux d'alertes construits pour cette période."
 
-msgid "**Status**"
-msgstr "**Statut**"
+msgid "**Status** column"
+msgstr "Colonne **Statut**"
 
 msgid "**out of date** when a source download or an alert set no longer matches the current settings (run it again in `Alerts <defo-alerts_>`_, `Harmonize <defo-harmonize_>`_ or `Integrate & vectorize <defo-integrate_>`_); **missing** when an alert set's files are gone; a dash when everything is current."
 msgstr "**obsolète** quand un téléchargement de source ou un jeu d'alertes ne correspond plus aux paramètres actuels (relancez-le dans `Alertes <defo-alerts_>`_, `Harmoniser <defo-harmonize_>`_ ou `Intégrer et vectoriser <defo-integrate_>`_) ; **manquante** quand les fichiers d'un jeu d'alertes ont disparu ; un tiret quand tout est à jour."
@@ -760,8 +760,8 @@ msgstr "le bouton radio rend la période *active* : `Alertes <defo-alerts_>`_, `
 msgid "the pencil icon changes its dates or look-back; and"
 msgstr "l'icône de crayon change ses dates ou sa rétrospection ;"
 
-msgid "the bin icon deletes it."
-msgstr "l'icône de corbeille la supprime."
+msgid "the bin icon deletes the period."
+msgstr "l'icône de corbeille supprime la période."
 
 msgid "Add a period"
 msgstr "Ajouter une période"
@@ -845,7 +845,7 @@ msgid "The **Alerts** step lists the sources of the active `period <defo-period_
 msgstr "L'étape **Alertes** liste les sources de la `période <defo-period_>`_ active, montre quelle part de l'AOI et de la période chacune couvre, et les télécharge. Chaque période a ses propres sources : une source ajoutée ici n'est ajoutée qu'à la période active."
 
 msgid "Open the **Alerts** step of the **Workflow** panel. It unlocks once the project has a `period <defo-period_>`_. It works on the active period: to work on another period, make it active in the `Period <defo-period_>`_ step first. The box at the top of the step names the period and its search window, e.g. \"Period 2026-09-01 → 2026-09-30 · search window from 2026-06-03 (90 days of look-back)\"."
-msgstr "Ouvrez l'étape **Alertes** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `période <defo-period_>`_. Elle porte sur la période active : pour travailler sur une autre période, rendez-la d'abord active à l'étape `Période <defo-period_>`_. L'encadré en haut de l'étape nomme la période et sa fenêtre de recherche, par exemple « Période 2026-09-01 → 2026-09-30 · fenêtre de recherche depuis le 2026-06-03 (90 jours de période antérieure) »."
+msgstr "Ouvrez l'étape **Alertes** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `période <defo-period_>`_. Elle porte sur la période active : pour travailler sur une autre période, rendez-la d'abord active à l'étape `Période <defo-period_>`_. L'encadré en haut de l'étape nomme la période et sa fenêtre de recherche, par exemple « Période 2026-09-01 → 2026-09-30 · fenêtre de recherche depuis le 2026-06-03 (90 jours de rétrospection) »."
 
 msgid "The Alerts step with three downloaded sources"
 msgstr "L'étape Alertes avec trois sources téléchargées"
@@ -870,6 +870,9 @@ msgstr "**AOI** : la part de l'AOI située dans l'emprise de la source, par exem
 
 msgid "The dates: \"✓ data to 2026-10-30\" (green) when the source has data up to the end of the search window, \"data to … only\" (orange) when its data stop inside the window, or \"✗ data ends …\" (red) when it has none in the window."
 msgstr "Les dates : « ✓ données jusqu'au 2026-10-30 » (en vert) quand la source a des données jusqu'à la fin de la fenêtre de recherche, « données jusqu'au … seulement » (en orange) quand ses données s'arrêtent dans la fenêtre, ou « ✗ fin des données le … » (en rouge) quand elle n'en a aucune dans la fenêtre."
+
+msgid "**Status**"
+msgstr "**État**"
 
 msgid "The row's state, or a button to download it (see `Download the sources <defo-alerts-download_>`_)."
 msgstr "L'état de la ligne, ou un bouton pour la télécharger (voir `Télécharger les sources <defo-alerts-download_>`_)."
@@ -1100,7 +1103,7 @@ msgid "Meaning"
 msgstr "Signification"
 
 msgid "\"Downloaded\""
-msgstr "« Téléchargé »"
+msgstr "« Téléchargée »"
 
 msgid "Downloaded for the current search window. The line under the name gives the download date and the size on disk."
 msgstr "Téléchargée pour la fenêtre de recherche actuelle. La ligne sous le nom donne la date du téléchargement et la taille sur le disque."
@@ -1151,7 +1154,7 @@ msgid "The footer under the table downloads in batch. Select **Download … pend
 msgstr "Le pied du tableau télécharge par lot. Sélectionnez **Télécharger … en attente** (par exemple **Télécharger 3 en attente**) pour télécharger chaque source qui en a besoin, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ; une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante. Pendant ce temps, le pied compte ses lignes (« 1 en cours · 2 en attente », puis « 1 sur 3 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui s'arrête après la ligne en cours (« Arrêt… »). La flèche à côté du bouton (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, après confirmation."
 
 msgid "The download also shows as a task notification titled **Download**, with the source it is on and its percentage."
-msgstr "Le téléchargement apparaît aussi comme une notification de tâche intitulée **Télécharger**, avec la source en cours et son pourcentage."
+msgstr "Le téléchargement apparaît aussi comme une notification de tâche intitulée **Téléchargement**, avec la source en cours et son pourcentage."
 
 msgid "Remove a source from a period"
 msgstr "Retirer une source d'une période"
@@ -1862,7 +1865,7 @@ msgid "Visualization layers support the review of the alerts: a land-cover map, 
 msgstr "Les couches de visualisation appuient l'examen des alertes : une carte d'occupation du sol, une référence forestière, une mosaïque récente. Elles ne modifient jamais les alertes. Une couche est une image Earth Engine ou un GeoTIFF. Elle peut être affichée sur la carte principale et, avec **Afficher dans Analyse** coché, sur les deux cartes de l'écran `Analyse <defo-analysis_>`_."
 
 msgid "Open the **Additional layers** step of the **Workflow** panel, the first step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_)."
-msgstr "Ouvrez l'étape **Couches supplémentaires** du panneau **Flux de travail**, la première étape de **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_)."
+msgstr "Ouvrez l'étape **Couches supplémentaires** du panneau **Flux de travail**, la première étape de **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_)."
 
 msgid "The step is optional: skip it and come back at any time. Its bar in the header is dashed, and the step reads \"optional\" until it has a layer."
 msgstr "L'étape est facultative : passez-la et revenez-y à tout moment. Dès que le projet a une `période de suivi <defo-period_>`_, le panneau **Flux de travail** compte l'étape comme terminée même sans couche, et son badge indique « aucune » au lieu de « rien pour l'instant »."
@@ -2129,7 +2132,7 @@ msgid "This step also chooses the report template."
 msgstr "Cette étape permet aussi de choisir le modèle de rapport."
 
 msgid "Open the **Questionnaire** step of the **Workflow** panel, in **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). The questionnaire belongs to the project: every alert set of the project is reviewed with it. The step is optional: without changes, Analysis asks the default question."
-msgstr "Ouvrez l'étape **Questionnaire** du panneau **Flux de travail**, dans **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Le questionnaire appartient au projet : tous les jeux d'alertes du projet sont examinés avec lui. L'étape est facultative : sans modification, Analyse pose la question par défaut."
+msgstr "Ouvrez l'étape **Questionnaire** du panneau **Flux de travail**, dans **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Le questionnaire appartient au projet : tous les jeux d'alertes du projet sont examinés avec lui. L'étape est facultative : sans modification, Analyse pose la question par défaut."
 
 msgid "The Questionnaire step"
 msgstr "L'étape Questionnaire"
@@ -2163,6 +2166,9 @@ msgstr "les flèches font monter ou descendre la question : Analyse pose les que
 
 msgid "the pencil icon edits it; and"
 msgstr "l'icône de crayon la modifie ;"
+
+msgid "the bin icon deletes it."
+msgstr "l'icône de corbeille la supprime."
 
 msgid "With no questions, the list reads **No questions: Analysis will only ask for the verdict.**"
 msgstr "Sans aucune question, la liste indique **Aucune question : Analyse ne demandera que le verdict.**"
@@ -2381,7 +2387,7 @@ msgid "split them among several evaluators. Each evaluator gets a *review packag
 msgstr "répartissez-les entre plusieurs évaluateurs. Chaque évaluateur reçoit un *paquet de révision*, examine ses propres alertes dans son propre compte SEPAL et renvoie une *copie révisée*, qui est ensuite fusionnée dans le projet."
 
 msgid "Open the **Evaluation** step of the **Workflow** panel, the last step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). It works on the active set: a split belongs to one alert set."
-msgstr "Ouvrez l'étape **Évaluation** du panneau **Flux de travail**, la dernière étape de **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Elle porte sur le jeu actif : une répartition appartient à un seul jeu d'alertes."
+msgstr "Ouvrez l'étape **Évaluation** du panneau **Flux de travail**, la dernière étape de **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Elle porte sur le jeu actif : une répartition appartient à un seul jeu d'alertes."
 
 msgid "The alert set is split into packages, each evaluator reviews theirs, and the reviews are merged back"
 msgstr "Le jeu d'alertes est réparti en paquets, chaque évaluateur examine le sien, et les révisions sont fusionnées en retour"
@@ -2488,8 +2494,8 @@ msgstr "**Attribuées**"
 msgid "The number of alerts the evaluator has."
 msgstr "Le nombre d'alertes de l'évaluateur."
 
-msgid "**Reviewed**"
-msgstr "**Révisées**"
+msgid "**Reviewed** column"
+msgstr "Colonne **Révisées**"
 
 msgid "The number of them that are reviewed in *your* project (by you, or merged from the evaluator)."
 msgstr "Combien d'entre elles sont examinées dans *votre* projet (par vous, ou fusionnées depuis l'évaluateur)."
@@ -3049,6 +3055,9 @@ msgstr "**Détectée**"
 msgid "Its first and last detection dates."
 msgstr "Ses dates de première et de dernière détection."
 
+msgid "**Status** row"
+msgstr "Ligne **Statut**"
+
 msgid "Its review status, with its colour: **Not reviewed**, **Reviewed: confirmed**, **Reviewed: false positive** or **Reviewed: needs revision**."
 msgstr "Son état d'examen, avec sa couleur : **Non examinée**, **Examinée : confirmée**, **Examinée : faux positif** ou **Examinée : à revoir**."
 
@@ -3468,6 +3477,9 @@ msgstr "**Détecté au total**"
 
 msgid "The area (or number) of all the set's alerts, whatever their status."
 msgstr "La superficie (ou le nombre) de toutes les alertes du jeu, quel que soit leur statut."
+
+msgid "**Reviewed**"
+msgstr "**Examinées**"
 
 msgid "The share of alerts that have a verdict, and \"16 of 48 alerts\". It always counts alerts."
 msgstr "La part des alertes qui ont un verdict, et « 16 alertes sur 48 ». Elle compte toujours des alertes."
@@ -3923,7 +3935,7 @@ msgid "The clusters beyond the cap are kept as not analysable. The next period r
 msgstr "Les groupes au-delà du plafond sont conservés comme non analysables. La période suivante ne les réexamine que si sa rétrospection remonte jusqu'en septembre et qu'elle utilise les mêmes sources. C'est le cas de la rétrospection de 90 jours d'octobre (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_)."
 
 msgid "With the alert set built, **Set up review** unlocks. To judge alerts against a recent image, the coordinator adds one `additional layer <defo-layers_>`_: an **Earth Engine** Sentinel-2 image of 27 September 2026 (tile 19LDF, east of Puerto Maldonado), drawn as an **RGB composite** in **True colour** (B4, B3, B2), **Min** 0 and **Max** 3000, named ``Sentinel-2 2026-09-27``, and **Show in Analysis** selected."
-msgstr "Une fois le jeu d'alertes construit, **Préparer la revue** se déverrouille. Pour juger les alertes au regard d'une image récente, la coordinatrice ajoute une `couche supplémentaire <defo-layers_>`_ : une image Sentinel-2 **Earth Engine** du 27 septembre 2026 (tuile 19LDF, à l'est de Puerto Maldonado), affichée en **Composite RVB** en **Couleurs naturelles** (B4, B3, B2), **Min** 0 et **Max** 3000, nommée ``Sentinel-2 2026-09-27``, et **Afficher dans Analyse** coché."
+msgstr "Une fois le jeu d'alertes construit, **Configurer la revue** se déverrouille. Pour juger les alertes au regard d'une image récente, la coordinatrice ajoute une `couche supplémentaire <defo-layers_>`_ : une image Sentinel-2 **Earth Engine** du 27 septembre 2026 (tuile 19LDF, à l'est de Puerto Maldonado), affichée en **Composite RVB** en **Couleurs naturelles** (B4, B3, B2), **Min** 0 et **Max** 3000, nommée ``Sentinel-2 2026-09-27``, et **Afficher dans Analyse** coché."
 
 msgid "Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why the Analysis timeline in the screenshots below has no *Planet* chip."
 msgstr "Les mosaïques mensuelles Planet NICFI couvriraient tout le département, mais le compte utilisé pour cet article n'a pas accès à NICFI. C'est pourquoi la frise d'Analyse des captures d'écran ci-dessous n'a pas de pastille *Planet*."

@@ -484,14 +484,14 @@ Cada fila de **Períodos** muestra:
         -   Las fechas del período ("inicio → fin"), con notas debajo: su ventana de búsqueda y las advertencias que haya.
     *   -   **Conjuntos**
         -   El número de conjuntos de alertas generados para este período.
-    *   -   **Estado**
+    *   -   Columna **Estado**
         -   **desactualizada** cuando la descarga de una fuente o un conjunto de alertas ya no corresponde a la configuración actual (vuelve a ejecutarlo en `Alertas <defo-alerts_>`_, `Armonizar <defo-harmonize_>`_ o `Integrar y vectorizar <defo-integrate_>`_); **falta** cuando los archivos de un conjunto de alertas han desaparecido; un guion cuando todo está al día.
 
 Los iconos a la derecha de cada fila:
 
 -   el botón de opción convierte el período en el período *activo*: `Alertas <defo-alerts_>`_, `Armonizar <defo-harmonize_>`_ e `Integrar y vectorizar <defo-integrate_>`_ trabajan sobre el período activo;
 -   el icono de lápiz cambia sus fechas o su retrospección; y
--   el icono de papelera lo elimina.
+-   el icono de papelera elimina el período.
 
 .. _defo-period-add:
 
@@ -929,7 +929,7 @@ La columna **Estado** indica:
     *   -   "no cubierta", "sin datos"
         -   La fuente no se puede ejecutar en este período: no cubre la AOI, o no tiene datos para la ventana de búsqueda. La línea bajo el nombre da el motivo. Consulta `Fuentes de alertas <defo-alerts_>`_ para la cobertura.
     *   -   "Sin archivo"
-        -   El archivo de una fuente GeoTIFF ya no está (consulta `Mensajes frecuentes <defo-harmonize-messages_>`_).
+        -   El archivo de una fuente GeoTIFF ha desaparecido (consulta `Mensajes frecuentes <defo-harmonize-messages_>`_).
 
 En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica "A armonizar" o "A alinear".
 
@@ -1663,7 +1663,7 @@ La tabla de evaluadores
         -   El nombre del evaluador. Una última fila, **Sin asignar**, cuenta las alertas que no recibió ningún evaluador.
     *   -   **Asignadas**
         -   El número de alertas que tiene el evaluador.
-    *   -   **Revisadas**
+    *   -   Columna **Revisadas**
         -   Cuántas de ellas están revisadas en *tu* proyecto (por ti, o integradas desde el evaluador).
     *   -   **Integrado**
         -   La fecha en que se integró por última vez su copia revisada, o un guion.
@@ -2019,7 +2019,7 @@ La parte superior del panel muestra lo que dice la tabla de alertas:
         -   Las fuentes que detectaron la alerta.
     *   -   **Detectada**
         -   Sus fechas de primera y última detección.
-    *   -   **Estado**
+    *   -   Fila **Estado**
         -   Su estado de revisión, con su color: **No revisada**, **Revisada: confirmada**, **Revisada: falso positivo** o **Revisada: necesita revisión**.
     *   -   **Tipo**
         -   Si la alerta crece de una pérdida anterior (consulta `Crecimiento de una pérdida anterior <defo-integrate-growth_>`_): **Crecimiento** (una etiqueta morada), **Crecimiento · bajo el área mínima** o **Nueva · bajo el área mínima** (una alerta pequeña a la que se le quitaron todos sus vínculos). Oculta para una alerta nueva.

@@ -486,14 +486,14 @@ Chaque ligne de **Périodes** affiche :
         -   Les dates de la période (« début → fin »), avec des notes en dessous : sa fenêtre de recherche et les éventuels avertissements.
     *   -   **Jeux**
         -   Le nombre de jeux d'alertes construits pour cette période.
-    *   -   **Statut**
+    *   -   Colonne **Statut**
         -   **obsolète** quand un téléchargement de source ou un jeu d'alertes ne correspond plus aux paramètres actuels (relancez-le dans `Alertes <defo-alerts_>`_, `Harmoniser <defo-harmonize_>`_ ou `Intégrer et vectoriser <defo-integrate_>`_) ; **manquante** quand les fichiers d'un jeu d'alertes ont disparu ; un tiret quand tout est à jour.
 
 Les icônes à droite de chaque ligne :
 
 -   le bouton radio rend la période *active* : `Alertes <defo-alerts_>`_, `Harmoniser <defo-harmonize_>`_ et `Intégrer et vectoriser <defo-integrate_>`_ travaillent sur la période active ;
 -   l'icône de crayon change ses dates ou sa rétrospection ;
--   l'icône de corbeille la supprime.
+-   l'icône de corbeille supprime la période.
 
 .. _defo-period-add:
 
@@ -1665,7 +1665,7 @@ Le tableau des évaluateurs
         -   Le nom de l'évaluateur. Une dernière ligne, **Non attribuées**, compte les alertes qu'aucun évaluateur n'a reçues.
     *   -   **Attribuées**
         -   Le nombre d'alertes de l'évaluateur.
-    *   -   **Révisées**
+    *   -   Colonne **Révisées**
         -   Combien d'entre elles sont examinées dans *votre* projet (par vous, ou fusionnées depuis l'évaluateur).
     *   -   **Fusionné**
         -   La date de la dernière fusion de sa copie révisée, ou un tiret.
@@ -2021,7 +2021,7 @@ Le haut du panneau montre ce que dit la table des alertes :
         -   Les sources qui ont détecté l'alerte.
     *   -   **Détectée**
         -   Ses dates de première et de dernière détection.
-    *   -   **Statut**
+    *   -   Ligne **Statut**
         -   Son état d'examen, avec sa couleur : **Non examinée**, **Examinée : confirmée**, **Examinée : faux positif** ou **Examinée : à revoir**.
     *   -   **Type**
         -   Si l'alerte est l'extension d'une perte antérieure (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_) : **Extension** (une pastille violette), **Extension · sous la surface minimale**, ou **Nouvelle · sous la surface minimale** (une petite alerte dont tous les liens ont été retirés). Masquée pour une nouvelle alerte.
