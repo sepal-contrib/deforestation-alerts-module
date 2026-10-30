@@ -28,7 +28,7 @@ still finds its rows claimed until it ends.
 Stop has the same scope: every job started in the open project and period
 gets its own cancel Event, and Stop sets all of them, so a later start (even a
 no-op click on a ready row) never takes Stop away from a Run all still going,
-nor points it at another project's job. ``_StopEvents`` also records each
+nor points it at another project's job. ``StopEvents`` also records each
 job's keys: the keys of the jobs started in this project and period, mask keys
 included, are the step's own (``mine_keys``); a mask another period's job is
 aligning reads running in its row but is not in this period's Stop scope (this
@@ -45,19 +45,20 @@ its done count; the entry goes with the scope's last job.
 Stop only sets the jobs' cancel Events, so it also marks the scope as
 ``stopping`` (a reactive): until the scope's last job ends, the footer reads
 ``Stopping after this row…`` while every job of the scope is stopped, and the
-rows a stopped job still holds no longer read Queued (``_StopEvents.stopped``):
+rows a stopped job still holds no longer read Queued (``StopEvents.stopped``):
 they will not run.
 
 Download again (a row's, or the footer menu's Download all again) and Delete
 files ask first (``refresh_confirm``, ``delete_confirm``). Delete files drops
 this period's raw and harmonized records of the source and deletes their
 files; the source and the alert sets built from them stay.
+
+The job state (in-flight keys, Stop events, row errors, progress, stages,
+batch, stopping) and the start and Stop live in ``gui.scripts.prepare_scope``:
+the shell creates one ``PrepareJobs`` per session and passes it in.
 """
 
-import asyncio
 import logging
-import threading
-from typing import Optional
 
 import solara
 from pysepal.solara.notifications import use_notifications
@@ -72,14 +73,12 @@ from deforestation_alerts.project import cleanup, paths
 from deforestation_alerts.project.models import period_sources, sets_using_source
 from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import size_text, t, tn
-from gui.scripts import aoi_io, source_layers
+from gui.scripts import source_layers
 from gui.scripts.coverage_ui import CheckAgainButton, result_note, row_notes
-from gui.scripts.error_text import error_text
-from gui.scripts.inflight import InflightKeys
-from gui.scripts.prepare_jobs import PrepareContext, progress_key, run_rows
+from gui.scripts.prepare_jobs import progress_key
+from gui.scripts.prepare_scope import aoi_key, inflight_key, mask_inflight_key, start_items, stop_scope  # noqa: F401 - aoi_key re-exported for the tests
 from gui.scripts.prepare_view import row_status_label, source_details, source_label, source_state, source_subtitle
-from gui.scripts.setup_guard import refuse_setup, update_setup
-from gui.scripts.solara_threads import spawn_in_context
+from gui.scripts.setup_guard import update_setup
 from gui.scripts.source_layers import refresh_mask_legends
 from gui.store import workflow_steps
 from gui.store.project_writers import is_writing
@@ -93,8 +92,6 @@ from gui.widget.product_table import STATUS_PX, ProductTable
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
-_DOWNLOADS = (Status.MISSING, Status.STALE)  # the runner downloads these (and anything forced)
-
 SOURCE_ACTIONS = 4  # map, details, download again, delete
 
 
@@ -102,15 +99,6 @@ def source_columns() -> list:
     """Source | Status (spec "The sources table"): the size on disk is in the subtitle."""
     return [{"label": t("steps.prepare.col_source")},
             {"label": t("steps.prepare.col_status"), "width": f"{STATUS_PX}px"}]
-
-
-def _inflight_key(project: str, period_id: str, source: str) -> str:
-    return f"prep:{project}:{period_id}:{source}"
-
-
-def mask_inflight_key(project: str, name: str) -> str:
-    """Project-wide, not per period: a mask has one aligned file per project."""
-    return f"prep:{project}:@mask:{name}"
 
 
 def mine_keys(running, stops, project: str, period_id: str) -> set:
@@ -124,7 +112,7 @@ def mine_rows(p, period, mine) -> set:
     """The ``prepare_jobs.progress_key`` of every row (source or mask) whose
     in-flight key is in ``mine``: the rows this scope's jobs hold."""
     sources = {progress_key(p.name, period.id, "source", s) for s in period_sources(p, period)
-               if _inflight_key(p.name, period.id, s) in mine}
+               if inflight_key(p.name, period.id, s) in mine}
     masks = {progress_key(p.name, period.id, "mask", m) for m in p.masks if mask_inflight_key(p.name, m) in mine}
     return sources | masks
 
@@ -152,12 +140,6 @@ def items_for_source(p, pdir, period, source) -> list:
     """A source row's Run: the period's stale masks first (its harmonize reads
     them all), then the source."""
     return [("mask", m.name) for m in plan_masks(p, pdir, period) if m.needs_run] + [("source", source)]
-
-
-def aoi_key(project: str) -> str:
-    """The in-flight key of the project's AOI raster (``masks/aoi.tif``),
-    shared by every period: one AOI-raster build at a time."""
-    return f"prep:{project}:@aoi"
 
 
 def _art(p, key):
@@ -234,11 +216,11 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
     """
     out = []
     for r in rows:
-        busy = _inflight_key(p.name, period.id, r.source) in mine
+        busy = inflight_key(p.name, period.id, r.source) in mine
         pkey = progress_key(p.name, period.id, "source", r.source)
         stage = (stages or {}).get(pkey) if busy else None
         pct = (progress or {}).get(pkey) if busy else None
-        queued = busy and stage is None and _inflight_key(p.name, period.id, r.source) not in stopped
+        queued = busy and stage is None and inflight_key(p.name, period.id, r.source) not in stopped
         file_source = is_file_source(p.sources[r.source])
         raw_art, harm_art = _art(p, raw_key(period.id, r.source)), _art(p, harm_key(period.id, r.source))
         if r.file_missing:
@@ -288,91 +270,18 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
     return out
 
 
-class _StopEvents:
-    """The cancel Events of the running jobs, and each job's in-flight keys,
-    by (project, period id).
-
-    Clicks add and stop, and workers discard, so every access takes the lock.
-    """
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._events: dict[tuple, dict] = {}  # scope -> {Event: frozenset of its keys}
-
-    def add(self, scope: tuple, keys=()) -> threading.Event:
-        event = threading.Event()
-        with self._lock:
-            self._events.setdefault(scope, {})[event] = frozenset(keys)
-        return event
-
-    def keys(self, scope: tuple) -> set:
-        """The in-flight keys of the jobs started in ``scope``."""
-        with self._lock:
-            return set().union(*self._events.get(scope, {}).values())
-
-    def discard(self, scope: tuple, event: threading.Event) -> None:
-        with self._lock:
-            events = self._events.get(scope)
-            if events is not None:
-                events.pop(event, None)
-                if not events:
-                    del self._events[scope]
-
-    def stop(self, scope: tuple) -> None:
-        with self._lock:
-            events = list(self._events.get(scope, ()))
-        for event in events:
-            event.set()
-
-    def stopped(self, scope: Optional[tuple] = None) -> set:
-        """The in-flight keys of the jobs Stop reached, in ``scope`` (None: every scope)."""
-        with self._lock:
-            scopes = [self._events.get(scope, {})] if scope is not None else list(self._events.values())
-            return {key for events in scopes for event, keys in events.items() if event.is_set() for key in keys}
-
-
-class _ScopedErrors:
-    """One job's view of the step's row errors (``{scope: {row: message}}``):
-    it reads and writes only its own scope's errors (the project and period
-    it ran for), so an error recorded after the user moved on never lands on
-    the same row of the period now showing."""
-
-    def __init__(self, store, scope):
-        self._store, self._scope = store, scope
-
-    @property
-    def value(self) -> dict:
-        return self._store.value.get(self._scope, {})
-
-    def set(self, errors: dict) -> None:
-        self._store.set({**self._store.value, self._scope: errors})
-
-
 @solara.component
-def PrepareStep(app_state, map_, gee_interface, layers):
+def PrepareStep(app_state, map_, gee_interface, layers, jobs):
+    """``jobs``: the session's ``PrepareJobs``, created once by the shell."""
     notifications = use_notifications()
     p = app_state.project.value
-    # Session-wide, like the step: never claimed or released from a render or
-    # an effect (see gui/scripts/map_layers.py), only from clicks and workers.
-    inflight = solara.use_memo(InflightKeys, [])
+    inflight, stops, row_errors, row_progress = jobs.inflight, jobs.stops, jobs.row_errors, jobs.row_progress
     running = inflight.value
     on = layers.on.value
     building = layers.inflight.value
-    stops = solara.use_memo(_StopEvents, [])  # session-wide, like ``inflight``
-    row_errors = solara.use_reactive({})  # {scope: {row: message}}, written through _ScopedErrors
-    errors_lock = solara.use_memo(threading.Lock, [])  # the step's jobs set row errors, percents and stages under it
-    # {prepare_jobs.progress_key: percent} of the downloads running; keyed by
-    # project and period, so a row of another scope never reads it
-    row_progress = solara.use_reactive({})
     info_source, set_info_source = solara.use_state(None)  # the source whose Details dialog is open
     pending_refresh, set_pending_refresh = solara.use_state(None)  # a source to download again, "*" for all
     pending_delete, set_pending_delete = solara.use_state(None)  # the source whose files to delete
-    row_stage = solara.use_reactive({})  # {progress_key: "download"|"harmonize"|"align"} of the rows running
-    batch = solara.use_reactive({})  # {(project, period id): (total, done)} of the scope's jobs, for the footer
-    # {(project, period id): Stop clicks} of the scopes Stop reached, until their
-    # last job ends: a count, so a second Stop (after a row started since the
-    # first) is a new value and re-renders
-    stopping = solara.use_reactive({})
     # A row's error belongs to the project and period it ran for: a job writes
     # under its own scope, the table reads the showing scope's, and a change
     # of scope forgets them all.
@@ -404,102 +313,9 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     def _aoi_raster_current():
         return status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is Status.CURRENT
 
-    def _is_file(kind, name):
-        return p.masks[name].origin == "file" if kind == "mask" else is_file_source(p.sources[name])
-
-    def _key(kind, name):
-        return mask_inflight_key(p.name, name) if kind == "mask" else _inflight_key(p.name, period.id, name)
-
     def _start(items, force=False):
-        """Start one tracked job for ``items`` (``("mask", name)`` /
-        ``("source", name)``, in run order)."""
-        if refuse_setup(app_state, notifications):  # a review copy downloads nothing (spec §6.3)
-            return
-        by_mask = {m.name: m for m in plan_masks(p, pdir, period)}
-        file_items = [it for it in items if _is_file(*it)]
-        needs_aoi_raster = bool(file_items) and not _aoi_raster_current()
-        if needs_aoi_raster and p.aoi.geometry_file is None:
-            # The GeoTIFF rows (sources and masks) wait for the AOI sidecar;
-            # the others still run (spec §12: one row must not stop the others).
-            notifications.info(t("steps.prepare.aoi_geometry_missing" if app_state.sidecar_pending.value
-                                 else "steps.prepare.aoi_geometry_failed"))
-            items = [it for it in items if it not in file_items]
-            needs_aoi_raster = False
-        if not items:
-            return
-        keys = [_key(*it) for it in items]
-        if needs_aoi_raster:
-            keys.append(aoi_key(p.name))  # one AOI-raster build at a time
-        stop_scope = (p.name, period.id)
-        job = {}
-        # The job joins this period's Stop scope only once its claim succeeds,
-        # and before the claim is published: the claim's re-render already
-        # counts these keys as this project's and period's (``mine_keys``),
-        # and a refused claim never lists another job's keys as ours.
-        if not inflight.claim(*keys, on_claim=lambda: job.update(cancel=stops.add(stop_scope, keys))):
-            # A key is held by another job: a mask another period's job is
-            # aligning, the AOI raster being built, a row still running.
-            notifications.info(t("steps.prepare.claim_busy"))
-            return
-        cancel = job["cancel"]
-
-        def _give_back():
-            # Under the step's lock, so a Stop or a start racing it sees the
-            # scope's last job either before or after it is gone.
-            with errors_lock:
-                stops.discard(stop_scope, cancel)  # before the release, so its re-render reads both gone
-                if not stops.keys(stop_scope):  # the scope's last job: its batch and its Stop are over
-                    batch.set({k: v for k, v in batch.value.items() if k != stop_scope})
-                    if stop_scope in stopping.value:
-                        stopping.set({k: n for k, n in stopping.value.items() if k != stop_scope})
-            inflight.release(*keys)
-
-        # Drift note: only rows that download from Earth Engine need it (the
-        # metadata and the AOI); a grid change re-harmonizes (re-aligns) from
-        # the raw file on disk, and a GeoTIFF row is read locally from the
-        # user's file.
-        raw = {it: (by_mask[it[1]].raw if it[0] == "mask" else by_source[it[1]].raw) for it in items}
-        downloads = [it for it in items if not _is_file(*it) and (force or raw[it] in _DOWNLOADS)]
-        meta = app_state.catalogue_meta.value
-        if (any(kind == "source" and getattr(p.sources[name], "catalogue_key", None) == "GLAD-L"
-                for kind, name in downloads) and "GLAD-L" not in meta):
-            _give_back()
-            notifications.info(t("steps.alerts.meta_loading"))
-            return
-        aoi = None  # local rows (a grid change, GeoTIFF sources and masks) need no Earth Engine
-        if downloads:
-            try:
-                aoi = aoi_io.ee_aoi(app_state.aoi_result.value, pdir)  # builds ee objects, no request
-            except Exception as exc:  # noqa: BLE001 - ValueError (no geometry), or a bad sidecar/ee object
-                # Any failure here must give the claimed keys back, or the rows
-                # read "running" for the rest of the session.
-                _give_back()
-                logger.exception("could not build the Earth Engine AOI")
-                notifications.error(error_text(exc))
-                return
-        ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,
-                             name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel,
-                             row_errors=_ScopedErrors(row_errors, scope), errors_lock=errors_lock,
-                             row_progress=row_progress, row_stage=row_stage, downloads=frozenset(downloads),
-                             on_row_end=lambda: _count(stop_scope, done=1))
-
-        def _job():
-            try:
-                run_rows(ctx, items, force=force)
-            except asyncio.CancelledError:
-                pass  # Stop: the task reads "cancelled"; not an error
-            finally:
-                _give_back()
-
-        _count(stop_scope, total=len(items))
-        spawn_in_context(_job)
-
-    def _count(stop_scope, total=0, done=0):
-        """Add to a scope's batch counts (a start's rows, a row's end); a
-        worker calls it too, so under the step's lock."""
-        with errors_lock:
-            was_total, was_done = batch.value.get(stop_scope, (0, 0))
-            batch.set({**batch.value, stop_scope: (was_total + total, was_done + done)})
+        start_items(jobs, app_state=app_state, layers=layers, map_=map_, notifications=notifications,
+                    items=items, force=force)
 
     def _toggle_map(source):
         # The Alerts step's pattern, not ``toggle``: a click behind a
@@ -521,16 +337,9 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     mine = mine_keys(running, stops, p.name, period.id)
     stopped = stops.stopped((p.name, period.id))
 
-    def _stop():
-        """Stop after the row in progress; the footer says so until the scope's last job ends."""
-        stop_scope = (p.name, period.id)
-        stops.stop(stop_scope)
-        with errors_lock:  # ``_give_back`` drops the mark under it: never one left behind
-            if stops.keys(stop_scope):
-                stopping.set({**stopping.value, stop_scope: stopping.value.get(stop_scope, 0) + 1})
     pending = run_all_items(p, pdir, period) if p.grid is not None else []
-    stages = scope_stages(row_stage.value, p.name, period.id)
-    counts = footer_counts(mine_rows(p, period, mine), stages, batch.value.get((p.name, period.id)))
+    stages = scope_stages(jobs.row_stage.value, p.name, period.id)
+    counts = footer_counts(mine_rows(p, period, mine), stages, jobs.batch.value.get((p.name, period.id)))
     redownload = redownload_items(p, rows)
 
     def _redownload_all():
@@ -554,12 +363,12 @@ def PrepareStep(app_state, map_, gee_interface, layers):
     details = None
     if shown is not None:
         row = by_source[shown]
-        shown_busy = _inflight_key(p.name, period.id, shown) in mine
+        shown_busy = inflight_key(p.name, period.id, shown) in mine
         shown_key = progress_key(p.name, period.id, "source", shown)
         shown_stage = stages.get(shown_key) if shown_busy else None
         lead = row_status_label(row, is_file_source(p.sources[shown]), stage=shown_stage,
                                 queued=(shown_busy and shown_stage is None
-                                        and _inflight_key(p.name, period.id, shown) not in stopped),
+                                        and inflight_key(p.name, period.id, shown) not in stopped),
                                 pct=row_progress.value.get(shown_key) if shown_busy else None)
         details = source_details(p, period, shown, row, source_reason(p, period, shown), lead)
 
@@ -582,7 +391,7 @@ def PrepareStep(app_state, map_, gee_interface, layers):
         set_pending_delete(None)
         # spec §5.1: like the other deletes, wait for the project's writers,
         # and for a job that claimed the row since the dialog opened
-        if is_writing(p.name) or _inflight_key(p.name, period.id, name) in inflight:
+        if is_writing(p.name) or inflight_key(p.name, period.id, name) in inflight:
             notifications.warning(t("steps.prepare.delete_files_busy"))
             return
         layers.hide(f"src:{name}")  # its layer reads the harmonized file
@@ -623,11 +432,11 @@ def PrepareStep(app_state, map_, gee_interface, layers):
                           on_confirm=_delete_files, title=delete_title, message=delete_message, note=delete_note,
                           confirm_label=t("common.delete"))
             BatchFooter(pending=len(pending), run_label=tn("steps.prepare.run_all", len(pending)),
-                        on_run=lambda: _start(pending), on_stop=_stop,
+                        on_run=lambda: _start(pending), on_stop=lambda: stop_scope(jobs, p.name, period.id),
                         # Run stays off while the scope holds keys its rows no longer show (a mask removed)
                         menu=menu, counts=counts, disabled=read_only(p) or bool(mine),
                         # every job of the scope is stopped (a row started since Stop brings Stop back)
-                        stopping=(p.name, period.id) in stopping.value and bool(mine) and mine <= stopped)
+                        stopping=(p.name, period.id) in jobs.stopping.value and bool(mine) and mine <= stopped)
             # Check again after a failed coverage check, or a failed AOI-sidecar
             # fetch that leaves the GeoTIFF rows (sources, masks on in the
             # period) waiting (the loader refetches it on the same retry)

@@ -38,7 +38,7 @@ from deforestation_alerts.project.models import (
     add_predefined_source,
 )
 from gui.i18n import t, tn
-from gui.scripts import aoi_io, prepare_jobs, raster_map, source_layers
+from gui.scripts import aoi_io, prepare_jobs, prepare_scope, raster_map, source_layers
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.prepare_view import source_label
 from gui.store.project_writers import is_writing, writing
@@ -545,7 +545,8 @@ class _FakeMap:
 @solara.component
 def _Harness(app_state, map_, gee_interface, layers):
     NotificationProvider()  # the step's use_notifications() needs it rendered first
-    prepare_step.PrepareStep(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers)
+    jobs = solara.use_memo(prepare_scope.PrepareJobs, [])  # as the shell does
+    prepare_step.PrepareStep(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers, jobs=jobs)
 
 
 def _render(state, layers=None, map_=None):
@@ -573,13 +574,14 @@ def step(monkeypatch, tmp_path):
 
     monkeypatch.setattr(prepare_step, "ProductTable", _RecorderTable)
     # Jobs are queued, not started: the test runs them (``run_jobs``).
-    monkeypatch.setattr(prepare_step, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append(target))
+    monkeypatch.setattr(prepare_scope, "spawn_in_context", lambda target, args=(), **kw: ns.jobs.append(target))
     # A job's items as the tests read them: a source by its bare name, a mask as ("mask", name).
-    monkeypatch.setattr(prepare_step, "run_rows",
+    monkeypatch.setattr(prepare_scope, "run_rows",
                         lambda ctx, items, force=False: ns.started.append((ctx, _named(items), force)))
 
     def plan(*rows):
-        monkeypatch.setattr(prepare_step, "plan_prepare", lambda p, pdir, period: list(rows))
+        for module in (prepare_step, prepare_scope):  # the table's rows, and the start's
+            monkeypatch.setattr(module, "plan_prepare", lambda p, pdir, period: list(rows))
 
     def run_jobs():
         while ns.jobs:
@@ -798,7 +800,7 @@ def test_stop_reaches_a_job_after_another_row_started(step, monkeypatch):
             _run(step.table[-1][1])  # RADD starts its own job
             _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
 
-    monkeypatch.setattr(prepare_step, "run_rows", blocked_mid_row)
+    monkeypatch.setattr(prepare_scope, "run_rows", blocked_mid_row)
     try:
         _run(step.table[-1][0])
         step.run_jobs()
@@ -818,12 +820,12 @@ def test_stop_in_one_project_leaves_another_projects_job_running(step, monkeypat
     """
     registries = []
 
-    class _Recording(prepare_step._StopEvents):
+    class _Recording(prepare_scope.StopEvents):
         def __init__(self):
             super().__init__()
             registries.append(self)
 
-    monkeypatch.setattr(prepare_step, "_StopEvents", _Recording)
+    monkeypatch.setattr(prepare_scope, "StopEvents", _Recording)
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE), PrepareRow("RADD", Status.CURRENT, Status.STALE))
     state = _state(_project("a", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
 
@@ -849,7 +851,7 @@ def test_stop_events_are_scoped_and_forgotten_when_their_job_ends():
     """The registry lives as long as the session: an ended job's Event must
     not stay in it.
     """
-    stops = prepare_step._StopEvents()
+    stops = prepare_scope.StopEvents()
     a1, a2, b = stops.add(("a", JAN.id), {"k1"}), stops.add(("a", JAN.id), {"k2"}), stops.add(("b", JAN.id), {"k3"})
     assert stops.stopped() == set()
     stops.stop(("a", JAN.id))
@@ -1134,7 +1136,7 @@ def test_stop_ends_the_job_quietly_and_gives_its_rows_back(step, monkeypatch):
     def cancelled(ctx, sources, force=False):
         raise asyncio.CancelledError()
 
-    monkeypatch.setattr(prepare_step, "run_rows", cancelled)
+    monkeypatch.setattr(prepare_scope, "run_rows", cancelled)
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
     state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
 
@@ -1234,13 +1236,13 @@ def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(step, monkeypat
 
     claims = []
 
-    class _Recording(prepare_step.InflightKeys):
+    class _Recording(prepare_scope.InflightKeys):
         def claim(self, *keys, **kw):
             claims.append(keys)
             return super().claim(*keys, **kw)
 
     monkeypatch.setattr(aoi_io, "ee_aoi", no_aoi)
-    monkeypatch.setattr(prepare_step, "InflightKeys", _Recording)
+    monkeypatch.setattr(prepare_scope, "InflightKeys", _Recording)
     step.plan(PrepareRow("tif", Status.MISSING, Status.MISSING))
     state = _state(_with_tif(tmp_path, sidecar=True))
 
@@ -1253,7 +1255,7 @@ def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(step, monkeypat
         step.run_jobs()
         [(ctx, sources, force)] = step.started
         assert sources == ["tif"] and not force and ctx.aoi is None
-        assert claims == [(prepare_step._inflight_key("d", JAN.id, "tif"), prepare_step.aoi_key("d"))]
+        assert claims == [(prepare_step.inflight_key("d", JAN.id, "tif"), prepare_step.aoi_key("d"))]
         assert prepare_step.aoi_key("d") == "prep:d:@aoi" and _toasts("info") == []
     finally:
         rc.close()
@@ -1398,12 +1400,12 @@ def _with_mask(*, origin="gee", tmp_path=None, sidecar=True, periods=(JAN,)):
 def _recording_inflight(monkeypatch):
     claims = []
 
-    class _Recording(prepare_step.InflightKeys):
+    class _Recording(prepare_scope.InflightKeys):
         def claim(self, *keys, **kw):
             claims.append(keys)
             return super().claim(*keys, **kw)
 
-    monkeypatch.setattr(prepare_step, "InflightKeys", _Recording)
+    monkeypatch.setattr(prepare_scope, "InflightKeys", _Recording)
     return claims
 
 
@@ -1420,7 +1422,7 @@ def test_run_all_aligns_the_periods_masks_first_and_stop_covers_their_keys(step,
     try:
         _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
         assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
-                           prepare_step._inflight_key("d", JAN.id, "GLAD-L"))]
+                           prepare_step.inflight_key("d", JAN.id, "GLAD-L"))]
         assert _stop_shown(rc)  # the job's keys are this period's
         assert not _run_all_shown(rc, 2)
         step.run_jobs()
@@ -1636,7 +1638,7 @@ def test_download_again_during_a_run_all_keeps_stop(step, monkeypatch):
             _refresh(rc, step.table[-1][1])  # Download again the ready RADD row
             _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
 
-    monkeypatch.setattr(prepare_step, "run_rows", run_all_blocked_mid_row)
+    monkeypatch.setattr(prepare_scope, "run_rows", run_all_blocked_mid_row)
     try:
         _button(rc, tn("steps.prepare.run_all", 1)).fire_event("click", None)
         step.run_jobs()
@@ -1787,7 +1789,7 @@ def test_the_footer_counts_this_scopes_rows_and_forgets_the_batch_when_it_ends(s
         ctx.on_row_end()
         seen.append(texts())
 
-    monkeypatch.setattr(prepare_step, "run_rows", a_run)
+    monkeypatch.setattr(prepare_scope, "run_rows", a_run)
     box, rc = _render(state)
     try:
         _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
@@ -1811,12 +1813,12 @@ def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, 
     silently, and January's job is not in February's Stop scope."""
     added = []
 
-    class _Recording(prepare_step._StopEvents):
+    class _Recording(prepare_scope.StopEvents):
         def add(self, scope, keys=()):
             added.append(scope)
             return super().add(scope, keys)
 
-    monkeypatch.setattr(prepare_step, "_StopEvents", _Recording)
+    monkeypatch.setattr(prepare_scope, "StopEvents", _Recording)
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
     state = _state(_with_mask(periods=(JAN, FEB)))
@@ -1859,7 +1861,7 @@ def test_a_geotiff_mask_claims_the_aoi_raster_and_waits_for_the_aoi_geometry(ste
         _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
         step.run_jobs()
         assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
-                           prepare_step._inflight_key("d", JAN.id, "GLAD-L"), prepare_step.aoi_key("d"))]
+                           prepare_step.inflight_key("d", JAN.id, "GLAD-L"), prepare_step.aoi_key("d"))]
         assert step.started[-1][1] == [("mask", "forest"), "GLAD-L"] and step.started[-1][0].aoi is None
     finally:
         rc.close()
@@ -2091,7 +2093,7 @@ def test_stop_says_stopping_until_the_job_ends_and_its_queued_rows_stop_reading_
         ctx.row_stage.set({})
         ctx.on_row_end()
 
-    monkeypatch.setattr(prepare_step, "run_rows", a_run)
+    monkeypatch.setattr(prepare_scope, "run_rows", a_run)
     box, rc = _render(state)
     try:
         _button(rc, tn("steps.prepare.run_all", 2)).fire_event("click", None)
@@ -2128,7 +2130,7 @@ def test_a_row_started_after_stop_brings_stop_back(step, monkeypatch):
             _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
             seen.append(any(t("steps.prepare.footer_stopping") in w.children for w in rc.find(v.Btn).widgets))
 
-    monkeypatch.setattr(prepare_step, "run_rows", a_run)
+    monkeypatch.setattr(prepare_scope, "run_rows", a_run)
     box, rc = _render(state)
     try:
         _run(step.table[-1][0])

@@ -72,7 +72,7 @@ def test_footer_counts_only_this_scope():
     add_predefined_source(p, "RADD")
     p.periods = {JAN.id: JAN, FEB.id: FEB}
     p.active_period = JAN.id
-    mine = {prepare_step._inflight_key("r", JAN.id, "RADD")}
+    mine = {prepare_step.inflight_key("r", JAN.id, "RADD")}
     foreign = {prepare_jobs.progress_key("r", FEB.id, "source", "RADD"): "download",
                prepare_jobs.progress_key("other", JAN.id, "source", "RADD"): "download"}
     stages = prepare_step.scope_stages(foreign, "r", JAN.id)

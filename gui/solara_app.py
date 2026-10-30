@@ -59,6 +59,7 @@ from gui.i18n import app_available_locales, format_number, t
 from gui.scripts import alert_layers, legend_specs, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
+from gui.scripts.prepare_scope import PrepareJobs
 from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.scene_loader import SceneIndexLoader
 from gui.scripts.set_context import SetContext
@@ -743,6 +744,8 @@ def _AppShell():
     # nav_model mirrors MapApp's rail step (see below); mapapp_ref holds the
     # rendered MapApp widget, resolved once it is mounted (_resolve_mapapp).
     # Both exist before the tiles so the Project dialog can close itself.
+    # The prepare jobs' state, one per session, shared by the steps that run them.
+    prepare_jobs = solara.use_memo(PrepareJobs, [])
     nav_model = solara.use_memo(lambda: _NavModel(), dependencies=[])
     mapapp_ref = solara.use_memo(lambda: {}, dependencies=[])
     about_widget = solara.use_memo(
@@ -768,7 +771,8 @@ def _AppShell():
             "period": render_detached(lambda: PeriodStep(app_state=app_state, layers=layers),
                                       t("app.drawer_item.period"))[0],
             "prepare": render_detached(lambda: PrepareStep(app_state=app_state, map_=map_,
-                                                           gee_interface=gee_interface, layers=layers),
+                                                           gee_interface=gee_interface, layers=layers,
+                                                           jobs=prepare_jobs),
                                        t("app.drawer_item.prepare"))[0],
             "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
                                                                gee_interface=gee_interface, layers=layers),

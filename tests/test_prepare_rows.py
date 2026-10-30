@@ -149,7 +149,7 @@ def test_a_downloaded_source_offers_no_run_until_its_window_changes(raw, harmoni
 
 
 def test_a_busy_row_reads_queued_or_its_stage():
-    key = prepare_step._inflight_key("r", JAN.id, "RADD")
+    key = prepare_step.inflight_key("r", JAN.id, "RADD")
     rows = [PrepareRow("RADD", Status.MISSING, Status.MISSING)]
     queued = _build(rows, mine={key})["RADD"]
     assert queued["cells"][1]["label"] == "Queued" and queued["cells"][0]["subtitle"] == "waiting for the row above"

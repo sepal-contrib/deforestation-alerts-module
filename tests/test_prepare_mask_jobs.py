@@ -22,7 +22,7 @@ from deforestation_alerts.project.models import (
     AoiRecord, GridSpec, NativeGrid, Period, Project, add_mask, add_predefined_source, set_period_mask,
 )
 from gui.i18n import t
-from gui.scripts import prepare_jobs, raster_map, source_layers
+from gui.scripts import prepare_jobs, prepare_scope, raster_map, source_layers
 from gui.store.state_manager import AppState
 from gui.tile import prepare_step
 
@@ -74,7 +74,7 @@ def test_a_ready_mask_is_not_run_again(tmp_path, cover):
 
 
 def test_mask_keys_share_the_stop_scope_of_the_period_that_started_them():
-    stops = prepare_step._StopEvents()
+    stops = prepare_scope.StopEvents()
     feb, mar = ("mj", "2026-02-01_2026-02-28"), ("mj", "2026-03-01_2026-03-31")
     event = stops.add(feb, {"prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest"})
     stops.add(mar, {"prep:mj:2026-03-01_2026-03-31:RADD"})

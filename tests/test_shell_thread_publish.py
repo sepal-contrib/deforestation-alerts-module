@@ -79,6 +79,7 @@ from gui.scripts import detached, legend_specs, map_layers, set_store
 from gui.scripts.detached import render_detached
 from gui.scripts.integrate_jobs import apply_result
 from gui.scripts.map_layers import MapLayers
+from gui.scripts.prepare_scope import PrepareJobs
 from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.autosave import install_autosave
@@ -242,6 +243,7 @@ def shell(data_root, monkeypatch):
             lambda: MapLayers(map_, legends=state.layer_legends, selected=state.selected_legend), [])
         tiles["map_layers"] = layers
         layout = solara.use_memo(lambda: _Layout(), [])
+        jobs = solara.use_memo(PrepareJobs, [])
 
         def _build():
             _detached("about", lambda: AboutTile())
@@ -251,7 +253,8 @@ def shell(data_root, monkeypatch):
             _detached("aoi", lambda: AoiStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("alerts", lambda: AlertsStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("period", lambda: PeriodStep(app_state=state, layers=layers))
-            _detached("prepare", lambda: PrepareStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
+            _detached("prepare", lambda: PrepareStep(app_state=state, map_=map_, gee_interface=gee, layers=layers,
+                                                      jobs=jobs))
             _detached("integrate", lambda: IntegrateStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("layers", lambda: LayersStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("header", lambda: WorkflowHeader(app_state=state))
