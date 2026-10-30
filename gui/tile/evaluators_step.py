@@ -922,7 +922,7 @@ def _StartAnalysis(app_state, ready):
                   disabled=not ready, classes=["defo-start-analysis"],
                   on_click=lambda: app_state.current_page_view.set("analysis_tile"))
     if not ready:
-        solara.Text(t("workflow.lock_analysis"), style=MUTED + "font-size:0.75rem;")
+        solara.Text(t("workflow.lock_review"), style=MUTED + "font-size:0.75rem;")
 
 
 @solara.component
@@ -948,5 +948,5 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
                 if p.multi_evaluator:
                     _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
                                   gee_interface=gee_interface)
-        # Without an active set, Start analysis says why (workflow.lock_analysis).
+        # Without an active set, Start analysis says why (workflow.lock_review).
         _StartAnalysis(app_state=app_state, ready=s is not None)

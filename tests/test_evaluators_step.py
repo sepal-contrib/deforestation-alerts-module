@@ -325,7 +325,7 @@ def test_the_step_waits_for_an_alert_set(data_root):
     p.active_set = None
     _box, rc = _render(_state(p))
     try:
-        assert t("workflow.lock_analysis") in _strings(rc.container)
+        assert t("workflow.lock_review") in _strings(rc.container)
         assert not [b for b in rc.find(v.Btn).widgets if t("evaluators.split") in _strings(b)]
     finally:
         rc.close()

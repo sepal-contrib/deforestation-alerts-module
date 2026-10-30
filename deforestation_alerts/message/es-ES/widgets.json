@@ -55,7 +55,6 @@
     "lock_period": "Elige primero el área de interés.",
     "lock_harmonize": "Descarga primero una fuente.",
     "lock_integrate": "Descarga y armoniza primero al menos una fuente.",
-    "lock_analysis": "Ejecuta primero Integrar y vectorizar.",
     "count_sources": {
       "one": "{count} fuente",
       "many": "{count} de fuentes",

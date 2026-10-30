@@ -54,7 +54,6 @@
     "lock_period": "Pick the AOI first.",
     "lock_harmonize": "Download a source first.",
     "lock_integrate": "Download and harmonize at least one source first.",
-    "lock_analysis": "Run Integrate & vectorize first.",
     "count_sources": {
       "one": "{count} source",
       "other": "{count} sources"

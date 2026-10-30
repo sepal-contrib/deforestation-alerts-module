@@ -55,7 +55,6 @@
     "lock_period": "Choisissez d'abord la zone d'intérêt.",
     "lock_harmonize": "Téléchargez d'abord une source.",
     "lock_integrate": "Téléchargez et harmonisez d'abord au moins une source.",
-    "lock_analysis": "Lancez d'abord Intégrer et vectoriser.",
     "count_sources": {
       "one": "{count} source",
       "many": "{count} de sources",

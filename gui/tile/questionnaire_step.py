@@ -130,7 +130,7 @@ def QuestionnaireStep(app_state):
         solara.Info(t("workflow.lock_project"))
         return
     if active_set(p) is None:  # the step's gate (workflow_steps): after Integrate & vectorize
-        solara.Info(t("workflow.lock_analysis"))
+        solara.Info(t("workflow.lock_review"))
         return
     name = p.name
 
