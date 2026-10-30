@@ -53,7 +53,7 @@ Stop only sets the jobs' cancel Events, so it also marks the scope as
 rows a stopped job still holds no longer read Queued (``StopEvents.stopped``):
 they will not run.
 
-The step is the Harmonize step (spec §2, ``stage="harmonize"``): it only
+The step is the Harmonize step (spec §2): it only
 harmonizes (``mode="harmonize"``), and only on its own click (Harmonize all
 or a row's pill: a download never chains into it); a row whose raw file is
 not current waits for its download in the Alerts step, which also holds Download again and
@@ -144,14 +144,14 @@ def redownload_items(p, rows) -> list:
     return [("source", r.source) for r in rows if not r.blocked and not is_file_source(p.sources[r.source])]
 
 
-def run_all_items(rows, mask_rows, stage=None) -> list:
+def run_all_items(rows, mask_rows) -> list:
     """Run all's rows (spec §7.3) from the period's ``plan_prepare`` and
     ``plan_masks``: the masks on in the period that need a run, then the
-    runnable sources; ``stage="harmonize"`` (spec §2): only the sources whose
-    raw file is current, as a harmonize never downloads."""
+    runnable sources whose raw file is current: a harmonize never downloads
+    (spec §2)."""
     masks = [("mask", m.name) for m in mask_rows if m.needs_run]
     sources = [("source", r.source) for r in rows
-               if r.needs_run and (stage != "harmonize" or r.raw is Status.CURRENT)]
+               if r.needs_run and r.raw is Status.CURRENT]
     return masks + sources
 
 
@@ -258,8 +258,7 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
         if tone:
             title["subtitle_tone"] = tone
         state = source_state(r, file_source=file_source, stage=running, queued=queued, pct=pct,
-                             failed=r.source in errors, locked=locked, on_run=(lambda s=r.source: run(s)),
-                             harmonize_only=True)
+                             failed=r.source in errors, locked=locked, on_run=(lambda s=r.source: run(s)))
         if busy and state["type"] == "verb":  # a stopped job still holds the row
             state["disabled"] = True
         key = f"src:{r.source}"
@@ -282,10 +281,10 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
 
 
 @solara.component
-def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harmonize"):
-    """``jobs``: the session's ``PrepareJobs``, created once by the shell.
-    ``stage``: ``harmonize``, the only one (spec §2): the grid, the masks and
-    the harmonize of each source the Alerts step downloaded."""
+def PrepareStep(app_state, map_, gee_interface, layers, jobs):
+    """The grid, the masks and the harmonize of each source the Alerts step
+    downloaded (spec §2). ``jobs``: the session's ``PrepareJobs``, created once
+    by the shell."""
     notifications = use_notifications()
     p = app_state.project.value
     inflight, stops, row_errors, row_progress = jobs.inflight, jobs.stops, jobs.row_errors, jobs.row_progress
@@ -328,7 +327,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
 
     def _start(items, force=False):
         start_items(jobs, app_state=app_state, layers=layers, map_=map_, notifications=notifications,
-                    items=items, force=force, mode=stage)
+                    items=items, force=force, mode="harmonize")
 
     def _toggle_map(source):
         # The Alerts step's pattern, not ``toggle``: a click behind a
@@ -347,12 +346,12 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
         layers.show(key, build, content_id=art.content_id, notifier=notifications,
                     legend=source_layers.harmonized_legend(key, source, period))
 
-    step_scope = (p.name, period.id, stage)
+    step_scope = (p.name, period.id, "harmonize")
     mine = mine_keys(running, stops, *step_scope)  # this step's jobs: its footer and Stop
     held = set(running)  # any job's, the Alerts step's downloads included: the rows read running
     stopped = stops.stopped()  # a row a stopped job (either step's) holds will not run
 
-    pending = free_items(run_all_items(rows, mask_rows, stage=stage), running, p.name, period.id)
+    pending = free_items(run_all_items(rows, mask_rows), running, p.name, period.id)
     stages = scope_stages(jobs.row_stage.value, p.name, period.id)
     counts = footer_counts(mine_rows(p, period, mine), stages, jobs.batch.value.get(step_scope))
 

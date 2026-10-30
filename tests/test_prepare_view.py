@@ -57,10 +57,13 @@ def test_a_ready_file_row_names_its_format_not_a_download():
     assert text == "GeoTIFF · 1 alert pixel"  # no size yet: no empty part
 
 
-def test_missing_catalogue_row_offers_download():
+def test_a_row_not_downloaded_offers_harmonize_disabled():
+    """A Harmonize row never downloads: it waits for its download in Alerts (spec §2)."""
+    cell = _state(PrepareRow("RADD", Status.MISSING, Status.MISSING))
+    assert _verb(cell) == ("Harmonize", "primary", "mdi-play") and cell["disabled"]
     clicks = []
-    cell = _state(PrepareRow("RADD", Status.MISSING, Status.MISSING), on_run=lambda: clicks.append(1))
-    assert _verb(cell) == ("Download", "primary", "mdi-play")
+    cell = _state(PrepareRow("RADD", Status.CURRENT, Status.MISSING), on_run=lambda: clicks.append(1))
+    assert not cell.get("disabled")
     cell["on_click"]()
     assert clicks == [1]
 
@@ -73,9 +76,10 @@ def test_missing_file_row_offers_harmonize():
     assert _subtitle(row, file_source=True, reason=Reason("not_read")) == ("not harmonized yet", None)
 
 
-def test_stale_raw_offers_download_in_warning():
+def test_stale_raw_waits_for_its_download_in_warning():
     row = PrepareRow("RADD", Status.STALE, Status.STALE)
-    assert _verb(_state(row)) == ("Download", "warning", "mdi-update")
+    cell = _state(row)
+    assert _verb(cell) == ("Harmonize", "warning", "mdi-update") and cell["disabled"]
     reason = Reason("window", (("old", "2025-10-03 – 2026-01-31"), ("new", "2025-11-02 – 2026-01-31")))
     assert _subtitle(row, reason=reason)[0] == (
         "the search window changed (2025-10-03 – 2026-01-31 → 2025-11-02 – 2026-01-31): download again")
@@ -141,7 +145,7 @@ def test_blocked_and_missing_file_rows_read_their_status():
 
 
 def test_a_review_copy_reads_text_not_verbs():
-    assert _state(PrepareRow("RADD", Status.MISSING, Status.MISSING), locked=True)["label"] == "To download"
+    assert _state(PrepareRow("RADD", Status.MISSING, Status.MISSING), locked=True)["label"] == "To harmonize"
     cell = _state(PrepareRow("RADD", Status.CURRENT, Status.STALE), locked=True, failed=True)
     assert (cell["type"], cell["label"]) == ("state", "To harmonize")
     # a grey circle, not the play or update icon of a pill: nothing there looks clickable
@@ -179,7 +183,7 @@ def test_a_user_file_the_alerts_step_reads_reads_reading_in_harmonize():
     """It no longer reads Harmonizing: the read never chains (option C)."""
     tif = PrepareRow("tif", Status.MISSING, Status.MISSING)
     cell = source_state(tif, file_source=True, stage="download", queued=False, pct=None, failed=False, locked=False,
-                        on_run=lambda: None, harmonize_only=True)
+                        on_run=lambda: None)
     assert cell["label"] == "Reading"
 
 

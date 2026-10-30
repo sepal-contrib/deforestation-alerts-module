@@ -72,6 +72,14 @@ def available_sources(project) -> list:
             + [n for n, s in project.sources.items() if s.kind == "custom" and n not in used])
 
 
+def new_periods_default(project, mode: str, key) -> bool:
+    """The *Add to new periods* tick a pick starts with: a source the project
+    already has keeps its own setting; a new one is on (spec §3)."""
+    if mode == "predefined" and project is not None and key in project.sources:
+        return key in project.new_period_sources
+    return True
+
+
 def predefined_items(project, pending: bool) -> list:
     """The source list's options with their coverage (spec §6.2 "Predefined",
     §2): a project custom source is disabled once the period has 6."""
@@ -411,6 +419,12 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
     key, set_key = solara.use_state(selectable[0] if selectable else None)
     if key not in selectable:
         key = selectable[0] if selectable else None
+
+    def _reset_new_periods():
+        if new_periods is not None:
+            new_periods.set(new_periods_default(p, mode, key))
+
+    solara.use_effect(_reset_new_periods, [mode, key])
     name, set_name = solara.use_state(src0.name if src0 else "")
     origin, set_origin = solara.use_state(src0.origin if src0 else "gee")
     asset = solara.use_reactive({"asset_id": src0.ref, "type": src0.asset_type, "column": "ALL", "value": None}

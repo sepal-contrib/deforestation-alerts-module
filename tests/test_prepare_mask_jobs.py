@@ -54,8 +54,15 @@ def _run_all(p, pdir, period):
     return prepare_step.run_all_items(plan_prepare(p, pdir, period), plan_masks(p, pdir, period))
 
 
+def _download(p, pdir, source="GLAD-L"):
+    """Record the source's raw file of February: Harmonize's Run all only runs downloaded sources."""
+    raw = _art(pdir, fp.raw_key(FEB.id, source), "raw_alert", fp.raw_alert_inputs(p, source, p.periods[FEB.id]))
+    p.artifacts = {**p.artifacts, raw.key: raw}
+
+
 def test_run_all_runs_the_periods_masks_first(tmp_path, cover):
     p = _project(tmp_path, cover)
+    _download(p, tmp_path)
     assert _run_all(p, tmp_path, p.periods[FEB.id]) == [("mask", "forest"), ("source", "GLAD-L")]
     set_period_mask(p, FEB.id, "forest", on=False)
     # an off mask is not run
@@ -72,6 +79,7 @@ def test_a_ready_mask_is_not_run_again(tmp_path, cover):
     p.artifacts = {raw.key: raw}
     aligned = _art(tmp_path, fp.mask_key("forest"), "mask", fp.mask_inputs(p, "forest"), stats={"on_pixels": 5})
     p.artifacts = {**p.artifacts, aligned.key: aligned}
+    _download(p, tmp_path)
     period = p.periods[FEB.id]
     assert _run_all(p, tmp_path, period) == [("source", "GLAD-L")]
     assert prepare_step.items_for_source(p, tmp_path, period, "GLAD-L") == [("source", "GLAD-L")]

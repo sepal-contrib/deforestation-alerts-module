@@ -777,7 +777,7 @@ def _AppShell():
                                       t("app.drawer_item.period"))[0],
             "harmonize": render_detached(lambda: PrepareStep(app_state=app_state, map_=map_,
                                                              gee_interface=gee_interface, layers=layers,
-                                                             jobs=prepare_jobs, stage="harmonize"),
+                                                             jobs=prepare_jobs),
                                          t("app.drawer_item.harmonize"))[0],
             "integrate": render_detached(lambda: IntegrateStep(app_state=app_state, map_=map_,
                                                                gee_interface=gee_interface, layers=layers),

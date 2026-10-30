@@ -108,7 +108,3 @@ def plan_prepare(p: Project, pdir, period: Period) -> list[PrepareRow]:
                                file_missing=missing,
                                stats=dict(art.stats) if harm is Status.CURRENT and art is not None else None))
     return rows
-
-
-def ready_sources(p: Project, pdir, period: Period) -> list[str]:
-    return [r.source for r in plan_prepare(p, pdir, period) if r.ready]

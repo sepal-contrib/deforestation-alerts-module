@@ -814,8 +814,7 @@ def test_add_to_new_periods_checkbox_defaults_on(monkeypatch, tmp_path):
         modal["on_add_predefined"]("GLAD-L")
         live = state.project.value
         assert "GLAD-L" not in live.new_period_sources and "GLAD-L" in live.periods[PER.id].sources
-        add.fire_event("click", None)  # a new opening starts on again
-        assert modal["new_periods"].value is True
+        # each opening's default is the form's (source_modal.new_periods_default)
     finally:
         rc.close()
 

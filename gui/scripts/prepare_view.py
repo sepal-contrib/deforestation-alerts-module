@@ -45,11 +45,10 @@ def _stage(stage: Optional[str], file_source: bool) -> Optional[str]:
     return "read" if stage == "download" and file_source else stage
 
 
-def _next(row: PrepareRow, file_source: bool, harmonize_only: bool = False) -> tuple[str, bool]:
+def _next(row: PrepareRow, file_source: bool) -> tuple[str, bool]:
     """What Run does next (``download`` / ``harmonize``) and whether it redoes
-    an out-of-date file (the warning pill). ``harmonize_only``: the Harmonize
-    step's row, which never downloads."""
-    if row.raw is not Status.CURRENT and not harmonize_only:
+    an out-of-date file (the warning pill)."""
+    if row.raw is not Status.CURRENT:
         return ("harmonize" if file_source else "download"), row.raw is Status.STALE
     return "harmonize", row.harmonized is Status.STALE
 
@@ -87,14 +86,13 @@ def _run_cell(verb: str, stale: bool, *, locked: bool, failed: bool, on_run: Cal
 
 
 def source_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], queued: bool, pct: Optional[int],
-                 failed: bool, locked: bool, on_run: Callable, harmonize_only: bool = False) -> dict:
-    """The Status cell (spec "Status cell: status or verb"): a ``state`` cell,
-    or the ``verb`` pill of the row's next run. ``stage``: the running job's
-    (``download`` / ``harmonize``) while it is the row's turn; ``queued``: the
-    row is claimed and waits for its turn; ``failed``: the row has an error.
-    ``harmonize_only``: the Harmonize step's row (spec §2): its pill
-    harmonizes, disabled while the raw file is not current (it waits for its
-    download in the Alerts step)."""
+                 failed: bool, locked: bool, on_run: Callable) -> dict:
+    """A Harmonize row's Status cell (spec "Status cell: status or verb"): a
+    ``state`` cell, or the Harmonize pill, disabled while the raw file is not
+    current (it waits for its download in the Alerts step, spec §2).
+    ``stage``: the running job's (``download`` / ``harmonize``) while it is
+    the row's turn; ``queued``: the row is claimed and waits for its turn;
+    ``failed``: the row has an error."""
     running = _in_flight(_stage(stage, file_source), queued, pct)
     if running is not None:
         return running
@@ -105,9 +103,8 @@ def source_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], qu
         return _state(STATUS_ICONS[status], "grey", status_text(status))
     if row.ready:
         return _state(STATUS_ICONS["ready"], "success", t("steps.prepare.state_ready"))
-    verb, stale = _next(row, file_source, harmonize_only)
-    cell = _run_cell(verb, stale, locked=locked, failed=failed, on_run=on_run)
-    if harmonize_only and row.raw is not Status.CURRENT and cell["type"] == "verb":
+    cell = _run_cell("harmonize", row.harmonized is Status.STALE, locked=locked, failed=failed, on_run=on_run)
+    if row.raw is not Status.CURRENT and cell["type"] == "verb":
         cell["disabled"] = True
     return cell
 

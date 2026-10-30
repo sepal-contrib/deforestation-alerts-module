@@ -546,8 +546,8 @@ def _free_custom_digit(period: Period) -> int:
 def set_period_source(p: Project, period_id: str, name: str, on: bool) -> None:
     """Use ``name`` in ``period_id`` or not: replaces the Period and ``p.periods``
     (published snapshots share them). On, a custom source takes the period's
-    lowest free digit; refused (``steps.alerts.cap_reached``) past 6 custom or
-    3 predefined sources in the period. Off drops its digit."""
+    lowest free digit; refused (``steps.alerts.cap_reached``) past 6 custom
+    sources in the period. Off drops its digit."""
     period = p.periods[period_id]
     if on and name in period.sources:
         return
@@ -556,9 +556,7 @@ def set_period_source(p: Project, period_id: str, name: str, on: bool) -> None:
                   "digits": {k: d for k, d in period.digits.items() if k != name}}
     elif p.sources[name].kind == "custom":
         update = {"sources": [*period.sources, name], "digits": {**period.digits, name: _free_custom_digit(period)}}
-    else:
-        if sum(p.sources[s].kind == "predefined" for s in period.sources if s in p.sources) >= len(PREDEFINED_DIGITS):
-            raise ProjectRuleError(key="steps.alerts.cap_reached")
+    else:  # a predefined source has its fixed digit, and there are only 3 of them
         update = {"sources": [*period.sources, name]}
     p.periods = {**p.periods, period_id: period.model_copy(update=update)}
 

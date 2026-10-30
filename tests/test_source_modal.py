@@ -53,6 +53,17 @@ def test_predefined_items_while_checking_and_after_a_failed_check():
     assert all("coverage not checked" in i["text"] and not i["disabled"] for i in items)
 
 
+def test_add_to_new_periods_starts_from_a_known_sources_own_setting():
+    p = _p()
+    add_predefined_source(p, "RADD")
+    p.new_period_sources = []  # the user switched RADD off for new periods
+    assert sm.new_periods_default(p, "predefined", "RADD") is False
+    p.new_period_sources = ["RADD"]
+    assert sm.new_periods_default(p, "predefined", "RADD") is True
+    assert sm.new_periods_default(p, "predefined", "GLAD-L") is True  # new to the project: on
+    assert sm.new_periods_default(p, "custom", None) is True
+
+
 def _gee(answer):
     calls = []
 
@@ -287,6 +298,33 @@ def test_a_custom_geotiff_is_validated_added_inside_the_task_and_the_modal_close
             assert (kw["origin"], kw["ref"], kw["asset_type"], kw["fmt"]) == ("file", str(path), "FILE", "radd")
             assert (kw["alert_band"], kw["date_band"], kw["editing"]) == (1, 2, None)
             assert added[0][0] == {"name": "my radd"}
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_picking_a_source_the_project_has_shows_its_own_add_to_new_periods():
+    """A source taken out of new periods and picked again does not quietly rejoin them."""
+    p = _p()
+    jan = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
+    p.periods, p.active_period = {jan.id: jan}, jan.id
+    add_predefined_source(p, "RADD")  # in the project, not in January
+    p.new_period_sources = []
+    p.coverage = {k: _cov(1.0) for k in ("GLAD-L", "RADD", "GLAD-S2")}
+    state, open_, new_periods = _state(p), solara.reactive(True), solara.reactive(True)
+
+    async def main():  # the form's validation task needs a running loop
+        box, rc = reacton.render(sm.SourceModal(open_=open_, app_state=state, gee_interface=object(),
+                                                on_add_predefined=print, on_add_custom=print, on_save_custom=print,
+                                                new_periods=new_periods), handle_error=False)
+        try:
+            picker = rc.find(v.Select, label=t("steps.alerts.predefined_label")).widget
+            assert picker.v_model == "GLAD-L" and new_periods.value is True  # new to the project: on
+            picker.v_model = "RADD"
+            assert new_periods.value is False
+            picker.v_model = "GLAD-S2"
+            assert new_periods.value is True
         finally:
             rc.close()
 

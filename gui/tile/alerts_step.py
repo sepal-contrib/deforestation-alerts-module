@@ -253,7 +253,6 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
         if refuse_setup(app_state, notifications):
             return
         set_editing(None)
-        new_periods.set(True)
         modal_open.set(True)
 
     removing = pending_remove if pending_remove in by_source else None  # the confirm goes with its row
