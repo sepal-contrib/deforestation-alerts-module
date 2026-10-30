@@ -204,8 +204,10 @@ def languages(page, rec, *, out):
     english_legend = {v for v in leaves(catalogue("en", "legend")) if len(re.sub(r"[^A-Za-z]", "", v)) >= 4}
     english_title = catalogue("en", "app")["app"]["drawer_item"]["harmonize"]  # the header's title
     # saved_ago's look-back edit left both downloads out of date, which locks
-    # Harmonize (it opens once a download is current): download them again.
+    # Harmonize (it opens once a download is current): download them again,
+    # then harmonize them (a download no longer chains into it, option C).
     ph.download_all(page, rec, out=out, expect_ready=2)
+    ph.run_all(page, rec, out=out, expect_ready=2, shot_name="languages_harmonized")
     # The active set's layer is switched on in Integrate & vectorize (while the
     # app is still in English) and stays on for the rest of the walk, so every
     # language's status legend can be read off the shared map.

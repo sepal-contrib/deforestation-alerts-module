@@ -149,10 +149,15 @@ def d_legends(page, rec, *, out):
     assert "Confirmed (high confidence)" in rec["preview_legend"] and "Probable (low confidence)" in rec["preview_legend"]
     rec["preview_options"] = ph.legend_options(page)
     assert [o["text"] for o in rec["preview_options"] if o["selected"]] == ["RADD · preview"], rec["preview_options"]
-    # Alerts downloads; with the grid and the mask ready the download chains into harmonizing
+    # Alerts only downloads (option C: no chain, even with the grid and the mask
+    # ready); Harmonize all then harmonizes it: hansen, GLAD-L and RADD read Ready
     ph.row_pill(page, "RADD", "download").click()
+    downloaded = w.en("steps.alerts.state_downloaded")
+    w.wait_for(lambda: downloaded in ph.row_text(page, "RADD"), 1200, "RADD downloaded", poll=3)
+    assert "preview" in ph.legend_text(page), ph.legend_text(page)  # the download harmonized nothing
+    ph.run_all(page, rec, out=out, expect_ready=3, shot_name="radd_harmonized")
     w.wait_for(lambda: "RADD" in ph.legend_text(page) and WINDOW in ph.legend_text(page)
-               and "preview" not in ph.legend_text(page), 1200, "RADD's harmonized legend", poll=3)
+               and "preview" not in ph.legend_text(page), 120, "RADD's harmonized legend", poll=3)
     assert not any("preview" in o["text"] for o in ph.legend_options(page)), ph.legend_options(page)
     w.goto_step(page, "harmonize", 2000)  # the masks card
     ph.row_button(page, "hansen", "mdi-map-plus").click()
