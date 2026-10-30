@@ -112,13 +112,13 @@ def test_running_row_shows_stage_and_percent():
     cell = _state(row, stage="download", pct=42)
     assert (cell["type"], cell["label"], cell["progress"]) == ("state", "Downloading 42%", 42)
     assert cell["title"] == "Downloading 42%"  # whole on hover when the cell clips it
-    assert _subtitle(row, stage="download", pct=42) == ("downloading 42% · then harmonize", None)
+    assert _subtitle(row, stage="download", pct=42) == ("downloading 42%", None)  # it never chains
     assert _state(row, stage="download")["label"] == "Downloading"  # no percent yet
     cell = _state(row, stage="harmonize", pct=42)
     assert cell["label"] == "Harmonizing" and cell.get("progress") is None and cell["title"] == "Harmonizing"
     assert _subtitle(row, stage="harmonize")[0] == "harmonizing"
     # a GeoTIFF is read, not downloaded
-    assert _state(row, file_source=True, stage="download", pct=42)["label"] == "Harmonizing"
+    assert _state(row, file_source=True, stage="download", pct=42)["label"] == "Reading"
 
 
 def test_claimed_row_without_stage_reads_queued():
@@ -173,6 +173,14 @@ def test_the_alerts_row_never_reads_harmonizing():
     """Option C (retires ruling R14): an Alerts row shows download states only."""
     row = PrepareRow("RADD", Status.CURRENT, Status.MISSING)
     assert _dl(row, stage="harmonize")["label"] == "Downloaded"
+
+
+def test_a_user_file_the_alerts_step_reads_reads_reading_in_harmonize():
+    """It no longer reads Harmonizing: the read never chains (option C)."""
+    tif = PrepareRow("tif", Status.MISSING, Status.MISSING)
+    cell = source_state(tif, file_source=True, stage="download", queued=False, pct=None, failed=False, locked=False,
+                        on_run=lambda: None, harmonize_only=True)
+    assert cell["label"] == "Reading"
 
 
 def test_the_alerts_subtitle_names_the_download():
@@ -231,7 +239,7 @@ def test_the_details_lead_of_a_row_in_flight_reads_its_running_state():
     assert row_status_label(row, False) == "To download"
     assert row_status_label(row, False, queued=True) == "Queued"
     assert row_status_label(row, False, stage="download", pct=42) == "Downloading 42%"
-    assert row_status_label(row, True, stage="download") == "Harmonizing"  # a user file is read
+    assert row_status_label(row, True, stage="download") == "Reading"  # a user file is read
     mask = MaskRow("forest", "gee", Status.MISSING, Status.MISSING, True, "keep")
     assert mask_status_label(mask) == "To download"
     assert mask_status_label(mask, stage="align") == "Aligning"

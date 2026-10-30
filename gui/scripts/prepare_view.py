@@ -27,7 +27,8 @@ WHY_KEYS = ("not_downloaded", "not_read", "not_harmonized", "not_aligned", "grid
             "file", "source", "mask_not_aligned", "mask", "masks", "raw")
 _RAW_TERMS = frozenset({"aoi", "window", "file", "source"})  # a run downloads again
 _BLOCKED_STATUS = {NOT_COVERED: "not_covered", NO_DATA: "no_data", UNCHECKED: "unchecked"}
-_STAGE_STATES = {"harmonize": "steps.prepare.state_harmonizing", "align": "steps.prepare.state_aligning"}
+_STAGE_STATES = {"harmonize": "steps.prepare.state_harmonizing", "align": "steps.prepare.state_aligning",
+                 "read": "steps.alerts.state_reading"}
 
 
 def reason_text(reason: Reason) -> str:
@@ -39,8 +40,9 @@ def _state(icon: str, color: Optional[str], label: str, **extra) -> dict:
 
 
 def _stage(stage: Optional[str], file_source: bool) -> Optional[str]:
-    """A user file is read, not downloaded: its whole run reads harmonizing."""
-    return "harmonize" if stage == "download" and file_source else stage
+    """A user file is read, not downloaded: its download reads Reading (it
+    never chains into harmonizing, option C)."""
+    return "read" if stage == "download" and file_source else stage
 
 
 def _next(row: PrepareRow, file_source: bool, harmonize_only: bool = False) -> tuple[str, bool]:
@@ -202,10 +204,7 @@ def download_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], 
     Harmonizing: option C), File missing, the blocked status,
     Downloaded once the raw file is current, else the Download (Read file)
     pill, in warning colour when the raw file is out of date."""
-    if stage == "download" and file_source:
-        label = t("steps.alerts.state_reading")
-        return _state(STATUS_ICONS["running"], "primary", label, title=label)
-    running = _in_flight("download" if stage == "download" else None, queued, pct)
+    running = _in_flight(_stage(stage, file_source) if stage == "download" else None, queued, pct)
     if running is not None:
         return running
     if row.file_missing:
