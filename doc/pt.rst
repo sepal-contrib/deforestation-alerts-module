@@ -586,7 +586,7 @@ Cada linha de **Fontes** mostra:
         -   Mostra a fonte no mapa: os alertas da janela de busca do período ativo. Uma fonte GeoTIFF só aparece depois de harmonizada.
     *   -   Ícone de informação
         -   Abre os **Detalhes** da fonte (veja `A janela de detalhes <defo-harmonize-details_>`_), com a caixa de seleção **Adicionar aos novos períodos** e, para uma fonte personalizada, o botão **Editar**.
-    *   -   **Baixar de novo**
+    *   -   **Baixar novamente**
         -   Baixa a fonte de novo (veja abaixo).
     *   -   **Remover deste período**
         -   Remove a fonte do período ativo (veja `Remover uma fonte de um período <defo-alerts-remove_>`_).
@@ -613,7 +613,7 @@ Fontes predefinidas
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/alerts-add-predefined.png
     :alt: Como adicionar uma fonte predefinida
 
-Escolha uma fonte no menu suspenso **Fonte** e selecione **Adicionar fonte**. A lista contém as fontes predefinidas e as fontes do próprio projeto que ainda não estão neste período. Cada item mostra a sua cobertura da AOI. Uma fonte que não cobre nada da AOI aparece desativada, com o motivo.
+Escolha uma fonte no menu suspenso **Fonte de alertas** e selecione **Adicionar fonte**. A lista contém as fontes predefinidas e as fontes do próprio projeto que ainda não estão neste período. Cada item mostra a sua cobertura da AOI. Uma fonte que não cobre nada da AOI aparece desativada, com o motivo.
 
 .. list-table::
     :header-rows: 1
@@ -714,7 +714,7 @@ A coluna **Status** mostra:
 
     *   -   Status
         -   Significado
-    *   -   "Baixado"
+    *   -   "Baixada"
         -   Baixada para a janela de busca atual. A linha abaixo do nome dá a data do download e o tamanho em disco.
     *   -   **Baixar**
         -   A fonte ainda não foi baixada para a janela de busca deste período, ou o download dela está desatualizado. Selecione o botão para baixá-la.
@@ -724,7 +724,7 @@ A coluna **Status** mostra:
         -   O último download falhou. O erro aparece em vermelho abaixo da linha.
     *   -   "Baixando 42%", "Lendo", "Na fila"
         -   A linha está em execução, ou espera a vez dela ("aguardando a linha acima").
-    *   -   "não coberto", "sem dados"
+    *   -   "não coberta", "sem dados"
         -   A fonte não pode ser executada para este período: ela não cobre a AOI, ou não tem dados para a janela de busca (o chip de datas dela está vermelho).
     *   -   "Sem arquivo"
         -   O arquivo de uma fonte GeoTIFF sumiu (veja `Mensagens comuns <defo-harmonize-messages_>`_).
@@ -733,11 +733,11 @@ Um botão azul executa uma linha pela primeira vez; um laranja refaz um arquivo 
 
 .. note::
 
-    Uma linha baixada não tem botão: uma fonte já baixada para a janela de busca do período não é baixada de novo sozinha. Para buscar os alertas mais recentes de um catálogo que continua adicionando alertas a datas passadas, use **Baixar de novo**. O app pergunta antes, mostrando a janela e a data do arquivo que será substituído. Isso não é oferecido para uma fonte GeoTIFF ("Nada a baixar de novo: lida de um arquivo").
+    Uma linha baixada não tem botão: uma fonte já baixada para a janela de busca do período não é baixada de novo sozinha. Para buscar os alertas mais recentes de um catálogo que continua adicionando alertas a datas passadas, use **Baixar novamente**. O app pergunta antes, mostrando a janela e a data do arquivo que será substituído. Isso não é oferecido para uma fonte GeoTIFF ("Nada a baixar de novo: lida de um arquivo").
 
-O rodapé abaixo da tabela baixa em lote. Selecione **Baixar … pendentes** (por exemplo, **Baixar 3 pendentes**) para baixar todas as fontes que precisam disso, uma linha por vez. As linhas que mostram "não coberto" ou "sem dados" são puladas; uma linha que falha mostra o erro em vermelho abaixo dela, e a execução segue para a próxima linha. Enquanto isso dura, o rodapé conta as linhas ("1 em execução · 2 na fila" e depois "1 de 3 concluídas", com uma barra de progresso) e o botão vira **Parar**, que para depois da linha em andamento ("Parando…"). A seta ao lado do botão (**Mais ações em lote**) abre **Baixar tudo de novo (…)**: cada fonte que não está bloqueada e não é um GeoTIFF é baixada de novo, depois que você confirma.
+O rodapé abaixo da tabela baixa em lote. Selecione **Baixar … pendentes** (por exemplo, **Baixar 3 pendentes**) para baixar todas as fontes que precisam disso, uma linha por vez. As linhas que mostram "não coberta" ou "sem dados" são puladas; uma linha que falha mostra o erro em vermelho abaixo dela, e a execução segue para a próxima linha. Enquanto isso dura, o rodapé conta as linhas ("1 em execução · 2 na fila" e depois "1 de 3 concluídas", com uma barra de progresso) e o botão vira **Parar**, que para depois da linha em andamento ("Parando…"). A seta ao lado do botão (**Mais ações em lote**) abre **Baixar tudo de novo (…)**: cada fonte que não está bloqueada e não é um GeoTIFF é baixada de novo, depois que você confirma.
 
-O download também aparece como uma notificação de tarefa com o título **Baixar**, com a fonte em que está e a porcentagem.
+O download também aparece como uma notificação de tarefa com o título **Download**, com a fonte em que está e a porcentagem.
 
 .. _defo-alerts-remove:
 
@@ -888,7 +888,7 @@ Os ícones à direita de cada linha:
 -   o ícone de informação abre os **Detalhes** dela (veja `A janela de detalhes <defo-harmonize-details_>`_); e
 -   o menu **Mais ações** (três pontos) contém:
 
-    -   **Baixar de novo** (só para máscaras do GEE), para um recurso que mudou. O app pergunta antes: "Isto busca a máscara de novo no Earth Engine, substitui o download e depois a alinha.";
+    -   **Baixar novamente** (só para máscaras do GEE), para um recurso que mudou. O app pergunta antes: "Isto busca a máscara de novo no Earth Engine, substitui o download e depois a alinha.";
     -   **Editar**, que abre **Editar a máscara** *nome*: o raster e a banda podem mudar, o nome não. Depois que um conjunto de alertas usou a máscara, ela não pode mais ser editada (**Um conjunto de alertas já usa esta máscara: adicione uma nova em vez disso.**); e
     -   **Excluir máscara…**, que exclui a máscara depois que você confirma. O download e o arquivo alinhado dela são apagados, e todos os períodos deixam de usá-la. Os conjuntos de alertas que a usaram mantêm seus alertas e aparecem como desatualizados.
 
@@ -930,7 +930,7 @@ A coluna **Status** mostra:
         -   A última execução da linha falhou. O erro aparece em vermelho abaixo da linha.
     *   -   "Baixando 42%", "Harmonizando", "Na fila"
         -   A linha está em execução, ou espera a vez dela numa execução ("aguardando a linha acima"). Uma linha que está sendo baixada em Alertas também aparece como em execução aqui, e não pode ser harmonizada até o download dela terminar.
-    *   -   "não coberto", "sem dados"
+    *   -   "não coberta", "sem dados"
         -   A fonte não pode ser executada neste período: ela não cobre a AOI, ou não tem dados para a janela de busca. A linha abaixo do nome dá o motivo. Veja `Fontes de alertas <defo-alerts_>`_ sobre a cobertura.
     *   -   "Sem arquivo"
         -   O arquivo de uma fonte GeoTIFF sumiu (veja `Mensagens comuns <defo-harmonize-messages_>`_).
@@ -943,7 +943,7 @@ Os ícones à direita de cada linha:
 
 -   o ícone de mapa (**Mostrar no mapa**) mostra os alertas harmonizados no mapa;
 -   o ícone de informação abre os **Detalhes** da linha (veja abaixo); e
--   **Excluir arquivos** remove o download e o arquivo harmonizado da fonte neste período, depois que você confirma. A fonte continua no período: baixe-a de novo em `Alertas <defo-alerts-download_>`_ e harmonize-a para recriá-los. Os conjuntos de alertas deste período feitos com a fonte passam a estar desatualizados; os alertas e as revisões deles são mantidos.
+-   **Excluir arquivos** remove o download e o arquivo harmonizado da fonte neste período, depois que você confirma. A fonte continua no período: baixe-a novamente em `Alertas <defo-alerts-download_>`_ e harmonize-a para recriá-los. Os conjuntos de alertas deste período feitos com a fonte passam a estar desatualizados; os alertas e as revisões deles são mantidos.
 
 .. _defo-harmonize-details:
 
@@ -979,7 +979,7 @@ Executar tudo
 
 O rodapé da tabela executa as linhas em lote. Selecione **Harmonizar … pendentes** (por exemplo, **Harmonizar 4 pendentes**). Primeiro ele alinha as máscaras ativas no período que precisam disso e depois harmoniza cada fonte baixada que precisa disso, uma linha por vez:
 
--   as linhas que mostram "não coberto" ou "sem dados", e as linhas ainda a baixar, são puladas;
+-   as linhas que mostram "não coberta" ou "sem dados", e as linhas ainda a baixar, são puladas;
 -   uma linha que falha mostra o erro em vermelho logo abaixo, e a execução segue para a próxima linha.
 
 Enquanto a execução dura, o rodapé conta as linhas dela ("1 em execução · 3 na fila", depois "2 de 4 concluídas", com uma barra de progresso) e o botão vira **Parar**, que para a execução depois da linha em andamento. Até essa linha terminar, o botão mostra "Parando…". As linhas já concluídas continuam concluídas. Este **Parar** para só a harmonização: um download em andamento em `Alertas <defo-alerts-download_>`_ continua, e o **Parar** de Alertas não para uma execução de harmonização.

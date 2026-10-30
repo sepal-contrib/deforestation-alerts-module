@@ -23,7 +23,7 @@ Le flux de travail en un coup d'œil
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
     :alt: Les étapes du flux de travail, de la zone d'intérêt à l'analyse
 
-Le panneau **Flux de travail** range les étapes sur deux niveaux : **Préparer les alertes** construit un jeu d'alertes, et **Préparer la revue** prépare son examen. Les autres outils s'ouvrent depuis la barre latérale gauche (voir `La fenêtre de l'application <defo-window_>`_).
+Le panneau **Flux de travail** range les étapes sur deux niveaux : **Préparer les alertes** construit un jeu d'alertes, et **Configurer la revue** prépare son examen. Les autres outils s'ouvrent depuis la barre latérale gauche (voir `La fenêtre de l'application <defo-window_>`_).
 
 .. list-table::
     :header-rows: 1
@@ -50,7 +50,7 @@ Le panneau **Flux de travail** range les étapes sur deux niveaux : **Préparer 
     *   -
         -   `Intégrer et vectoriser <defo-integrate_>`_
         -   Combiner les sources en un jeu d'alertes, avec un polygone par alerte.
-    *   -   **Préparer la revue**
+    *   -   **Configurer la revue**
         -   `Couches supplémentaires <defo-layers_>`_ (facultatif)
         -   Ajouter des couches de référence pour juger les alertes.
     *   -
@@ -69,7 +69,7 @@ Le panneau **Flux de travail** range les étapes sur deux niveaux : **Préparer 
         -   `Export <defo-export_>`_
         -   Exporter les fichiers d'une alerte, ou les alertes de tout un jeu.
 
-**Préparer la revue** reste verrouillé tant que le projet n'a pas de jeu d'alertes : construisez-en d'abord un dans **Préparer les alertes**.
+**Configurer la revue** reste verrouillé tant que le projet n'a pas de jeu d'alertes : construisez-en d'abord un dans **Préparer les alertes**.
 
 Pour un exemple complet, du début à la fin, consultez `Cas d'usage : examen des alertes à Madre de Dios, au Pérou <defo-use-case_>`_.
 
@@ -101,7 +101,7 @@ La carte occupe toute la fenêtre. Le panneau **Flux de travail**, à droite, co
 
 L'en-tête du panneau **Flux de travail** reste visible pendant que l'étape en dessous défile :
 
--   Une bande montre les deux niveaux côte à côte, **Préparer les alertes** et **Préparer la revue**, chacun avec son nom au-dessus d'une barre par étape. Une barre pleine a des résultats (une AOI, des périodes, des sources…), une barre grise est encore vide et une barre hachurée est verrouillée : survolez-la pour lire pourquoi (p. ex. « Construisez d'abord un ensemble d'alertes. »). Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une barre en pointillés. Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une barre pour ouvrir son étape.
+-   Une bande montre les deux niveaux côte à côte, **Préparer les alertes** et **Configurer la revue**, chacun avec son nom au-dessus d'une barre par étape. Une barre pleine a des résultats (une AOI, des périodes, des sources…), une barre grise est encore vide et une barre hachurée est verrouillée : survolez-la pour lire pourquoi (p. ex. « Construisez d'abord un jeu d'alertes. »). Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une barre en pointillés. Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une barre pour ouvrir son étape.
 -   Sous la bande, la position de l'étape dans son niveau (p. ex. « 3 / 5 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide indique « facultatif ». Sélectionnez le nom pour passer à une autre étape depuis une liste, ou utilisez les flèches de chaque côté pour aller à l'étape précédente ou suivante.
 -   Sous le nom, une ligne dit quoi faire dans l'étape (p. ex. « Définissez la période de surveillance. »). Le bouton d'information à droite de cette ligne ouvre l'aide de l'étape.
 
@@ -557,7 +557,7 @@ Une *source d'alertes* est un jeu de données d'alertes de perte forestière. Ch
 
 L'étape **Alertes** liste les sources de la `période <defo-period_>`_ active, montre quelle part de l'AOI et de la période chacune couvre, et les télécharge. Chaque période a ses propres sources : une source ajoutée ici n'est ajoutée qu'à la période active.
 
-Ouvrez l'étape **Alertes** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `période <defo-period_>`_. Elle porte sur la période active : pour travailler sur une autre période, rendez-la d'abord active à l'étape `Période <defo-period_>`_. L'encadré en haut de l'étape nomme la période et sa fenêtre de recherche, par exemple « Période 2026-09-01 → 2026-09-30 · fenêtre de recherche depuis le 2026-06-03 (90 jours de période antérieure) ».
+Ouvrez l'étape **Alertes** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `période <defo-period_>`_. Elle porte sur la période active : pour travailler sur une autre période, rendez-la d'abord active à l'étape `Période <defo-period_>`_. L'encadré en haut de l'étape nomme la période et sa fenêtre de recherche, par exemple « Période 2026-09-01 → 2026-09-30 · fenêtre de recherche depuis le 2026-06-03 (90 jours de rétrospection) ».
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/alerts-list.png
     :alt: L'étape Alertes avec trois sources téléchargées
@@ -712,7 +712,7 @@ La colonne **État** indique :
 
     *   -   État
         -   Signification
-    *   -   « Téléchargé »
+    *   -   « Téléchargée »
         -   Téléchargée pour la fenêtre de recherche actuelle. La ligne sous le nom donne la date du téléchargement et la taille sur le disque.
     *   -   **Télécharger**
         -   La source n'est pas encore téléchargée pour la fenêtre de recherche de cette période, ou son téléchargement est obsolète. Sélectionnez le bouton pour la télécharger.
@@ -735,7 +735,7 @@ Un bouton bleu exécute une ligne pour la première fois ; un bouton orange refa
 
 Le pied du tableau télécharge par lot. Sélectionnez **Télécharger … en attente** (par exemple **Télécharger 3 en attente**) pour télécharger chaque source qui en a besoin, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ; une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante. Pendant ce temps, le pied compte ses lignes (« 1 en cours · 2 en attente », puis « 1 sur 3 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui s'arrête après la ligne en cours (« Arrêt… »). La flèche à côté du bouton (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, après confirmation.
 
-Le téléchargement apparaît aussi comme une notification de tâche intitulée **Télécharger**, avec la source en cours et son pourcentage.
+Le téléchargement apparaît aussi comme une notification de tâche intitulée **Téléchargement**, avec la source en cours et son pourcentage.
 
 .. _defo-alerts-remove:
 
@@ -1240,7 +1240,7 @@ Couches supplémentaires
 
 Les couches de visualisation appuient l'examen des alertes : une carte d'occupation du sol, une référence forestière, une mosaïque récente. Elles ne modifient jamais les alertes. Une couche est une image Earth Engine ou un GeoTIFF. Elle peut être affichée sur la carte principale et, avec **Afficher dans Analyse** coché, sur les deux cartes de l'écran `Analyse <defo-analysis_>`_.
 
-Ouvrez l'étape **Couches supplémentaires** du panneau **Flux de travail**, la première étape de **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_).
+Ouvrez l'étape **Couches supplémentaires** du panneau **Flux de travail**, la première étape de **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_).
 
 L'étape est facultative : passez-la et revenez-y à tout moment. Dès que le projet a une `période de suivi <defo-period_>`_, le panneau **Flux de travail** compte l'étape comme terminée même sans couche, et son badge indique « aucune » au lieu de « rien pour l'instant ».
 
@@ -1426,7 +1426,7 @@ Le *questionnaire* contient les questions auxquelles on répond pour chaque aler
 
 Cette étape permet aussi de choisir le modèle de rapport.
 
-Ouvrez l'étape **Questionnaire** du panneau **Flux de travail**, dans **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Le questionnaire appartient au projet : tous les jeux d'alertes du projet sont examinés avec lui. L'étape est facultative : sans modification, Analyse pose la question par défaut.
+Ouvrez l'étape **Questionnaire** du panneau **Flux de travail**, dans **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Le questionnaire appartient au projet : tous les jeux d'alertes du projet sont examinés avec lui. L'étape est facultative : sans modification, Analyse pose la question par défaut.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/questionnaire-list.png
     :alt: L'étape Questionnaire
@@ -1587,7 +1587,7 @@ Cette étape détermine qui examine les alertes du jeu actif :
 -   examinez-les toutes vous-même ; ou
 -   répartissez-les entre plusieurs évaluateurs. Chaque évaluateur reçoit un *paquet de révision*, examine ses propres alertes dans son propre compte SEPAL et renvoie une *copie révisée*, qui est ensuite fusionnée dans le projet.
 
-Ouvrez l'étape **Évaluation** du panneau **Flux de travail**, la dernière étape de **Préparer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Elle porte sur le jeu actif : une répartition appartient à un seul jeu d'alertes.
+Ouvrez l'étape **Évaluation** du panneau **Flux de travail**, la dernière étape de **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Elle porte sur le jeu actif : une répartition appartient à un seul jeu d'alertes.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/evaluators.gif
     :alt: Le jeu d'alertes est réparti en paquets, chaque évaluateur examine le sien, et les révisions sont fusionnées en retour
@@ -2608,7 +2608,7 @@ Les groupes au-delà du plafond sont conservés comme non analysables. La pério
 Couches supplémentaires
 """""""""""""""""""""""
 
-Une fois le jeu d'alertes construit, **Préparer la revue** se déverrouille. Pour juger les alertes au regard d'une image récente, la coordinatrice ajoute une `couche supplémentaire <defo-layers_>`_ : une image Sentinel-2 **Earth Engine** du 27 septembre 2026 (tuile 19LDF, à l'est de Puerto Maldonado), affichée en **Composite RVB** en **Couleurs naturelles** (B4, B3, B2), **Min** 0 et **Max** 3000, nommée ``Sentinel-2 2026-09-27``, et **Afficher dans Analyse** coché.
+Une fois le jeu d'alertes construit, **Configurer la revue** se déverrouille. Pour juger les alertes au regard d'une image récente, la coordinatrice ajoute une `couche supplémentaire <defo-layers_>`_ : une image Sentinel-2 **Earth Engine** du 27 septembre 2026 (tuile 19LDF, à l'est de Puerto Maldonado), affichée en **Composite RVB** en **Couleurs naturelles** (B4, B3, B2), **Min** 0 et **Max** 3000, nommée ``Sentinel-2 2026-09-27``, et **Afficher dans Analyse** coché.
 
 .. note::
 

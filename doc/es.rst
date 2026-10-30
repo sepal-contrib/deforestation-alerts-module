@@ -522,7 +522,7 @@ Selecciona **Nuevo período**. El diálogo viene rellenado para que el nuevo per
 
 Debajo de los campos, el diálogo muestra una vista previa de la ventana de búsqueda ("Ventana de búsqueda: inicio → fin"). Selecciona **Añadir período**: el período se crea y pasa a ser el período activo.
 
-Un período nuevo empieza con las opciones de máscara del último período. Cámbialas en `Armonizar <defo-harmonize_>`_. Sus fuentes de alertas son las marcadas con **Añadir a los nuevos periodos** en `Alertas <defo-alerts-new-periods_>`_; añade o quita fuentes allí.
+Un período nuevo empieza con las opciones de máscara del último período. Cámbialas en `Armonizar <defo-harmonize_>`_. Sus fuentes de alertas son las marcadas con **Añadir a los nuevos períodos** en `Alertas <defo-alerts-new-periods_>`_; añade o quita fuentes allí.
 
 .. tip::
 
@@ -555,7 +555,7 @@ Una *fuente de alertas* es un conjunto de datos de alertas de pérdida de bosque
 
 El paso **Alertas** muestra las fuentes del `período <defo-period_>`_ activo, indica qué parte de la AOI y del período cubre cada una, y las descarga. Cada período tiene sus propias fuentes: una fuente añadida aquí se añade solo al período activo.
 
-Abre el paso **Alertas** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene un `período <defo-period_>`_. Trabaja sobre el período activo: para trabajar en otro período, primero hazlo activo en el paso `Período <defo-period_>`_. El recuadro de la parte superior del paso indica el período y su ventana de búsqueda, por ejemplo, "Periodo 2026-09-01 → 2026-09-30 · ventana de búsqueda desde el 2026-06-03 (90 días de período previo)".
+Abre el paso **Alertas** del panel **Flujo de trabajo**. Se desbloquea en cuanto el proyecto tiene un `período <defo-period_>`_. Trabaja sobre el período activo: para trabajar en otro período, primero hazlo activo en el paso `Período <defo-period_>`_. El recuadro de la parte superior del paso indica el período y su ventana de búsqueda, por ejemplo, "Período 2026-09-01 → 2026-09-30 · ventana de búsqueda desde el 2026-06-03 (90 días de retrospección)".
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/alerts-list.png
     :alt: El paso Alertas con tres fuentes descargadas
@@ -581,10 +581,10 @@ Cada fila de **Fuentes** muestra:
     *   -   Icono de mapa
         -   Muestra la fuente en el mapa: las alertas de la ventana de búsqueda del período activo. Una fuente GeoTIFF solo se muestra una vez armonizada.
     *   -   Icono de información
-        -   Abre los **Detalles** de la fuente (consulta `El diálogo de detalles <defo-harmonize-details_>`_), con la casilla **Añadir a los nuevos periodos** y, para una fuente personalizada, el botón **Editar**.
+        -   Abre los **Detalles** de la fuente (consulta `El diálogo de detalles <defo-harmonize-details_>`_), con la casilla **Añadir a los nuevos períodos** y, para una fuente personalizada, el botón **Editar**.
     *   -   **Descargar de nuevo**
         -   Descarga la fuente de nuevo (ver más abajo).
-    *   -   **Quitar de este periodo**
+    *   -   **Quitar de este período**
         -   Quita la fuente del período activo (consulta `Quitar una fuente de un período <defo-alerts-remove_>`_).
 
 La cobertura se comprueba una vez, al elegir la AOI, y se guarda en el proyecto. Si la comprobación falló (por ejemplo, porque no se pudo acceder a GEE), aparece un botón **Comprobar de nuevo** debajo de la lista.
@@ -601,7 +601,7 @@ Un período admite como máximo tres fuentes predefinidas y seis personalizadas.
 
 .. _defo-alerts-new-periods:
 
-Bajo la fuente, la casilla **Añadir a los nuevos periodos** (marcada por defecto) decide si los períodos creados después empiezan con esta fuente. Nunca cambia los períodos existentes. Para cambiarla más tarde, abre los **Detalles** de la fuente con su icono de información.
+Bajo la fuente, la casilla **Añadir a los nuevos períodos** (marcada por defecto) decide si los períodos creados después empiezan con esta fuente. Nunca cambia los períodos existentes. Para cambiarla más tarde, abre los **Detalles** de la fuente con su icono de información.
 
 Fuentes predefinidas
 """"""""""""""""""""
@@ -609,7 +609,7 @@ Fuentes predefinidas
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/alerts-add-predefined.png
     :alt: Añadir una fuente predefinida
 
-Elige una fuente en el menú desplegable **Fuente** y selecciona **Añadir fuente**. La lista contiene las fuentes predefinidas y las fuentes propias del proyecto que todavía no están en este período. Cada opción muestra su cobertura de la AOI. Una fuente que no cubre nada de la AOI aparece desactivada, con el motivo.
+Elige una fuente en el menú desplegable **Fuente de alertas** y selecciona **Añadir fuente**. La lista contiene las fuentes predefinidas y las fuentes propias del proyecto que todavía no están en este período. Cada opción muestra su cobertura de la AOI. Una fuente que no cubre nada de la AOI aparece desactivada, con el motivo.
 
 .. list-table::
     :header-rows: 1
@@ -667,7 +667,7 @@ Una fuente personalizada lee tu propio raster de alertas a través de uno de cua
         -   Cómo está escrita la fecha: **yymm (año y mes; la alerta se fecha el día 1)**, **yyddd (año y día del año)**, **yyyyddd (año y día del año)** o **año decimal**.
         -   Solo para **Solo fecha**. Se sugiere a partir de los valores de la banda de fecha (ver más abajo).
 
-Para una fuente **Solo fecha**, la aplicación lee los valores mínimo y máximo de la banda de fecha sobre la AOI ("Leyendo los valores de fecha…") y sugiere la codificación que les corresponde, por ejemplo "Valores de 24001 a 24366: se leen como yyddd." Comprueba la sugerencia: la aplicación solo lee los dos extremos del rango. Cuando los valores no parecen fechas ("… no parecen fechas. Revisa la banda de fecha."), o cuando ningún píxel de la AOI tiene fecha ("Ningún píxel con fecha en el AOI: elige la codificación."), elige tú la codificación.
+Para una fuente **Solo fecha**, la aplicación lee los valores mínimo y máximo de la banda de fecha sobre la AOI ("Leyendo los valores de fecha…") y sugiere la codificación que les corresponde, por ejemplo "Valores de 24001 a 24366: se leen como yyddd." Comprueba la sugerencia: la aplicación solo lee los dos extremos del rango. Cuando los valores no parecen fechas ("… no parecen fechas. Revisa la banda de fecha."), o cuando ningún píxel de la AOI tiene fecha ("Ningún píxel con fecha en la AOI: elige la codificación."), elige tú la codificación.
 
 Los cuatro formatos:
 
@@ -710,7 +710,7 @@ La columna **Estado** indica:
 
     *   -   Estado
         -   Significado
-    *   -   "Descargado"
+    *   -   "Descargada"
         -   Descargada para la ventana de búsqueda actual. La línea bajo el nombre da la fecha de descarga y el tamaño en disco.
     *   -   **Descargar**
         -   La fuente todavía no se ha descargado para la ventana de búsqueda de este período, o su descarga está desactualizada. Selecciona el botón para descargarla.
@@ -725,7 +725,7 @@ La columna **Estado** indica:
     *   -   "Sin archivo"
         -   El archivo de una fuente GeoTIFF ha desaparecido (consulta `Mensajes frecuentes <defo-harmonize-messages_>`_).
 
-Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo desactualizado. La línea bajo el nombre indica entonces el motivo: por ejemplo, "la ventana de búsqueda cambió (…): descargar de nuevo" o "el AOI cambió: descargar de nuevo". En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica "A descargar".
+Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo desactualizado. La línea bajo el nombre indica entonces el motivo: por ejemplo, "la ventana de búsqueda cambió (…): descargar de nuevo" o "la AOI cambió: descargar de nuevo". En la `copia de revisión <defo-evaluation-return_>`_ de un evaluador no se ejecuta nada: en lugar de un botón, la columna indica "A descargar".
 
 .. note::
 
@@ -733,14 +733,14 @@ Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo d
 
 El pie bajo la tabla descarga en lote. Selecciona **Descargar … pendientes** (por ejemplo, **Descargar 3 pendientes**) para descargar cada fuente que lo necesite, una fila tras otra. Las filas que indican "no cubierta" o "sin datos" se omiten; una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente. Mientras dura, el pie cuenta sus filas ("1 en curso · 2 en cola", luego "1 de 3 terminadas", con una barra de progreso) y el botón se convierte en **Detener**, que se detiene después de la fila en curso ("Deteniendo…"). La flecha junto al botón (**Más acciones por lotes**) abre **Descargar todo de nuevo (…)**: cada fuente que no está bloqueada y no es un GeoTIFF se descarga de nuevo, después de confirmar.
 
-La descarga también aparece como una notificación de tarea titulada **Descargar**, con la fuente en la que está y su porcentaje.
+La descarga también aparece como una notificación de tarea titulada **Descarga**, con la fuente en la que está y su porcentaje.
 
 .. _defo-alerts-remove:
 
 Quitar una fuente de un período
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Selecciona el icono de papelera (**Quitar de este periodo**) y confirma. Se eliminan los archivos descargados y armonizados de la fuente en este período. Los conjuntos de alertas de este período que ya la usaban conservan sus alertas y aparecen como desactualizados.
+Selecciona el icono de papelera (**Quitar de este período**) y confirma. Se eliminan los archivos descargados y armonizados de la fuente en este período. Los conjuntos de alertas de este período que ya la usaban conservan sus alertas y aparecen como desactualizados.
 
 La fuente sigue en el proyecto: los demás períodos la conservan, y se puede volver a añadir con **Añadir fuente**. Una fuente nunca se elimina de todo el proyecto.
 
@@ -756,7 +756,7 @@ Mensajes frecuentes
 "Este recurso CCDC guarda sus fechas como días julianos o tiempo Unix …"
     Solo se admiten resultados de CCDC fechados en años fraccionarios.
 
-"Este periodo ya tiene 6 fuentes personalizadas."
+"Este período ya tiene 6 fuentes personalizadas."
     Quita una fuente personalizada del período antes de añadir otra.
 
 "Un trabajo está escribiendo en este proyecto; …"
@@ -951,7 +951,7 @@ El diálogo de detalles
 
 El icono de información de una fuente o de una máscara abre un resumen de solo lectura de con qué se hicieron sus archivos. Empieza con el estado de la fila y, para una fuente, el período. Cuando la fila está desactualizada, una línea naranja **Motivo:** dice qué cambió.
 
-En `Alertas <defo-alerts_>`_, el icono de información de una fuente abre el mismo diálogo, con dos controles más: la casilla **Añadir a los nuevos periodos** (consulta `Añadir una fuente <defo-alerts-new-periods_>`_) y, para una fuente personalizada, **Editar**.
+En `Alertas <defo-alerts_>`_, el icono de información de una fuente abre el mismo diálogo, con dos controles más: la casilla **Añadir a los nuevos períodos** (consulta `Añadir una fuente <defo-alerts-new-periods_>`_) y, para una fuente personalizada, **Editar**.
 
 .. list-table::
     :header-rows: 1
@@ -1322,10 +1322,10 @@ Debajo de los campos aparece una vista previa de la leyenda de la capa.
     *   -   **Mín**, **Máx**
         -   *Continuo*: el rango de valores que se estira sobre los colores.
         -   0 y 1. Ambos deben ser números, con **Mín** menor que **Máx**.
-    *   -   **Ajustar al AOI (2–98 %)**
+    *   -   **Ajustar a la AOI (2–98 %)**
         -   *Continuo*: rellena **Mín** y **Máx** con los percentiles 2 y 98 de la banda sobre el rectángulo que envuelve la AOI.
         -
-    *   -   **Buscar las clases en el AOI**
+    *   -   **Buscar las clases en la AOI**
         -   *Categórico*: enumera los valores enteros presentes sobre la AOI, cada uno con un color, su valor, una **Etiqueta** y un icono de ojo que lo oculta o lo muestra. Cuando la imagen nombra sus clases y sus colores (como ESA WorldCover), las clases los toman; si no, cada clase se etiqueta con su valor.
         -   Como máximo 50 clases. Los valores no enumerados y las clases ocultas son transparentes.
     *   -   **Añadir un valor**
@@ -1337,7 +1337,7 @@ Debajo de los campos aparece una vista previa de la leyenda de la capa.
 
 .. labels-ok: Intro
 
-Cuando una banda solo contiene 0 y 1 sobre la AOI, las clases encontradas nombran el 1 como la banda y empiezan con el 0 oculto: "Solo 0 y 1 en el AOI: 1 lleva el nombre de la banda y 0 empieza oculto (transparente)." Selecciona el icono de ojo del 0 para dibujarlo también.
+Cuando una banda solo contiene 0 y 1 sobre la AOI, las clases encontradas nombran el 1 como la banda y empiezan con el 0 oculto: "Solo 0 y 1 en la AOI: 1 lleva el nombre de la banda y 0 empieza oculto (transparente)." Selecciona el icono de ojo del 0 para dibujarlo también.
 
 Compuesto RGB
 """""""""""""
@@ -1363,13 +1363,13 @@ Compuesto RGB
     *   -   **Mín**, **Máx**
         -   El rango de valores que se estira sobre los colores, el mismo para las tres bandas.
         -   0 y 1. Ambos deben ser números, con **Mín** menor que **Máx**.
-    *   -   **Ajustar al AOI (2–98 %)**
+    *   -   **Ajustar a la AOI (2–98 %)**
         -   Rellena **Mín** y **Máx** con un solo rango para las tres bandas, a partir de sus percentiles 2 y 98 sobre el rectángulo que envuelve la AOI.
         -
 
 .. tip::
 
-    Ajusta **Mín** y **Máx** al rango real de los datos (por ejemplo, de 0 a 3000 para una imagen Sentinel-2 de reflectancia de superficie), o selecciona **Ajustar al AOI (2–98 %)**. Con el rango predeterminado de 0 a 1, la mayoría de las imágenes se ven completamente blancas.
+    Ajusta **Mín** y **Máx** al rango real de los datos (por ejemplo, de 0 a 3000 para una imagen Sentinel-2 de reflectancia de superficie), o selecciona **Ajustar a la AOI (2–98 %)**. Con el rango predeterminado de 0 a 1, la mayoría de las imágenes se ven completamente blancas.
 
 Mostrar en Análisis
 """""""""""""""""""
@@ -1393,12 +1393,12 @@ Mensajes frecuentes
     Elige una banda distinta para cada color.
 
 "Esta banda tiene valores no enteros: dibújala como Continua."
-    **Buscar las clases en el AOI** encontró valores decimales: la banda no es un conjunto de clases. Pon **Tipo de raster** en **Continuo: una rampa de color**.
+    **Buscar las clases en la AOI** encontró valores decimales: la banda no es un conjunto de clases. Pon **Tipo de raster** en **Continuo: una rampa de color**.
 
 "Más de 50 valores: esta banda parece continua."
     Dibuja la banda como **Continuo: una rampa de color**, o añade a mano las clases que necesites con **Añadir un valor**.
 
-"No hay valores en el AOI." o "La banda no tiene dispersión de valores en el AOI."
+"No hay valores en la AOI." o "La banda no tiene dispersión de valores en la AOI."
     La banda no tiene datos sobre la AOI, o tiene el mismo valor en todas partes. Revisa la imagen y la banda, o escribe tú **Mín** y **Máx**.
 
 "Busca las clases o añade un valor." o "Muestra al menos una clase."
@@ -1705,7 +1705,7 @@ Para compartir los paquetes:
 
 El paquete se abre como una copia de revisión en Análisis, filtrada a las alertas del evaluador, con los pasos de configuración bloqueados.
 
-Un paquete necesita la forma de la AOI. Hasta que esté cargada, el paso indica **Los paquetes esperan la geometría del AOI: abre el paso AOI para cargarla.**
+Un paquete necesita la forma de la AOI. Hasta que esté cargada, el paso indica **Los paquetes esperan la geometría de la AOI: abre el paso AOI para cargarla.**
 
 Si el `cuestionario <defo-questionnaire_>`_ cambia después de generar los paquetes, los iconos de nube se vuelven ámbar ("Creado antes de que cambiara el cuestionario: genera los paquetes de nuevo."). Selecciona **Regenerar paquetes** y envía los nuevos.
 
@@ -2316,8 +2316,8 @@ Columna izquierda:
         -   Contenido
     *   -   **Por estado de revisión**
         -   Una barra dividida por estado y el valor de cada estado.
-    *   -   **A lo largo de los periodos de seguimiento**
-        -   Una columna por período de monitoreo del proyecto, dividida por estado, a partir de su conjunto de alertas más reciente. Un período que aún está en revisión muestra rayada su parte sin revisar. Con un solo período, indica "Este proyecto tiene un solo periodo de seguimiento. Añade otro y aquí se dibujará su tendencia."
+    *   -   **A lo largo de los períodos de seguimiento**
+        -   Una columna por período de monitoreo del proyecto, dividida por estado, a partir de su conjunto de alertas más reciente. Un período que aún está en revisión muestra rayada su parte sin revisar. Con un solo período, indica "Este proyecto tiene un solo período de seguimiento. Añade otro y aquí se dibujará su tendencia."
     *   -   **Tamaño de las alertas**
         -   Las alertas por tamaño: menos de 0,5 ha, 0,5–1 ha, 1–2 ha, 2–5 ha, 5–10 ha, 10–25 ha y 25 ha o más.
     *   -   **Por área administrativa**
@@ -2359,7 +2359,7 @@ Su tabla enumera los historiales que incluyen una alerta de este conjunto, prime
 
     *   -   Columna
         -   Contenido
-    *   -   **Periodos de monitoreo**
+    *   -   **Períodos de monitoreo**
         -   El primer y el último período del historial.
     *   -   **Alertas**
         -   El número de alertas del historial, todos los períodos juntos.
@@ -2577,7 +2577,7 @@ La ventana de búsqueda va del 2026-06-03 al 2026-09-30, así que también se en
 Alertas
 """""""
 
-En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos periodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, **Descargar 3 pendientes** en el pie descarga las tres fuentes en la ventana de búsqueda.
+En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos períodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, **Descargar 3 pendientes** en el pie descarga las tres fuentes en la ventana de búsqueda.
 
 Armonizar
 """""""""
@@ -2701,7 +2701,7 @@ Con 13 de las 48 alertas revisadas, la mayoría de los puntos siguen en gris. La
 La ronda de octubre
 ^^^^^^^^^^^^^^^^^^^
 
-Al empezar la ronda siguiente, la coordinadora selecciona **Nuevo período** en `Período de monitoreo <defo-period-add_>`_. El diálogo viene completado: del 2026-10-01 (el día siguiente al fin de septiembre) a hoy, con los 90 días de retrospección usados la vez anterior. La coordinadora fija el final en 2026-10-20, el día de esta ronda. **Añadir período** lo convierte en el período activo, con las opciones de máscara del período de septiembre y las tres fuentes marcadas con **Añadir a los nuevos periodos**.
+Al empezar la ronda siguiente, la coordinadora selecciona **Nuevo período** en `Período de monitoreo <defo-period-add_>`_. El diálogo viene completado: del 2026-10-01 (el día siguiente al fin de septiembre) a hoy, con los 90 días de retrospección usados la vez anterior. La coordinadora fija el final en 2026-10-20, el día de esta ronda. **Añadir período** lo convierte en el período activo, con las opciones de máscara del período de septiembre y las tres fuentes marcadas con **Añadir a los nuevos períodos**.
 
 Después:
 
@@ -2730,7 +2730,7 @@ El `Resumen <defo-overview_>`_ sintetiza el conjunto de octubre. En **Superficie
 
     La comparación requiere cuidado. **Pérdida confirmada** solo cuenta las alertas revisadas como alertas verdaderas, y solo un tercio de las alertas de octubre están revisadas; la cifra de septiembre también cubre solo las alertas de septiembre revisadas hasta ahora. La flecha significa que por ahora se ha *confirmado* menos pérdida, no que se haya perdido menos bosque: la cifra crece a medida que el equipo sigue revisando.
 
-**A lo largo de los periodos de seguimiento** muestra los dos períodos uno al lado del otro, con la parte aún en revisión rayada (2870 ha detectadas en septiembre, 1177 ha en octubre).
+**A lo largo de los períodos de seguimiento** muestra los dos períodos uno al lado del otro, con la parte aún en revisión rayada (2870 ha detectadas en septiembre, 1177 ha en octubre).
 
 Más abajo:
 
