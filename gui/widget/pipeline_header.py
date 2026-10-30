@@ -17,7 +17,7 @@ import solara
 import solara.lab
 
 from gui.i18n import t
-from gui.store.workflow_steps import LEVELS, STEPS, StepStatus, nav_targets, step_states, steps_of
+from gui.store.workflow_steps import LEVELS, STEPS, StepStatus, nav_targets, plan_once, step_states, steps_of
 from gui.widget.help import InfoButton
 from gui.widget.text_style import MUTED
 
@@ -159,7 +159,10 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     Evaluation step ends with its own *Start analysis*.
     """
     p = project.value
-    states = step_states(p)
+    with plan_once():  # the gates and badges below plan the active period once
+        states = step_states(p)
+        texts = [count_text(s, p) if states[i] is not StepStatus.LOCKED or i == active_step else ""
+                 for i, s in enumerate(STEPS)]
     prev_t, next_t = nav_targets(active_step, states)
     menu_open, set_menu_open = solara.use_state(False)
     # The visit (a count of step changes) a locked-tab click happened on: the
@@ -262,7 +265,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     key=spec.key,
                     tip=t(spec.lock_reason_key)
                     if locked
-                    else f"{t(spec.label_key)} · {count_text(spec, p)}",
+                    else f"{t(spec.label_key)} · {texts[i]}",
                     seg_style=_seg_style(i),
                     locked=locked,
                     on_activate=lambda i=i: on_navigate(i),
@@ -322,7 +325,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     )
                     solara.Text(t(active.label_key), style="font-weight: 700;")
                     if not empty_optional:
-                        rv.Chip(children=[count_text(active, p)], x_small=True)
+                        rv.Chip(children=[texts[active_step]], x_small=True)
                     rv.Icon(
                         children=["mdi-menu-down"],
                         small=True,
@@ -358,7 +361,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                                 label=t(spec.label_key),
                                 sub_text=t(spec.lock_reason_key)
                                 if locked
-                                else count_text(spec, p),
+                                else texts[i],
                                 locked=locked,
                                 active=i == active_step,
                                 on_jump=_jump,

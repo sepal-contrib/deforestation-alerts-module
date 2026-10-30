@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import solara
 
 from deforestation_alerts.engine import fingerprint as fp
-from deforestation_alerts.engine.plan import plan_prepare
+from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.engine.runner import MaskNotReady
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
@@ -50,12 +50,16 @@ def _art(pdir, key, kind, inputs, stats=None):
     return fp.make_artifact(key, kind, pdir, f, inputs, stats=stats)
 
 
+def _run_all(p, pdir, period):
+    return prepare_step.run_all_items(plan_prepare(p, pdir, period), plan_masks(p, pdir, period))
+
+
 def test_run_all_runs_the_periods_masks_first(tmp_path, cover):
     p = _project(tmp_path, cover)
-    assert prepare_step.run_all_items(p, tmp_path, p.periods[FEB.id]) == [("mask", "forest"), ("source", "GLAD-L")]
+    assert _run_all(p, tmp_path, p.periods[FEB.id]) == [("mask", "forest"), ("source", "GLAD-L")]
     set_period_mask(p, FEB.id, "forest", on=False)
     # an off mask is not run
-    assert prepare_step.run_all_items(p, tmp_path, p.periods[FEB.id]) == [("source", "GLAD-L")]
+    assert _run_all(p, tmp_path, p.periods[FEB.id]) == [("source", "GLAD-L")]
     assert prepare_step.items_for_source(p, tmp_path, p.periods[FEB.id], "GLAD-L") == [("source", "GLAD-L")]
     set_period_mask(p, FEB.id, "forest", on=True)
     assert prepare_step.items_for_source(p, tmp_path, p.periods[FEB.id], "GLAD-L") == [
@@ -69,7 +73,7 @@ def test_a_ready_mask_is_not_run_again(tmp_path, cover):
     aligned = _art(tmp_path, fp.mask_key("forest"), "mask", fp.mask_inputs(p, "forest"), stats={"on_pixels": 5})
     p.artifacts = {**p.artifacts, aligned.key: aligned}
     period = p.periods[FEB.id]
-    assert prepare_step.run_all_items(p, tmp_path, period) == [("source", "GLAD-L")]
+    assert _run_all(p, tmp_path, period) == [("source", "GLAD-L")]
     assert prepare_step.items_for_source(p, tmp_path, period, "GLAD-L") == [("source", "GLAD-L")]
 
 
@@ -344,7 +348,7 @@ def test_a_switch_during_run_all_leaves_the_row_in_flight_out_of_date(tmp_path, 
     row = plan_prepare(live, tmp_path, live.periods[FEB.id])[0]
     assert row.raw is fp.Status.CURRENT and row.harmonized is fp.Status.STALE and row.needs_run
     # the next Run all re-harmonizes it without a download (the raw file is current)
-    assert prepare_step.run_all_items(live, tmp_path, live.periods[FEB.id]) == [("source", "GLAD-L")]
+    assert _run_all(live, tmp_path, live.periods[FEB.id]) == [("source", "GLAD-L")]
 
 
 def test_source_rows_run_in_the_context_mode_and_report_its_stage(tmp_path, cover, monkeypatch):

@@ -276,6 +276,37 @@ def test_prepare_tab_ticked_once_integrate_has_outputs(monkeypatch):
     rc.close()
 
 
+def test_one_header_render_plans_the_active_period_once(monkeypatch):
+    from datetime import date
+
+    from deforestation_alerts.engine.fingerprint import Status
+    from deforestation_alerts.engine.plan import PrepareRow
+    from deforestation_alerts.project.models import GridSpec, Period
+    from gui.store import workflow_steps
+    from gui.store.workflow_steps import step_index
+    from gui.widget.pipeline_header import PipelineHeader
+
+    calls = []
+
+    def plan(p, pdir, period):
+        calls.append(id(p))
+        return [PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT)]  # downloaded and ready
+
+    monkeypatch.setattr(workflow_steps, "plan_prepare", plan)
+    p = _project(aoi_name="Acre")
+    period = Period(id=JAN, start=date(2026, 1, 1), end=date(2026, 1, 31), sources=["GLAD-L"])
+    p.periods = {JAN: period}
+    p.active_period = JAN
+    p.grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=0, ymax=0, width=1, height=1)
+    project = _reactive(p)
+    box, rc = reacton.render(PipelineHeader(active_step=step_index("harmonize"), on_navigate=lambda i: None,
+                                            project=project), handle_error=False)
+    assert len(calls) == 1
+    project.set(p.model_copy())  # a change publishes a fresh copy: planned again, once
+    assert len(calls) == 2 and calls[0] != calls[1]
+    rc.close()
+
+
 def test_lock_note_clears_on_navigation():
     from gui.i18n import t
     from gui.widget.pipeline_header import PipelineHeader

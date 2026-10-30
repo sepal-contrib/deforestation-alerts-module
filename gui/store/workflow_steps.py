@@ -28,12 +28,14 @@ The machinery (``StepStatus``/``StepSpec``/``step_status``/``step_states``/
 lists and the layout flags are per-app.
 """
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 from deforestation_alerts.engine.fingerprint import Status
-from deforestation_alerts.engine.plan import plan_prepare, ready_sources
+from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import period_sources
 
@@ -82,11 +84,37 @@ def active_set(p):
     return p.alert_sets.get(p.active_set) if p is not None and p.active_set else None
 
 
+#: Inside ``plan_once``: the plans made so far, by project object and period.
+_plan_cache: ContextVar[Optional[dict]] = ContextVar("plan_cache", default=None)
+
+
+@contextmanager
+def plan_once():
+    """Within the block (one header render), ``prepare_plan`` plans each
+    project and period once. Scoped, not kept: a test or a job may change a
+    project in place, so a plan is only reused while nothing can change it."""
+    token = _plan_cache.set({})
+    try:
+        yield
+    finally:
+        _plan_cache.reset(token)
+
+
+def prepare_plan(p, pdir, period) -> list:
+    cache = _plan_cache.get()
+    if cache is None:
+        return plan_prepare(p, pdir, period)
+    key = (id(p), str(pdir), period.id)  # ``p`` outlives the block, so its id is not reused
+    if key not in cache:
+        cache[key] = plan_prepare(p, pdir, period)
+    return cache[key]
+
+
 def _ready(p) -> list:
     period = active_period(p)
     if period is None or p.grid is None:
         return []
-    return ready_sources(p, paths.project_dir(p.name), period)
+    return [r.source for r in prepare_plan(p, paths.project_dir(p.name), period) if r.ready]
 
 
 def _evaluator_count(p) -> int:
@@ -103,7 +131,8 @@ def _evaluator_count(p) -> int:
 def _downloaded(p) -> bool:
     """An active-period source whose raw file is current (Harmonize has work or results)."""
     period = active_period(p)
-    return period is not None and any(r.raw is Status.CURRENT for r in plan_prepare(p, paths.project_dir(p.name), period))
+    return period is not None and any(r.raw is Status.CURRENT
+                                      for r in prepare_plan(p, paths.project_dir(p.name), period))
 
 
 def _has_set(p) -> bool:

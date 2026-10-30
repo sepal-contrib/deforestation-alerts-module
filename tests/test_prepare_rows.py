@@ -235,14 +235,11 @@ def test_harmonize_row_reads_running_while_downloading():
         assert cell["type"] != "verb" or cell["disabled"]
 
 
-def test_run_all_harmonize_skips_rows_without_raw(monkeypatch):
-    monkeypatch.setattr(prepare_step, "plan_masks", lambda p, pdir, period: [])
-    monkeypatch.setattr(prepare_step, "plan_prepare", lambda p, pdir, period: [
-        PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE),
-        PrepareRow("GLAD-S2", Status.CURRENT, Status.CURRENT)])
-    p = _p()
-    assert prepare_step.run_all_items(p, "/tmp/x", JAN, stage="harmonize") == [("source", "RADD")]
-    assert prepare_step.run_all_items(p, "/tmp/x", JAN) == [("source", "GLAD-L"), ("source", "RADD")]
+def test_run_all_harmonize_skips_rows_without_raw():
+    rows = [PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE),
+            PrepareRow("GLAD-S2", Status.CURRENT, Status.CURRENT)]
+    assert prepare_step.run_all_items(rows, [], stage="harmonize") == [("source", "RADD")]
+    assert prepare_step.run_all_items(rows, []) == [("source", "GLAD-L"), ("source", "RADD")]
 
 
 def test_a_downloading_mask_reads_its_percent():

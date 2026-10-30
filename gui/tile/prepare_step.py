@@ -130,12 +130,13 @@ def redownload_items(p, rows) -> list:
     return [("source", r.source) for r in rows if not r.blocked and not is_file_source(p.sources[r.source])]
 
 
-def run_all_items(p, pdir, period, stage=None) -> list:
-    """Run all's rows (spec §7.3): the masks on in the period that need a run,
-    then the runnable sources; ``stage="harmonize"`` (spec §2): only the
-    sources whose raw file is current, as a harmonize never downloads."""
-    masks = [("mask", m.name) for m in plan_masks(p, pdir, period) if m.needs_run]
-    sources = [("source", r.source) for r in plan_prepare(p, pdir, period)
+def run_all_items(rows, mask_rows, stage=None) -> list:
+    """Run all's rows (spec §7.3) from the period's ``plan_prepare`` and
+    ``plan_masks``: the masks on in the period that need a run, then the
+    runnable sources; ``stage="harmonize"`` (spec §2): only the sources whose
+    raw file is current, as a harmonize never downloads."""
+    masks = [("mask", m.name) for m in mask_rows if m.needs_run]
+    sources = [("source", r.source) for r in rows
                if r.needs_run and (stage != "harmonize" or r.raw is Status.CURRENT)]
     return masks + sources
 
@@ -304,6 +305,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
         return
     pdir = paths.project_dir(p.name)
     rows = plan_prepare(p, pdir, period) if p.grid is not None else []
+    mask_rows = plan_masks(p, pdir, period) if p.grid is not None else []
     by_source = {r.source: r for r in rows}
 
     def _aoi_raster_current():
@@ -333,7 +335,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
     mine = mine_keys(running, stops, p.name, period.id)
     stopped = stops.stopped((p.name, period.id))
 
-    pending = run_all_items(p, pdir, period, stage=stage) if p.grid is not None else []
+    pending = run_all_items(rows, mask_rows, stage=stage)
     stages = scope_stages(jobs.row_stage.value, p.name, period.id)
     counts = footer_counts(mine_rows(p, period, mine), stages, jobs.batch.value.get((p.name, period.id)))
 
@@ -390,7 +392,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
             # between the grid card and the sources table (spec §7.3); a mask row
             # reads running whichever period's job claimed it, so it gets every key
             MasksCard(app_state=app_state, map_=map_, gee_interface=gee_interface, layers=layers, period=period,
-                      rows=plan_masks(p, pdir, period), running=running, errors=errors,
+                      rows=mask_rows, running=running, errors=errors,
                       on_run=lambda n: _start([("mask", n)]), on_rerun=lambda n: _start([("mask", n)], force=True),
                       progress=row_progress.value, stages=stages, stopped=stops.stopped())
             ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
