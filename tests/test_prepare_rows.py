@@ -94,7 +94,6 @@ def test_four_action_slots_in_order():
     out = _build(rows, p=p)
     for r in out.values():
         assert [a["kind"] for a in r["actions"]] == ["map_toggle", "info", "refresh", "delete"]
-        assert len(r["actions"]) == prepare_step.SOURCE_ACTIONS
     radd, tif = _acts(out["RADD"]), _acts(out["tif"])
     assert not radd["refresh"]["disabled"] and radd["refresh"]["title"] == "Download again"
     assert tif["refresh"]["disabled"] and tif["refresh"]["title"] == "Nothing to download again: read from a file"
@@ -212,6 +211,44 @@ def test_the_map_toggle_of_a_blocked_row_is_off_unless_its_layer_is_on():
     assert toggle["disabled"] and not toggle["is_on"]
     [toggle] = [a for a in _build([row], on={"src:GLAD-L"})["GLAD-L"]["actions"] if a["kind"] == "map_toggle"]
     assert toggle["is_on"] and not toggle["disabled"]
+
+
+# The Harmonize step (spec §2): a row harmonizes a raw file the Alerts step downloaded
+# ---------------------------------------------------------------------------
+def test_harmonize_rows_need_the_download_first():
+    from gui.i18n import t
+
+    rows = [PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.MISSING)]
+    out = _build(rows, stage="harmonize")
+    glad, radd = out["GLAD-L"], out["RADD"]
+    assert glad["notes"][0]["text"] == t("steps.harmonize.download_first")
+    assert glad["cells"][1]["disabled"] and glad["cells"][1]["label"] == "Harmonize"
+    assert radd["notes"] == [] and radd["cells"][1]["label"] == "Harmonize" and not radd["cells"][1].get("disabled")
+    for r in out.values():  # Download again moved to the Alerts step
+        assert [a["kind"] for a in r["actions"]] == ["map_toggle", "info", "delete"]
+        assert len(r["actions"]) == prepare_step.SOURCE_ACTIONS
+
+
+def test_harmonize_row_reads_running_while_downloading():
+    from gui.scripts.prepare_scope import PrepareJobs, inflight_key
+
+    jobs = PrepareJobs()
+    jobs.inflight.claim(inflight_key("r", JAN.id, "GLAD-L"))  # the Alerts step downloads it
+    rows = [PrepareRow("GLAD-L", Status.MISSING, Status.MISSING)]
+    pkey = prepare_jobs.progress_key("r", JAN.id, "source", "GLAD-L")
+    for stages in ({}, {pkey: "download"}):
+        cell = _build(rows, mine=set(jobs.inflight.value), stages=stages, stage="harmonize")["GLAD-L"]["cells"][1]
+        assert cell["type"] != "verb" or cell["disabled"]
+
+
+def test_run_all_harmonize_skips_rows_without_raw(monkeypatch):
+    monkeypatch.setattr(prepare_step, "plan_masks", lambda p, pdir, period: [])
+    monkeypatch.setattr(prepare_step, "plan_prepare", lambda p, pdir, period: [
+        PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE),
+        PrepareRow("GLAD-S2", Status.CURRENT, Status.CURRENT)])
+    p = _p()
+    assert prepare_step.run_all_items(p, "/tmp/x", JAN, stage="harmonize") == [("source", "RADD")]
+    assert prepare_step.run_all_items(p, "/tmp/x", JAN) == [("source", "GLAD-L"), ("source", "RADD")]
 
 
 def test_a_downloading_mask_reads_its_percent():

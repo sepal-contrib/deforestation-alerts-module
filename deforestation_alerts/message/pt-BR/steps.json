@@ -351,6 +351,15 @@
       "error_bad_look_back": "A busca retroativa deve ser um número inteiro de dias, 0 ou mais.",
       "add": "Adicionar período"
     },
+    "harmonize": {
+      "download_first": "Baixe-a primeiro em Alertas",
+      "run_all": {
+        "one": "Harmonizar {n} pendente",
+        "many": "Harmonizar {n} pendentes",
+        "other": "Harmonizar {n} pendentes"
+      },
+      "job_title": "Harmonizar"
+    },
     "prepare": {
       "description": "Baixe todas as máscaras e fontes do período ativo na própria projeção de cada uma, depois alinhe-as à grade do projeto e aplique as máscaras do período (harmonizar). Nada cujas entradas não mudaram é executado duas vezes.",
       "info_header": "Sobre Baixar e harmonizar",

@@ -356,7 +356,7 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
     refuse_if_read_only(ctx.app_state.project.value)
     scope = run_scope(ctx.app_state.project.value)
     items = _items(rows)
-    title = t("steps.prepare.job_title")
+    title = t("steps.harmonize.job_title" if ctx.mode == "harmonize" else "steps.prepare.job_title")
     with writing(ctx.name), tracked_job(ctx.notifier, title, total_steps=len(items)) as task:
         for kind, name in items:
             if ctx.cancel.is_set():

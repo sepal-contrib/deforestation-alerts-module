@@ -351,6 +351,15 @@
       "error_bad_look_back": "La retrospección debe ser un número entero de días, 0 o más.",
       "add": "Añadir período"
     },
+    "harmonize": {
+      "download_first": "Descárgala primero en Alertas",
+      "run_all": {
+        "one": "Armonizar {n} pendiente",
+        "many": "Armonizar {n} pendientes",
+        "other": "Armonizar {n} pendientes"
+      },
+      "job_title": "Armonizar"
+    },
     "prepare": {
       "description": "Descarga todas las máscaras y fuentes del período activo en su propia proyección, luego las alinea con la cuadrícula del proyecto y aplica las máscaras del período (armonizar). Nada cuyas entradas no hayan cambiado se ejecuta dos veces.",
       "info_header": "Acerca de Descargar y armonizar",

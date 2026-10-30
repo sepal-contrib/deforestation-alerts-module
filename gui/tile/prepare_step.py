@@ -48,10 +48,13 @@ Stop only sets the jobs' cancel Events, so it also marks the scope as
 rows a stopped job still holds no longer read Queued (``StopEvents.stopped``):
 they will not run.
 
-Download again (a row's, or the footer menu's Download all again) and Delete
-files ask first (``refresh_confirm``, ``delete_confirm``). Delete files drops
-this period's raw and harmonized records of the source and deletes their
-files; the source and the alert sets built from them stay.
+The step is the Harmonize step (spec §2, ``stage="harmonize"``): it only
+harmonizes (``mode="harmonize"``); a row whose raw file is not current waits
+for its download in the Alerts step, which also holds Download again and
+Download all again (``refresh_confirm``, ``redownload_items``, kept here for
+it). Delete files asks first (``delete_confirm``): it drops this period's raw
+and harmonized records of the source and deletes their files; the source and
+the alert sets built from them stay.
 
 The job state (in-flight keys, Stop events, row errors, progress, stages,
 batch, stopping) and the start and Stop live in ``gui.scripts.prepare_scope``:
@@ -92,7 +95,7 @@ from gui.widget.product_table import STATUS_PX, ProductTable
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
-SOURCE_ACTIONS = 4  # map, details, download again, delete
+SOURCE_ACTIONS = 3  # the Harmonize step's: map, details, delete (Download again is the Alerts step's)
 
 
 def source_columns() -> list:
@@ -128,11 +131,13 @@ def redownload_items(p, rows) -> list:
     return [("source", r.source) for r in rows if not r.blocked and not is_file_source(p.sources[r.source])]
 
 
-def run_all_items(p, pdir, period) -> list:
+def run_all_items(p, pdir, period, stage=None) -> list:
     """Run all's rows (spec §7.3): the masks on in the period that need a run,
-    then the runnable sources."""
+    then the runnable sources; ``stage="harmonize"`` (spec §2): only the
+    sources whose raw file is current, as a harmonize never downloads."""
     masks = [("mask", m.name) for m in plan_masks(p, pdir, period) if m.needs_run]
-    sources = [("source", r.source) for r in plan_prepare(p, pdir, period) if r.needs_run]
+    sources = [("source", r.source) for r in plan_prepare(p, pdir, period)
+               if r.needs_run and (stage != "harmonize" or r.raw is Status.CURRENT)]
     return masks + sources
 
 
@@ -179,11 +184,17 @@ def delete_confirm(p, period, source) -> tuple:
             t("steps.prepare.delete_files_sets", names=names) if sets else None)
 
 
-def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_refresh, on_delete,
+def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle, on_info, on_delete, on_refresh=None,
                stages=None, info_open=None, locked=False, progress=None, writing=False, masks_pend=False,
-               stopped=frozenset()) -> list:
+               stopped=frozenset(), stage=None) -> list:
     """The ``ProductTable`` rows of the sources table (spec "The sources
     table", option B); pure.
+
+    ``stage="harmonize"``: the Harmonize step's rows (spec §2): no Download
+    again; a row whose raw file is not current reads
+    ``steps.harmonize.download_first`` and its pill is disabled. None: the
+    rows as before, download and harmonize in one (``on_refresh`` then
+    needed).
 
     ``mine``: this project's and period's in-flight keys; ``errors``: the row
     errors by source; ``on``/``building``: the map keys shown and being built;
@@ -214,13 +225,14 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
     period or a change to the period's dates makes it. Download again stays: a
     live catalogue changes under the same window (spec §5.3).
     """
+    harmonize = stage == "harmonize"
     out = []
     for r in rows:
         busy = inflight_key(p.name, period.id, r.source) in mine
         pkey = progress_key(p.name, period.id, "source", r.source)
-        stage = (stages or {}).get(pkey) if busy else None
+        running = (stages or {}).get(pkey) if busy else None  # the job's stage
         pct = (progress or {}).get(pkey) if busy else None
-        queued = busy and stage is None and inflight_key(p.name, period.id, r.source) not in stopped
+        queued = busy and running is None and inflight_key(p.name, period.id, r.source) not in stopped
         file_source = is_file_source(p.sources[r.source])
         raw_art, harm_art = _art(p, raw_key(period.id, r.source)), _art(p, harm_key(period.id, r.source))
         if r.file_missing:
@@ -229,50 +241,53 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
             notes = []  # its coverage sentence is its subtitle
         else:
             notes = [n for n in row_notes(r.coverage, r.notes) if n["tone"] in ("warning", "error")]
+            if harmonize and r.raw is not Status.CURRENT:
+                notes.insert(0, {"text": t("steps.harmonize.download_first"), "tone": "info"})
         result = result_note(r.stats) if not r.blocked else None
         if result is not None and result["tone"] == "warning":  # every pixel masked out
             notes.append(result)
         reason = source_reason(p, period, r.source) if not (r.ready or r.blocked) else None
         subtitle, tone = source_subtitle(r, file_source=file_source, raw_art=raw_art, harm_art=harm_art,
-                                         reason=reason, stage=stage, queued=queued, pct=pct)
+                                         reason=reason, stage=running, queued=queued, pct=pct)
         title = {"type": "title", "value": source_label(p.sources[r.source]), "subtitle": subtitle}
         if tone:
             title["subtitle_tone"] = tone
-        state = source_state(r, file_source=file_source, stage=stage, queued=queued, pct=pct,
-                             failed=r.source in errors, locked=locked, on_run=(lambda s=r.source: run(s)))
+        state = source_state(r, file_source=file_source, stage=running, queued=queued, pct=pct,
+                             failed=r.source in errors, locked=locked, on_run=(lambda s=r.source: run(s)),
+                             harmonize_only=harmonize)
         if busy and state["type"] == "verb":  # a stopped job still holds the row
             state["disabled"] = True
         key = f"src:{r.source}"
-        out.append({
-            "key": r.source,
-            "cells": [title, state],
-            "notes": notes,
-            "error": errors.get(r.source),
-            "actions": [
-                # ``ready`` keeps files built before a failed check (Integrate
-                # uses them), but a blocked row is not shown (ruling T19 C)
-                # (a layer already on can always be switched off)
-                {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
-                 "disabled": (not r.ready or r.blocked) and key not in on, "on_click": (lambda s=r.source: toggle(s))},
-                {"kind": "info", "is_on": info_open == r.source, "on_click": (lambda s=r.source: on_info(s))},
-                {"kind": "refresh", "disabled": busy or locked or r.blocked or file_source or masks_pend,
-                 "title": t("steps.prepare.action_nothing_to_fetch" if file_source
-                            else "steps.prepare.redownload_all_masks" if masks_pend
-                            else "steps.prepare.action_download_again"),
-                 "on_click": (lambda s=r.source: on_refresh(s))},
-                # the confirm re-checks: a job can start while it is open
-                {"kind": "delete", "disabled": busy or writing or locked or (raw_art is None and harm_art is None),
-                 "title": t("steps.prepare.delete_files_busy" if (busy or writing) and not locked
-                            else "steps.prepare.action_delete_files"),
-                 "on_click": (lambda s=r.source: on_delete(s))},
-            ],
-        })
+        actions = [
+            # ``ready`` keeps files built before a failed check (Integrate
+            # uses them), but a blocked row is not shown (ruling T19 C)
+            # (a layer already on can always be switched off)
+            {"kind": "map_toggle", "is_on": key in on, "loading": key in building,
+             "disabled": (not r.ready or r.blocked) and key not in on, "on_click": (lambda s=r.source: toggle(s))},
+            {"kind": "info", "is_on": info_open == r.source, "on_click": (lambda s=r.source: on_info(s))},
+            {"kind": "refresh", "disabled": busy or locked or r.blocked or file_source or masks_pend,
+             "title": t("steps.prepare.action_nothing_to_fetch" if file_source
+                        else "steps.prepare.redownload_all_masks" if masks_pend
+                        else "steps.prepare.action_download_again"),
+             "on_click": (lambda s=r.source: on_refresh(s))},
+            # the confirm re-checks: a job can start while it is open
+            {"kind": "delete", "disabled": busy or writing or locked or (raw_art is None and harm_art is None),
+             "title": t("steps.prepare.delete_files_busy" if (busy or writing) and not locked
+                        else "steps.prepare.action_delete_files"),
+             "on_click": (lambda s=r.source: on_delete(s))},
+        ]
+        if harmonize:  # Download again is the Alerts step's
+            del actions[2]
+        out.append({"key": r.source, "cells": [title, state], "notes": notes, "error": errors.get(r.source),
+                    "actions": actions})
     return out
 
 
 @solara.component
-def PrepareStep(app_state, map_, gee_interface, layers, jobs):
-    """``jobs``: the session's ``PrepareJobs``, created once by the shell."""
+def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harmonize"):
+    """``jobs``: the session's ``PrepareJobs``, created once by the shell.
+    ``stage``: ``harmonize``, the only one (spec §2): the grid, the masks and
+    the harmonize of each source the Alerts step downloaded."""
     notifications = use_notifications()
     p = app_state.project.value
     inflight, stops, row_errors, row_progress = jobs.inflight, jobs.stops, jobs.row_errors, jobs.row_progress
@@ -280,7 +295,6 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs):
     on = layers.on.value
     building = layers.inflight.value
     info_source, set_info_source = solara.use_state(None)  # the source whose Details dialog is open
-    pending_refresh, set_pending_refresh = solara.use_state(None)  # a source to download again, "*" for all
     pending_delete, set_pending_delete = solara.use_state(None)  # the source whose files to delete
     # A row's error belongs to the project and period it ran for: a job writes
     # under its own scope, the table reads the showing scope's, and a change
@@ -315,7 +329,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs):
 
     def _start(items, force=False):
         start_items(jobs, app_state=app_state, layers=layers, map_=map_, notifications=notifications,
-                    items=items, force=force)
+                    items=items, force=force, mode=stage)
 
     def _toggle_map(source):
         # The Alerts step's pattern, not ``toggle``: a click behind a
@@ -337,23 +351,9 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs):
     mine = mine_keys(running, stops, p.name, period.id)
     stopped = stops.stopped((p.name, period.id))
 
-    pending = run_all_items(p, pdir, period) if p.grid is not None else []
+    pending = run_all_items(p, pdir, period, stage=stage) if p.grid is not None else []
     stages = scope_stages(jobs.row_stage.value, p.name, period.id)
     counts = footer_counts(mine_rows(p, period, mine), stages, jobs.batch.value.get((p.name, period.id)))
-    redownload = redownload_items(p, rows)
-
-    def _redownload_all():
-        """Force a fresh download and harmonize of every catalogue and Earth
-        Engine source that is not blocked (the footer menu's, once its
-        confirm is accepted)."""
-        _start(redownload, force=True)
-
-    masks_pend = any(kind == "mask" for kind, _ in pending)
-    menu = [{"label": tn("steps.prepare.redownload_all", len(redownload)),
-             "icon": "mdi-download",
-             "on_click": lambda: set_pending_refresh("*"),  # asks first
-             "disabled": masks_pend or read_only(p),
-             "title": t("steps.prepare.redownload_all_masks") if masks_pend else ""}] if redownload else []
 
     shown = info_source if info_source in by_source else None  # the dialog goes with its row
 
@@ -372,16 +372,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs):
                                 pct=row_progress.value.get(shown_key) if shown_busy else None)
         details = source_details(p, period, shown, row, source_reason(p, period, shown), lead)
 
-    # A confirm goes with its row, Download all again's with its menu item.
-    refreshing = pending_refresh if pending_refresh in by_source or (pending_refresh == "*" and redownload) else None
-    deleting = pending_delete if pending_delete in by_source else None
-
-    def _confirm_refresh():
-        set_pending_refresh(None)
-        if refreshing == "*":
-            _redownload_all()
-        else:
-            _start([("source", refreshing)], force=True)  # no masks first: only the download is asked for
+    deleting = pending_delete if pending_delete in by_source else None  # the confirm goes with its row
 
     def _delete_files():
         """This period's raw and harmonized files of the source and their
@@ -403,14 +394,13 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs):
         if update_setup(app_state, p.name, _apply, notifications):
             cleanup.delete_files(pdir, gone)
 
-    refresh_title, refresh_message = refresh_confirm(p, period, refreshing, redownload) if refreshing else ("", "")
     delete_title, delete_message, delete_note = delete_confirm(p, period, deleting) if deleting else ("", "", None)
 
     table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
-                            on_info=_toggle_info, on_refresh=set_pending_refresh, on_delete=set_pending_delete,
+                            on_info=_toggle_info, on_delete=set_pending_delete,
                             stages=stages, info_open=shown, locked=read_only(p), progress=row_progress.value,
-                            writing=is_writing(p.name), masks_pend=masks_pend, stopped=stopped)
+                            writing=is_writing(p.name), stopped=stopped, stage=stage)
 
     with solara.Column(style="gap:16px;"):
         StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
@@ -425,16 +415,13 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs):
             ProductTable(title=t("steps.prepare.list_title"), columns=source_columns(), rows=table_rows,
                          empty_text=t("steps.prepare.empty"))
             DetailsDialog(open=shown is not None, details=details, on_close=lambda: set_info_source(None))
-            ConfirmDialog(open=refreshing is not None, on_cancel=lambda: set_pending_refresh(None),
-                          on_confirm=_confirm_refresh, title=refresh_title, message=refresh_message,
-                          confirm_label=t("steps.prepare.redownload_label"), confirm_color="primary")
             ConfirmDialog(open=deleting is not None, on_cancel=lambda: set_pending_delete(None),
                           on_confirm=_delete_files, title=delete_title, message=delete_message, note=delete_note,
                           confirm_label=t("common.delete"))
-            BatchFooter(pending=len(pending), run_label=tn("steps.prepare.run_all", len(pending)),
+            BatchFooter(pending=len(pending), run_label=tn("steps.harmonize.run_all", len(pending)),
                         on_run=lambda: _start(pending), on_stop=lambda: stop_scope(jobs, p.name, period.id),
                         # Run stays off while the scope holds keys its rows no longer show (a mask removed)
-                        menu=menu, counts=counts, disabled=read_only(p) or bool(mine),
+                        menu=[], counts=counts, disabled=read_only(p) or bool(mine),
                         # every job of the scope is stopped (a row started since Stop brings Stop back)
                         stopping=(p.name, period.id) in jobs.stopping.value and bool(mine) and mine <= stopped)
             # Check again after a failed coverage check, or a failed AOI-sidecar

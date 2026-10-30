@@ -339,6 +339,14 @@
       "error_bad_look_back": "Look-back must be a whole number of days, 0 or more.",
       "add": "Add period"
     },
+    "harmonize": {
+      "download_first": "Download it in Alerts first",
+      "run_all": {
+        "one": "Harmonize {n} pending",
+        "other": "Harmonize {n} pending"
+      },
+      "job_title": "Harmonize"
+    },
     "prepare": {
       "description": "Download every mask and source of the active period in its own projection, then align them onto the project grid and apply the period's masks (harmonize). Nothing whose inputs are unchanged runs twice.",
       "info_header": "About Download & harmonize",

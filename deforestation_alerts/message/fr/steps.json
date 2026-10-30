@@ -351,6 +351,15 @@
       "error_bad_look_back": "La rétrospection doit être un nombre entier de jours, 0 ou plus.",
       "add": "Ajouter une période"
     },
+    "harmonize": {
+      "download_first": "Téléchargez-la d'abord dans Alertes",
+      "run_all": {
+        "one": "Harmoniser {n} en attente",
+        "many": "Harmoniser {n} en attente",
+        "other": "Harmoniser {n} en attente"
+      },
+      "job_title": "Harmoniser"
+    },
     "prepare": {
       "description": "Télécharge chaque masque et source de la période active dans sa propre projection, puis les aligne sur la grille du projet et applique les masques de la période (harmoniser). Rien dont les entrées sont inchangées ne s'exécute deux fois.",
       "info_header": "À propos de Télécharger et harmoniser",
