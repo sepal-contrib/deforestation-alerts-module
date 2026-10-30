@@ -112,7 +112,7 @@ def alert_rows(p, pdir, period, *, mine, errors, stages, progress, on, building,
         file_source = is_file_source(src)
         reason = source_reason(p, period, r.source) if not (r.raw is Status.CURRENT or r.blocked) else None
         subtitle, tone = download_subtitle(r, file_source=file_source, raw_art=_art(p, raw_key(period.id, r.source)),
-                                           reason=reason, stage=running, queued=queued)
+                                           reason=reason, queued=queued)
         chips = [{"value": c["label"], "color": TONE_COLORS[c["tone"]]}
                  for c in coverage_chips(p, r.source, period, pending=pending_cov)]
         title = {"type": "title", "value": source_label(src), "subtitle": subtitle, "chips": chips}

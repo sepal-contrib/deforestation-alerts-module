@@ -169,9 +169,15 @@ def test_the_alerts_status_cell_stops_at_the_download():
     assert _dl(PrepareRow("tif", Status.CURRENT, Status.MISSING), file_source=True)["label"] == "Ready"
 
 
+def test_the_alerts_row_never_reads_harmonizing():
+    """Option C (retires ruling R14): an Alerts row shows download states only."""
+    row = PrepareRow("RADD", Status.CURRENT, Status.MISSING)
+    assert _dl(row, stage="harmonize")["label"] == "Downloaded"
+
+
 def test_the_alerts_subtitle_names_the_download():
     row = PrepareRow("RADD", Status.CURRENT, Status.MISSING)
-    kw = dict(file_source=False, raw_art=_art("raw_alert", 3_000_000), reason=None, stage=None, queued=False)
+    kw = dict(file_source=False, raw_art=_art("raw_alert", 3_000_000), reason=None, queued=False)
     assert download_subtitle(row, **kw) == ("downloaded 2026-02-03 · 3.0 MB", None)
     assert download_subtitle(PrepareRow("RADD", Status.MISSING, Status.MISSING), **{**kw, "raw_art": None})[0] == (
         "not downloaded yet")

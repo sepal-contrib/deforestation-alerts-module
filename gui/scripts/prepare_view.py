@@ -198,14 +198,14 @@ def row_status_label(row: PrepareRow, file_source: bool, *, stage: Optional[str]
 
 def download_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], queued: bool, pct: Optional[int],
                    failed: bool, locked: bool, on_run: Callable) -> dict:
-    """An Alerts row's Status cell: its state in a running job (a download
-    that chains reads Harmonizing), File missing, the blocked status,
+    """An Alerts row's Status cell: its state in a running download (never
+    Harmonizing: option C), File missing, the blocked status,
     Downloaded once the raw file is current, else the Download (Read file)
     pill, in warning colour when the raw file is out of date."""
     if stage == "download" and file_source:
         label = t("steps.alerts.state_reading")
         return _state(STATUS_ICONS["running"], "primary", label, title=label)
-    running = _in_flight(stage, queued, pct)
+    running = _in_flight("download" if stage == "download" else None, queued, pct)
     if running is not None:
         return running
     if row.file_missing:
@@ -221,13 +221,11 @@ def download_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], 
 
 
 def download_subtitle(row: PrepareRow, *, file_source: bool, raw_art: Optional[Artifact], reason: Optional[Reason],
-                      stage: Optional[str], queued: bool) -> tuple[str, Optional[str]]:
+                      queued: bool) -> tuple[str, Optional[str]]:
     """The grey line under an Alerts row's name, and its tone: the download's
     date and size once current, else why it must be downloaded (read) again.
     ``reason``: ``engine.why.source_reason``; a harmonize-side reason reads as
     the row's raw status."""
-    if stage == "harmonize":
-        return t("steps.prepare.sub_harmonizing"), None
     if queued:
         return t("steps.prepare.sub_queued"), None
     if row.file_missing:
