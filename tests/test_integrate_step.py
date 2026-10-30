@@ -872,8 +872,8 @@ def test_small_growth_is_kept_until_unticked_and_reopens_as_run(step):
         assert t("steps.integrate.small_growth_no_earlier") in _texts(rc)  # no earlier period: nothing links
         # the static explanation lives in the info dialog, not under the checkbox
         assert not has_message("steps.integrate.small_growth_hint")
-        assert "linked to the alert they grow from" not in " ".join(_texts(rc))
-        assert "linked to the alert they grow from" in t("steps.integrate.info_md")
+        # no sentence of the info dialog is rendered in the tile
+        assert not [s for s in _texts(rc) if len(s) > 30 and s in t("steps.integrate.info_md")]
         _checkbox(rc, label).v_model = False
         _run(rc)
         step.run_jobs()

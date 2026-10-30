@@ -10,7 +10,7 @@
     "raw_not_ready": "Téléchargez cette source dans Alertes avant de l'harmoniser.",
     "file_not_found": "Fichier introuvable : {path}",
     "not_a_source": "{source} n'est pas une source de ce projet.",
-    "not_ready": "{source} n'est pas téléchargée et harmonisée pour cette période ; lancez d'abord Télécharger et harmoniser.",
+    "not_ready": "{source} n'est pas téléchargée et harmonisée pour cette période ; téléchargez-la d'abord dans Alertes et harmonisez-la dans Harmoniser.",
     "footprint_missing": "L'empreinte du jeu antérieur {set_id} est manquante ; relancez d'abord Intégrer et vectoriser sur ce jeu.",
     "carry_missing": "Le raster combiné du jeu antérieur {set_id} est manquant ; relancez d'abord Intégrer et vectoriser sur ce jeu.",
     "no_sources": "Choisissez au moins une source, chacune une seule fois.",

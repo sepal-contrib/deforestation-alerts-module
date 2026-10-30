@@ -10,7 +10,7 @@
     "raw_not_ready": "Baixe esta fonte em Alertas antes de harmonizá-la.",
     "file_not_found": "Arquivo não encontrado: {path}",
     "not_a_source": "{source} não é uma fonte deste projeto.",
-    "not_ready": "{source} não foi baixada e harmonizada para este período; execute Baixar e harmonizar primeiro.",
+    "not_ready": "{source} não foi baixada e harmonizada para este período; baixe-a primeiro em Alertas e harmonize-a em Harmonizar.",
     "footprint_missing": "A área de cobertura do conjunto anterior {set_id} está faltando; execute Integrar e vetorizar nesse conjunto novamente primeiro.",
     "carry_missing": "O raster combinado do conjunto anterior {set_id} está faltando; execute Integrar e vetorizar nesse conjunto novamente primeiro.",
     "no_sources": "Escolha pelo menos uma fonte, cada uma uma única vez.",

@@ -10,7 +10,7 @@
     "raw_not_ready": "Descarga esta fuente en Alertas antes de armonizarla.",
     "file_not_found": "Archivo no encontrado: {path}",
     "not_a_source": "{source} no es una fuente de este proyecto.",
-    "not_ready": "{source} no está descargada y armonizada para este período; ejecuta primero Descargar y armonizar.",
+    "not_ready": "{source} no está descargada y armonizada para este período; descárgala primero en Alertas y armonízala en Armonizar.",
     "footprint_missing": "Falta la huella del conjunto anterior {set_id}; ejecuta Integrar y vectorizar en ese conjunto de nuevo primero.",
     "carry_missing": "Falta el ráster combinado del conjunto anterior {set_id}; ejecuta Integrar y vectorizar en ese conjunto de nuevo primero.",
     "no_sources": "Elige al menos una fuente, cada una una sola vez.",

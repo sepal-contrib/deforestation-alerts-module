@@ -143,7 +143,7 @@ def _alternatives(texts, slot) -> str:
 
 def prepare_labels(forms, ready, running, stop):
     """The labels ``run_all`` reads, in one language: ``forms`` the plural
-    forms of ``steps.prepare.run_all`` (each with ``{n}``), ``ready`` the
+    forms of ``steps.harmonize.run_all`` (each with ``{n}``), ``ready`` the
     ``steps.prepare.state_ready`` text, ``running`` the texts of
     ``RUNNING_KEYS`` (``{pct}`` matches any percent): a pattern, ``stop`` the
     ``steps.prepare.footer_stop`` text of the button that replaces Run while a
@@ -158,7 +158,7 @@ def en_prepare():
     if EN_PREPARE is None:
         from tools.walk.walklib import MESSAGES_EN
 
-        node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["prepare"]["run_all"]
+        node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["harmonize"]["run_all"]
         EN_PREPARE = prepare_labels(node.values(), en("steps.prepare.state_ready"), [en(k) for k in RUNNING_KEYS],
                                     en("steps.prepare.footer_stop"))
     return EN_PREPARE

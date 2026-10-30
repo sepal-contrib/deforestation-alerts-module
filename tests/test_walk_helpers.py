@@ -309,7 +309,7 @@ def test_prepare_footer_and_row_helpers_find_the_pills_actions_and_stop(_walk_br
             <div><button>Harmonize</button></div>
             <span title="Download again"><button disabled><i class="mdi-refresh"></i></button></span></div>
           <div style="display:grid;grid-template-columns:1fr 1fr"><div>RADD</div><div><i></i><div>Ready</div></div></div>
-          <button>Run 2 pending</button></div>""")
+          <button>Harmonize 2 pending</button></div>""")
         assert phases.row_pill(page, "GLAD-L", "harmonize").count() == 1
         assert phases.row_pill(page, "GLAD-L", "download").count() == 0
         assert phases.row_pill(page, "RADD", "harmonize").count() == 0

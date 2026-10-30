@@ -384,10 +384,6 @@
       "list_title": "Sources for this period",
       "col_source": "Source",
       "empty": "Add alert sources first.",
-      "run_all": {
-        "one": "Run {n} pending",
-        "other": "Run {n} pending"
-      },
       "footer_strip": "{running} running · {queued} queued",
       "footer_running": "{running} running",
       "footer_done": "{done} of {total} done",
@@ -412,7 +408,7 @@
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "The AOI's geometry is still being fetched; run this row again in a moment.",
       "aoi_geometry_failed": "The AOI's geometry could not be fetched, so the GeoTIFF rows cannot run; use Check again, then run them.",
-      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Run … pending aligns the masks first.",
+      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Harmonize … pending aligns the masks first.",
       "mask_file_missing": "Mask {name}: file not found ({path}). Put the file back at this path to use the mask.",
       "mask_name_empty": "Give the mask a name.",
       "mask_name_too_long": "Use at most 24 characters.",
@@ -434,7 +430,7 @@
       "masks_title": "Masks",
       "masks_empty": "No masks yet.",
       "masks_note": "A mask is the pixels where its band is non-zero; zero and no-data are outside it. Keep removes alerts outside the mask; exclude removes alerts inside it.",
-      "masks_switched": "This period's sources are out of date; Run … pending harmonizes them again without downloading them.",
+      "masks_switched": "This period's sources are out of date; Harmonize … pending harmonizes them again without downloading them.",
       "mask_add": "Add mask",
       "mask_add_title": "Add a mask",
       "mask_edit_title": "Edit mask {name}",
