@@ -1,8 +1,8 @@
 """Compact pipeline header for the workflow panel.
 
-Two levels (spec: workflow two levels §1): a tab row (Prepare alerts | Set
-up review), then the active level's segment strip (one cell per step of that
-level) mapping the pipeline (has-outputs / empty / locked, with a ring on the current step), a
+Two levels (spec: workflow two levels §1) in one strip: per level (Prepare
+alerts | Set up review) a clickable label over its segments (one cell per
+step) mapping the pipeline (has-outputs / empty / locked, with a ring on the current step), a
 title row with the active step's name, output count and position, a unified
 clickable title (badge + name + count + caret) that opens the jump menu,
 Back / Next buttons, and the step's instruction line with its info button.
@@ -55,8 +55,12 @@ def count_text(spec, p) -> str:
     return t("workflow.count_empty")
 
 
+# A native <button> reset to bare text: Enter / Space and focus come for free.
+_BUTTON_RESET = "background: none; border: 0; margin: 0; font: inherit; color: inherit;"
+
+
 @solara.component
-def _SegmentCell(key: str, tip: str, seg_style: str, locked: bool, on_activate):
+def _SegmentCell(key: str, label: str, tip: str, seg_style: str, locked: bool, current: bool, on_activate):
     """One segment of the pipeline strip.
 
     Its own component so the ``rv.use_event`` click hook is called exactly once
@@ -65,39 +69,42 @@ def _SegmentCell(key: str, tip: str, seg_style: str, locked: bool, on_activate):
     it, so lock/unlock never changes the hook count. ``data-step-key`` lets the
     headless driver click a step by key.
     """
-    cursor = "" if locked else " cursor: pointer;"
+    cursor = "default" if locked else "pointer"
     with rv.Html(
-        tag="div",
-        style_=f"flex: 1; padding: 7px 0;{cursor}",
-        attributes={"title": tip, "data-step-key": key},
+        tag="button",
+        style_=f"{_BUTTON_RESET} display: block; flex: 1; min-width: 0; padding: 7px 0; cursor: {cursor};",
+        attributes={
+            "title": tip, "data-step-key": key, "aria-label": label,
+            "aria-current": "step" if current else "false", "aria-disabled": "true" if locked else "false",
+        },
     ) as cell:
         rv.Html(tag="div", style_=seg_style)
     rv.use_event(cell, "click", lambda *_: not locked and on_activate())
 
 
 @solara.component
-def _LevelTab(level: str, mark: str, label: str, tip: str, active: bool, locked: bool, primary: str, on_activate):
-    """One level tab. Same per-cell hook rule as ``_SegmentCell``; a locked
-    tab keeps its handler and the caller's handler only shows the reason.
-    ``data-level-key`` lets the headless driver click a tab by key."""
-    tone = primary if active else "rgba(128, 128, 128, 0.75)"
-    line = f"border-bottom: 2px solid {primary};" if active else "border-bottom: 2px solid transparent;"
+def _LevelLabel(level: str, label: str, tip: str, done: bool, active: bool, locked: bool, primary: str, on_activate):
+    """One level's label, above its bars. Same per-cell hook rule as
+    ``_SegmentCell``; a locked level keeps its handler and the caller's
+    handler only shows the reason. ``data-level-key`` lets the headless
+    driver click a level by key. A long label is cut, its tooltip whole."""
+    tone = primary if active else "rgba(128, 128, 128, 0.9)"
     with rv.Html(
-        tag="div",
-        style_=f"flex: 1; text-align: center; padding: 8px 4px 6px; font-size: 12px; color: {tone};"
-        f" {line}{' font-weight: 600;' if active else ''}"
-        f" cursor: {'not-allowed; opacity: 0.6' if locked else 'pointer'};",
-        attributes={"title": tip, "data-level-key": level},
-    ) as tab:
-        rv.Html(
-            tag="span",
-            children=[mark],
-            style_=f"display: inline-block; width: 16px; height: 16px; line-height: 16px;"
-            f" border-radius: 50%; color: #ffffff; font-size: 10px; margin-right: 4px;"
-            f" background: {primary if active or mark == '✓' else 'rgba(128, 128, 128, 0.45)'};",
-        )
-        rv.Html(tag="span", children=[label])
-    rv.use_event(tab, "click", lambda *_: on_activate())
+        tag="button",
+        class_="defo-level-label defo-level-label--on" if active else "defo-level-label",
+        style_=f"{_BUTTON_RESET} display: block; width: 100%; padding: 0 1px; text-align: left;"
+        f" font-size: 11px; font-weight: 700; line-height: 16px; color: {tone};"
+        " white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+        f" cursor: {'not-allowed' if locked else 'pointer'};",
+        attributes={
+            "title": tip, "data-level-key": level, "aria-label": label,
+            "aria-disabled": "true" if locked else "false",
+        },
+    ) as button:
+        if locked:
+            rv.Icon(children=["mdi-lock-outline"], x_small=True, style_="color: inherit; margin: -2px 3px 0 0;")
+        rv.Html(tag="span", children=[f"✓ {label}" if done else label])
+    rv.use_event(button, "click", lambda *_: on_activate())
 
 
 @solara.component
@@ -228,48 +235,52 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
         style="gap: 0px; padding: 10px 12px 6px;"
         " border-bottom: 1px solid rgba(128, 128, 128, 0.25);"
     ):
-        # Level tabs, edge to edge across the header (negative margins undo
-        # the column's padding). A level is ticked once its last required step
-        # has outputs.
-        with solara.Row(
-            style="gap: 0; margin: -10px -12px 4px; border-bottom: 1px solid rgba(128, 128, 128, 0.25);"
-        ):
-            for n, level in enumerate(LEVELS, start=1):
+        # Both levels in one strip: per level, its label over its bars, the
+        # groups as wide as their step counts. A level is ticked once its last
+        # required step has outputs. Each cell is a padded transparent WRAPPER
+        # (~21 px tall) carrying the tooltip and click handler — the 7 px bar
+        # inside is purely visual, so the hit area meets the spec's >=20 px.
+        solara.Style(
+            ".defo-level-label:not(.defo-level-label--on):not([aria-disabled='true']):hover"
+            " { text-decoration: underline; }"
+        )
+        with solara.Row(style="gap: 10px; align-items: flex-end; flex-wrap: nowrap;"):
+            for level in LEVELS:
                 idx = steps_of(level)
                 locked = all(states[i] is StepStatus.LOCKED for i in idx)
                 last_required = [i for i in idx if not STEPS[i].optional][-1]
-                _LevelTab(
-                    level=level,
-                    mark="✓" if states[last_required] is StepStatus.HAS_OUTPUTS else str(n),
-                    label=t(_LEVEL_LABELS[level]),
-                    tip=t(STEPS[idx[0]].lock_reason_key) if locked else "",
-                    active=level == active.level,
-                    locked=locked,
-                    primary=primary,
-                    on_activate=lambda level=level: _open_level(level),
-                )
+                label = t(_LEVEL_LABELS[level])
+                with solara.Column(gap="0px", style=f"flex: {len(idx)} 1 0; min-width: 0;"):
+                    _LevelLabel(
+                        level=level,
+                        label=label,
+                        tip=f"{label} · {t(STEPS[idx[0]].lock_reason_key)}" if locked else label,
+                        done=states[last_required] is StepStatus.HAS_OUTPUTS,
+                        active=level == active.level,
+                        locked=locked,
+                        primary=primary,
+                        on_activate=lambda level=level: _open_level(level),
+                    )
+                    with solara.Row(style="gap: 4px; align-items: center; flex-wrap: nowrap;"):
+                        for i in idx:
+                            spec = STEPS[i]
+                            cell_locked = states[i] is StepStatus.LOCKED
+                            _SegmentCell(
+                                key=spec.key,
+                                label=t(spec.label_key),
+                                tip=t(spec.lock_reason_key)
+                                if cell_locked
+                                else f"{t(spec.label_key)} · {texts[i]}",
+                                seg_style=_seg_style(i),
+                                locked=cell_locked,
+                                current=i == active_step,
+                                on_activate=lambda i=i: on_navigate(i),
+                            )
         # Only Review can lock; the note shows on the step it was clicked from,
         # while Review is still locked.
         review = steps_of("review")
         if lock_note_at == visit.current[1] and all(states[i] is StepStatus.LOCKED for i in review):
             solara.Text(t(STEPS[review[0]].lock_reason_key), style=MUTED + "font-size: 11px; padding: 0 2px;")
-
-        # Segment strip. Each cell is a padded transparent WRAPPER (~21 px
-        # tall) carrying the tooltip and click handler — the 7 px bar inside
-        # is purely visual, so the hit area meets the spec's >=20 px.
-        with solara.Row(style="gap: 4px; align-items: center;"):
-            for i in level_steps:
-                spec = STEPS[i]
-                locked = states[i] is StepStatus.LOCKED
-                _SegmentCell(
-                    key=spec.key,
-                    tip=t(spec.lock_reason_key)
-                    if locked
-                    else f"{t(spec.label_key)} · {texts[i]}",
-                    seg_style=_seg_style(i),
-                    locked=locked,
-                    on_activate=lambda i=i: on_navigate(i),
-                )
 
         with solara.Row(style="gap: 8px; align-items: center; padding: 4px 0;"):
             solara.Button(

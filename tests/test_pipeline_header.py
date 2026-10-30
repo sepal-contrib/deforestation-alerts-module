@@ -123,38 +123,90 @@ def _strings(widget):
     return out + ([value] if isinstance(value, str) else [])
 
 
-def test_strip_shows_only_the_active_level():
-    from gui.store.workflow_steps import steps_of, STEPS
+def _labels(rc):
+    return {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}
 
-    box, rc, _ = _render("integrate", _project(n_alerts=3))
-    keys = [w.attributes["data-step-key"] for w in _htmls(rc, "data-step-key")]
-    assert keys == [STEPS[i].key for i in steps_of("prepare")] and len(keys) == 5
+
+def _bars(rc):
+    return {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}
+
+
+def test_strip_shows_both_levels_side_by_side():
+    from gui.store.workflow_steps import STEPS
+
+    for key in ("integrate", "evaluators"):
+        box, rc, _ = _render(key, _project(n_alerts=3))
+        assert list(_bars(rc)) == [s.key for s in STEPS]
+        rc.close()
+
+
+def test_labels_and_bars_are_buttons():
+    from gui.i18n import t
+    from gui.store.workflow_steps import STEPS
+
+    box, rc, _ = _render("aoi", _project(aoi_name="Acre"))
+    labels, bars = _labels(rc), _bars(rc)
+    assert {w.tag for w in [*labels.values(), *bars.values()]} == {"button"}
+    assert labels["prepare"].attributes["aria-label"] == t("workflow.level_prepare")
+    assert bars["integrate"].attributes["aria-label"] == t(STEPS[4].label_key)
+    assert bars["aoi"].attributes["aria-current"] == "step"
+    assert bars["period"].attributes["aria-current"] == "false"
+    # Review is locked without a set: its label and bars say so
+    assert labels["review"].attributes["aria-disabled"] == "true"
+    assert labels["prepare"].attributes["aria-disabled"] == "false"
+    assert bars["evaluators"].attributes["aria-disabled"] == "true"
     rc.close()
-    box, rc, _ = _render("evaluators", _project(n_alerts=3))
-    assert [w.attributes["data-step-key"] for w in _htmls(rc, "data-step-key")] == [
-        "layers", "questionnaire", "evaluators"]
-    rc.close()
 
 
-def test_level_tabs_with_lock_reason_and_tick():
+def test_level_labels_with_lock_reason_and_tick():
     from gui.i18n import t
 
     box, rc, _ = _render("aoi", _project(aoi_name="Acre"))
-    tabs = {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}
-    assert list(tabs) == ["prepare", "review"]
+    labels = _labels(rc)
+    assert list(labels) == ["prepare", "review"]
     text = "".join(_strings(box))
     assert t("workflow.level_prepare") in text and t("workflow.level_review") in text
-    assert tabs["review"].attributes["title"] == t("workflow.lock_review")
+    assert t("workflow.lock_review") in labels["review"].attributes["title"]
+    assert "mdi-lock-outline" in _strings(labels["review"])
+    # The active level's label is marked
+    assert "defo-level-label--on" in labels["prepare"].class_
+    assert "defo-level-label--on" not in labels["review"].class_
     rc.close()
     # A solo review gives Evaluation, Review's last required step, its
-    # output: the Review tab is ticked. Integrate is locked in this fixture (no
-    # ready sources), so Prepare keeps its number.
+    # output: the Review label is ticked. Integrate is locked in this fixture
+    # (no ready sources), so Prepare has no tick.
     p = _project(n_alerts=3)
     p.multi_evaluator = False
     box, rc, _ = _render("layers", p)
-    tabs = {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}
-    assert "".join(_strings(tabs["review"])).startswith("✓")
-    assert "".join(_strings(tabs["prepare"])).startswith("1")
+    labels = _labels(rc)
+    assert "".join(_strings(labels["review"])).startswith("✓")
+    assert "✓" not in "".join(_strings(labels["prepare"]))
+    rc.close()
+
+
+def test_long_labels_are_cut_with_the_full_text_as_tooltip():
+    from gui.i18n import t
+
+    box, rc, _ = _render("aoi", _project(aoi_name="Acre"))
+    prepare = _labels(rc)["prepare"]
+    assert "text-overflow: ellipsis" in prepare.style_ and "white-space: nowrap" in prepare.style_
+    assert prepare.attributes["title"] == t("workflow.level_prepare")
+    rc.close()
+
+
+def test_a_bar_of_the_other_level_navigates_there():
+    from gui.store.workflow_steps import step_index
+
+    box, rc, seen = _render("aoi", _project(aoi_name="Acre", n_alerts=3))
+    _bars(rc)["evaluators"].fire_event("click", None)
+    assert seen == [step_index("evaluators")]
+    rc.close()
+
+
+def test_a_locked_bar_does_not_navigate():
+    box, rc, seen = _render("aoi", _project(aoi_name="Acre"))
+    _bars(rc)["evaluators"].fire_event("click", None)
+    assert seen == []
     rc.close()
 
 
@@ -162,8 +214,7 @@ def test_review_tab_locked_without_set():
     from gui.i18n import t
 
     box, rc, seen = _render("aoi", _project(aoi_name="Acre"))
-    review = {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}["review"]
-    review.fire_event("click", None)
+    _labels(rc)["review"].fire_event("click", None)
     assert seen == []
     assert t("workflow.lock_review") in "".join(_strings(box))
     rc.close()
@@ -271,8 +322,7 @@ def test_prepare_tab_ticked_once_integrate_has_outputs(monkeypatch):
 
     monkeypatch.setattr(workflow_steps, "_ready", lambda p: ["GLAD-L"])  # Integrate unlocked
     box, rc, _ = _render("layers", _project(n_alerts=3))
-    tabs = {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}
-    assert "".join(_strings(tabs["prepare"])).startswith("✓")
+    assert "".join(_strings(_labels(rc)["prepare"])).startswith("✓")
     rc.close()
 
 
