@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parents[2]
 MESSAGES = REPO / "deforestation_alerts" / "message"
 MARKER = "MARKER-SLICE6"
 STEP_KEYS = ("aoi", "period", "alerts", "harmonize", "integrate", "layers", "questionnaire", "evaluators")
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_slice6"
+DATA = w.ROOT / "deforestation_alerts_walk_slice6"
 
 
 def catalogue(locale, name):
@@ -61,6 +61,8 @@ def pick_template(page, rec, *, out, data, template):
     (questionnaire Task 4); the Export section only builds and downloads.
     """
     w.goto_step(page, "questionnaire", 2000)
+    page.locator(".right-panel button.defo-template-toggle:visible").first.click()  # the template card's caret
+    page.wait_for_timeout(800)
     ph.pick_file(page, "Report template", template)  # Task 6's FileInputComponent helper
     w.wait_for(lambda: ph.manifest(data, PROJECT).get("report_template") == str(template), 30,
                "the template saved in project.json")
@@ -92,10 +94,13 @@ def info_buttons(page, rec, *, out):
         w.wait_for(lambda: not page.locator(ph.MODAL).count(), 15, f"{key}: info dialog closed")
     ui = catalogue("en", "ui")["analysis_tile"]
     w.goto_step(page, "analysis", 4000)
-    w.wait_for(lambda: ui["description"][:60] in w.panel_text(page), 60, "the Analysis panel")
+    # the analysis screen's info is the help button in its top bar, titled with the description
+    info = page.locator(f'button[aria-label="{ui["info_header"]}"]:visible').first
+    w.wait_for(lambda: info.count() and info.get_attribute("title") == ui["description"], 60,
+               "the Analysis info button")
 
     def _open_info():  # a click while the panel swaps from the last step can land on the leaving tile
-        page.locator(".defo-analysis-right .mdi-information-outline:visible").last.click()
+        info.click()
         page.wait_for_timeout(1500)
         return page.locator(ph.MODAL).count()
 
@@ -177,11 +182,13 @@ def _all_leaves(locale) -> set:
 
 def english_left(text, code) -> list:
     """The English catalogue texts (four letters or more, no placeholder, not
-    also a text of ``code``'s catalogue) that ``text`` still shows as words."""
-    own = _all_leaves(code)
+    also words of ``code``'s catalogue, e.g. es "Solo alertas…") that ``text``
+    still shows as words."""
+    own = "\n".join(_all_leaves(code))
+    word = lambda v, s: re.search(rf"(?<!\w){re.escape(v)}(?!\w)", s)  # noqa: E731
     return sorted(v for v in _all_leaves("en")
-                  if "{" not in v and len(re.sub(r"[^A-Za-z]", "", v)) >= 4 and v not in own
-                  and re.search(rf"(?<!\w){re.escape(v)}(?!\w)", text))
+                  if "{" not in v and len(re.sub(r"[^A-Za-z]", "", v)) >= 4 and not word(v, own)
+                  and word(v, text))
 
 
 def _switch(page, code):
@@ -196,6 +203,9 @@ def _switch(page, code):
 def languages(page, rec, *, out):
     english_legend = {v for v in leaves(catalogue("en", "legend")) if len(re.sub(r"[^A-Za-z]", "", v)) >= 4}
     english_title = catalogue("en", "app")["app"]["drawer_item"]["harmonize"]  # the header's title
+    # saved_ago's look-back edit left both downloads out of date, which locks
+    # Harmonize (it opens once a download is current): download them again.
+    ph.download_all(page, rec, out=out, expect_ready=2)
     # The active set's layer is switched on in Integrate & vectorize (while the
     # app is still in English) and stays on for the rest of the walk, so every
     # language's status legend can be read off the shared map.

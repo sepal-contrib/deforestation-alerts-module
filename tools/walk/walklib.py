@@ -42,6 +42,10 @@ REPO = Path(__file__).resolve().parents[2]
 # $DEFO_ALERTS_ENV_BIN, else the micromamba env the runbook creates.
 ENV_BIN = Path(os.environ.get("DEFO_ALERTS_ENV_BIN") or Path.home() / "micromamba" / "envs" / "defo-alerts" / "bin")
 MESSAGES_EN = REPO / "deforestation_alerts" / "message" / "en"
+#: Where the walks keep their data dirs (and the seed project they copy):
+#: $DEFO_WALK_ROOT, else ~/module_results. Keep it under $HOME: the file
+#: menus walk there from $HOME (``phases.pick_file``).
+ROOT = Path(os.environ.get("DEFO_WALK_ROOT") or Path.home() / "module_results")
 
 #: Every open dialog but MapApp's rail dialog (its v-dialog has the content
 #: class ``dialog-container``): a step's form, Manage projects, a confirmation.
@@ -142,8 +146,10 @@ def new_page(playwright, report: dict):
     page.on("console", lambda m: report["console"].append(f"{m.type}: {m.text[:400]}")
             if m.type in ("error", "warning") else None)
     page.on("pageerror", lambda e: report["page_errors"].append(str(e)[:400]))
+    # EE tile 429s are throttling the app's tile queue retries, not failures.
     page.on("response", lambda r: report["bad_responses"].append((r.status, r.url[:160]))
-            if r.status >= 400 else None)
+            if r.status >= 400 and not (r.status == 429 and "earthengine.googleapis.com" in r.url
+                                        and "/tiles/" in r.url) else None)
     return browser, page
 
 

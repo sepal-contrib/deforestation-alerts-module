@@ -33,7 +33,7 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 from tools.walk.questionnaire_walk import SEED, PROJECT, THEME_SWAP_ERROR, goto_analysis, toggle_dark
 
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_timeline"
+DATA = w.ROOT / "deforestation_alerts_walk_timeline"
 HOST = ".analysis-timeline:visible"
 
 

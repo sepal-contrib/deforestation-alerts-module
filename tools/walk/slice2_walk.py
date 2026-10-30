@@ -24,7 +24,7 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8981)
     ap.add_argument("--out", type=Path, default=Path("/tmp/slice2_walk"))
     args = ap.parse_args(argv)
-    data = Path.home() / "module_results" / "deforestation_alerts_walk_slice2"
+    data = w.ROOT / "deforestation_alerts_walk_slice2"
     # The walk's own data dir, rebuilt: files a previous run left (a set's
     # downloads) would hide what this run writes.
     shutil.rmtree(data, ignore_errors=True)

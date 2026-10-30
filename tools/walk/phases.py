@@ -238,12 +238,23 @@ def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_d
     goto_step(page, step, 2000)
     run = run_button(page, labels)
     t_run = now_ms(page)
-    run.click()
+
+    def started():
+        # Stop replaces Run while the job lasts, so "nothing pending" is only
+        # true once Stop is not shown either
+        return (prepare_state(page, labels)["running"] or job_running(page, labels)
+                or pending_count(page, labels) == 0)
+
+    meta_loading = en("steps.alerts.meta_loading")
+    for _ in range(20):  # a GLAD-L download right after opening: its band list may still be loading
+        t_click = now_ms(page)
+        run.click()
+        wait_for(lambda: started() or any(x["msg"] == meta_loading for x in toasts_since(page, t_click)),
+                 30, "the job to start", poll=0.3)
+        if started():
+            break
+        page.wait_for_timeout(3000)
     t0 = time.time()
-    # Stop replaces Run while the job lasts, so "nothing pending" is only true
-    # once Stop is not shown either
-    wait_for(lambda: prepare_state(page, labels)["running"] or job_running(page, labels)
-             or pending_count(page, labels) == 0, 30, "the job to start", poll=0.3)
     while time.time() - t0 < timeout:
         st = prepare_state(page, labels)
         idle = not st["running"] and not job_running(page, labels)
@@ -392,6 +403,15 @@ def pick_images(page, rec, *, out):
 
 
 def download_with_images(page, rec, *, out, folder):
+    """Build the alert's files with the images on screen. A pick is an
+    unsaved change, and Build files waits for a Save (the save/export dock)."""
+    if save_btn(page).is_enabled():
+        t_ms = now_ms(page)
+        save_btn(page).click()
+        wait_for(lambda: any("saved" in x["msg"].lower() or x["kind"] in ("toast-error", "toast-warning")
+                             for x in toasts_since(page, t_ms)), 120, "save outcome toast")
+        assert not errors(toasts_since(page, t_ms)), toasts_since(page, t_ms)
+        page.wait_for_timeout(1500)
     open_section(page, "Export this alert")
     before = set(os.listdir(folder))
     t_ms = now_ms(page)
@@ -584,8 +604,11 @@ def select_only(page, label, option, scope=MODAL):
             if wanted == keep and selected != wanted:
                 item.click()
                 page.wait_for_timeout(300)
-    page.locator(f'{scope} .v-select:has(label:text-is("{label}")) .v-select__slot').last.click()  # close it
+    # close it: Escape, as a long menu can cover its own field; a dialog with
+    # an open menu leaves Escape to the menu (Vuetify's open dependents)
+    page.keyboard.press("Escape")
     page.wait_for_timeout(400)
+    assert dialog_open(page), f"Escape closed the dialog, not the {label} menu"
 
 
 def type_asset(page, asset_id, scope=MODAL):
@@ -767,6 +790,7 @@ def run_phases(page, phases, report, report_path):
         except Exception as e:  # noqa: BLE001
             rec.update(ok=False, error=f"{e.__class__.__name__}: {e}", trace=traceback.format_exc()[-1500:])
             ok = False
+            page.screenshot(path=str(Path(report_path).parent / f"FAILED_{name}.png"))
         rec["toasts"] = toasts_since(page, t0)
         report.setdefault("phases", {})[name] = rec
         with open(report_path, "w") as f:

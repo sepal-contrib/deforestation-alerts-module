@@ -22,7 +22,7 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 from tools.walk.seed_project import seed
 
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_slice4"
+DATA = w.ROOT / "deforestation_alerts_walk_slice4"
 USER = DATA / "user"
 PROJECT = "s4"
 AMAZON = (-55.10, -10.10, -55.00, -10.00)

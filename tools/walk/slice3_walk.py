@@ -25,7 +25,7 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 from tools.walk.seed_project import seed
 
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_slice3"
+DATA = w.ROOT / "deforestation_alerts_walk_slice3"
 USER = DATA / "user"  # the walk's "SEPAL folder" files: under $HOME, like a user's
 AMAZON = (-55.10, -10.10, -55.00, -10.00)
 CANINDEYU = (-55.5, -24.5, -55.4, -24.4)
@@ -112,9 +112,11 @@ def add_custom(page, rec, *, name, origin, ref, preset, encoding=None, out):
 
 def a_mixed(page, rec, *, out, folder):
     add_custom(page, rec, name="radd sa", origin="gee", ref=latest_radd_sa(), preset="RADD", out=out)
-    assert "custom · RADD" in rec["row_radd sa"] and "covers" in rec["row_radd sa"], rec["row_radd sa"]
+    assert "AOI 100 %" in rec["row_radd sa"], rec["row_radd sa"]  # the Alerts row's coverage chip
     add_custom(page, rec, name="ccdc tif", origin="file", ref=USER / "ccdc.tif", preset="SEPAL CCDC alerts", out=out)
-    assert "custom · SEPAL CCDC alerts" in rec["row_ccdc tif"], rec["row_ccdc tif"]
+    # the Alerts row no longer names the preset: the stored definition does
+    rec["formats"] = {n: ph.manifest(DATA, "s3a")["sources"][n]["format"] for n in ("radd sa", "ccdc tif")}
+    assert rec["formats"] == {"radd sa": "radd", "ccdc tif": "ccdc"}, rec["formats"]
     ph.prepare_grid_and_run_all(page, rec, out=out, expect_ready=3)  # three rows, one Ready cell each
     ph.integrate_and_land(page, rec, out=out)
     alerts, s = store("s3a")
@@ -184,9 +186,10 @@ def f_attribute(page, rec, *, out):
     ph.integrate_and_land(page, rec, out=out, replace=True)  # a_mixed's set has a review
     alerts, _ = store("s3a")
     rec["columns"] = list(alerts.columns)
-    for column in ("b11", "slope"):  # both layers attributed the same alerts
-        assert column in alerts.columns and alerts[column].notna().any(), rec["columns"]
-        rec[f"{column}_alerts"] = f'{int(alerts[column].notna().sum())} of {len(alerts)}'
+    for band in ("b11", "slope"):  # both layers attributed the same alerts; columns are <layer>_<band>
+        column = next((c for c in alerts.columns if c.endswith(f"_{band}")), None)
+        assert column and alerts[column].notna().any(), rec["columns"]
+        rec[f"{band}_alerts"] = f'{int(alerts[column].notna().sum())} of {len(alerts)}'
 
 
 def b_date_only(page, rec, *, out, asset):
@@ -220,7 +223,8 @@ def c_not_covered(page, rec, *, out):
 
     w.open_project(page, "s3c2")
     w.goto_step(page, "alerts", 2000)
-    w.wait_for(lambda: "does not cover the AOI" in ph.row_text(page, "GLAD-S2"), 120, "GLAD-S2's coverage chip")
+    w.wait_for(lambda: "Not covered: GLAD-S2 does not cover this AOI" in ph.row_text(page, "GLAD-S2")
+               and "AOI 0 %" in ph.row_text(page, "GLAD-S2"), 120, "GLAD-S2's coverage reason and chip")
     rec["alerts_row"] = ph.row_text(page, "GLAD-S2")
     assert ph.row_button(page, "GLAD-S2", "mdi-map-plus").is_disabled()
     # a blocked row shows its reason, not a verb pill, and cannot be fetched again (Alerts downloads)
@@ -269,7 +273,8 @@ def main(argv=None):
     # 2025-06 on: RADD has only 6 pixels (10 m) in the box in 2026, below the minimum alert size
     seed("s3a", AMAZON, sources=("GLAD-L",), period=("2025-06-01", "2026-08-31"), look_back=0, root=DATA)
     seed("s3b", AMAZON, period=("2026-03-01", "2026-04-30"), look_back=0, root=DATA)
-    seed("s3c1", CANINDEYU, sources=("GLAD-L",), root=DATA)
+    # Alerts opens once a period exists
+    seed("s3c1", CANINDEYU, sources=("GLAD-L",), period=("2026-06-01", "2026-08-31"), look_back=0, root=DATA)
     seed("s3c2", CANINDEYU, sources=("GLAD-L", "GLAD-S2"), period=("2026-06-01", "2026-08-31"), look_back=0,
          root=DATA)
     seed("s3d", AMAZON, sources=("RADD",), period=("2019-01-01", "2019-12-31"), look_back=0, root=DATA)

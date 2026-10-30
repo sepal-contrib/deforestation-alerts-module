@@ -40,8 +40,8 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 
 PROJECT = "repro_p"
-SEED = Path.home() / "module_results" / "deforestation_alerts" / PROJECT
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_questionnaire"
+SEED = w.ROOT / "deforestation_alerts" / PROJECT
+DATA = w.ROOT / "deforestation_alerts_walk_questionnaire"
 REPO = Path(__file__).resolve().parents[2]
 QUESTION = "Road access"
 PLACEHOLDER = "{road_access}"
@@ -253,7 +253,9 @@ def check_3_badge(page, rec, *, out):
 
 def check_4_required_refusal(page, rec, *, out):
     before = counter(page)
-    assert not questions_open(page)
+    if questions_open(page):  # Questions opens by default now: collapse it, so the refusal must reopen it
+        questions_header(page).click()
+        w.wait_for(lambda: not questions_open(page), 10, "the Questions section collapsed")
     t0 = w.now_ms(page)
     ph.save_btn(page).click()
     got = w.wait_for(lambda: [x for x in w.toasts_since(page, t0) if x["kind"] == "toast-warning"], 60,

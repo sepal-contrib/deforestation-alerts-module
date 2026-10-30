@@ -48,7 +48,7 @@ from tools.walk import walklib as w
 from tools.walk.panes_walk import _XY
 from tools.walk.questionnaire_walk import PROJECT, SEED, THEME_SWAP_ERROR, goto_analysis
 
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_group"
+DATA = w.ROOT / "deforestation_alerts_walk_group"
 #: the seed's August set: 90 unreviewed alerts, a dozen of them within 500 m of each other
 WORK_SET = "2026-08-01_2026-08-31__glad-l"
 RADIUS = 500.0

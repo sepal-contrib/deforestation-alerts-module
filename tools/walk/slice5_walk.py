@@ -23,7 +23,7 @@ from tools.walk import phases as ph
 from tools.walk import walklib as w
 from tools.walk.seed_project import seed
 
-DATA = Path.home() / "module_results" / "deforestation_alerts_walk_slice5"
+DATA = w.ROOT / "deforestation_alerts_walk_slice5"
 USER = DATA / "user"  # the walk's "SEPAL folder" files: under $HOME, like a user's
 PROJECT = "s5"
 AMAZON = (-55.10, -10.10, -55.00, -10.00)
@@ -109,6 +109,8 @@ def b_second_period(page, rec, *, out):
     p = ph.manifest(DATA, PROJECT)  # the new period copied the latest period's mask choices
     rec["july_masks_at_creation"] = p["periods"][JULY]["masks"]
     assert p["periods"][JULY]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JULY]["masks"]
+    # Harmonize opens once a source of the period is downloaded
+    ph.download_all(page, rec, out=out, expect_ready=1)  # July starts with GLAD-L (Add to new periods)
     w.goto_step(page, "harmonize", 2000)
     rec["july_mask_row"] = ph.row_text(page, "south")
     rec["july_mask_mode"] = ph.row_mode_value(page, "south")
@@ -129,7 +131,6 @@ def b_second_period(page, rec, *, out):
     w.goto_step(page, "period", 2000)
     rec["june_row_after_switch"] = ph.row_text(page, JUNE_ROW)
     assert "out of date" not in rec["june_row_after_switch"], rec["june_row_after_switch"]
-    ph.download_all(page, rec, out=out, expect_ready=1)  # July starts with GLAD-L (Add to new periods)
     ph.run_all(page, rec, out=out, expect_ready=2, shot_name="july_ready")  # south (aligned, off in July) and GLAD-L
     ph.integrate_and_land(page, rec, out=out)
     p = ph.manifest(DATA, PROJECT)
@@ -173,11 +174,14 @@ def d_rules(page, rec, *, out):
     folder = DATA / PROJECT / "periods" / JUNE
     before = sorted(str(f) for f in folder.rglob("*"))
     w.goto_step(page, "period", 2000)
-    t0 = w.now_ms(page)
+    # a period with sets opens for its look-back only: the dates are disabled
     ph.row_button(page, JUNE_ROW, "mdi-pencil-outline").click()
-    ph.wait_toast(page, t0, "This period has alert sets; its dates can't change.", kind="warning")
-    page.wait_for_timeout(1000)
-    assert not ph.dialog_open(page), "the period modal opened"
+    w.wait_for(lambda: ph.dialog_open(page), 15, "the look-back modal")
+    dates = page.locator(f"{ph.MODAL} input")
+    rec["june_dates_disabled"] = [dates.nth(i).is_disabled() for i in range(2)]
+    assert rec["june_dates_disabled"] == [True, True], rec["june_dates_disabled"]
+    ph.modal_button(page, "Cancel").click()
+    w.wait_for(lambda: not ph.dialog_open(page), 15, "the modal closed")
     t1 = w.now_ms(page)
     ph.row_button(page, JUNE_ROW, "mdi-delete-outline").click()
     ph.wait_toast(page, t1, "This period has alert sets and a later period exists", kind="warning")
@@ -270,8 +274,8 @@ def f_replace_list(page, rec, *, out):
     page.wait_for_timeout(1000)
     rec["replace_dialog"] = ph.modal_text(page)
     w.shot(page, out, "replace_dialog")
-    # A plural node since 734b8cb: "1 reviewed alert", no "(s)".
-    assert "1 reviewed alert in this set will be discarded." in rec["replace_dialog"], rec["replace_dialog"]
+    # A plural node since 734b8cb: "1 reviewed cluster", no "(s)" (clusters since 65f50e3).
+    assert "1 reviewed cluster in this set will be discarded." in rec["replace_dialog"], rec["replace_dialog"]
     # each listed alert on a line of its own (ConfirmDialog's details are blocks)
     assert re.search(r"^#\d+ · Reviewed: confirmed · [\d.]+ ha$", rec["replace_dialog"], re.M), rec["replace_dialog"]
     ph.modal_button(page, "Cancel").click()
