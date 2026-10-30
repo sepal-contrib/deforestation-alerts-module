@@ -23,6 +23,7 @@ import reacton
 import solara
 from pysepal.solara.notifications import NotificationProvider
 from pysepal.solara.notifications.bus import get_current_bus
+from pysepal.solara.notifications.notifier import Notifier
 
 from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine.coverage import Note, preview_window
@@ -1151,6 +1152,36 @@ def test_download_all_runs_the_pending_rows_only(dl, monkeypatch):
         _button(rc, tn("steps.alerts.download_all", 1)).fire_event("click", None)
         dl.run_jobs()
         assert [(items, force) for _, items, force in dl.started] == [(["GLAD-L"], False)]
+    finally:
+        rc.close()
+
+
+def test_download_all_skips_a_row_a_harmonize_job_holds_and_its_stop_is_its_own(dl, monkeypatch):
+    """Option C: a harmonize job holding a row neither disables Download all
+    nor makes its claim refuse the batch; that row reads its download state
+    (never Harmonizing or Queued), and the footer's Stop stops only the
+    downloads."""
+    monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
+    dl.plan(PrepareRow("GLAD-L", Status.STALE, Status.STALE), PrepareRow("RADD", Status.STALE, Status.STALE))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+    jobs = prepare_scope.PrepareJobs()
+    box, rc = _dl_render(state, jobs=jobs)
+    try:
+        prepare_scope.start_items(jobs, app_state=state, layers=None, map_=None,
+                                  notifications=Notifier(get_current_bus()), items=[("source", "RADD")],
+                                  mode="harmonize")
+        radd = dl.table[-1][1]
+        assert radd["cells"][1]["type"] == "verb" and radd["cells"][1]["disabled"]  # held, not Queued
+        assert _act(radd, "refresh")["disabled"]
+        assert not _stop_shown(rc)  # the harmonize is the Harmonize step's job
+        download_all = _button(rc, tn("steps.alerts.download_all", 1))
+        assert not download_all.disabled
+        download_all.fire_event("click", None)
+        assert _info_toasts("info") == []
+        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
+        dl.run_jobs()
+        cancelled = {(ctx.mode, *items): ctx.cancel.is_set() for ctx, items, _ in dl.started}
+        assert cancelled == {("harmonize", "RADD"): False, ("download", "GLAD-L"): True}
     finally:
         rc.close()
 

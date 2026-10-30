@@ -79,7 +79,7 @@ def test_a_ready_mask_is_not_run_again(tmp_path, cover):
 
 def test_mask_keys_share_the_stop_scope_of_the_period_that_started_them():
     stops = prepare_scope.StopEvents()
-    feb, mar = ("mj", "2026-02-01_2026-02-28"), ("mj", "2026-03-01_2026-03-31")
+    feb, mar = ("mj", "2026-02-01_2026-02-28", "harmonize"), ("mj", "2026-03-01_2026-03-31", "harmonize")
     event = stops.add(feb, {"prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest"})
     stops.add(mar, {"prep:mj:2026-03-01_2026-03-31:RADD"})
     running = {"prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest", "prep:other:@mask:x",

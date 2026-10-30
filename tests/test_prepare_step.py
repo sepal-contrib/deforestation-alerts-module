@@ -1558,7 +1558,7 @@ def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, 
         run_all.fire_event("click", None)
         assert len(step.jobs) == 1 and _toasts("info") == [t("steps.prepare.claim_busy")]
         # the refused job never entered February's Stop scope, not even for a moment
-        assert added == [("d", JAN.id)] and not _stop_shown(rc)
+        assert added == [("d", JAN.id, "harmonize")] and not _stop_shown(rc)
 
         step.run_jobs()  # January's job ends and gives the mask back
         _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)
@@ -1913,3 +1913,104 @@ def test_a_row_claimed_in_one_step_reads_running_in_another_and_refuses_a_harmon
     finally:
         for rc in rcs:
             rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Option C (user decision 2026-10-30): Alerts' downloads and Harmonize's
+# harmonizing are independent jobs, one Stop scope per step.
+# ---------------------------------------------------------------------------
+def _footer_texts(rc):
+    return [c for w in rc.find(v.Html).widgets for c in (w.children or []) if isinstance(c, str)]
+
+
+def test_each_step_stops_only_its_own_jobs(step, monkeypatch):
+    """The Stop scope is (project, period, step): the Alerts step's Stop
+    (``stop_scope(..., "download")``) leaves a harmonize running, and
+    Harmonize's Stop leaves a download running."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+    jobs = prepare_scope.PrepareJobs()
+    glad, radd = (prepare_scope.inflight_key("d", JAN.id, s) for s in ("GLAD-L", "RADD"))
+    download, harmonize = ("d", JAN.id, "download"), ("d", JAN.id, "harmonize")
+
+    box, rc = _render(state, jobs=jobs)
+    try:
+        _download(state, jobs, "GLAD-L")
+        assert not _stop_shown(rc)  # the download is the Alerts step's job: Harmonize's footer stays idle
+        _run(step.table[-1][1])  # RADD harmonizes
+        assert _stop_shown(rc)
+
+        prepare_scope.stop_scope(jobs, "d", JAN.id, "download")  # the Alerts step's Stop
+        assert jobs.stops.stopped(download) == {glad} and jobs.stops.stopped(harmonize) == set()
+        assert _stop_shown(rc)  # Harmonize's job still runs: its Stop is not Stopping…
+        assert jobs.stopping.value == {download: 1}
+
+        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
+        assert jobs.stops.stopped(harmonize) == {radd}
+        step.run_jobs()
+        cancelled = {(ctx.mode, *items): ctx.cancel.is_set() for ctx, items, _ in step.started}
+        assert cancelled == {("download", "GLAD-L"): True, ("harmonize", "RADD"): True}
+        assert jobs.stopping.value == {} and jobs.batch.value == {}
+    finally:
+        rc.close()
+
+
+def test_a_harmonize_stop_leaves_the_download_uncancelled(step, monkeypatch):
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+    jobs = prepare_scope.PrepareJobs()
+
+    box, rc = _render(state, jobs=jobs)
+    try:
+        _download(state, jobs, "GLAD-L")
+        _run(step.table[-1][1])
+        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
+        step.run_jobs()
+        cancelled = {(ctx.mode, *items): ctx.cancel.is_set() for ctx, items, _ in step.started}
+        assert cancelled == {("download", "GLAD-L"): False, ("harmonize", "RADD"): True}
+    finally:
+        rc.close()
+
+
+def test_harmonize_all_skips_a_row_a_download_holds_and_stays_usable(step, monkeypatch):
+    """A download holding a row neither disables Harmonize all nor makes its
+    all-or-nothing claim refuse the batch: the held row is left out."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE), PrepareRow("RADD", Status.CURRENT, Status.STALE))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+    jobs = prepare_scope.PrepareJobs()
+
+    box, rc = _render(state, jobs=jobs)
+    try:
+        _download(state, jobs, "GLAD-L", force=True)  # Download again in the Alerts step
+        assert _queued(step.table[-1][0])  # held by the download: no pill to click
+        run_all = _button(rc, tn("steps.harmonize.run_all", 1))
+        assert not run_all.disabled
+        run_all.fire_event("click", None)
+        assert _toasts("info") == []
+        step.run_jobs()
+        assert [(ctx.mode, items) for ctx, items, _ in step.started] == [("download", ["GLAD-L"]),
+                                                                         ("harmonize", ["RADD"])]
+    finally:
+        rc.close()
+
+
+def test_the_footer_counts_only_its_own_steps_jobs(step, monkeypatch):
+    """Each step's batch (``done of total``) and strip count its own jobs."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE))
+    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
+    jobs = prepare_scope.PrepareJobs()
+
+    box, rc = _render(state, jobs=jobs)
+    try:
+        _download(state, jobs, "GLAD-L")
+        _run(step.table[-1][1])
+        assert jobs.batch.value == {("d", JAN.id, "download"): (1, 0), ("d", JAN.id, "harmonize"): (1, 0)}
+        texts = _footer_texts(rc)
+        assert t("steps.prepare.footer_strip", running="0", queued="1") in texts
+        assert t("steps.prepare.footer_done", done="0", total="1") in texts
+    finally:
+        rc.close()

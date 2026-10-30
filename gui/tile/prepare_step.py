@@ -25,15 +25,20 @@ a job still finishing a row for a project the user left neither shows as
 running in, nor blocks, the project now open, while reopening its own project
 still finds its rows claimed until it ends.
 
-Stop has the same scope: every job started in the open project and period
-gets its own cancel Event, and Stop sets all of them, so a later start (even a
-no-op click on a ready row) never takes Stop away from a Run all still going,
-nor points it at another project's job. ``StopEvents`` also records each
-job's keys: the keys of the jobs started in this project and period, mask keys
-included, are the step's own (``mine_keys``); a mask another period's job is
-aligning reads running in its row but is not in this period's Stop scope (this
-Stop could not stop it). A click whose keys are already claimed (that mask, or
-the AOI raster another job is building) says so (``claim_busy``).
+Stop is per project, period and step (option C, user decision 2026-10-30):
+every job this step started in the open project and period gets its own
+cancel Event, and Stop sets all of them, so a later start (even a no-op click
+on a ready row) never takes Stop away from a Run all still going, nor points
+it at another project's job or at the Alerts step's downloads, which run
+independently with their own Stop. ``StopEvents`` also records each job's
+keys: the keys of the jobs this step started in this project and period, mask
+keys included, are the step's own (``mine_keys``); a mask another period's
+job is aligning, or a row the Alerts step downloads, reads running in its row
+but is not in this Stop scope (this Stop could not stop it). Run all leaves
+out the source rows another job holds (``free_items``), so a download never
+makes its claim refuse the batch; a single click whose keys are already
+claimed (a held row, that mask, or the AOI raster another job is building)
+says so (``claim_busy``).
 
 The footer under the table (``BatchFooter``) runs every pending row, and
 stops this scope's jobs while they run. Its counts come from the claimed rows
@@ -49,8 +54,9 @@ rows a stopped job still holds no longer read Queued (``StopEvents.stopped``):
 they will not run.
 
 The step is the Harmonize step (spec §2, ``stage="harmonize"``): it only
-harmonizes (``mode="harmonize"``); a row whose raw file is not current waits
-for its download in the Alerts step, which also holds Download again and
+harmonizes (``mode="harmonize"``), and only on its own click (Harmonize all
+or a row's pill: a download never chains into it); a row whose raw file is
+not current waits for its download in the Alerts step, which also holds Download again and
 Download all again (``refresh_confirm``, ``redownload_items``, kept here for
 it). Delete files asks first (``delete_confirm``): it drops this period's raw
 and harmonized records of the source and deletes their files; the source and
@@ -103,11 +109,19 @@ def source_columns() -> list:
             {"label": t("steps.prepare.col_status"), "width": f"{STATUS_PX}px"}]
 
 
-def mine_keys(running, stops, project: str, period_id: str) -> set:
-    """The claimed keys of the jobs started in this project and period, masks
-    included: one Run all / Stop scope (spec §7.3). A mask job another period
-    started is not in it: its Stop could not stop it."""
-    return set(running) & stops.keys((project, period_id))
+def mine_keys(running, stops, project: str, period_id: str, step: str) -> set:
+    """The claimed keys of the jobs ``step`` (``"download"`` / ``"harmonize"``)
+    started in this project and period, masks included: one Run all / Stop
+    scope (spec §7.3, option C). A mask job another period started is not in
+    it, nor another step's job: this Stop could not stop them."""
+    return set(running) & stops.keys((project, period_id, step))
+
+
+def free_items(items, running, project: str, period_id: str) -> list:
+    """``items`` without the source rows another job holds: a Run all's claim
+    is all-or-nothing, so a row the other step runs would refuse the batch
+    (option C). A held mask stays: its sources would fail without it."""
+    return [it for it in items if it[0] != "source" or inflight_key(project, period_id, it[1]) not in running]
 
 
 def mine_rows(p, period, mine) -> set:
@@ -192,7 +206,8 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
     ``steps.harmonize.download_first`` and its pill is disabled (Download
     again is the Alerts step's: ``alerts_step.alert_rows``).
 
-    ``mine``: this project's and period's in-flight keys; ``errors``: the row
+    ``mine``: the in-flight keys held, by either step's job (a row the Alerts
+    step downloads reads running here too, with no pill); ``errors``: the row
     errors by source; ``on``/``building``: the map keys shown and being built;
     ``run``/``toggle``/``on_info``/``on_delete``: the row's
     pill and actions, called with the source. ``stages``: the running job's
@@ -332,12 +347,14 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
         layers.show(key, build, content_id=art.content_id, notifier=notifications,
                     legend=source_layers.harmonized_legend(key, source, period))
 
-    mine = mine_keys(running, stops, p.name, period.id)
-    stopped = stops.stopped((p.name, period.id))
+    step_scope = (p.name, period.id, stage)
+    mine = mine_keys(running, stops, *step_scope)  # this step's jobs: its footer and Stop
+    held = set(running)  # any job's, the Alerts step's downloads included: the rows read running
+    stopped = stops.stopped()  # a row a stopped job (either step's) holds will not run
 
-    pending = run_all_items(rows, mask_rows, stage=stage)
+    pending = free_items(run_all_items(rows, mask_rows, stage=stage), running, p.name, period.id)
     stages = scope_stages(jobs.row_stage.value, p.name, period.id)
-    counts = footer_counts(mine_rows(p, period, mine), stages, jobs.batch.value.get((p.name, period.id)))
+    counts = footer_counts(mine_rows(p, period, mine), stages, jobs.batch.value.get(step_scope))
 
     shown = info_source if info_source in by_source else None  # the dialog goes with its row
 
@@ -347,7 +364,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
     details = None
     if shown is not None:
         row = by_source[shown]
-        shown_busy = inflight_key(p.name, period.id, shown) in mine
+        shown_busy = inflight_key(p.name, period.id, shown) in held
         shown_key = progress_key(p.name, period.id, "source", shown)
         shown_stage = stages.get(shown_key) if shown_busy else None
         lead = row_status_label(row, is_file_source(p.sources[shown]), stage=shown_stage,
@@ -380,7 +397,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
 
     delete_title, delete_message, delete_note = delete_confirm(p, period, deleting) if deleting else ("", "", None)
 
-    table_rows = build_rows(p, pdir, period, rows, mine=mine, errors=errors, on=on, building=building,
+    table_rows = build_rows(p, pdir, period, rows, mine=held, errors=errors, on=on, building=building,
                             run=lambda s: _start(items_for_source(p, pdir, period, s)), toggle=_toggle_map,
                             on_info=_toggle_info, on_delete=set_pending_delete,
                             stages=stages, info_open=shown, locked=read_only(p), progress=row_progress.value,
@@ -402,11 +419,13 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
                           on_confirm=_delete_files, title=delete_title, message=delete_message, note=delete_note,
                           confirm_label=t("common.delete"))
             BatchFooter(pending=len(pending), run_label=tn("steps.harmonize.run_all", len(pending)),
-                        on_run=lambda: _start(pending), on_stop=lambda: stop_scope(jobs, p.name, period.id),
-                        # Run stays off while the scope holds keys its rows no longer show (a mask removed)
+                        on_run=lambda: _start(pending), on_stop=lambda: stop_scope(jobs, *step_scope),
+                        # Run stays off while this step holds keys its rows no longer show (a mask
+                        # removed); the Alerts step's downloads never turn it off
                         menu=[], counts=counts, disabled=read_only(p) or bool(mine),
                         # every job of the scope is stopped (a row started since Stop brings Stop back)
-                        stopping=(p.name, period.id) in jobs.stopping.value and bool(mine) and mine <= stopped)
+                        stopping=(step_scope in jobs.stopping.value and bool(mine)
+                                  and mine <= stops.stopped(step_scope)))
             # Check again after a failed coverage check, or a failed AOI-sidecar
             # fetch that leaves the GeoTIFF rows (sources, masks on in the
             # period) waiting (the loader refetches it on the same retry)

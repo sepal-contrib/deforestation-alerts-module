@@ -2,9 +2,13 @@
 
 The shell creates one ``PrepareJobs`` per session and hands it to every step
 that runs or shows prepare rows: a row has one in-flight key
-(``inflight_key``) whichever step started it, and one Stop scope per project
-and period. Never claimed or released from a render or an effect (see
-gui/scripts/map_layers.py), only from clicks and workers.
+(``inflight_key``) whichever step started it, so two jobs never run one row,
+and one Stop scope per project, period and step (option C, user decision
+2026-10-30): the Alerts step's downloads (``mode="download"``) and the
+Harmonize step's harmonizing (``mode="harmonize"``) are independent jobs,
+each step's Stop, footer counts and ``stopping`` mark its own. Never claimed
+or released from a render or an effect (see gui/scripts/map_layers.py), only
+from clicks and workers.
 """
 
 import asyncio
@@ -48,7 +52,7 @@ def aoi_key(project: str) -> str:
 
 class StopEvents:
     """The cancel Events of the running jobs, and each job's in-flight keys,
-    by (project, period id).
+    by (project, period id, step).
 
     Clicks add and stop, and workers discard, so every access takes the lock.
     """
@@ -117,8 +121,8 @@ class PrepareJobs:
         # project and period, so a row of another scope never reads it
         self.row_progress = solara.reactive({})
         self.row_stage = solara.reactive({})  # {progress_key: "download"|"harmonize"|"align"} of the rows running
-        self.batch = solara.reactive({})  # {(project, period id): (total, done)} of the scope's jobs, for the footer
-        # {(project, period id): Stop clicks} of the scopes Stop reached, until their
+        self.batch = solara.reactive({})  # {(project, period id, step): (total, done)} of the scope's jobs, for the footer
+        # {(project, period id, step): Stop clicks} of the scopes Stop reached, until their
         # last job ends: a count, so a second Stop (after a row started since the
         # first) is a new value and re-renders
         self.stopping = solara.reactive({})
@@ -172,13 +176,13 @@ def start_items(jobs: PrepareJobs, *, app_state, layers, map_, notifications, it
     keys = [_key(*it) for it in items]
     if needs_aoi_raster:
         keys.append(aoi_key(p.name))  # one AOI-raster build at a time
-    stop_scope = (p.name, period.id)
+    stop_scope = (p.name, period.id, mode)  # one Stop scope per step (option C)
     stops, batch, stopping = jobs.stops, jobs.batch, jobs.stopping
     job = {}
-    # The job joins this period's Stop scope only once its claim succeeds,
+    # The job joins its step's Stop scope only once its claim succeeds,
     # and before the claim is published: the claim's re-render already
-    # counts these keys as this project's and period's (``mine_keys``),
-    # and a refused claim never lists another job's keys as ours.
+    # counts these keys as this step's (``mine_keys``), and a refused
+    # claim never lists another job's keys as ours.
     if not jobs.inflight.claim(*keys, on_claim=lambda: job.update(cancel=stops.add(stop_scope, keys))):
         # A key is held by another job: a mask another period's job is
         # aligning, the AOI raster being built, a row still running.
@@ -238,9 +242,11 @@ def start_items(jobs: PrepareJobs, *, app_state, layers, map_, notifications, it
     spawn_in_context(_job)
 
 
-def stop_scope(jobs: PrepareJobs, project: str, period_id: str) -> None:
-    """Stop after the row in progress; the footer says so until the scope's last job ends."""
-    scope = (project, period_id)
+def stop_scope(jobs: PrepareJobs, project: str, period_id: str, step: str) -> None:
+    """Stop ``step``'s jobs (``"download"``: the Alerts step's, ``"harmonize"``:
+    the Harmonize step's) after the row in progress; the footer says so until
+    the scope's last job ends."""
+    scope = (project, period_id, step)
     jobs.stops.stop(scope)
     with jobs.errors_lock:  # ``_give_back`` drops the mark under it: never one left behind
         if jobs.stops.keys(scope):
