@@ -155,6 +155,9 @@ def start_items(jobs: PrepareJobs, *, app_state, layers, map_, notifications, it
 
     by_source = {r.source: r for r in plan_prepare(p, pdir, period)}
     by_mask = {m.name: m for m in plan_masks(p, pdir, period)}
+    # ``items`` come from the render: a project or period switch since then can
+    # name a row the live plan no longer has; drop it before any key is taken
+    items = [it for it in items if it[1] in (by_mask if it[0] == "mask" else by_source)]
     file_items = [it for it in items if _is_file(*it)]
     needs_aoi_raster = bool(file_items) and status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is not Status.CURRENT
     if needs_aoi_raster and p.aoi.geometry_file is None:

@@ -1397,6 +1397,26 @@ def _with_mask(*, origin="gee", tmp_path=None, sidecar=True, periods=(JAN,)):
     return p
 
 
+def test_a_click_naming_a_row_the_live_plan_lost_claims_nothing(step, monkeypatch):
+    """The items come from the render; a switch landing before the click can
+    leave one the live period's plan no longer has: it is dropped before any
+    key is taken, so no row reads running for the rest of the session."""
+    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    claims = _recording_inflight(monkeypatch)
+    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
+    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
+
+    box, rc = _render(state)
+    try:
+        [row] = step.table[-1]
+        monkeypatch.setattr(prepare_scope, "plan_prepare", lambda p, pdir, period: [])  # the live plan
+        _run(row)
+        step.run_jobs()
+        assert claims == [] and step.started == []
+    finally:
+        rc.close()
+
+
 def _recording_inflight(monkeypatch):
     claims = []
 
