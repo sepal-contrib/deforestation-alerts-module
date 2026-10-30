@@ -84,6 +84,7 @@
       "import_failed": "L'import de {file} a échoué. {error}"
     },
     "aoi": {
+      "instruction": "Choisissez la zone à surveiller.",
       "description": "Choisissez la zone à surveiller. Elle est enregistrée avec le projet et chaque téléchargement y est découpé.",
       "info_header": "À propos de la zone d'intérêt",
       "info_md": "Choisissez la zone que ce projet surveille : une zone administrative, un polygone que vous dessinez, ou un asset Earth Engine. Elle est enregistrée avec le projet dès que vous la sélectionnez, et chaque téléchargement y est découpé.\n\n- La **couverture** de chaque source d'alertes sur cette zone est vérifiée une fois et enregistrée dans le projet ; l'étape Alertes l'affiche.\n- Dès que le projet a un jeu d'alertes, l'AOI est verrouillée : une nouvelle zone invaliderait tous les téléchargements et toutes les empreintes. Utilisez **Dupliquer** dans la boîte de dialogue Projet pour surveiller une autre zone avec les mêmes sources, masques, couches et grille.",
@@ -94,25 +95,22 @@
       "busy": "Une tâche écrit dans ce projet ; modifiez l'AOI une fois celle-ci terminée."
     },
     "alerts": {
-      "description": "Les jeux de données d'alertes que ce projet surveille, avec la part de l'AOI que chacun couvre. Chacun est téléchargé pour chaque période, découpé selon l'AOI et la fenêtre de recherche de la période.",
+      "instruction": "Ajoutez des sources d'alertes et téléchargez-les pour cette période.",
+      "description": "Les sources d'alertes de cette période, avec la part de l'AOI que chacune couvre. Chacune est téléchargée sur la fenêtre de recherche de la période et découpée selon l'AOI. La liste est propre à chaque période : une source peut être retirée d'une période sans toucher aux autres.",
       "info_header": "À propos des sources d'alertes",
-      "info_md": "Une source d'alertes est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est **confirmé** (confiance élevée) ou **probable** (confiance faible) et porte le jour de sa première détection.\n\n- **Prédéfinies :** GLAD-L (Landsat, environ 30 m), GLAD-S2 (Sentinel-2, 10 m) et RADD (Sentinel-1, 10 m). RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.\n- **Personnalisées :** une image ou collection d'images Earth Engine, ou un GeoTIFF dans votre dossier SEPAL, lu via un préréglage de format : *RADD* (bande Alert 2 probable, 3 confirmée ; date `yyddd`), *alertes CCDC SEPAL* et *alertes PyEO SEPAL* (1–2 détections probable, 3 ou plus confirmée ; date de première détection en années décimales) ou *date seule* (une bande de date dans l'encodage choisi ; chaque pixel daté est confirmé).\n\nLa puce de chaque ligne est la **couverture** de la source : la part de l'AOI à l'intérieur de son empreinte. Une source qui ne couvre aucune partie de l'AOI ne peut pas être ajoutée ; une couverture partielle est un avertissement. Un projet contient au plus 3 sources prédéfinies et 6 personnalisées. Une source personnalisée peut être modifiée tant qu'aucun jeu d'alertes ne l'utilise ; ensuite, supprimez-la et ajoutez-en une nouvelle.",
+      "info_md": "Une source d'alertes est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est **confirmé** (confiance élevée) ou **probable** (confiance faible) et porte le jour de sa première détection.\n\n- **Prédéfinies :** GLAD-L (Landsat, environ 30 m), GLAD-S2 (Sentinel-2, 10 m) et RADD (Sentinel-1, 10 m). RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.\n- **Personnalisées :** une image ou collection d'images Earth Engine, ou un GeoTIFF dans votre dossier SEPAL, lu via un préréglage de format : *RADD* (bande Alert 2 probable, 3 confirmée ; date `yyddd`), *alertes CCDC SEPAL* et *alertes PyEO SEPAL* (1–2 détections probable, 3 ou plus confirmée ; date de première détection en années décimales) ou *date seule* (une bande de date dans l'encodage choisi ; chaque pixel daté est confirmé).\n\nLa liste montre les sources de la **période active**. **Télécharger** récupère une source sur la fenêtre de recherche de la période, dans sa propre projection et découpée selon l'AOI ; une source GeoTIFF est lue depuis son fichier à la place, et **Télécharger … en attente** récupère chaque source manquante ou obsolète. La puce de chaque ligne est la **couverture** de la source : la part de l'AOI à l'intérieur de son empreinte. Une source qui ne couvre aucune partie de l'AOI ne peut pas être ajoutée ; une couverture partielle est un avertissement.\n\n**Ajouter aux nouvelles périodes** choisit les sources avec lesquelles démarre une nouvelle période. Une période contient au plus 3 sources prédéfinies et 6 personnalisées. Le bouton corbeille d'une ligne retire la source de cette période seulement : ses fichiers téléchargés de cette période sont supprimés, et elle reste dans le projet et peut être ajoutée de nouveau. Une source personnalisée peut être modifiée tant qu'aucun jeu d'alertes ne l'utilise ; ensuite, retirez-la et ajoutez-en une nouvelle.",
       "list_title": "Sources",
       "col_source": "Source",
-      "col_coverage": "Couverture",
       "empty": "Aucune source d'alertes pour l'instant. Ajoutez-en au moins une.",
       "add": "Ajouter une source",
       "add_title": "Ajouter une source d'alertes",
       "predefined_label": "Source d'alertes",
-      "all_added": "Toutes les sources prédéfinies sont déjà dans ce projet.",
-      "kind_predefined": "prédéfinie",
+      "all_added": "Toutes les sources sont déjà dans cette période.",
       "label_glad_l": "GLAD-L (Landsat, 30 m)",
       "label_radd": "RADD (Sentinel-1, 10 m)",
       "label_glad_s2": "GLAD-S2 (Sentinel-2, 10 m)",
       "meta_loading": "La liste des bandes de GLAD-L est encore en cours de chargement depuis Earth Engine ; réessayez dans un instant.",
       "meta_failed": "Impossible de charger la liste des bandes de GLAD-L : {error}",
-      "delete_title": "Retirer {name} ?",
-      "delete_message": "Ses téléchargements et fichiers harmonisés sont supprimés.",
       "delete_used": {
         "one": "Utilisée par {n} jeu d'alertes ; il conserve ses alertes et apparaîtra obsolète.",
         "many": "Utilisée par {n} de jeux d'alertes ; ils conservent leurs alertes et apparaîtront obsolètes.",
@@ -176,7 +174,6 @@
       "collection_help": "Chaque image de la collection est utilisée, la plus récente en premier. Pour une collection d'instantanés hebdomadaires (comme celle de RADD), indiquez l'id de l'image la plus récente.",
       "err_band_map": "Choisissez un format et associez ses bandes.",
       "err_no_ref": "Choisissez un asset ou un fichier.",
-      "kind_custom": "personnalisée · {format}",
       "file_preview_after_harmonize": "Une source GeoTIFF s'affiche une fois harmonisée.",
       "err_aoi_not_ready": "La géométrie de l'AOI n'est pas encore prête ; réessayez dans un instant.",
       "err_aoi_changed": "L'AOI a changé pendant la vérification ; ajoutez la source à nouveau.",
@@ -200,6 +197,7 @@
       "encoding_help": "Comment la bande de date stocke ses dates."
     },
     "layers": {
+      "instruction": "Ajoutez des couches qui aident à examiner les alertes.",
       "description": "Des couches qui appuient l'analyse des alertes : une image Earth Engine ou un GeoTIFF de votre dossier SEPAL. Elles peuvent aussi être affichées sur les deux cartes d'Analyse.",
       "info_header": "À propos des couches facultatives",
       "info_md": "Les couches de visualisation appuient l'analyse des alertes ; elles ne les modifient jamais.\n\n- **Image Earth Engine** et **GeoTIFF** (dans votre dossier SEPAL). Une fois les bandes de l'image lues, une bande est affichée seule, deux se choisissent dans **Bande**, et trois ou plus demandent **Bandes** : une bande, ou un **Composite RVB** (suggéré quand les noms de bandes donnent le rouge, le vert et le bleu). Une bande prend un **Type de raster** : *Continu*, une rampe de couleurs entre un minimum et un maximum (**Étirer sur l'AOI** les remplit avec les centiles 2–98 % de la bande sur l'AOI) ; ou *Catégoriel*, une couleur et un libellé par classe (**Trouver les classes dans l'AOI** liste les valeurs entières présentes, 50 au plus ; masquez une classe avec son œil ; les valeurs non listées et les classes masquées sont transparentes ; avec seulement 0 et 1, 1 prend le nom de la bande et 0 est d'abord masqué). **RVB** affiche trois bandes depuis un **Composite** (couleurs naturelles, infrarouge fausses couleurs, SWIR / PIR / rouge) ou avec les bandes de votre choix (Personnalisé), entre un minimum et un maximum communs.\n- Une couche GeoTIFF : l'application écrit un fichier de pyramides à côté, donc son dossier doit être accessible en écriture.\n\nAffichez une couche sur cette carte avec le bouton carte de sa ligne ; sa légende apparaît avec elle. Cochez **Afficher dans Analyse** pour l'ajouter, désactivée, aux deux cartes d'Analyse.",
@@ -308,9 +306,10 @@
       "source_file": "GeoTIFF / VRT"
     },
     "period": {
-      "description": "Chaque période télécharge toutes les sources sur ses dates plus les jours de rétrospection qui les précèdent. Les pixels déjà signalés par les jeux des périodes antérieures sont ignorés, donc une alerte publiée tardivement atterrit dans le jeu de la période suivante et aucun pixel n'est signalé deux fois.",
+      "instruction": "Définissez la période de surveillance.",
+      "description": "Chaque période télécharge ses sources sur ses dates plus les jours de rétrospection qui les précèdent. Les pixels déjà signalés par les jeux des périodes antérieures sont ignorés, donc une alerte publiée tardivement atterrit dans le jeu de la période suivante et aucun pixel n'est signalé deux fois.",
       "info_header": "À propos des périodes",
-      "info_md": "Une période est un cycle de surveillance, généralement un mois. Pour chaque période, toutes les sources sont téléchargées sur sa **fenêtre de recherche** : les dates de la période plus les jours de **rétrospection** qui les précèdent, afin que les alertes publiées tardivement soient quand même trouvées.\n\n- Les pixels déjà signalés par les jeux d'alertes des périodes antérieures sont retirés avant la vectorisation, donc un pixel n'est jamais signalé deux fois.\n- **Nouvelle période** commence le lendemain de la dernière période et reprend les choix de masques de cette période.\n- Les dates d'une période ne peuvent plus changer dès qu'elle a des jeux d'alertes. Une période peut être supprimée quand elle n'a aucun jeu, ou quand elle est la dernière période ; ses téléchargements et fichiers sont supprimés avec elle.\n- Sélectionnez une ligne pour en faire la période active de Télécharger et harmoniser et d'Intégrer et vectoriser.",
+      "info_md": "Une période est un cycle de surveillance, généralement un mois. Chaque source d'une période est téléchargée sur sa **fenêtre de recherche** : les dates de la période plus les jours de **rétrospection** qui les précèdent, afin que les alertes publiées tardivement soient quand même trouvées.\n\n- Les pixels déjà signalés par les jeux d'alertes des périodes antérieures sont retirés avant la vectorisation, donc un pixel n'est jamais signalé deux fois.\n- **Nouvelle période** commence le lendemain de la dernière période et reprend les choix de masques de cette période ; elle démarre avec les sources cochées dans **Ajouter aux nouvelles périodes** (Alertes).\n- Les dates d'une période ne peuvent plus changer dès qu'elle a des jeux d'alertes. Une période peut être supprimée quand elle n'a aucun jeu, ou quand elle est la dernière période ; ses téléchargements et fichiers sont supprimés avec elle.\n- Sélectionnez une ligne pour en faire la période active d'Alertes, d'Harmoniser et d'Intégrer et vectoriser.",
       "list_title": "Périodes",
       "empty": "Aucune période pour l'instant.",
       "col_period": "Période",
@@ -327,7 +326,7 @@
       "new_title": "Nouvelle période",
       "edit_title": "Changer les dates de {period}",
       "edit_look_back_title": "Période antérieure de {period}",
-      "masks_copied": "Elle commence avec les choix de masques de la dernière période ; modifiez-les dans Télécharger et harmoniser.",
+      "masks_copied": "Elle commence avec les choix de masques de la dernière période ; modifiez-les dans Harmoniser.",
       "save": "Enregistrer",
       "created": "Période créée",
       "saved": "Période enregistrée",
@@ -335,9 +334,9 @@
       "state_stale": "obsolète",
       "state_missing": "manquante",
       "note_sources_stale": {
-        "one": "{count} source obsolète ici : relancez-la dans Télécharger et harmoniser.",
-        "many": "{count} de sources obsolètes ici : relancez-les dans Télécharger et harmoniser.",
-        "other": "{count} sources obsolètes ici : relancez-les dans Télécharger et harmoniser."
+        "one": "{count} source obsolète ici : relancez-la dans Alertes ou Harmoniser.",
+        "many": "{count} de sources obsolètes ici : relancez-les dans Alertes ou Harmoniser.",
+        "other": "{count} sources obsolètes ici : relancez-les dans Alertes ou Harmoniser."
       },
       "note_sets_stale": {
         "one": "{count} jeu d'alertes généré à partir d'entrées qui ont changé depuis.",
@@ -369,7 +368,11 @@
       "add": "Ajouter une période"
     },
     "harmonize": {
-      "download_first": "Téléchargez-la d'abord dans Alertes",
+      "instruction": "Alignez les téléchargements sur la grille du projet et appliquez les masques.",
+      "description": "Télécharge les masques, puis les aligne, avec les sources téléchargées dans Alertes, sur la grille du projet et applique les masques de la période (harmoniser). Rien dont les entrées sont inchangées ne s'exécute deux fois.",
+      "info_header": "À propos de Harmoniser",
+      "info_md": "Cette étape aligne chaque entrée de la période active sur la **grille** du projet : une projection en mètres et une taille de pixel.\n\n1. **Grille :** un code EPSG (le bouton cible suggère la zone UTM de l'AOI) et une résolution. Elle est verrouillée dès que le projet a un jeu d'alertes.\n2. **Masques :** des rasters définis une fois par projet (une image Earth Engine ou un GeoTIFF, une bande ; un pixel est actif là où sa valeur n'est pas zéro). Chaque période choisit quels masques sont activés et si chacun **conserve** sa zone (les alertes à l'extérieur sont supprimées) ou l'**exclut** (les alertes à l'intérieur sont supprimées). Un masque est téléchargé une fois et aligné sur la grille.\n3. **Sources :** chaque source téléchargée dans Alertes (ou lue depuis votre propre fichier) est alignée sur la grille et masquée (harmonisée).\n\nRien dont les entrées sont inchangées ne s'exécute deux fois : une nouvelle grille ou un changement de masque ne fait que réharmoniser, sans télécharger. **Harmoniser … en attente** exécute d'abord les masques, puis chaque source téléchargée manquante ou obsolète, et ignore les lignes qui affichent *Non couverte* ou *Aucune donnée pour cette période*. Chaque ligne a besoin du double de sa taille compressée en espace disque libre.",
+      "download_first": "Téléchargez-la ou lisez-la d'abord dans Alertes",
       "run_all": {
         "one": "Harmoniser {n} en attente",
         "many": "Harmoniser {n} en attente",
@@ -378,9 +381,6 @@
       "job_title": "Harmoniser"
     },
     "prepare": {
-      "description": "Télécharge chaque masque et source de la période active dans sa propre projection, puis les aligne sur la grille du projet et applique les masques de la période (harmoniser). Rien dont les entrées sont inchangées ne s'exécute deux fois.",
-      "info_header": "À propos de Télécharger et harmoniser",
-      "info_md": "Cette étape prépare chaque entrée de la période active sur la **grille** du projet : une projection en mètres et une taille de pixel.\n\n1. **Grille :** un code EPSG (le bouton cible suggère la zone UTM de l'AOI) et une résolution. Elle est verrouillée dès que le projet a un jeu d'alertes.\n2. **Masques :** des rasters définis une fois par projet (une image Earth Engine ou un GeoTIFF, une bande ; un pixel est actif là où sa valeur n'est pas zéro). Chaque période choisit quels masques sont activés et si chacun **conserve** sa zone (les alertes à l'extérieur sont supprimées) ou l'**exclut** (les alertes à l'intérieur sont supprimées). Un masque est téléchargé une fois et aligné sur la grille.\n3. **Sources :** chaque source est téléchargée sur la fenêtre de recherche de la période dans sa propre projection, puis alignée sur la grille et masquée (harmonisée).\n\nRien dont les entrées sont inchangées ne s'exécute deux fois : une nouvelle grille ou un changement de masque ne fait que réharmoniser, sans télécharger. **Exécuter … en attente** exécute d'abord les masques, puis chaque source manquante ou obsolète, et ignore les lignes qui affichent *Non couverte* ou *Aucune donnée pour cette période*. Chaque ligne a besoin du double de sa taille compressée en espace disque libre.",
       "grid_title": "Grille du projet",
       "grid_epsg": "EPSG",
       "grid_resolution": "Résolution",
@@ -415,7 +415,6 @@
         "many": "Tout télécharger à nouveau ({n})",
         "other": "Tout télécharger à nouveau ({n})"
       },
-      "redownload_all_masks": "Exécutez d'abord les masques en attente",
       "job_title": "Télécharger et harmoniser",
       "job_row": "Préparation de {source}",
       "job_mask_row": "Préparation du masque {mask}",
@@ -589,14 +588,14 @@
       "d_pixels_masked": "{kept} ({before} avant les masques : {removed} retirés)"
     },
     "integrate": {
+      "instruction": "Regroupez les pixels d'alerte en groupes.",
       "description": "Combine les sources téléchargées, ignore les pixels qu'une période antérieure a déjà signalés, et regroupe les pixels d'alerte voisins en groupes.",
       "info_header": "À propos d'Intégrer et vectoriser",
-      "info_md": "Cette étape transforme les sources harmonisées de la période active en un **jeu d'alertes** : les groupes qu'Analyse passe en revue.\n\n1. Les sources choisies sont combinées pixel par pixel ; chaque pixel d'alerte se souvient des sources qui l'ont détecté.\n2. Les pixels déjà signalés par les jeux des périodes antérieures (leur **empreinte**) sont retirés.\n3. Les pixels d'alerte voisins sont regroupés en **groupes** ; chaque groupe garde les sources de tous ses pixels. Les groupes plus petits que la **taille minimale** sont écartés ; vous pouvez limiter le nombre de groupes, triés comme vous le choisissez.\n4. Chaque **couche d'attributs** optionnelle (une image Earth Engine ou un GeoTIFF) ajoute une statistique de ses bandes à chaque groupe.\n\nLes pixels des groupes trop petits pour être gardés, ou au-delà du nombre maximal de groupes, sont conservés comme **non analysables**, et l'exécution de la période suivante les réexamine dans sa rétrospection. Un interrupteur **inclure les alertes probables** vaut pour toutes les sources choisies (**Régler par source** pour choisir chacune) ; désactivé, leurs pixels probables sont écartés. La couche **Afficher les pixels non analysables** les dessine sur la carte.\n\nUn jeu d'alertes est identifié par sa période et ses sources : relancer la même combinaison le **remplace**, après une confirmation qui liste les groupes examinés qu'elle écarterait. À la fin de l'exécution, le nouveau jeu devient le jeu actif : préparez le questionnaire, puis lancez Analyse.",
-      "sources": "Sources à combiner",
+      "info_md": "Cette étape transforme les sources harmonisées de la période active en un **jeu d'alertes** : les groupes qu'Analyse passe en revue.\n\n1. Les sources choisies sont combinées pixel par pixel ; chaque pixel d'alerte se souvient des sources qui l'ont détecté.\n2. Les pixels déjà signalés par les jeux des périodes antérieures (leur **empreinte**) sont retirés.\n3. Les pixels d'alerte voisins sont regroupés en **groupes** ; chaque groupe garde les sources de tous ses pixels. Les groupes plus petits que la **taille minimale** sont écartés ; vous pouvez limiter le nombre de groupes, triés comme vous le choisissez.\n4. Chaque **couche d'attributs** optionnelle (une image Earth Engine ou un GeoTIFF) ajoute une statistique de ses bandes à chaque groupe.\n\nLes groupes plus petits que la taille minimale sortent du jeu, de ses exports et de la carte. **Garder les groupes plus petits qui touchent une perte confirmée antérieure** les garde comme *Extension · sous la surface minimale*, liés à l'alerte qu'ils prolongent ; case décochée, ils sont écartés comme tout petit groupe.\n\nLes pixels des groupes trop petits pour être gardés, ou au-delà du nombre maximal de groupes, sont conservés comme **non analysables**, et l'exécution de la période suivante les réexamine dans sa rétrospection. Un interrupteur **inclure les alertes probables** vaut pour toutes les sources choisies (**Régler par source** pour choisir chacune) ; désactivé, leurs pixels probables sont écartés. La couche **Afficher les pixels non analysables** les dessine sur la carte.\n\nUn jeu d'alertes est identifié par sa période et ses sources : relancer la même combinaison le **remplace**, après une confirmation qui liste les groupes examinés qu'elle écarterait. À la fin de l'exécution, le nouveau jeu devient le jeu actif : préparez le questionnaire, puis lancez Analyse.",
+      "sources": "Sources",
       "min_size": "Taille minimale de groupe",
-      "min_size_hint": "Les groupes plus petits que cela ({px} pixels sur la grille) sont écartés, et sortent du jeu, de ses exports et de la carte.",
+      "min_size_hint": "= {px} pixels sur la grille",
       "small_growth": "Garder les groupes plus petits qui touchent une perte confirmée antérieure",
-      "small_growth_hint": "Ils entrent dans le jeu comme Extension · sous la surface minimale, liés à l'alerte qu'ils prolongent. Case décochée, ils sont écartés comme tout petit groupe.",
       "small_growth_no_earlier": "Aucune période antérieure n'a encore de jeu d'alertes : rien ne se lie lors de cette exécution.",
       "small_growth_no_reviewed": "Aucune alerte d'une période antérieure n'est encore examinée : rien ne se lie lors de cette exécution.",
       "include_probable": "Inclure les alertes probables (non confirmées)",
@@ -736,6 +735,7 @@
       }
     },
     "questionnaire": {
+      "instruction": "Rédigez les questions posées pour chaque alerte.",
       "add_title": "Ajouter une question",
       "edit_title": "Modifier la question",
       "add": "Ajouter la question",
@@ -792,6 +792,7 @@
       "template_missing": "Le fichier a disparu : choisissez-le de nouveau, ou videz le champ pour utiliser le modèle par défaut."
     },
     "evaluators": {
+      "instruction": "Choisissez qui examine les alertes.",
       "description": "Révisez seul, ou répartissez les alertes entre des évaluateurs et fusionnez ce qu'ils vous renvoient.",
       "info_header": "Évaluation",
       "info_md": "**Mode de revue** : en **Individuelle**, vous examinez vous-même toutes les alertes ; avec **Plusieurs évaluateurs**, les alertes sont réparties entre des évaluateurs.\n\n**Répartir les alertes…** distribue à tour de rôle les alertes de l'ensemble actif, dans l'ordre de l'ensemble, entre les évaluateurs que vous comptez ou nommez. Les alertes déjà révisées restent non attribuées, sauf si vous les incluez. **Modifier la répartition** répartit à nouveau ou supprime la répartition.\n\n**Générer les paquets** crée un zip par évaluateur : les alertes de l'ensemble, le questionnaire, l'AOI et le cache de scènes. L'icône de nuage de chaque ligne télécharge ensuite le zip de cet évaluateur. L'évaluateur l'importe dans la boîte de dialogue Projet et révise ses alertes dans Analyse.\n\n**Fusionner une copie révisée…** fusionne les révisions qu'un évaluateur vous renvoie. Seules les alertes attribuées à cet évaluateur sont prises ; si vous en avez révisé une autrement, vous choisissez la révision à garder."

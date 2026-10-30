@@ -84,6 +84,7 @@ SAME_IN = {
         "analysis_tile.verdict.title",
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_col_raster", "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
+        "steps.integrate.sources",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
         # ramp names, the SWIR acronym and "Palette" are the same in French
         "steps.layers.ramp_magma", "steps.layers.ramp_oranges", "steps.layers.ramp_terrain",
@@ -407,11 +408,21 @@ def test_counted_labels_agree_with_their_count():
     ("fr", "Tout exécuter", "Exécuter … en attente"), ("pt-BR", "Executar tudo", "Executar … pendentes")])
 def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
     set_locale(locale)
-    for key in ("info_md", "mask_not_ready", "masks_switched"):
+    for key in ("mask_not_ready", "masks_switched"):
         text = i18n.t(f"steps.prepare.{key}")
         assert old not in text and button in text, key
     first, _, last = i18n.tn("steps.prepare.run_all", 3).partition("3")
     assert button == f"{first}…{last}"
+    # the Harmonize help names the button of its own footer
+    first, _, last = i18n.tn("steps.harmonize.run_all", 3).partition("3")
+    assert f"{first}…{last}" in i18n.t("steps.harmonize.info_md")
+
+
+@pytest.mark.parametrize("key", ["aoi", "period", "alerts", "harmonize", "integrate", "layers",
+                                 "questionnaire", "evaluators"])
+def test_every_step_has_an_instruction(key):
+    """The line under the step's title; the parity test covers the other languages."""
+    assert i18n.has_message(f"steps.{key}.instruction")
 
 
 @pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])

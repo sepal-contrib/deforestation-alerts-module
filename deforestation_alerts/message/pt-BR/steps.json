@@ -84,6 +84,7 @@
       "import_failed": "Falha ao importar {file}. {error}"
     },
     "aoi": {
+      "instruction": "Escolha a área a monitorar.",
       "description": "Escolha a área a monitorar. Ela é salva com o projeto e todos os downloads são recortados por ela.",
       "info_header": "Sobre a área de interesse",
       "info_md": "Escolha a área que este projeto monitora: uma área administrativa, um polígono que você desenhar ou um recurso do Earth Engine. Ela é salva com o projeto assim que você a seleciona, e todos os downloads são recortados por ela.\n\n- A **cobertura** de cada fonte de alertas sobre esta área é verificada uma vez e salva no projeto; a etapa Alertas a exibe.\n- Assim que o projeto tem um conjunto de alertas, a AOI fica bloqueada: uma nova área invalidaria todos os downloads e todas as pegadas. Use **Duplicar** na janela Projeto para monitorar outra área com as mesmas fontes, máscaras, camadas e grade.",
@@ -94,25 +95,22 @@
       "busy": "Uma tarefa está gravando neste projeto; altere a AOI quando ela terminar."
     },
     "alerts": {
-      "description": "Os conjuntos de dados de alertas que este projeto monitora, com a parte da AOI que cada um cobre. Cada um é baixado para todos os períodos, recortado pela AOI e pela janela de busca do período.",
+      "instruction": "Adicione fontes de alertas e baixe-as para este período.",
+      "description": "As fontes de alertas deste período, com a parte da AOI que cada uma cobre. Cada uma é baixada na janela de busca do período e recortada pela AOI. A lista é de cada período: uma fonte pode ser removida de um período sem afetar os outros.",
       "info_header": "Sobre as fontes de alertas",
-      "info_md": "Uma fonte de alertas é um conjunto de dados de alertas de perda florestal. Cada pixel de alerta é **confirmado** (alta confiança) ou **provável** (baixa confiança) e traz o dia em que foi detectado pela primeira vez.\n\n- **Predefinidas:** GLAD-L (Landsat, cerca de 30 m), GLAD-S2 (Sentinel-2, 10 m) e RADD (Sentinel-1, 10 m). O RADD só detecta em floresta tropical úmida primária; no restante de sua área, não reporta alertas.\n- **Personalizadas:** uma imagem ou coleção de imagens do Earth Engine, ou um GeoTIFF na sua pasta do SEPAL, lido por meio de um formato predefinido: *RADD* (banda de alerta 2 provável, 3 confirmado; data `yyddd`), *alertas CCDC do SEPAL* e *alertas PyEO do SEPAL* (1–2 detecções provável, 3 ou mais confirmado; data da primeira detecção em anos decimais) ou *somente data* (uma banda de data na codificação que você escolher; todo pixel com data é confirmado).\n\nO chip de cada linha é a **cobertura** da fonte: a parte da AOI dentro da sua pegada. Uma fonte que não cobre nada da AOI não pode ser adicionada; uma cobertura parcial é um aviso. Um projeto tem no máximo 3 fontes predefinidas e 6 personalizadas. Uma fonte personalizada pode ser editada até que um conjunto de alertas a use; depois disso, exclua-a e adicione uma nova.",
+      "info_md": "Uma fonte de alertas é um conjunto de dados de alertas de perda florestal. Cada pixel de alerta é **confirmado** (alta confiança) ou **provável** (baixa confiança) e traz o dia em que foi detectado pela primeira vez.\n\n- **Predefinidas:** GLAD-L (Landsat, cerca de 30 m), GLAD-S2 (Sentinel-2, 10 m) e RADD (Sentinel-1, 10 m). O RADD só detecta em floresta tropical úmida primária; no restante de sua área, não reporta alertas.\n- **Personalizadas:** uma imagem ou coleção de imagens do Earth Engine, ou um GeoTIFF na sua pasta do SEPAL, lido por meio de um formato predefinido: *RADD* (banda de alerta 2 provável, 3 confirmado; data `yyddd`), *alertas CCDC do SEPAL* e *alertas PyEO do SEPAL* (1–2 detecções provável, 3 ou mais confirmado; data da primeira detecção em anos decimais) ou *somente data* (uma banda de data na codificação que você escolher; todo pixel com data é confirmado).\n\nA lista mostra as fontes do **período ativo**. **Baixar** obtém uma fonte na janela de busca do período, na sua própria projeção e recortada pela AOI; uma fonte GeoTIFF é lida do seu arquivo em vez disso, e **Baixar … pendentes** obtém cada fonte que esteja faltando ou desatualizada. O chip de cada linha é a **cobertura** da fonte: a parte da AOI dentro da sua pegada. Uma fonte que não cobre nada da AOI não pode ser adicionada; uma cobertura parcial é um aviso.\n\n**Adicionar aos novos períodos** decide com quais fontes um novo período começa. Um período tem no máximo 3 fontes predefinidas e 6 personalizadas. O botão de lixeira de uma linha remove a fonte somente deste período: os arquivos baixados dela neste período são excluídos, e a fonte continua no projeto e pode ser adicionada de novo. Uma fonte personalizada pode ser editada até que um conjunto de alertas a use; depois disso, remova-a e adicione uma nova.",
       "list_title": "Fontes",
       "col_source": "Fonte",
-      "col_coverage": "Cobertura",
       "empty": "Ainda não há fonte de alertas. Adicione pelo menos uma.",
       "add": "Adicionar fonte",
       "add_title": "Adicionar uma fonte de alertas",
       "predefined_label": "Fonte",
-      "all_added": "Todas as fontes predefinidas já estão neste projeto.",
-      "kind_predefined": "predefinida",
+      "all_added": "Todas as fontes já estão neste período.",
       "label_glad_l": "GLAD-L (Landsat, 30 m)",
       "label_radd": "RADD (Sentinel-1, 10 m)",
       "label_glad_s2": "GLAD-S2 (Sentinel-2, 10 m)",
       "meta_loading": "A lista de bandas do GLAD-L ainda está sendo carregada do Earth Engine; tente novamente em instantes.",
       "meta_failed": "Não foi possível carregar a lista de bandas do GLAD-L: {error}",
-      "delete_title": "Remover {name}?",
-      "delete_message": "Seus downloads e arquivos harmonizados são excluídos.",
       "delete_used": {
         "one": "Usada por {n} conjunto de alertas; ele mantém seus alertas e aparecerá como desatualizado.",
         "many": "Usada por {n} de conjuntos de alertas; eles mantêm seus alertas e aparecerão como desatualizados.",
@@ -176,7 +174,6 @@
       "collection_help": "Todas as imagens da coleção são usadas, a mais recente por cima. Para uma coleção de instantâneos semanais (como a do próprio RADD), informe o id da imagem mais recente.",
       "err_band_map": "Escolha um formato e mapeie suas bandas.",
       "err_no_ref": "Escolha um recurso ou um arquivo.",
-      "kind_custom": "personalizada · {format}",
       "file_preview_after_harmonize": "Uma fonte GeoTIFF é exibida depois de harmonizada.",
       "err_aoi_not_ready": "A geometria da AOI ainda não está pronta; tente novamente em instantes.",
       "err_aoi_changed": "A AOI mudou durante a verificação; adicione a fonte novamente.",
@@ -200,6 +197,7 @@
       "encoding_help": "Como a banda de data armazena suas datas."
     },
     "layers": {
+      "instruction": "Adicione camadas que ajudem a revisar os alertas.",
       "description": "Camadas que apoiam a análise dos alertas: uma imagem do Earth Engine ou um GeoTIFF da sua pasta do SEPAL. Elas também podem ser exibidas nos dois mapas da Análise.",
       "info_header": "Sobre as camadas opcionais",
       "info_md": "As camadas de visualização apoiam a análise dos alertas; elas nunca os alteram.\n\n- **Imagem do Earth Engine** e **GeoTIFF** (na sua pasta do SEPAL). Lidas as bandas da imagem, uma banda é desenhada sozinha, duas são escolhidas em **Banda** e três ou mais perguntam **Bandas**: uma banda ou uma **Composição RGB** (sugerida quando os nomes das bandas dão vermelho, verde e azul). Uma banda recebe um **Tipo de raster**: *Contínuo*, uma rampa de cores entre um mínimo e um máximo (**Ajustar à AOI** os preenche com os percentis 2–98 % da banda na AOI); ou *Categórico*, uma cor e um rótulo por classe (**Encontrar as classes na AOI** lista os valores inteiros presentes, no máximo 50; oculte uma classe pelo seu olho; valores não listados e classes ocultas ficam transparentes; com só 0 e 1, o 1 recebe o nome da banda e o 0 começa oculto). **RGB** desenha três bandas a partir de uma **Composição** (cor verdadeira, infravermelho falsa-cor, SWIR / NIR / vermelho) ou com as bandas que você escolher (Personalizada), entre um mínimo e um máximo comuns.\n- Uma camada GeoTIFF: o app grava um arquivo de pirâmides ao lado dela, então a pasta precisa permitir gravação.\n\nExiba uma camada neste mapa com o botão de mapa da sua linha; a legenda aparece junto. Marque **Mostrar na Análise** para adicioná-la, desligada, aos dois mapas da Análise.",
@@ -308,9 +306,10 @@
       "source_file": "GeoTIFF / VRT"
     },
     "period": {
-      "description": "Cada período baixa todas as fontes nas suas datas mais os dias de busca retroativa anteriores. Os pixels já reportados pelos conjuntos de períodos anteriores são ignorados, então um alerta publicado com atraso entra no conjunto do período seguinte e nenhum pixel é reportado duas vezes.",
+      "instruction": "Defina o período de monitoramento.",
+      "description": "Cada período baixa as suas fontes nas suas datas mais os dias de busca retroativa anteriores. Os pixels já reportados pelos conjuntos de períodos anteriores são ignorados, então um alerta publicado com atraso entra no conjunto do período seguinte e nenhum pixel é reportado duas vezes.",
       "info_header": "Sobre os períodos",
-      "info_md": "Um período é uma rodada de monitoramento, normalmente um mês. Para cada período, todas as fontes são baixadas na sua **janela de busca**: as datas do período mais os dias de **busca retroativa** anteriores, para que alertas publicados com atraso ainda sejam encontrados.\n\n- Os pixels já reportados pelos conjuntos de alertas de períodos anteriores são removidos antes da vetorização, então um pixel nunca é reportado duas vezes.\n- **Novo período** começa no dia seguinte ao último período e copia as escolhas de máscara desse período.\n- As datas de um período não podem mudar depois que ele tem conjuntos de alertas. Um período pode ser excluído quando não tem conjuntos, ou quando é o último período; seus downloads e arquivos são excluídos com ele.\n- Selecione uma linha para torná-la o período ativo de Baixar e harmonizar e de Integrar e vetorizar.",
+      "info_md": "Um período é uma rodada de monitoramento, normalmente um mês. Cada fonte de um período é baixada na sua **janela de busca**: as datas do período mais os dias de **busca retroativa** anteriores, para que alertas publicados com atraso ainda sejam encontrados.\n\n- Os pixels já reportados pelos conjuntos de alertas de períodos anteriores são removidos antes da vetorização, então um pixel nunca é reportado duas vezes.\n- **Novo período** começa no dia seguinte ao último período e copia as escolhas de máscara desse período; começa com as fontes marcadas em **Adicionar aos novos períodos** (Alertas).\n- As datas de um período não podem mudar depois que ele tem conjuntos de alertas. Um período pode ser excluído quando não tem conjuntos, ou quando é o último período; seus downloads e arquivos são excluídos com ele.\n- Selecione uma linha para torná-la o período ativo de Alertas, Harmonizar e Integrar e vetorizar.",
       "list_title": "Períodos",
       "empty": "Ainda não há períodos.",
       "col_period": "Período",
@@ -327,7 +326,7 @@
       "new_title": "Novo período",
       "edit_title": "Alterar as datas de {period}",
       "edit_look_back_title": "Busca retroativa de {period}",
-      "masks_copied": "Ele começa com as escolhas de máscara do último período; altere-as em Baixar e harmonizar.",
+      "masks_copied": "Ele começa com as escolhas de máscara do último período; altere-as em Harmonizar.",
       "save": "Salvar",
       "created": "Período criado",
       "saved": "Período salvo",
@@ -335,9 +334,9 @@
       "state_stale": "desatualizado",
       "state_missing": "faltando",
       "note_sources_stale": {
-        "one": "{count} fonte desatualizada aqui: execute-a novamente em Baixar e harmonizar.",
-        "many": "{count} de fontes desatualizadas aqui: execute-as novamente em Baixar e harmonizar.",
-        "other": "{count} fontes desatualizadas aqui: execute-as novamente em Baixar e harmonizar."
+        "one": "{count} fonte desatualizada aqui: execute-a novamente em Alertas ou Harmonizar.",
+        "many": "{count} de fontes desatualizadas aqui: execute-as novamente em Alertas ou Harmonizar.",
+        "other": "{count} fontes desatualizadas aqui: execute-as novamente em Alertas ou Harmonizar."
       },
       "note_sets_stale": {
         "one": "{count} conjunto de alertas gerado a partir de entradas que mudaram desde então.",
@@ -369,7 +368,11 @@
       "add": "Adicionar período"
     },
     "harmonize": {
-      "download_first": "Baixe-a primeiro em Alertas",
+      "instruction": "Alinhe os downloads à grade do projeto e aplique as máscaras.",
+      "description": "Baixa as máscaras, depois as alinha, junto com as fontes baixadas em Alertas, à grade do projeto e aplica as máscaras do período (harmonizar). Nada cujas entradas não mudaram é executado duas vezes.",
+      "info_header": "Sobre Harmonizar",
+      "info_md": "Esta etapa alinha todas as entradas do período ativo na **grade** do projeto: uma projeção em metros e um tamanho de pixel.\n\n1. **Grade:** um código EPSG (o botão de mira sugere a zona UTM da AOI) e uma resolução. Ela fica bloqueada assim que o projeto tem um conjunto de alertas.\n2. **Máscaras:** rasters definidos uma vez por projeto (uma imagem do Earth Engine ou um GeoTIFF, uma banda; um pixel está ativo onde seu valor não é zero). Cada período escolhe quais máscaras estão ativas e se cada uma **mantém** sua área (os alertas fora dela são removidos) ou a **exclui** (os alertas dentro dela são removidos). Uma máscara é baixada uma vez e alinhada à grade.\n3. **Fontes:** cada fonte baixada em Alertas (ou lida do seu próprio arquivo) é alinhada à grade e mascarada (harmonizada).\n\nNada cujas entradas não mudaram é executado duas vezes: uma nova grade ou uma troca de máscara apenas harmoniza de novo, sem baixar. **Harmonizar … pendentes** executa primeiro as máscaras, depois cada fonte baixada que esteja faltando ou desatualizada, e pula as linhas que mostram *Não coberta* ou *Sem dados para este período*. Cada linha precisa do dobro do seu tamanho compactado livre em disco.",
+      "download_first": "Baixe-a ou leia-a primeiro em Alertas",
       "run_all": {
         "one": "Harmonizar {n} pendente",
         "many": "Harmonizar {n} pendentes",
@@ -378,9 +381,6 @@
       "job_title": "Harmonizar"
     },
     "prepare": {
-      "description": "Baixe todas as máscaras e fontes do período ativo na própria projeção de cada uma, depois alinhe-as à grade do projeto e aplique as máscaras do período (harmonizar). Nada cujas entradas não mudaram é executado duas vezes.",
-      "info_header": "Sobre Baixar e harmonizar",
-      "info_md": "Esta etapa prepara todas as entradas do período ativo na **grade** do projeto: uma projeção em metros e um tamanho de pixel.\n\n1. **Grade:** um código EPSG (o botão de mira sugere a zona UTM da AOI) e uma resolução. Ela fica bloqueada assim que o projeto tem um conjunto de alertas.\n2. **Máscaras:** rasters definidos uma vez por projeto (uma imagem do Earth Engine ou um GeoTIFF, uma banda; um pixel está ativo onde seu valor não é zero). Cada período escolhe quais máscaras estão ativas e se cada uma **mantém** sua área (os alertas fora dela são removidos) ou a **exclui** (os alertas dentro dela são removidos). Uma máscara é baixada uma vez e alinhada à grade.\n3. **Fontes:** cada fonte é baixada na janela de busca do período na sua própria projeção, depois alinhada à grade e mascarada (harmonizada).\n\nNada cujas entradas não mudaram é executado duas vezes: uma nova grade ou uma troca de máscara apenas harmoniza de novo, sem baixar. **Executar … pendentes** executa primeiro as máscaras, depois cada fonte que esteja faltando ou desatualizada, e pula as linhas que mostram *Não coberta* ou *Sem dados para este período*. Cada linha precisa do dobro do seu tamanho compactado livre em disco.",
       "grid_title": "Grade do projeto",
       "grid_epsg": "EPSG",
       "grid_resolution": "Resolução",
@@ -415,7 +415,6 @@
         "many": "Baixar tudo de novo ({n})",
         "other": "Baixar tudo de novo ({n})"
       },
-      "redownload_all_masks": "Execute primeiro as máscaras pendentes",
       "job_title": "Baixar e harmonizar",
       "job_row": "Preparando {source}",
       "job_mask_row": "Preparando a máscara {mask}",
@@ -589,14 +588,14 @@
       "d_pixels_masked": "{kept} ({before} antes das máscaras: {removed} removidos)"
     },
     "integrate": {
+      "instruction": "Reúna os pixels de alerta em agrupamentos.",
       "description": "Combine as fontes baixadas, ignore os pixels que um período anterior já reportou e reúna os pixels de alerta vizinhos em agrupamentos.",
       "info_header": "Sobre Integrar e vetorizar",
-      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os agrupamentos que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada pixel de alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Os pixels de alerta vizinhos são reunidos em **agrupamentos**; cada agrupamento guarda as fontes de todos os seus pixels. Os agrupamentos menores que o **tamanho mínimo** são descartados; você pode limitar o número de agrupamentos, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada agrupamento.\n\nOs pixels de agrupamentos pequenos demais para serem mantidos, ou além do número máximo de agrupamentos, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os agrupamentos revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
-      "sources": "Fontes a combinar",
+      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os agrupamentos que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada pixel de alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Os pixels de alerta vizinhos são reunidos em **agrupamentos**; cada agrupamento guarda as fontes de todos os seus pixels. Os agrupamentos menores que o **tamanho mínimo** são descartados; você pode limitar o número de agrupamentos, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada agrupamento.\n\nOs agrupamentos menores que o tamanho mínimo ficam fora do conjunto, das suas exportações e do mapa. **Manter os agrupamentos menores que tocam uma perda confirmada anterior** os mantém como *Crescimento · abaixo da área mínima*, vinculados ao alerta a partir do qual crescem; desmarcado, são descartados como qualquer agrupamento pequeno.\n\nOs pixels de agrupamentos pequenos demais para serem mantidos, ou além do número máximo de agrupamentos, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os agrupamentos revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
+      "sources": "Fontes",
       "min_size": "Tamanho mínimo do agrupamento",
-      "min_size_hint": "Os agrupamentos menores que isto ({px} pixels na grade) são descartados e ficam fora do conjunto, das suas exportações e do mapa.",
+      "min_size_hint": "= {px} pixels na grade",
       "small_growth": "Manter os agrupamentos menores que tocam uma perda confirmada anterior",
-      "small_growth_hint": "Eles entram no conjunto como Crescimento · abaixo da área mínima, vinculados ao alerta a partir do qual crescem. Desmarcado, são descartados como qualquer agrupamento pequeno.",
       "small_growth_no_earlier": "Nenhum período anterior tem ainda um conjunto de alertas: nada se vincula nesta execução.",
       "small_growth_no_reviewed": "Nenhum alerta de um período anterior foi revisado ainda: nada se vincula nesta execução.",
       "include_probable": "Incluir alertas prováveis (não confirmados)",
@@ -736,6 +735,7 @@
       }
     },
     "questionnaire": {
+      "instruction": "Escreva as perguntas feitas para cada alerta.",
       "add_title": "Adicionar uma pergunta",
       "edit_title": "Editar pergunta",
       "add": "Adicionar pergunta",
@@ -792,6 +792,7 @@
       "template_missing": "O arquivo não existe mais: escolha-o novamente ou limpe o campo para usar o modelo padrão."
     },
     "evaluators": {
+      "instruction": "Escolha quem revisa os alertas.",
       "description": "Revise sozinho ou divida os alertas entre avaliadores e mescle o que eles devolverem.",
       "info_header": "Avaliação",
       "info_md": "**Modo de revisão**: no modo **Individual**, você mesmo revisa todos os alertas; com **Vários avaliadores**, os alertas são divididos entre avaliadores.\n\n**Dividir alertas…** distribui em rodízio os alertas do conjunto ativo, na ordem do conjunto, entre os avaliadores que você contar ou nomear. Os alertas já revisados ficam sem atribuição, a menos que você os inclua. **Editar divisão** divide novamente ou remove a divisão.\n\n**Gerar pacotes** cria um zip por avaliador: os alertas do conjunto, o questionário, a AOI e o cache de cenas. O ícone de nuvem de cada linha então baixa o zip desse avaliador. O avaliador o importa na janela Projeto e revisa os alertas dele na Análise.\n\n**Mesclar cópia revisada…** mescla as revisões que um avaliador devolve. Só são considerados os alertas atribuídos a esse avaliador; quando você revisou um deles de forma diferente, você escolhe qual revisão manter."

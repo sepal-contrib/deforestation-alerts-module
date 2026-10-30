@@ -284,8 +284,7 @@ def test_workflow_tiles_open_with_description_and_info_button():
     from gui.store.workflow_steps import STEPS
 
     assert set(STEP_FILES) == {s.key for s in STEPS}
-    # the Harmonize tile still keeps its intro texts under steps.prepare (Task 7/9 move them)
-    text_keys = {**{s.key: s.text_key for s in STEPS}, "harmonize": "steps.prepare"}
+    text_keys = {s.key: s.text_key for s in STEPS}
     for key, rel in STEP_FILES.items():
         src = _src(rel)
         assert src.count("StepIntro(") == 1, rel

@@ -386,7 +386,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
                             writing=is_writing(p.name), stopped=stopped)
 
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.prepare.description"), t("steps.prepare.info_header"), t("steps.prepare.info_md"))
+        StepIntro(t("steps.harmonize.description"), t("steps.harmonize.info_header"), t("steps.harmonize.info_md"))
         GridForm(app_state=app_state)  # remounts its fields per project and AOI (ruling #18)
         if p.grid is not None:
             # between the grid card and the sources table (spec §7.3); a mask row

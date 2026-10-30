@@ -278,9 +278,9 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         with solara.Column(style="gap:4px;"):
             rv.Checkbox(label=t("steps.integrate.small_growth"), v_model=keep_small_growth,
                         on_v_model=set_keep_small_growth, dense=True, hide_details=True, class_="mt-0")
-            hint = t("steps.integrate.small_growth_hint")
-            solara.Text(f"{hint} {t(growth_note)}" if growth_note else hint,
-                        style="display:block;" + MUTED + "font-size:0.75rem;", classes=["ml-8"])
+            if growth_note:
+                solara.Text(t(growth_note), style="display:block;" + MUTED + "font-size:0.75rem;",
+                            classes=["ml-8"])
         rv.Select(label=t("steps.integrate.sorting"), v_model=sorting, on_v_model=set_sorting, dense=True,
                   outlined=True, items=[{"text": t(f"steps.integrate.sorting_{k}"), "value": k} for k in SORTINGS])
         with solara.Column(style="gap:0;"):

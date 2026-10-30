@@ -40,7 +40,7 @@ from deforestation_alerts.project.models import (
 )
 from deforestation_alerts.project.models import set_id as make_set_id
 from deforestation_alerts.scripts.raster_attribute import ALERT_RESERVED_COLUMNS
-from gui.i18n import t, tn
+from gui.i18n import has_message, t, tn
 from gui.scripts import integrate_jobs
 from gui.scripts.alert_layers import EARLIER_PREFIX, SET_LAYER_KEY
 from gui.scripts.map_layers import MapLayers
@@ -869,8 +869,11 @@ def test_small_growth_is_kept_until_unticked_and_reopens_as_run(step):
     map_, rc = _render(_state(_project("d", "GLAD-L")))
     try:
         assert _checkbox(rc, label).v_model is True
-        hint = f"{t('steps.integrate.small_growth_hint')} {t('steps.integrate.small_growth_no_earlier')}"
-        assert hint in _texts(rc)  # no earlier period: the hint says nothing links
+        assert t("steps.integrate.small_growth_no_earlier") in _texts(rc)  # no earlier period: nothing links
+        # the static explanation lives in the info dialog, not under the checkbox
+        assert not has_message("steps.integrate.small_growth_hint")
+        assert "linked to the alert they grow from" not in " ".join(_texts(rc))
+        assert "linked to the alert they grow from" in t("steps.integrate.info_md")
         _checkbox(rc, label).v_model = False
         _run(rc)
         step.run_jobs()
