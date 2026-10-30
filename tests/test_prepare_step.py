@@ -157,6 +157,7 @@ def test_a_download_shows_its_percent_on_its_row_and_in_the_pill(monkeypatch, tm
         return _arts(job.source)
 
     monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
+    monkeypatch.setattr(prepare_jobs, "harmonize_ready", lambda p, pdir, period: True)  # the download chains
     prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d", notifier=Notifier(bus), row_progress=progress,
                                errors_lock=threading.Lock()), ["GLAD-L"])
 

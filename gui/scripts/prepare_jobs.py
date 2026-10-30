@@ -43,7 +43,9 @@ has begun.
 
 Each row also says which stage it is in (``row_stage``): ``download`` while an
 item of ``downloads`` fetches its tiles, then ``harmonize`` (a mask:
-``align``); a row that downloads nothing starts at that second stage. The
+``align``) when the run goes on to it (a download chains only when
+``harmonize_ready``; else its row stays ``download`` to its end); a row
+that downloads nothing starts at that second stage. The
 stage goes when the row ends, and ``on_row_end`` is called for every row the
 run reached, whether it succeeded, failed or was skipped: the step's footer
 counts the running, queued and done rows from them.
@@ -67,6 +69,7 @@ from deforestation_alerts.engine.runner import (
     MaskJob,
     SourceJob,
     apply_artifacts,
+    harmonize_ready,
     run_mask_row,
     run_source_row,
 )
@@ -336,7 +339,8 @@ def _row_reporter(ctx: PrepareContext, task, title: str, key: tuple, done_step: 
             _set_progress(ctx, key, 100)
             _set_stage(ctx, key, then)
             task.update(title)
-            task.step(done_step)
+            if done_step:  # None: the run ends with the download
+                task.step(done_step)
             return
         _set_progress(ctx, key, pct)
         task.update(t("steps.prepare.job_progress", title=title, pct=pct))
@@ -396,7 +400,12 @@ def _run_item(ctx: PrepareContext, task, title: str, scope: tuple, live, kind: s
                         meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L"
                         else None)
         run, error_key = run_source_row, name
-        done_step, then = t("steps.prepare.job_harmonize_row", source=name), "harmonize"
+        # a download chains into harmonizing only when ``harmonize_ready`` (the
+        # runner's own test, on the same copy): else its row never reads harmonizing
+        if ctx.mode == "harmonize" or harmonize_ready(job.project, ctx.pdir, ctx.period):
+            done_step, then = t("steps.prepare.job_harmonize_row", source=name), "harmonize"
+        else:
+            done_step, then = None, "download"
     # a harmonize-only source row never downloads, whatever ``downloads`` says
     downloads = (kind, name) in ctx.downloads and (kind == "mask" or ctx.mode == "download")
     _set_stage(ctx, key, "download" if downloads else then)

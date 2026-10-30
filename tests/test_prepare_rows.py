@@ -282,6 +282,7 @@ def _stage_ctx(p, **over):
 
 
 def test_run_rows_reports_each_rows_stage(monkeypatch):
+    monkeypatch.setattr(prepare_jobs, "harmonize_ready", lambda p, pdir, period: True)  # the downloads chain
     ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L")}))
     seen = {}
 
@@ -297,6 +298,7 @@ def test_run_rows_reports_each_rows_stage(monkeypatch):
 
 
 def test_the_stage_turns_to_harmonize_at_100_percent(monkeypatch):
+    monkeypatch.setattr(prepare_jobs, "harmonize_ready", lambda p, pdir, period: True)  # the download chains
     ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L")}))
     key = prepare_jobs.progress_key("r", JAN.id, "source", "GLAD-L")
 
@@ -310,6 +312,30 @@ def test_the_stage_turns_to_harmonize_at_100_percent(monkeypatch):
     monkeypatch.setattr(prepare_jobs, "run_source_row", run)
     prepare_jobs.run_rows(ctx, ["GLAD-L"])
     assert ctx.row_stage.history == [{key: "download"}, {key: "harmonize"}, {}]
+
+
+def test_a_download_that_does_not_chain_stays_downloading_at_100_percent(monkeypatch):
+    """Carry (Task 2/4): no grid or masks not aligned, so the run stops after
+    the download (``harmonize_ready``): its row never reads Harmonizing, and
+    the task gets no harmonize milestone."""
+    from pysepal.solara.notifications.bus import NotificationBus
+    from pysepal.solara.notifications.notifier import Notifier
+
+    bus = NotificationBus()
+    ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L"), ("source", "RADD")}),
+                     notifier=Notifier(bus))  # _p() has no grid: nothing chains
+    key = prepare_jobs.progress_key("r", JAN.id, "source", "RADD")
+
+    def run(job, on_tiles, **kw):
+        on_tiles(10, 10)
+        return {}
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", run)
+    prepare_jobs.run_rows(ctx, ["RADD"])
+    assert {s for h in ctx.row_stage.history for s in h.values()} == {"download"}
+    assert ctx.row_stage.history[0] == {key: "download"} and ctx.row_stage.value == {}
+    (task,) = bus.tasks.value
+    assert not any("Harmoniz" in m.message for m in task.milestones)
 
 
 def test_row_end_is_reported_on_failure(monkeypatch):
