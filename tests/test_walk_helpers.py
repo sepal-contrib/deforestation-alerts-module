@@ -115,7 +115,7 @@ def test_the_walks_prepare_labels_are_the_ones_the_status_cells_show():
 
 # ----------------------------------------------------- the band pickers
 #: A stand-in for a form's Vuetify multi-select (the attribute form's Bands):
-#: the slot toggles the menu, an item toggles its ``aria-selected``.
+#: the slot toggles the menu, Escape closes it, an item toggles its ``aria-selected``.
 _BANDS = """<!doctype html><html><body>
 <div class="v-dialog--active"><div class="v-select"><label>Bands</label>
   <div class="v-select__slot" onclick="menu()">B1</div></div></div>
@@ -127,6 +127,9 @@ _BANDS = """<!doctype html><html><body>
 <script>
 window.picked = [];
 function menu() { document.getElementById('menu').classList.toggle('menuable__content__active'); }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('menu').classList.remove('menuable__content__active');
+});
 function pick(e) {
   e.setAttribute('aria-selected', String(e.getAttribute('aria-selected') !== 'true'));
   window.picked.push([...document.querySelectorAll('[aria-selected="true"]')].length);
