@@ -44,7 +44,7 @@ def LayersStep(app_state, map_, gee_interface, layers):
     editing, set_editing = solara.use_state(None)
     pending_delete, set_pending_delete = solara.use_state(None)
     if p is None or p.aoi is None:
-        solara.Info(t("workflow.lock_layers"))
+        solara.Info(t("workflow.lock_review"))
         return
 
     # Runs in VisLayerModal's validation task (on the loop, never from an

@@ -21,9 +21,51 @@ def _states(p):
     return dict(zip([s.key for s in STEPS], step_states(p)))
 
 
+def test_order_and_levels():
+    from gui.store.workflow_steps import steps_of
+    assert [s.key for s in STEPS] == ["aoi", "period", "alerts", "harmonize", "integrate",
+                                      "layers", "questionnaire", "evaluators"]
+    assert steps_of("prepare") == [0, 1, 2, 3, 4]
+    assert steps_of("review") == [5, 6, 7]
+    assert [s.key for s in STEPS if s.optional] == ["layers", "questionnaire"]
+    assert all(s.text_key for s in STEPS)
+
+
+def test_period_unlocks_with_the_aoi_alone():
+    from gui.store.workflow_steps import step_index, step_status
+    p = _p()
+    assert step_status(STEPS[step_index("period")], p) is StepStatus.LOCKED
+    p.aoi = AoiRecord(spec={}, name="Canindeyu", method="ADMIN1", digest="2317", bounds=(0, 0, 1, 1))
+    p.sources = {}
+    assert step_status(STEPS[step_index("period")], p) is not StepStatus.LOCKED
+
+
+def test_harmonize_unlocks_after_a_download(tmp_path, monkeypatch):
+    from gui.store.workflow_steps import step_index, step_status
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    spec = STEPS[step_index("harmonize")]
+    p = _p()
+    p.aoi = AoiRecord(spec={}, name="Canindeyu", method="ADMIN1", digest="2317", bounds=(0, 0, 1, 1))
+    add_predefined_source(p, "GLAD-L")
+    p.periods[JAN.id] = JAN
+    p.active_period = JAN.id
+    assert step_status(spec, p) is StepStatus.LOCKED
+    pdir = tmp_path / "demo"
+    pdir.mkdir()
+    (pdir / "r.tif").write_bytes(b"x")
+    key = fp.raw_key(JAN.id, "GLAD-L")
+    p.artifacts[key] = fp.make_artifact(key, "raw_alert", pdir, pdir / "r.tif", fp.raw_alert_inputs(p, "GLAD-L", JAN))
+    assert step_status(spec, p) is not StepStatus.LOCKED
+
+
+def test_optional_steps_pass_with_an_active_set():
+    from gui.store.workflow_steps import step_index
+    spec = STEPS[step_index("layers")]
+    assert spec.passed_key == "workflow.count_optional" and not spec.passed(_p())
+    assert spec.passed(_with_set(_p()))
+
+
 def test_order_and_rail():
-    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire",
-                                      "evaluators"]
     # The first three rail items are dialogs: the Overview dashboard is the
     # widest, over the map and the panel alike (spec §9.5). The Project dialog
     # is spatial_risk's status block (spec D5): Manage projects and the name
@@ -40,17 +82,14 @@ def test_gates_follow_the_project(tmp_path, monkeypatch):
     p = _p()
     p.aoi = AoiRecord(spec={}, name="Canindeyu", method="ADMIN1", digest="2317", bounds=(0, 0, 1, 1))
     s = _states(p)
-    assert s["aoi"] is StepStatus.HAS_OUTPUTS and s["alerts"] is StepStatus.EMPTY
-    assert s["layers"] is StepStatus.EMPTY
-    assert s["period"] is StepStatus.LOCKED
+    assert s["aoi"] is StepStatus.HAS_OUTPUTS and s["period"] is StepStatus.EMPTY
+    assert s["alerts"] is StepStatus.LOCKED and s["layers"] is StepStatus.LOCKED
     add_predefined_source(p, "GLAD-L")
-    assert _states(p)["period"] is StepStatus.EMPTY and _states(p)["prepare"] is StepStatus.LOCKED
     p.periods[JAN.id] = JAN
     p.active_period = JAN.id
     s = _states(p)
-    assert s["prepare"] is StepStatus.EMPTY and s["integrate"] is StepStatus.LOCKED
-    # Optional layers, left empty, is done once the user moved on to a period
-    assert s["layers"] is StepStatus.HAS_OUTPUTS
+    assert s["alerts"] is StepStatus.HAS_OUTPUTS and s["harmonize"] is StepStatus.LOCKED
+    assert s["integrate"] is StepStatus.LOCKED
     # one ready source unlocks Integrate
     p.grid = GridSpec(epsg="EPSG:32721", resolution=10, xmin=0, ymax=0, width=1, height=1)
     pdir = tmp_path / "demo"
@@ -60,11 +99,12 @@ def test_gates_follow_the_project(tmp_path, monkeypatch):
     ):
         (pdir / "r.tif").write_bytes(b"x")
         p.artifacts[key] = fp.make_artifact(key, kind, pdir, pdir / "r.tif", inputs)
+    assert _states(p)["harmonize"] is StepStatus.EMPTY
     hk = fp.harm_key(JAN.id, "GLAD-L")
     (pdir / "h.tif").write_bytes(b"x")
     p.artifacts[hk] = fp.make_artifact(hk, "harmonized", pdir, pdir / "h.tif", fp.harmonized_inputs(p, "GLAD-L", JAN))
     s = _states(p)
-    assert s["prepare"] is StepStatus.HAS_OUTPUTS and s["integrate"] is StepStatus.EMPTY
+    assert s["harmonize"] is StepStatus.HAS_OUTPUTS and s["integrate"] is StepStatus.EMPTY
     p.alert_sets["x"] = AlertSet(id="x", period_id=JAN.id, sources=["GLAD-L"], digit_map={0: "GLAD-L"},
                                  params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
                                  footprint_rel_path="f", n_alerts=3, n_reviewed=1, fingerprint="f",
@@ -72,6 +112,8 @@ def test_gates_follow_the_project(tmp_path, monkeypatch):
     p.active_set = "x"
     s = _states(p)
     assert s["integrate"] is StepStatus.HAS_OUTPUTS
+    # Optional layers, left empty, is done once an alert set exists
+    assert s["layers"] is StepStatus.HAS_OUTPUTS
 
 
 def test_every_label_and_lock_key_exists():
@@ -113,7 +155,7 @@ def test_questionnaire_comes_before_evaluators_and_counts_questions():
     p = _with_set(_p())  # a new project holds the default questions
     assert spec.unlocked(p) and spec.count(p) == len(p.questions) > 0
     p.questions = []
-    assert step_status(spec, p) is StepStatus.EMPTY
+    assert spec.count(p) == 0 and step_status(spec, p) is StepStatus.HAS_OUTPUTS  # optional: done once a set exists
 
 
 def test_questionnaire_needs_an_alert_set():
@@ -121,7 +163,7 @@ def test_questionnaire_needs_an_alert_set():
     opens only once Integrate & vectorize has made one."""
     from gui.store.workflow_steps import step_index, step_status
     spec = STEPS[step_index("questionnaire")]
-    assert spec.lock_reason_key == "workflow.lock_analysis"
+    assert spec.lock_reason_key == "workflow.lock_review"
     p = _p()
     assert step_status(spec, p) is StepStatus.LOCKED
     assert step_status(spec, _with_set(p)) is StepStatus.HAS_OUTPUTS
@@ -152,14 +194,13 @@ def test_evaluators_needs_an_active_set_and_counts_evaluators():
     assert t(spec.count_key, count=2) == "2 evaluators"
 
 
-def test_optional_layers_left_empty_reads_none_once_a_period_exists():
+def test_optional_layers_left_empty_reads_optional_once_a_set_exists():
     from gui.i18n import t
     from gui.store.workflow_steps import step_index, step_status
     from gui.widget.pipeline_header import count_text
     spec = STEPS[step_index("layers")]
     p = _p()
-    p.aoi = AoiRecord(spec={}, name="Canindeyu", method="ADMIN1", digest="2317", bounds=(0, 0, 1, 1))
-    assert step_status(spec, p) is StepStatus.EMPTY and count_text(spec, p) == t("workflow.count_empty")
-    p.periods[JAN.id] = JAN
+    assert step_status(spec, p) is StepStatus.LOCKED
+    _with_set(p)
     assert step_status(spec, p) is StepStatus.HAS_OUTPUTS
-    assert count_text(spec, p) == t("workflow.count_none") == "none"
+    assert count_text(spec, p) == t("workflow.count_optional") == "optional"

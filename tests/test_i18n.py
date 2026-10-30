@@ -309,8 +309,14 @@ def test_every_key_the_code_uses_exists_in_the_english_catalogue():
     literal, built = _keys_in_code(set(catalogue))
     table = _dynamic_keys()
     missing, unknown, heads = [], [], set()
+    def _section(key):  # StepSpec.text_key names a whole section of messages
+        node = catalogue
+        for part in key.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        return isinstance(node, dict)
+
     for where, key in literal:
-        if not _resolves(catalogue, key):
+        if not _resolves(catalogue, key) and not (where.startswith("gui/store/workflow_steps.py") and _section(key)):
             missing.append(f"{where} {key}")
     for where, node in built:
         head, *rest = node.values

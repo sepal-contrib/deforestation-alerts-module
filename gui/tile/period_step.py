@@ -136,7 +136,7 @@ def hide_dropped_layers(layers, content_ids, set_ids=()) -> None:
 def PeriodStep(app_state, layers):
     """Hook-free gate: every hook lives in the keyed child below."""
     p = app_state.project.value
-    if p is None or not p.sources:
+    if p is None or p.aoi is None:
         solara.Info(t("workflow.lock_period"))
         return
     _PeriodList(app_state=app_state, layers=layers).key(

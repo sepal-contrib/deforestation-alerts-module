@@ -10,7 +10,7 @@
       "alerts": "Alerts",
       "layers": "Optional layers",
       "period": "Period",
-      "prepare": "Download & harmonize",
+      "harmonize": "Harmonize",
       "integrate": "Integrate & vectorize",
       "overview": "Overview",
       "questionnaire": "Questionnaire",

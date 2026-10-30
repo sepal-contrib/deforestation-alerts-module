@@ -1057,7 +1057,7 @@ def test_closing_the_project_shows_the_lock_message(step):
     try:
         state.close_project_state()
         assert rc.find(v.TextField).widgets == []
-        assert rc.find(v.Alert, children=[t("workflow.lock_prepare")]).widgets
+        assert rc.find(v.Alert, children=[t("workflow.lock_harmonize")]).widgets
     finally:
         rc.close()
 

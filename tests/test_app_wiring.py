@@ -272,7 +272,7 @@ STEP_FILES = {
     "alerts": "gui/tile/alerts_step.py",
     "layers": "gui/tile/layers_step.py",
     "period": "gui/tile/period_step.py",
-    "prepare": "gui/tile/prepare_step.py",
+    "harmonize": "gui/tile/prepare_step.py",
     "integrate": "gui/tile/integrate_step.py",
     "questionnaire": "gui/tile/questionnaire_step.py",
     "evaluators": "gui/tile/evaluators_step.py",
@@ -284,11 +284,12 @@ def test_workflow_tiles_open_with_description_and_info_button():
     from gui.store.workflow_steps import STEPS
 
     assert set(STEP_FILES) == {s.key for s in STEPS}
+    text_keys = {s.key: s.text_key for s in STEPS}
     for key, rel in STEP_FILES.items():
         src = _src(rel)
         assert src.count("StepIntro(") == 1, rel
         for part in ("description", "info_header", "info_md"):
-            assert f'"steps.{key}.{part}"' in src, (rel, part)
+            assert f'"{text_keys[key]}.{part}"' in src, (rel, part)
     analysis = _src("gui/tile/analysis/analysis_tile.py")
     assert "info_button(" in analysis and "analysis_tile.description" in analysis
 

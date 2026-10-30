@@ -218,7 +218,7 @@ def test_a_mask_switch_turns_the_prepare_badge_down(two_periods, monkeypatch):
     monkeypatch.setattr(ws.paths, "project_dir", lambda name, root=None: pdir)
     p.active_period = FEB.id
     _run_all(p, pdir, FEB)
-    prepare = ws.STEPS[ws.step_index("prepare")]
+    prepare = ws.STEPS[ws.step_index("harmonize")]
     assert prepare.count(p) == 1
     set_period_mask(p, FEB.id, "forest", mode="exclude")
     assert prepare.count(p) == 0

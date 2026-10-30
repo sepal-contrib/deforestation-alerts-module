@@ -82,12 +82,18 @@ def test_names_are_unique_and_short():
     assert vl.validate_name("S2", p, current="S2") is None
 
 
-def test_the_layers_step_is_third_and_counts_layers():
-    assert [s.key for s in STEPS] == ["aoi", "alerts", "layers", "period", "prepare", "integrate", "questionnaire",
-                                      "evaluators"]
+def test_the_layers_step_opens_with_an_alert_set_and_counts_layers():
+    from datetime import datetime
+
+    from deforestation_alerts.project.models import AlertSet, AlertSetParams
     p = _p()
     assert dict(zip([s.key for s in STEPS], step_states(p)))["layers"] is StepStatus.LOCKED
     p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="d", bounds=(0, 0, 1, 1))
+    assert dict(zip([s.key for s in STEPS], step_states(p)))["layers"] is StepStatus.LOCKED
+    p.alert_sets["x"] = AlertSet(id="x", period_id="p", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
+                                 params=AlertSetParams(), store_rel_path="a", combined_rel_path="c",
+                                 footprint_rel_path="f", n_alerts=3, fingerprint="f", created_at=datetime.now())
+    p.active_set = "x"
     p.vis_layers = {"t": FileVisLayer(name="t", path="/x.tif")}
     assert dict(zip([s.key for s in STEPS], step_states(p)))["layers"] is StepStatus.HAS_OUTPUTS
 
@@ -792,7 +798,7 @@ def test_the_step_is_locked_without_an_aoi(monkeypatch):
     state = _state(_p())
     box, rc = _render_step(state, _FakeMap(), MapLayers(_FakeMap()))
     try:
-        assert seen == {} and t("workflow.lock_layers") in str([w.children for w in rc.find(v.Alert).widgets])
+        assert seen == {} and t("workflow.lock_review") in str([w.children for w in rc.find(v.Alert).widgets])
     finally:
         rc.close()
 

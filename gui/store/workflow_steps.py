@@ -2,8 +2,8 @@
 
 Two registries:
 
-* ``STEPS`` — the gated workflow steps (AOI → Alerts → Optional layers →
-  Period → Download & harmonize → Integrate & vectorize → Questionnaire →
+* ``STEPS`` — the gated workflow steps, in two levels: prepare (AOI → Period →
+  Alerts → Harmonize → Integrate) and review (Optional layers → Questionnaire →
   Evaluators). Analysis is not a step: *Start analysis* (the last step,
   Evaluation) opens its own screen (``app_state.screen``), gated by ``active_set``. Gates and counts
   read only the Project. Order, labels, gates, lock reasons and
@@ -32,8 +32,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, List, Optional, Tuple, Union
 
-from deforestation_alerts.engine.plan import ready_sources
+from deforestation_alerts.engine.fingerprint import Status
+from deforestation_alerts.engine.plan import plan_prepare, ready_sources
 from deforestation_alerts.project import paths
+from deforestation_alerts.project.models import period_sources
 
 
 class StepStatus(Enum):
@@ -56,6 +58,9 @@ class StepSpec:
     # (a later step has outputs); its badge then reads t(passed_key).
     passed: Callable[[Any], bool] = field(default=lambda p: False)  # (project)
     passed_key: Optional[str] = None
+    level: str = "prepare"  # "prepare" | "review"
+    optional: bool = False
+    text_key: str = ""  # the step's i18n section, e.g. "steps.integrate"
 
 
 @dataclass(frozen=True)
@@ -95,43 +100,63 @@ def _evaluator_count(p) -> int:
     return 1 if p.multi_evaluator is False else 0
 
 
+def _downloaded(p) -> bool:
+    """An active-period source whose raw file is current (Harmonize has work or results)."""
+    period = active_period(p)
+    return period is not None and any(r.raw is Status.CURRENT for r in plan_prepare(p, paths.project_dir(p.name), period))
+
+
+def _has_set(p) -> bool:
+    return active_set(p) is not None
+
+
 STEPS: List[StepSpec] = [
     StepSpec(key="aoi", page_view="aoi_tile", label_key="app.drawer_item.aoi", icon="mdi-map-marker",
+             text_key="steps.aoi",
              count=lambda p: p.aoi.name if p is not None and p.aoi else None),
-    StepSpec(key="alerts", page_view="alerts_tile", label_key="app.drawer_item.alerts", icon="mdi-alert-decagram",
-             unlocked=lambda p: p is not None and p.aoi is not None, lock_reason_key="workflow.lock_alerts",
-             count=lambda p: len(p.sources) if p is not None else 0,
-             count_key="workflow.count_sources"),
-    StepSpec(key="layers", page_view="layers_tile", label_key="app.drawer_item.layers", icon="mdi-layers-outline",
-             unlocked=lambda p: p is not None and p.aoi is not None, lock_reason_key="workflow.lock_layers",
-             count=lambda p: len(p.vis_layers) if p is not None else 0,
-             count_key="workflow.count_layers",
-             # optional: skipped once a monitoring period exists (the next step's output)
-             passed=lambda p: p is not None and bool(p.periods), passed_key="workflow.count_none"),
     StepSpec(key="period", page_view="period_tile", label_key="app.drawer_item.period", icon="mdi-calendar-range",
-             unlocked=lambda p: p is not None and bool(p.sources), lock_reason_key="workflow.lock_period",
+             text_key="steps.period",
+             unlocked=lambda p: p is not None and p.aoi is not None, lock_reason_key="workflow.lock_period",
              count=lambda p: len(p.periods) if p is not None else 0,
              count_key="workflow.count_periods"),
-    StepSpec(key="prepare", page_view="prepare_tile", label_key="app.drawer_item.prepare", icon="mdi-cloud-download",
-             unlocked=lambda p: active_period(p) is not None, lock_reason_key="workflow.lock_prepare",
+    StepSpec(key="alerts", page_view="alerts_tile", label_key="app.drawer_item.alerts", icon="mdi-alert-decagram",
+             text_key="steps.alerts",
+             unlocked=lambda p: active_period(p) is not None, lock_reason_key="workflow.lock_alerts",
+             count=lambda p: len(period_sources(p, active_period(p))) if active_period(p) is not None else 0,
+             count_key="workflow.count_sources"),
+    StepSpec(key="harmonize", page_view="harmonize_tile", label_key="app.drawer_item.harmonize", icon="mdi-grid",
+             text_key="steps.prepare",  # the tile keeps its messages under the old name
+             unlocked=_downloaded, lock_reason_key="workflow.lock_harmonize",
              count=lambda p: len(_ready(p)),
              count_key="workflow.count_ready"),
     StepSpec(key="integrate", page_view="integrate_tile", label_key="app.drawer_item.integrate",
-             icon="mdi-vector-union",
+             icon="mdi-vector-union", text_key="steps.integrate",
              unlocked=lambda p: bool(_ready(p)), lock_reason_key="workflow.lock_integrate",
              count=lambda p: active_set(p).n_alerts if active_set(p) else 0,
              count_key="workflow.count_clusters"),
+    StepSpec(key="layers", page_view="layers_tile", label_key="app.drawer_item.layers", icon="mdi-layers-outline",
+             text_key="steps.layers", level="review", optional=True,
+             unlocked=_has_set, lock_reason_key="workflow.lock_review",
+             count=lambda p: len(p.vis_layers) if p is not None else 0,
+             count_key="workflow.count_layers",
+             passed=_has_set, passed_key="workflow.count_optional"),
     StepSpec(key="questionnaire", page_view="questionnaire_tile", label_key="app.drawer_item.questionnaire",
-             icon="mdi-clipboard-list-outline",
-             # its questions are asked of an alert set: after Integrate & vectorize
-             unlocked=lambda p: active_set(p) is not None, lock_reason_key="workflow.lock_analysis",
+             icon="mdi-clipboard-list-outline", text_key="steps.questionnaire", level="review", optional=True,
+             unlocked=_has_set, lock_reason_key="workflow.lock_review",
              count=lambda p: len(p.questions) if p is not None else 0,
-             count_key="workflow.count_questions"),
+             count_key="workflow.count_questions",
+             passed=_has_set, passed_key="workflow.count_optional"),
     StepSpec(key="evaluators", page_view="evaluators_tile", label_key="app.drawer_item.evaluators",
-             icon="mdi-account-multiple-outline",
-             unlocked=lambda p: active_set(p) is not None, lock_reason_key="workflow.lock_analysis",
+             icon="mdi-account-multiple-outline", text_key="steps.evaluators", level="review",
+             unlocked=_has_set, lock_reason_key="workflow.lock_review",
              count=lambda p: _evaluator_count(p), count_key="workflow.count_evaluators"),
 ]
+
+LEVELS = ("prepare", "review")
+
+
+def steps_of(level: str) -> List[int]:
+    return [i for i, s in enumerate(STEPS) if s.level == level]
 
 RAIL_ITEMS: List[RailItem] = [
     RailItem("about", 1, "about_tile", "app.drawer_item.about", "mdi-help-circle", "dialog", 1300),

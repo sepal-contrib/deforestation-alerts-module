@@ -49,11 +49,11 @@
     }
   },
   "workflow": {
-    "lock_alerts": "Selecione primeiro uma área de interesse e um período.",
+    "lock_alerts": "Adicione primeiro um período.",
     "lock_project": "Abra primeiro um projeto.",
-    "lock_layers": "Selecione primeiro uma área de interesse.",
-    "lock_period": "Adicione primeiro pelo menos uma fonte de alertas.",
-    "lock_prepare": "Crie ou selecione primeiro um período.",
+    "lock_review": "Crie primeiro um conjunto de alertas.",
+    "lock_period": "Escolha primeiro a área de interesse.",
+    "lock_harmonize": "Baixe primeiro uma fonte.",
     "lock_integrate": "Baixe e harmonize primeiro pelo menos uma fonte.",
     "lock_analysis": "Execute primeiro Integrar e vetorizar.",
     "count_sources": {
@@ -88,7 +88,7 @@
     },
     "step_badge": "{n} / {total}",
     "count_empty": "nada ainda",
-    "count_none": "nenhuma",
+    "count_optional": "opcional",
     "start_analysis": "Iniciar análise",
     "count_evaluators": {
       "one": "{count} avaliador",

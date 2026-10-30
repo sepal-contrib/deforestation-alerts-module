@@ -301,7 +301,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
 
     solara.use_effect(_refresh_mask_legends, [p.active_period if p is not None else None, choices])
     if p is None or period is None or p.aoi is None:
-        solara.Info(t("workflow.lock_prepare"))
+        solara.Info(t("workflow.lock_harmonize"))
         return
     pdir = paths.project_dir(p.name)
     rows = plan_prepare(p, pdir, period) if p.grid is not None else []
