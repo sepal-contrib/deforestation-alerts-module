@@ -1,4 +1,4 @@
-"""What a Download & harmonize source or mask row shows (option B): one
+"""What a download/harmonize source or mask row shows (option B): one
 Status cell holding a state or a verb pill, and a subtitle under its name.
 
 Pure presentation: the row's ``PrepareRow`` / ``MaskRow``, its artifacts, its ``Reason``

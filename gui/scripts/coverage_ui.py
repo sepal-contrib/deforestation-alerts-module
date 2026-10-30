@@ -51,7 +51,7 @@ def coverage_chips(p, name: str, period, pending: bool = False) -> list:
 
 
 def row_notes(state: str, notes) -> list:
-    """Under-row notes of a Download & harmonize row (spec §7.3)."""
+    """Under-row notes of a download/harmonize row (spec §7.3)."""
     if state == NOT_COVERED:
         return [{"text": t("coverage.not_covered_row", reason=note_text(notes[0])), "tone": "error"}]
     if state == NO_DATA:

@@ -3,7 +3,7 @@
 Picking an AOI with no project open creates one named <aoi>_<yyyymmdd>.
 Once the project has an alert set, the AOI is locked (D10): the view is shown
 read-only with a hint to duplicate the project instead. Before that, a change
-is refused while a job writes into the project (a Download & harmonize or
+is refused while a job writes into the project (a download/harmonize or
 Integrate run reads the AOI's files and would write old-AOI files after the
 change), as the other steps refuse their edits (spec §5.1).
 

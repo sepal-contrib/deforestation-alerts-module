@@ -630,19 +630,6 @@ def update_custom_source(p: Project, name: str, **changes) -> CustomSource:
     return new
 
 
-def remove_source(p: Project, name: str) -> None:
-    """Drop the definition, its use in every period and in new periods and,
-    for a custom source, its coverage record. The artifacts and their files
-    go through ``project.cleanup`` (spec §5.2)."""
-    src = p.sources.get(name)
-    p.sources = {k: s for k, s in p.sources.items() if k != name}
-    for pid in [k for k, per in p.periods.items() if name in per.sources or name in per.digits]:
-        set_period_source(p, pid, name, False)
-    set_new_period_source(p, name, False)
-    if src is not None and src.kind == "custom" and name in p.coverage:
-        p.coverage = {k: c for k, c in p.coverage.items() if k != name}
-
-
 def sets_using_mask(p: Project, name: str) -> list[str]:
     return sorted(s.id for s in p.alert_sets.values() if any(m.get("name") == name for m in s.masks_used))
 

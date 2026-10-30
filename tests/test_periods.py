@@ -41,7 +41,7 @@ def _art(pdir, key, kind, rel):
 
 
 def _with_downloads(p, pdir, pid):
-    """The period's raw and harmonized files, recorded as Download & harmonize leaves them."""
+    """The period's raw and harmonized files, recorded as download/harmonize leaves them."""
     raw, harm = fp.raw_key(pid, "GLAD-L"), fp.harm_key(pid, "GLAD-L")
     p.artifacts = {**p.artifacts,
                    raw: _art(pdir, raw, "raw_alert", f"periods/{pid}/raw/raw.tif"),

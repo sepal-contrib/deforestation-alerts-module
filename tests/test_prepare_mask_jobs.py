@@ -1,4 +1,4 @@
-"""Mask rows in the Download & harmonize jobs (spec §7.3): Run all aligns the
+"""Mask rows in the download/harmonize jobs (spec §7.3): Run all aligns the
 period's masks first, a source Run runs its stale masks first, mask keys share
 the period's Stop scope, a keep mask covering none of the AOI warns, and a mask
 switched while its period's Run all runs leaves the row in flight out of date

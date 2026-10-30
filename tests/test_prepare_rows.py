@@ -1,4 +1,4 @@
-"""Download & harmonize rows (spec §7.3, option B): states, verbs, actions, notes, refusals and Stop."""
+"""Download/harmonize rows (spec §7.3, option B): states, verbs, actions, notes, refusals and Stop."""
 
 import asyncio
 import threading

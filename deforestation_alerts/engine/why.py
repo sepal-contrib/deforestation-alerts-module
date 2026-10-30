@@ -1,4 +1,4 @@
-"""Why a source or mask is out of date (the Download & harmonize Why line).
+"""Why a source or mask is out of date (the download/harmonize Why line).
 
 Compares an artifact's stored ``inputs`` with today's terms, rebuilt one by
 one rather than through ``harmonized_inputs`` / ``mask_inputs``: those return

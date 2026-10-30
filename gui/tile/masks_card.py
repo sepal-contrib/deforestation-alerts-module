@@ -1,4 +1,4 @@
-"""The Masks card of Download & harmonize (spec §7.3, §5.1, "Masks card").
+"""The Masks card of Harmonize (spec §7.3, §5.1, "Masks card").
 
 One row per project mask, in the sources table's grammar: its name over a
 subtitle (origin and size, or why it needs a run), its choice in the active

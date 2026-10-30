@@ -1,4 +1,4 @@
-"""The Download & harmonize batch footer (spec "Footer"): its counts, idle and busy."""
+"""The Harmonize batch footer (spec "Footer"): its counts, idle and busy."""
 
 from datetime import date, datetime
 

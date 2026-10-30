@@ -184,7 +184,7 @@ def _fits(page, rec, key, names, *, out):
 
 
 def tables(page, rec, *, out):
-    """Sources, periods, Download & harmonize and masks rows at the panel width."""
+    """Sources, periods, Harmonize and masks rows at the panel width."""
     w.goto_step(page, "alerts", 2000)
     _fits(page, rec, "sources", SOURCES, out=out)
     w.goto_step(page, "period", 2000)

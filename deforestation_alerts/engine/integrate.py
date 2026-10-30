@@ -308,7 +308,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     set's folder and returns the set and its artifacts; the caller records them.
     ``on_step`` gets a message key as each stage starts. Raises ``ValueError``
     when no source is chosen or one is chosen twice, when a source's download or harmonized file is not current
-    for the period (its Download & harmonize row is not ready), or an earlier
+    for the period (its download/harmonize row is not ready), or an earlier
     set's footprint is missing.
 
     The three files are built under staged names and moved onto the set's own

@@ -1,4 +1,4 @@
-"""The Masks card and ``MaskModal`` of Download & harmonize (spec §7.3, §5.1).
+"""The Masks card and ``MaskModal`` of Harmonize (spec §7.3, §5.1).
 
 The card's pure row builder and switch are tested directly; the card itself
 is rendered with recorders standing in for ``ProductTable``, ``MaskModal``

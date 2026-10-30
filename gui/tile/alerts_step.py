@@ -3,7 +3,7 @@ alert sources, their coverage of the AOI and of the period, and their
 download.
 
 One row per source of the period (``period_sources``), built from the
-Download & harmonize row parts limited to the raw file
+download/harmonize row parts limited to the raw file
 (``prepare_view.download_state`` / ``download_subtitle``): a user file is
 read, not downloaded, so its pill reads Read file. Two chips say whether the
 source covers the AOI and the period's search window

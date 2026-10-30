@@ -1,7 +1,7 @@
 """The project grid card (spec §7.1): EPSG with auto-UTM, resolution, size.
 
 A Save is refused once the project has a set (D10), and while a job writes
-into the project (a Download & harmonize or Integrate run reads the grid:
+into the project (a download/harmonize or Integrate run reads the grid:
 spec §5.1, as the other steps refuse their edits).
 """
 

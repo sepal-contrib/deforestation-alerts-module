@@ -1,4 +1,4 @@
-"""Download & harmonize rows, offline: native download, harmonize onto the grid, the runner.
+"""Download/harmonize rows, offline: native download, harmonize onto the grid, the runner.
 
 Earth Engine is replaced by a fake ``export_native`` that writes a raster in
 EPSG:4326 (the predefined sources' native CRS) over the AOI, so every

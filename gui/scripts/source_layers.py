@@ -3,7 +3,7 @@
 under the same key) and ``mask:<mask>``, plus the Overview set's legend and
 the earlier sets' names and legends (``alerts:set:<set id>``).
 
-One builder per file layer for the Alerts and Download & harmonize steps and
+One builder per file layer for the Alerts and Harmonize steps and
 the job that refreshes them (slice-1 Task 18 minor: they were duplicated).
 The layer names are translated now (they are the ipyleaflet layer names); the
 legends carry language-neutral ``Label`` keys, translated at render.

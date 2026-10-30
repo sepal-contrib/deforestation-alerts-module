@@ -1,4 +1,4 @@
-"""The footer under the Download & harmonize table (spec "Footer").
+"""The footer under the Harmonize table (spec "Footer").
 
 Idle, it is a primary split button on the right: the main part runs every
 pending row (``Run {n} pending``), and its caret shows the other batch actions

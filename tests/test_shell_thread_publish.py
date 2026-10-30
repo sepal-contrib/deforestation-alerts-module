@@ -167,7 +167,7 @@ def _alerts(n, set_id):
 
 
 def _project():
-    """A project at the Download & harmonize step: AOI, two sources, the
+    """A project at the Harmonize step: AOI, two sources, the
     period and the grid, so every step tile renders its real form."""
     now = datetime.now()
     p = Project(name=NAME, created_at=now, updated_at=now)
@@ -177,7 +177,7 @@ def _project():
     p.periods[JAN.id] = JAN
     p.active_period = JAN.id
     p.grid = gridmod.build_grid(PARAGUAY, gridmod.auto_utm_epsg(PARAGUAY), 30.0)
-    # a project mask, off in the period: Download & harmonize renders its row
+    # a project mask, off in the period: download/harmonize renders its row
     # in the Masks card (switch and mode cells included) on every publish
     add_mask(p, name="forest", origin="gee", ref="UMD/x", asset_type="IMAGE", band="b",
              native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=JAN.id)
@@ -342,7 +342,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
         before = _roots(shell)
         assert len(before) == 11 and shell.reports == []
 
-        # Download & harmonize: a row's artifacts, applied by run_rows on its worker
+        # download/harmonize: a row's artifacts, applied by run_rows on its worker
         for source in ("GLAD-L", "RADD"):
             arts = _row_artifacts(source)
             await _wait(_publish(lambda a=arts: state.update_project(NAME, lambda live: apply_artifacts(live, a)),

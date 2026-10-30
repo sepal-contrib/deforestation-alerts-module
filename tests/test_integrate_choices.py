@@ -48,7 +48,7 @@ def test_has_probable_is_false_only_for_a_date_only_custom_source():
 
 def test_choices_skip_sources_that_are_neither_ready_nor_left_out(monkeypatch):
     """A covered source whose files are not built yet is not offered: it is
-    the Download & harmonize step's business, not a reason to show."""
+    the Harmonize step's business, not a reason to show."""
     rows = [
         PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT, "covered", (), stats=None),
         PrepareRow("RADD", Status.MISSING, Status.MISSING, "covered", ()),

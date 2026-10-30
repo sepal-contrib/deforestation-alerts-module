@@ -1,4 +1,4 @@
-"""Download & harmonize step (spec §7.3).
+"""Harmonize step (spec §7.3).
 
 Slice 1 simplifications of §7.3 (ruling #72): the table has one row per source;
 one in-flight key per row covers both of its artifacts; Run all is one job

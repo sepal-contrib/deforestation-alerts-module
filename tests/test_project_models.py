@@ -14,7 +14,6 @@ from deforestation_alerts.project.models import (
     period_digit,
     period_id,
     period_sources,
-    remove_source,
     set_id,
     set_new_period_source,
     set_period_source,
@@ -70,15 +69,14 @@ def test_period_window_and_ids():
 def test_source_edits_replace_the_shared_sources_dict_instead_of_mutating_it():
     """The app publishes shallow copies of the project, so every snapshot
     shares ``sources``; a render iterating it on another thread must not see
-    it change size under an add or a remove."""
+    it change size under an add."""
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
     add_predefined_source(p, "GLAD-L")
     snapshot = p.model_copy()
     being_iterated = iter(snapshot.sources.values())
     add_predefined_source(p, "RADD")
-    remove_source(p, "GLAD-L")
     assert [s.name for s in being_iterated] == ["GLAD-L"]  # no "dictionary changed size during iteration"
-    assert list(snapshot.sources) == ["GLAD-L"] and list(p.sources) == ["RADD"]
+    assert list(snapshot.sources) == ["GLAD-L"] and list(p.sources) == ["GLAD-L", "RADD"]
 
 
 def test_locked_once_a_set_exists():
@@ -151,17 +149,6 @@ def test_edit_is_refused_once_a_set_used_the_source():
     assert sets_using_source(p, "mine") == ["x__mine"]
     with pytest.raises(ValueError, match="steps.alerts.edit_used"):
         update_custom_source(p, "mine", ref="users/x/c")
-
-
-def test_remove_source_drops_a_custom_coverage_record_only():
-    p = _project()
-    add_predefined_source(p, "RADD")
-    _add(p, "mine")
-    cov = SourceCoverage(aoi_digest="d", checked_on=date(2026, 10, 1), fraction=1.0)
-    p.coverage = {"RADD": cov, "mine": cov}
-    remove_source(p, "mine")
-    remove_source(p, "RADD")
-    assert set(p.coverage) == {"RADD"}  # the three predefined entries are always kept (spec §5.1)
 
 
 def test_set_ids_use_the_shared_slug():
@@ -417,15 +404,6 @@ def test_set_new_period_source_toggles_the_list_only():
     set_new_period_source(p, "RADD", True)
     set_new_period_source(p, "RADD", True)
     assert p.new_period_sources == ["GLAD-L", "RADD"]
-
-
-def test_remove_source_leaves_every_period():
-    p = _two_periods()
-    _add(p, "mine", period_id=JAN.id)
-    remove_source(p, "RADD")
-    remove_source(p, "mine")
-    assert all(per.sources == ["GLAD-L"] and per.digits == {} for per in p.periods.values())
-    assert p.new_period_sources == ["GLAD-L"]
 
 
 def test_custom_cap_is_per_period():

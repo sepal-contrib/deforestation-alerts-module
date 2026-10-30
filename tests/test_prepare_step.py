@@ -1,4 +1,4 @@
-"""Download & harmonize step (spec §7.3): the grid form, the row worker and
+"""Harmonize step (spec §7.3): the grid form, the row worker and
 the step itself.
 
 ``run_rows`` is driven with a fake ``run_source_row`` (the engine has its own
@@ -999,7 +999,7 @@ def test_grid_form_does_not_overwrite_a_grid_frozen_since_it_rendered(step, monk
 
 @pytest.mark.parametrize("when", ["before", "during"])
 def test_grid_form_refuses_a_save_while_a_job_writes_into_the_project(step, monkeypatch, when):
-    """Review A I1: a Download & harmonize (or Integrate) job reads the grid;
+    """Review A I1: a Harmonize (or Integrate) job reads the grid;
     a Save under it is refused with a reason, also when the job set its mark
     after the click (checked under the state lock)."""
     state = _state(_project("d", "RADD", bounds=PARAGUAY, grid=True))

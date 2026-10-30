@@ -1,4 +1,4 @@
-"""Run Download & harmonize rows on a worker thread (spec §7.3).
+"""Run download/harmonize rows on a worker thread (spec §7.3).
 
 One job runs its rows one at a time: mask rows (``("mask", name)``: download
 and align a project mask) and source rows (``("source", name)``), in the

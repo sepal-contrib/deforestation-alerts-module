@@ -1,4 +1,4 @@
-"""Download & harmonize rows for coverage and custom sources, offline."""
+"""Download/harmonize rows for coverage and custom sources, offline."""
 
 import dataclasses
 from datetime import date, datetime

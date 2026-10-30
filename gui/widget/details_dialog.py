@@ -1,4 +1,4 @@
-"""The Details dialog of a Download & harmonize row (spec "Details dialog"):
+"""The Details dialog of a download/harmonize row (spec "Details dialog"):
 what the row's files were made with, read-only.
 
 ``details`` is ``prepare_view.source_details`` / ``mask_details``: a title, a

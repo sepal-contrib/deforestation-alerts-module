@@ -148,7 +148,7 @@ def scope_changed(project, period_id: str, scope: tuple) -> Optional[str]:
     """What ``project`` no longer shares with a job started on ``period_id``
     and ``scope`` (``run_scope``): ``"period"``, ``"aoi"`` or ``"grid"``, else
     None (the job's results may be recorded). Both job layers use it
-    (Integrate and Download & harmonize)."""
+    (Integrate and download/harmonize)."""
     if period_id not in project.periods:
         return "period"
     digest, signature = run_scope(project)

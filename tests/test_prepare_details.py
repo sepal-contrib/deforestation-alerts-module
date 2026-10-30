@@ -1,4 +1,4 @@
-"""The Details dialog of a Download & harmonize row: what ``source_details`` /
+"""The Details dialog of a download/harmonize row: what ``source_details`` /
 ``mask_details`` read from the project, and how ``DetailsDialog`` shows it."""
 
 import uuid

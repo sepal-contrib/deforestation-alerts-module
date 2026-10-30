@@ -625,14 +625,14 @@ def row_button(page, name, icon, scope=".right-panel"):
     """A row action by its icon (ProductTable): mdi-map-plus / mdi-map-minus (show / hide),
     mdi-information-outline (details), mdi-dots-vertical (a mask's menu),
     mdi-pencil-outline, mdi-delete-outline, mdi-radiobox-blank /
-    mdi-radiobox-marked (select). Not a Download & harmonize row's run: that
+    mdi-radiobox-marked (select). Not a download/harmonize row's run: that
     is its verb pill (``row_pill``), and mdi-refresh is both the source's
     Download again (``row_action``) and the pill's Retry."""
     return row(page, name, scope).locator(f"button:has(.{icon})").first
 
 
 def row_pill(page, name, verb, scope=".right-panel"):
-    """The verb pill of a Download & harmonize row's Status cell, by its label:
+    """The verb pill of a download/harmonize row's Status cell, by its label:
     ``verb`` is ``download`` / ``harmonize`` / ``align`` / ``retry`` (the
     ``steps.prepare.verb_*`` texts). A row that is ready, running, queued,
     blocked or on a review copy shows a state, not a pill: ``.count()`` is 0."""

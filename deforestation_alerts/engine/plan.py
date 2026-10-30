@@ -1,4 +1,4 @@
-"""Which Download & harmonize rows (sources and masks) need running for a period (spec §7.3)."""
+"""Which download/harmonize rows (sources and masks) need running for a period (spec §7.3)."""
 
 from dataclasses import dataclass
 from typing import Optional

@@ -1,4 +1,4 @@
-"""Download & harmonize source rows, option B: one status or verb, and a subtitle."""
+"""Download/harmonize source rows, option B: one status or verb, and a subtitle."""
 
 from datetime import datetime
 

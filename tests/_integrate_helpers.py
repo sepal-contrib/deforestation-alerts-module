@@ -1,4 +1,4 @@
-"""Shared helpers: record raw and harmonized files for a period, as Download & harmonize leaves them."""
+"""Shared helpers: record raw and harmonized files for a period, as download/harmonize leaves them."""
 
 import numpy as np
 
@@ -22,7 +22,7 @@ def blank():
 
 
 def prepare(p, pdir, period, arrays, day):
-    """Record raw and harmonized artifacts per source, as Download & harmonize leaves them."""
+    """Record raw and harmonized artifacts per source, as download/harmonize leaves them."""
     ws, we = period.search_window()
     for name, arr in arrays.items():
         dates = np.where(arr > 0, day, 0)

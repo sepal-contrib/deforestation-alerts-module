@@ -1,10 +1,10 @@
 """Solara entry for the Forest Cover Loss Alerts app.
 
 Session bootstrap (pysepal solara pattern) + MapApp.element() shell: the rail
-(About, Project, Overview) and the project workflow in the right panel (AOI →
-Alerts → Optional layers → Period → Download & harmonize → Integrate &
-vectorize → Questionnaire → Evaluators), and beside MapApp the analysis
-screen (``app_state.screen``), which *Start analysis* opens.
+(About, Project, Overview) and the project workflow in the right panel, in
+two levels: Prepare data (AOI → Period → Alerts → Harmonize → Integrate &
+vectorize) and Review (Optional layers → Questionnaire → Evaluators); and
+beside MapApp the analysis screen (``app_state.screen``), which *Start analysis* opens.
 Run: ./run_ui.sh (Voila, as on SEPAL) or
 solara run gui/solara_app.py --port 8900 --no-open
 """
@@ -711,7 +711,7 @@ def _AppShell():
     set_context = solara.use_memo(lambda: SetContext(app_state), dependencies=[])
 
     # The ONE shared map. Memoized so the SAME instance is handed to MapApp AND
-    # to every map-bearing step (AOI, Alerts, Download & harmonize, Integrate,
+    # to every map-bearing step (AOI, Alerts, Harmonize, Integrate,
     # Overview draw their layers + popups on it). Re-creating it per render
     # would desync the steps (which capture it once) from the map MapApp
     # renders. The SATELLITE basemap is added once here.

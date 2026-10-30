@@ -1,4 +1,4 @@
-"""One Download & harmonize row, run on a worker thread (spec §7.3).
+"""One download/harmonize row, run on a worker thread (spec §7.3).
 
 The coverage guard comes first (spec §7.2): a row whose source does not cover
 the AOI, has no data for the window, or has no coverage record for this AOI is
