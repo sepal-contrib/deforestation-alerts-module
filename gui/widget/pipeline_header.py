@@ -162,8 +162,12 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     states = step_states(p)
     prev_t, next_t = nav_targets(active_step, states)
     menu_open, set_menu_open = solara.use_state(False)
-    # The step a locked-tab click happened on: the note clears by itself on
-    # the next navigation, with no effect to reset it.
+    # The visit (a count of step changes) a locked-tab click happened on: the
+    # note clears by itself on the next navigation, and stays cleared on a
+    # return to the same step, with no effect to reset it.
+    visit = solara.use_ref([active_step, 0])
+    if visit.current[0] != active_step:
+        visit.current = [active_step, visit.current[1] + 1]
     lock_note_at, set_lock_note_at = solara.use_state(None)
     active = STEPS[active_step]
     level_steps = steps_of(active.level)
@@ -200,7 +204,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
         shows why, and the current level's own tab changes nothing."""
         first = next((i for i in steps_of(level) if states[i] is not StepStatus.LOCKED), None)
         if first is None:
-            set_lock_note_at(active_step)
+            set_lock_note_at(visit.current[1])
         elif level != active.level:
             on_navigate(first)
 
@@ -244,7 +248,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
         # Only Review can lock; the note shows on the step it was clicked from,
         # while Review is still locked.
         review = steps_of("review")
-        if lock_note_at == active_step and all(states[i] is StepStatus.LOCKED for i in review):
+        if lock_note_at == visit.current[1] and all(states[i] is StepStatus.LOCKED for i in review):
             solara.Text(t(STEPS[review[0]].lock_reason_key), style=MUTED + "font-size: 11px; padding: 0 2px;")
 
         # Segment strip. Each cell is a padded transparent WRAPPER (~21 px

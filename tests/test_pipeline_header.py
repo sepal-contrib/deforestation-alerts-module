@@ -294,6 +294,9 @@ def test_lock_note_clears_on_navigation():
     seg = {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}["period"]
     seg.fire_event("click", None)  # Period is unlocked once an AOI exists
     assert t("workflow.lock_review") not in "".join(_strings(box))
+    seg = {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}["aoi"]
+    seg.fire_event("click", None)  # back to the step the note was shown on
+    assert t("workflow.lock_review") not in "".join(_strings(box))
     rc.close()
 
 
