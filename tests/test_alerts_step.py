@@ -1061,10 +1061,11 @@ def test_a_download_whose_ee_aoi_fails_releases_its_rows(dl, monkeypatch, error)
         rc.close()
 
 
-def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(dl, monkeypatch, tmp_path):
+def test_a_geotiff_row_needs_no_ee_aoi_and_claims_only_its_row(dl, monkeypatch, tmp_path):
     """A GeoTIFF row is read locally (no Earth Engine AOI, no catalogue
-    metadata) and, when the AOI raster must be built first, claims the
-    project's AOI-raster key with its own, so two jobs never build it at once."""
+    metadata) from the AOI bounds alone: its download never builds the AOI
+    raster, so it claims only its own key (only Harmonize claims the
+    project's AOI-raster key)."""
     def no_aoi(result, pdir):
         pytest.fail("a GeoTIFF row must not build the Earth Engine AOI")
 
@@ -1089,7 +1090,7 @@ def test_a_geotiff_row_needs_no_ee_aoi_and_claims_the_aoi_raster(dl, monkeypatch
         dl.run_jobs()
         [(ctx, sources, force)] = dl.started
         assert sources == ["tif"] and not force and ctx.aoi is None
-        assert claims == [(alerts_step.inflight_key("d", JAN.id, "tif"), prepare_scope.aoi_key("d"))]
+        assert claims == [(alerts_step.inflight_key("d", JAN.id, "tif"),)]
         assert _info_toasts("info") == []
     finally:
         rc.close()
@@ -1099,7 +1100,7 @@ def _check_again_shown(rc):
     return bool([w for w in rc.find(v.Btn).widgets if t("coverage.check_again") in w.children])
 
 
-def test_a_geotiff_row_waits_for_the_aoi_geometry(dl, tmp_path):
+def test_a_geotiff_row_does_not_wait_for_the_aoi_geometry(dl, tmp_path):
     dl.plan(PrepareRow("tif", Status.MISSING, Status.MISSING))
     state = _state(_with_tif(tmp_path, sidecar=False))
     state.sidecar_pending.set(True)  # the loader is fetching it
@@ -1107,34 +1108,48 @@ def test_a_geotiff_row_waits_for_the_aoi_geometry(dl, tmp_path):
     box, rc = _dl_render(state)
     try:
         _pill(dl.table[-1][0])
-        assert dl.jobs == [] and _info_toasts("info") == [t("steps.prepare.aoi_geometry_missing")]
-        assert _offers_run(dl.table[-1][0])  # nothing was claimed
-        assert not _check_again_shown(rc)  # nothing failed
+        dl.run_jobs()
+        [(ctx, sources, _)] = dl.started
+        assert sources == ["tif"] and ctx.mode == "download" and _info_toasts("info") == []
     finally:
         rc.close()
 
 
-def test_a_failed_aoi_sidecar_refuses_only_the_geotiff_rows_and_offers_check_again(dl, monkeypatch, tmp_path):
-    """Spec §12: the Earth Engine rows of a Download all still get the Earth
-    Engine AOI; the GeoTIFF rows are refused with a message that says the
-    fetch failed, and Check again (which refetches the sidecar) is offered."""
+def test_a_failed_aoi_sidecar_holds_back_no_download_and_offers_no_check_again(dl, monkeypatch, tmp_path):
+    """The AOI sidecar only matters to Harmonize: a Download all runs the
+    Earth Engine and the GeoTIFF rows alike, and the Alerts step offers no
+    Check again for it."""
     monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
     dl.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("tif", Status.MISSING, Status.MISSING))
     state = _state(_with_tif(tmp_path, sidecar=False), meta={"GLAD-L": {}})
 
     box, rc = _dl_render(state)
     try:
-        assert state.coverage_error.value is None and _check_again_shown(rc)
+        assert not _check_again_shown(rc)
         _button(rc, tn("steps.alerts.download_all", 2)).fire_event("click", None)
         dl.run_jobs()
         [(ctx, sources, _)] = dl.started
-        assert sources == ["GLAD-L"] and ctx.aoi == "AOI" and ctx.mode == "download"
-        assert _info_toasts("info") == [t("steps.prepare.aoi_geometry_failed")]
+        assert sources == ["GLAD-L", "tif"] and ctx.aoi == "AOI" and ctx.mode == "download"
+        assert _info_toasts("info") == []
+    finally:
+        rc.close()
 
-        _button(rc, t("coverage.check_again")).fire_event("click", None)
-        assert state.coverage_retry.value == 1
-        state.sidecar_pending.set(True)  # the retry fetches it again
-        assert not _check_again_shown(rc)
+
+def test_download_all_with_a_geotiff_row_is_not_refused_while_a_harmonize_builds_the_aoi_raster(
+        dl, monkeypatch, tmp_path):
+    monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
+    dl.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("tif", Status.MISSING, Status.MISSING))
+    state = _state(_with_tif(tmp_path, sidecar=True), meta={"GLAD-L": {}})
+    jobs = prepare_scope.PrepareJobs()
+    assert jobs.inflight.claim(prepare_scope.aoi_key("d"))  # a harmonize job is building the AOI raster
+
+    box, rc = _dl_render(state, jobs=jobs)
+    try:
+        _button(rc, tn("steps.alerts.download_all", 2)).fire_event("click", None)
+        dl.run_jobs()
+        [(ctx, sources, _)] = dl.started
+        assert sources == ["GLAD-L", "tif"] and ctx.mode == "download"
+        assert _info_toasts("info") == []
     finally:
         rc.close()
 

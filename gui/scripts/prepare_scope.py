@@ -162,7 +162,9 @@ def start_items(jobs: PrepareJobs, *, app_state, layers, map_, notifications, it
     # ``items`` come from the render: a project or period switch since then can
     # name a row the live plan no longer has; drop it before any key is taken
     items = [it for it in items if it[1] in (by_mask if it[0] == "mask" else by_source)]
-    file_items = [it for it in items if _is_file(*it)]
+    # Only a harmonize (or a mask's alignment) builds the AOI raster: a
+    # GeoTIFF source's download (Read file) reads the AOI bounds alone
+    file_items = [it for it in items if _is_file(*it) and (mode == "harmonize" or it[0] == "mask")]
     needs_aoi_raster = bool(file_items) and status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is not Status.CURRENT
     if needs_aoi_raster and p.aoi.geometry_file is None:
         # The GeoTIFF rows (sources and masks) wait for the AOI sidecar;

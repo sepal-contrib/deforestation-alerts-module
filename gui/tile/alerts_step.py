@@ -32,7 +32,7 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, preview_window, record_for, window_coverage
 from deforestation_alerts.engine.fingerprint import (
-    AOI_KEY, Status, aoi_raster_inputs, harm_key, is_file_source, raw_key, status,
+    Status, harm_key, is_file_source, raw_key,
 )
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine.why import source_reason
@@ -356,10 +356,6 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
     menu = [{"label": tn("steps.prepare.redownload_all", len(redownload)), "icon": "mdi-download",
              "on_click": lambda: set_pending_refresh("*"), "disabled": ro}] if redownload else []
     start, end = period.search_window()[0], period.end
-    # a failed AOI-sidecar fetch leaves the user files waiting (the loader refetches it on Check again)
-    sidecar_failed = (p.aoi.geometry_file is None and not app_state.sidecar_pending.value
-                      and any(is_file_source(p.sources[r.source]) and r.raw is not Status.CURRENT for r in rows)
-                      and status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is not Status.CURRENT)
 
     with solara.Column(style="gap:16px;"):
         solara.Text(tn("steps.alerts.period_box", period.look_back_days, start=period.start.isoformat(),
@@ -378,7 +374,8 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
                     # every job of the scope is stopped (a row started since Stop brings Stop back)
                     stopping=step_scope in jobs.stopping.value and bool(mine) and mine <= stopped)
         # spec §6.2 "Failure": the sources left without a record can be checked again
-        CheckAgainButton(app_state=app_state, show=sidecar_failed or (
+        # (a GeoTIFF's download never waits for the AOI sidecar: only Harmonize offers its Check again)
+        CheckAgainButton(app_state=app_state, show=(
             bool(app_state.coverage_error.value) and any(record_for(p, n) is None for n in period_sources(p, period))))
 
     SourceModal(open_=modal_open, app_state=app_state, gee_interface=gee_interface, editing=editing,
