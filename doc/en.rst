@@ -470,8 +470,8 @@ The pixels of a reported alert are part of the footprint, so the look-back does 
 
 When the earlier alert was saved as **True alert** or **Needs review**, `Integrate & vectorize <defo-integrate-growth_>`_ keeps this growth in view:
 
--   A new alert that touches or overlaps the earlier alert is a *growth alert*, linked to it.
--   A cluster under the minimum size is kept when it touches the earlier alert: it is a growth alert *under the minimum area*. A small cluster that touches nothing is set aside, and the look-back can still bring it back in the next period.
+-   A new alert that touches the earlier alert, or lies within one pixel of the grid from it, is a *growth alert*, linked to it.
+-   A cluster under the minimum size is kept when it touches the earlier alert: it is a growth alert *under the minimum area* (unless **Keep smaller clusters that touch earlier confirmed loss** is cleared). A small cluster that touches nothing is set aside, and the look-back can still bring it back in the next period.
 -   The run looks for earlier alerts in every earlier period, whatever the look-back.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
@@ -671,9 +671,9 @@ A custom source reads your own alert raster through one of four format presets. 
         -   The source's name in lists, legends and file names.
         -   Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique in the project. GLAD-L, RADD and GLAD-S2 are reserved.
     *   -   **Source**
-        -   Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder).
+        -   Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF / VRT** (a file in your SEPAL folder: a GeoTIFF, or a VRT, a GDAL virtual raster read like the GeoTIFFs it points to).
         -   **Earth Engine**.
-    *   -   Asset or **GeoTIFF**
+    *   -   Asset or **GeoTIFF / VRT**
         -   The GEE image or image collection, or the .tif file.
         -   An image collection is used whole, the newest image on top. For a collection of weekly snapshots (like RADD's own), give the latest image's ID instead. The GeoTIFF needs a coordinate reference system.
     *   -   **Alert format**
@@ -872,9 +872,9 @@ Select **Add mask** to open the **Add a mask** dialog. The bands are read as soo
         -   The mask's name in lists, legends and file names.
         -   Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique among the project's masks.
     *   -   **Source**
-        -   **Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder).
+        -   **Earth Engine** (an asset) or **GeoTIFF / VRT** (a file in your SEPAL folder).
         -   **Earth Engine**.
-    *   -   Asset or **GeoTIFF**
+    *   -   Asset or **GeoTIFF / VRT**
         -   The GEE image or image collection, or the .tif file.
         -   
     *   -   **Band**
@@ -1052,8 +1052,8 @@ This step turns the harmonized sources of the active period into an *alert set*:
 
 -   combines the sources pixel by pixel;
 -   removes what earlier periods already reported;
--   groups neighbouring alert pixels into alerts; and
--   draws one polygon per alert.
+-   groups neighbouring alert pixels into *clusters*; and
+-   draws one polygon per cluster. Each cluster it keeps is an alert of the set.
 
 Open the **Integrate & vectorize** step of the **Workflow** panel. It unlocks once at least one source of the active period is ready in `Harmonize <defo-harmonize_>`_.
 
@@ -1102,9 +1102,10 @@ Growth of earlier loss
 
 A clearing often keeps growing from one month to the next. The run links each new alert to the *earlier loss* it grows from: the alerts of earlier periods' sets that were saved as **True alert** or **Needs review**. An earlier alert's shape is the polygon drawn for it in `Refine the polygon <defo-analysis-refine_>`_, or else its detected cluster.
 
--   A new alert that touches or overlaps an earlier alert's shape is a *growth alert*, linked to every earlier alert it touches. One without a link is a *new* alert.
--   A cluster smaller than the **Minimum cluster size** is kept when it touches earlier loss: it is a growth alert *under the minimum area*. A small cluster that touches nothing is set aside as *not analysable*, as before.
+-   A new cluster that lies within one pixel of the grid of an earlier alert's shape, edge to edge, is a *growth alert*, linked to every earlier alert that close. A cluster one empty pixel away still counts; a diagonal gap of one pixel is farther. One without a link is a *new* alert.
+-   With **Keep smaller clusters that touch earlier confirmed loss** selected (the default), a cluster smaller than the **Minimum cluster size** is kept when it is that close to earlier loss: it is a growth alert *under the minimum area*. Cleared, every small cluster is set aside. A small cluster that touches nothing is always set aside as *not analysable*.
 -   Growth alerts are sorted and limited with the others: **Limit the number of clusters** can leave them out.
+-   Sets made before this reach of one pixel keep the links they were made with until they are run again.
 -   Only the reviews saved when the run starts count. An earlier alert confirmed afterwards is not linked, but it can be linked by hand in `Earlier alerts <defo-analysis-earlier_>`_.
 
 The alerts linked to each other, across all periods, make the *history* of a clearing. Analysis shows it on each alert, and the `Overview <defo-overview-growth_>`_ sums it up.
@@ -1130,13 +1131,16 @@ The form opens with the settings of the active alert set (all but the sources), 
         -   Shown only when at least one selected source has a *probable* (low-confidence) class. One switch for all such sources. Off, their probable pixels are dropped before anything else, and only their confirmed pixels count. With two or more such sources, **Set per source** unfolds one switch per source (see below).
         -   On.
     *   -   **Minimum cluster size**
-        -   Clusters smaller than this are dropped. The hint gives that size in pixels of the grid (at 10 m, 0.5 ha is "50 pixels on the grid").
-        -   0.5 ha. Any number of hectares, 0 or more. Even at 0, an alert is at least one pixel.
+        -   Clusters smaller than this are dropped, unless the next option keeps them. The hint gives that size in pixels of the grid (at 10 m, 0.5 ha is "50 pixels on the grid").
+        -   0.5 ha. Any number of hectares, 0 or more. Even at 0, a cluster is at least one pixel.
+    *   -   **Keep smaller clusters that touch earlier confirmed loss**
+        -   Keeps a cluster under the minimum size when it is within one pixel of an earlier alert reviewed as **True alert** or **Needs review** (see `Growth of earlier loss <defo-integrate-growth_>`_). A line under it says when the run has nothing to link to: "No earlier period has an alert set yet: nothing links in this run." or "No alert of an earlier period is reviewed yet: nothing links in this run."
+        -   Selected.
     *   -   **Order**
-        -   The order of the alerts in the set, which is the review order: **Bigger clusters first**, **Smaller clusters first**, **Recent clusters first** (by last detection date) or **Older clusters first** (by first detection date).
+        -   The order of the clusters in the set, which is the review order: **Bigger clusters first**, **Smaller clusters first**, **Recent clusters first** (by last detection date) or **Older clusters first** (by first detection date).
         -   **Bigger clusters first**.
     *   -   **Limit the number of clusters**
-        -   When selected, shows **Maximum number of clusters**: only the first alerts in the chosen **Order** are kept. Its hint says which (e.g. "Keeps the 100 biggest clusters." or "Keeps the 100 most recent clusters."). When cleared, every alert is kept.
+        -   When selected, shows **Maximum number of clusters**: only the first clusters in the chosen **Order** are kept. Its hint says which (e.g. "Keeps the 100 biggest clusters." or "Keeps the 100 most recent clusters."). When cleared, every cluster is kept.
         -   Cleared. When selected, the limit starts at 100. It must be a whole number greater than 0.
     *   -   **Attribute layers**
         -   Rasters whose band statistics are added to every alert (see below).
@@ -1158,7 +1162,7 @@ Attribute layers
 
 An *attribute layer* adds information to each alert from a raster (e.g. the majority land-cover class under the alert, or its mean elevation). The values are columns of the alert table: they are exported with the alerts, and columns of classes can be used in the Analysis filter.
 
-.. shot: integrate-attribute | The "Add an attribute layer" dialog: Layer name "worldcover" with its hint "Alert columns are named <layer name>_<band>.", Source = Earth Engine, the ESA WorldCover image picked, the one-band line "One band (Map): its statistic is added to every alert.", and the band's row with statistic Majority and its column name worldcover_map beside it. Crop to the dialog.
+.. shot: integrate-attribute | The "Add an attribute layer" dialog: Layer name "worldcover" with its hint "Cluster columns are named <layer name>_<band>.", Source = Earth Engine, the ESA WorldCover image picked, the one-band line "One band (Map): its statistic is added to every cluster.", and the band's row with statistic Majority and its column name worldcover_map beside it. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-attribute.png
     :alt: Adding an attribute layer
@@ -1167,8 +1171,8 @@ To add an attribute layer:
 
 1.  Select **Add attribute layer** to open the **Add an attribute layer** dialog.
 2.  Check the **Layer name**, suggested from the raster once it is chosen. The columns are named *layer name*\_\ *band*.
-3.  Choose the **Source** (**Earth Engine**, an image, or **GeoTIFF**, a file in your SEPAL folder), then choose the raster. Its bands are read at once.
-4.  With one band, the form reads "One band (…): its statistic is added to every alert." With two or more, select one or more in **Bands**.
+3.  Choose the **Source** (**Earth Engine**, an image, or **GeoTIFF / VRT**, a file in your SEPAL folder), then choose the raster. Its bands are read at once.
+4.  With one band, the form reads "One band (…): its statistic is added to every cluster." With two or more, select one or more in **Bands**.
 5.  For each band, choose the statistic computed over the alert: **Majority** (for classes), **Mean**, **Minimum**, **Maximum** or **Median**. It starts on **Majority** when the band's name looks like classes (e.g. ``landcover``), and on **Mean** otherwise, marked "(suggested)". The column name is shown beside it.
 6.  Select **Add attribute layer**.
 
@@ -1190,21 +1194,21 @@ The grey line above the button names the set the run makes: "Creates or replaces
 
 Select **Integrate & vectorize**. The button stays disabled until at least one source is selected and, when **Limit the number of clusters** is selected, the limit is valid ("Enter a whole number greater than 0." under the field).
 
-The run goes through "Combining sources", "Vectorizing clusters", "Saving the alerts", "Writing the footprint" and "Building map tiles". When it ends, a message reads "N alerts ready for review", followed by "Linked N alerts to earlier loss (M under the minimum area)" when it found `growth alerts <defo-integrate-growth_>`_, and the new set becomes the *active set*: the one the `Questionnaire <defo-questionnaire_>`_, `Evaluation <defo-evaluation_>`_, `Analysis <defo-analysis_>`_ and `Overview <defo-overview_>`_ work on. The step stays open.
+The run goes through "Combining sources", "Vectorizing clusters", "Saving the clusters", "Writing the footprint" and "Building map tiles". When it ends, a message reads "N clusters ready for review", followed by "Linked N clusters to earlier loss (M under the minimum area)" when it found `growth alerts <defo-integrate-growth_>`_, and the new set becomes the *active set*: the one the `Questionnaire <defo-questionnaire_>`_, `Evaluation <defo-evaluation_>`_, `Analysis <defo-analysis_>`_ and `Overview <defo-overview_>`_ work on. The step stays open.
 
-If no alert is left, the set is still made, empty, and the message gives the reason for each source (e.g. "GLAD-L: all 56 alert pixels removed by masks" or "RADD: probable (unconfirmed) alerts were left out").
+If no cluster is left, the set is still made, empty: the message reads "No new clusters in this period: the alert set is empty." and gives the reason for each source (e.g. "GLAD-L: all 56 alert pixels removed by masks" or "RADD: probable (unconfirmed) alerts were left out").
 
 .. _defo-integrate-replace:
 
 Replace a set
 """""""""""""
 
-.. shot: integrate-replace | The "Replace this alert set?" confirmation for the demo set, with "N reviewed alerts in this set will be discarded. The evaluator split and its pending returns will be discarded." (the demo set is split), then the list of reviewed alerts ("#0 · Reviewed: confirmed · 383.18 ha" …); the Cancel and orange Replace buttons. Crop to the dialog.
+.. shot: integrate-replace | The "Replace this alert set?" confirmation for the demo set, with "N reviewed clusters in this set will be discarded. The evaluator split and its pending returns will be discarded." (the demo set is split), then the list of reviewed alerts ("#0 · Reviewed: confirmed · 383.18 ha" …); the Cancel and orange Replace buttons. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-replace.png
     :alt: Confirming the replacement of an alert set
 
-When the set about to be replaced has reviewed alerts or an `evaluator split <defo-evaluation_>`_, the **Replace this alert set?** dialog lists what would be lost: the reviewed alerts (up to 20, then "… and N more"), and the split with the reviews that evaluators have not sent back yet. When alerts of later periods grow from this set, it adds "N alerts of later periods are linked to this set; their links will break.": after the run, those links show as "earlier set was re-run" (see `Earlier alerts <defo-analysis-earlier_>`_). Select **Replace** to continue. A set with nothing to lose is replaced without confirmation.
+When the set about to be replaced has reviewed alerts or an `evaluator split <defo-evaluation_>`_, the **Replace this alert set?** dialog lists what would be lost: the reviewed alerts (up to 20, then "… and N more"), and the split with the reviews that evaluators have not sent back yet. When alerts of later periods grow from this set, it adds "N clusters of later periods are linked to this set; their links will break.": after the run, those links show as "earlier set was re-run" (see `Earlier alerts <defo-analysis-earlier_>`_). Select **Replace** to continue. A set with nothing to lose is replaced without confirmation.
 
 .. attention::
 
@@ -1291,7 +1295,7 @@ The layer list
 Each row of **Visualization layers** shows:
 
 -   the layer's **Name**;
--   a chip with its source (**Earth Engine** or **GeoTIFF**);
+-   a chip with its source (**Earth Engine** or **GeoTIFF / VRT**);
 -   an **in Analysis** chip when it is shown on the Analysis maps; and
 -   a note with its bands and value range, or, for a categorical layer, its band and number of classes ("band Map · 9 classes").
 
@@ -1317,9 +1321,9 @@ Select **Add layer** to open the **Add a visualization layer** dialog. The form 
         -   The layer's name in the list, on the maps and in the legend.
         -   Left empty, it is filled from the asset or file name, plus the band or combination. At most 24 characters, unique in the project.
     *   -   **Source**
-        -   **Earth Engine** (an image asset) or **GeoTIFF** (a file in your SEPAL folder).
+        -   **Earth Engine** (an image asset) or **GeoTIFF / VRT** (a file in your SEPAL folder).
         -   **Earth Engine**.
-    *   -   Asset or **GeoTIFF**
+    *   -   Asset or **GeoTIFF / VRT**
         -   A GEE *image* (not a collection), or a .tif file.
         -   The GeoTIFF's folder must be writable: the app writes an overview file next to it so that the layer draws quickly.
 
@@ -1578,7 +1582,9 @@ The **Report template** line names the template in use, with a chip: **default**
     *   -   ``{alert_system}``
         -   The sources that detected the alert.
     *   -   ``{area_loss}``
-        -   The alert's area, in hectares.
+        -   The alert's area, in hectares (the group's, for a group).
+    *   -   ``{group_size}``, ``{group_alerts}``
+        -   For an alert reviewed in a group: the number of alerts in the group and their numbers ("12, 15, 16"). Otherwise "1" and the alert's own number.
     *   -   ``{verdict}`` (green)
         -   The verdict, in the language of the app.
     *   -   One per question (green)
@@ -1661,6 +1667,33 @@ A project starts with neither checkbox selected. The note under them reads "Choo
 -   **Multiple evaluators** completes the step once the alerts are split.
 -   While a split exists, both checkboxes are disabled on **Multiple evaluators** (**Remove the split to switch to solo.**).
 
+.. _defo-evaluation-group:
+
+Review nearby alerts together
+"""""""""""""""""""""""""""""
+
+Under the review mode, the **Review nearby alerts together** checkbox lets `Analysis <defo-analysis-nearby_>`_ review neighbouring alerts as one group: "In Analysis, alerts within this distance can be reviewed with one verdict, one set of answers and one polygon." It works in both modes. Once it is selected:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 30 45 25
+
+    *   -   Field
+        -   Description
+        -   Default and limits
+    *   -   **Distance (m)**
+        -   How close, edge to edge, an alert must be to be offered in the group.
+        -   300. From 10 to 5,000.
+    *   -   **Include already reviewed alerts**
+        -   Also offers alerts reviewed before grouping was on. "Unchecked, alerts reviewed before grouping was on are never offered."
+        -   Cleared.
+
+Some changes are locked:
+
+-   Once groups are saved, grouping cannot be turned off and the distance cannot change: "2 groups are saved: remove them to turn grouping off."
+-   A split fixes all three settings: "The alerts were split with grouping: remove the split to change it." (or "without grouping").
+-   In a review copy, they are "Set by the project's creator."
+
 .. _defo-evaluation-split:
 
 Split the alerts
@@ -1694,6 +1727,8 @@ With **Multiple evaluators** selected, select **Split alerts…** above the eval
         -   Cleared.
 
 Select **Split**. The alerts are dealt out one by one in the set's order (the **Order** chosen in `Integrate & vectorize <defo-integrate-options_>`_), like cards: the first to evaluator 1, the second to evaluator 2, and so on round the list. Each evaluator gets about the same number of alerts, spread over the whole order.
+
+With **Review nearby alerts together** selected, the split never parts a group. Alerts within the distance of each other, edge to edge, chain into one group of nearby alerts. Each group goes whole to the evaluator with the fewest alerts so far. When one group holds more than an even share, the dialog warns: "One group of nearby alerts holds 30 alerts, more than an even share."
 
 The evaluators table
 """"""""""""""""""""
@@ -1812,6 +1847,8 @@ To merge a reviewed copy:
     *   -   ignored
         -   Alerts that are not assigned to this evaluator. They are never taken.
 
+With grouping on, each count also gives its number of groups ("3 new reviews (1 group)"). A group is merged whole: when one of its alerts conflicts, the whole group is a conflict.
+
 After the merge, the set's alerts are updated, a message reads "Merged N reviews from (evaluator).", and the **Merged** column shows the date.
 
 The preview may also warn that "The questionnaire changed since the packages were made; answers are merged by question key.", or list columns it ignores. If the alert open in Analysis is among the merged ones, it is reloaded.
@@ -1831,6 +1868,9 @@ Common messages
 
 "This zip is a review package, not a reviewed copy."
     Choose the file the evaluator sent back.
+
+"This return would break a group of alerts, so nothing was merged. Choose Keep mine, or ask the evaluator to update the app and send the review again."
+    Taking the evaluator's reviews would split a group saved in your project. Choose **Keep mine**, or ask for a reviewed copy made with an up-to-date app.
 
 "A review copy cannot merge reviewed copies; open the creator's project."
     Merge in the original project.
@@ -1882,7 +1922,7 @@ It needs an alert set: until `Integrate & vectorize <defo-integrate_>`_ has made
 The screen
 ^^^^^^^^^^
 
-.. shot: analysis-screen | The whole Analysis screen of the demo project at 1440×900, on an unreviewed alert in the middle of the set: the top bar (Workflow, "Analysis · <project>", the funnel, the Alert set selector, the tally "12 reviewed · 36 left" over its bar, the help icon, Previous · 13 / 48 · Next); the two maps with "Before image · Sentinel-2 2026-05-28 · 27%" and "After image · Sentinel-2 2026-09-27 · 18%" titles, the layers icon at the top right of each map and the basemap thumbnail at the bottom left; the timeline under the maps with both handles placed; the right panel with Source / Detected / Status, the Verdict buttons, the Questions section open with the loss driver and the added "Access road nearby?" question, the Refine polygon section closed, and the footer (Export this alert, Save & next, Save). No crop.
+.. shot: analysis-screen | The whole Analysis screen of the demo project at 1440×900, on an unreviewed alert in the middle of the set: the top bar (Workflow, "Analysis · <project>", the funnel, the Alert set selector, the tally "12 reviewed · 36 left" over its bar, the help icon, Previous · 13 / 48 · Next and the next-unreviewed icon); the two maps with "Before image · Sentinel-2 2026-05-28 · 27%" and "After image · Sentinel-2 2026-09-27 · 18%" titles, the Original alert outlines, the layers icon at the top right of each map, the basemap thumbnail and the scale bar at the bottom left; the timeline under the maps with both handles placed; the right panel with Source / Detected / Status, the Verdict buttons, the Questions section open with the loss driver and the added "Access road nearby?" question, the Refine polygon section closed, and the dock (Export this alert "available after save", Save filled, Next, the next-unreviewed icon). No crop.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-screen.png
     :alt: The Analysis screen
@@ -1909,7 +1949,7 @@ The help icon in the top bar opens **About analysis**, a short summary of this s
 The top bar
 ^^^^^^^^^^^
 
-.. shot: analysis-topbar | The top bar of the Analysis screen with the filter menu open below the funnel: "Filter alerts" title, Attribute = Evaluator, Values = Ana (23) selected as a chip, the Clear filter and Apply buttons; to the right the Alert set selector, the tally "5 reviewed · 18 left · filtered · 48 total" over its bar, and Previous · 06 / 23 · Next. Crop to the top bar and the open menu.
+.. shot: analysis-topbar | The top bar of the Analysis screen with the filter menu open below the funnel: "Filter alerts" title, Attribute = Evaluator, Values = Ana (23) selected as a chip, the Clear filter and Apply buttons; to the right the Alert set selector, the tally "5 reviewed · 18 left · filtered · 48 total" over its bar, and Previous · 06 / 23 · Next with the next-unreviewed icon. Crop to the top bar and the open menu.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-topbar.png
     :alt: The top bar with the filter menu open
@@ -1931,7 +1971,11 @@ From left to right:
     *   -   **Previous** / **Next**
         -   The previous or next alert in the set's order. They stop at the first and the last alert.
     *   -   Counter
-        -   The alert's number in the set ("13 / 48"). Select it to open a small menu: **Jump to alert number** (enter a number and select **Go**, or press **Enter**) and **Next unreviewed alert**, which goes to the next alert without a verdict, starting again from the top after the last one.
+        -   The alert's number in the set ("13 / 48"). Select it to open **Jump to alert number**: enter a number and select **Go**, or press **Enter**.
+    *   -   **Next unreviewed alert** icon
+        -   Goes to the next alert without a verdict, starting again from the top after the last one. Disabled when no other alert is left to review.
+
+When the alert on screen has unsaved changes, every way to another alert asks first (see `Save the review <defo-analysis-save_>`_).
 
 The order of the alerts is the **Order** chosen in `Integrate & vectorize <defo-integrate-options_>`_.
 
@@ -1949,7 +1993,7 @@ The filter keeps one attribute's values and hides the other alerts from the navi
 
 With a filter on:
 
--   **Previous**, **Next** and **Next unreviewed alert** move among the matching alerts only;
+-   **Previous**, **Next** and the **Next unreviewed alert** icon move among the matching alerts only;
 -   the counter counts the matches ("06 / 24"), or reads "– / 24" while the alert on screen is not one of them, and the progress line ends with "filtered · 48 total";
 -   the jump menu still takes the alert's number in the whole set, but refuses one the filter hides ("Alert 12 is not in the current filter"); and
 -   when nothing matches, the counter reads "No alerts match this filter".
@@ -1979,6 +2023,9 @@ Both maps centre on the alert when it opens. A yellow dashed box marks the alert
     *   -   **Zoom to the alert**
         -   Upper-left corner of the after map
         -   Zooms both maps back to the alert.
+    *   -   Scale bar
+        -   Lower-left corner of each map, under the basemap thumbnail
+        -   The map's scale, in metres or kilometres.
 
 The **Layers** menu lists:
 
@@ -1991,7 +2038,7 @@ The **Layers** menu lists:
     *   -   **Imagery**
         -   *True Color* (on) and *False Color* (near infrared, red and green; off): the image chosen for that map.
     *   -   **Alerts**
-        -   *Original Alert*: the alert pixels of the set, half transparent (off). *Alert BB*: the alert's bounding box. *Defo Layer*: the polygon saved for the alert (see `Refine the polygon <defo-analysis-refine_>`_). *Earlier alerts* (see `Earlier alerts <defo-analysis-earlier_>`_).
+        -   *Original alert*: the outline of the alert's polygon from `Integrate & vectorize <defo-integrate_>`_, and of the other alerts of its group (see `Nearby alerts <defo-analysis-nearby_>`_), on by default and hidden while drawing. *All alerts*: the alert pixels of the whole set, half transparent (off). *Alert BB*: the alert's bounding box. *Defo Layer*: the polygon saved for the alert (see `Refine the polygon <defo-analysis-refine_>`_). *Earlier alerts* (see `Earlier alerts <defo-analysis-earlier_>`_). *Nearby alerts*, only when nearby alerts are reviewed together.
     *   -   **Additional layers**
         -   The `additional layers <defo-layers_>`_ marked **Show in Analysis**, turned off.
 
@@ -2081,6 +2128,8 @@ The top of the panel shows what the alert table says:
         -   Its first and last detection dates.
     *   -   **Status** row
         -   Its review status, with its colour: **Not reviewed**, **Reviewed: confirmed**, **Reviewed: false positive** or **Reviewed: needs revision**.
+    *   -   **Group**
+        -   For an alert reviewed with nearby alerts: "group of 4". Hidden otherwise.
     *   -   **Kind**
         -   Whether the alert grows from earlier loss (see `Growth of earlier loss <defo-integrate-growth_>`_): **Growth** (a purple chip), **Growth · under minimum area**, or **New · under minimum area** (a small alert whose links were all removed). Hidden for a new alert.
     *   -   **History**
@@ -2088,7 +2137,7 @@ The top of the panel shows what the alert table says:
 
 If the active set is out of date or its files are missing, an orange line above it says so, as in the `Overview <defo-overview_>`_. The review is still possible.
 
-.. shot: analysis-console | The review panel on an alert being reviewed: Source "GLAD-L, RADD and GLAD-S2", Detected "2026-06-13 → 2026-09-27", Status chip "Not reviewed"; under Verdict the three buttons with True alert filled; the Questions section open with its badge "1 of 2 · required missing", question 1 "Loss driver" with Agriculture expansion picked in its list and a check mark, question 2 "Access road nearby?" with its Required tag and no answer; the footer with Export this alert (badge "available after save"), Save & next, Save, and the orange "Unsaved changes on this alert" line. Crop to the right panel.
+.. shot: analysis-console | The review panel on an alert being reviewed: Source "GLAD-L, RADD and GLAD-S2", Detected "2026-06-13 → 2026-09-27", Status chip "Not reviewed"; under Verdict the three buttons with True alert filled; the Questions section open with its badge "1 of 2 · required missing", question 1 "Loss driver" with Agriculture expansion picked in its list and a check mark, question 2 "Access road nearby?" with its Required tag and no answer; the dock with Export this alert (badge "available after save"), Save filled, Next and the next-unreviewed icon, and the orange "Unsaved changes on this alert" line. Crop to the right panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-console.png
     :alt: The review panel: verdict and questions
@@ -2137,7 +2186,7 @@ Refine the polygon
 
 The alert's polygon comes from the alert pixels. In **Refine polygon**, draw the area that was actually lost instead. The saved polygon is stored with the review, shown as *Defo Layer* on the maps, and its area becomes the alert's area. The section's badge reads "nothing drawn" or, for example, "2 shapes · 1.3 ha".
 
-.. shot: analysis-refine | The after map in drawing mode, beside the open Refine polygon section: on the map, the drawing toolbar at the top left (draw polygon, trash), the Fill holes / Remove hole bar under it, the hint "Right-click a vertex to delete it", the patches Model 1 found, drawn with their vertices; in the panel, Stop drawing (in Start drawing's place) and Save drawing, the Model 1 row with Run, the Remove from map icon and "Found 9 patches · 25.9 ha", the Model 2 row with Run and the Add to map icon greyed; the badge "nothing drawn" (no drawing saved yet) and the footer line "Save your drawing before saving this review". Crop to the after map and the right panel.
+.. shot: analysis-refine | The after map in drawing mode, beside the open Refine polygon section: on the map, the drawing toolbar at the top left (draw polygon, trash), the Fill holes / Remove hole bar under it, the hint "Right-click a vertex to delete it", the patches Model 1 found, drawn with their vertices; in the panel, Stop drawing (in Start drawing's place) and Save drawing, the Model 1 row with Run, the Remove from map icon and "Found 9 patches · 25.9 ha", the Model 2 row with Run and the Add to map icon greyed; the badge "nothing drawn" (no drawing saved yet) and the dock's state line "Save your drawing before saving this review". Crop to the after map and the right panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-refine.png
     :alt: Drawing the polygon of an alert
@@ -2178,7 +2227,7 @@ Choosing other images or another **Image area** drops the models' results: run t
 Earlier alerts
 """"""""""""""
 
-This section appears when the active set's period has earlier periods with alert sets. It lists the earlier loss near the alert: the alerts of earlier periods reviewed as **Reviewed: confirmed** or **Reviewed: needs revision**, within the distance set in **Within** (1 km by default, from 0.1 to 50 km), plus every alert linked to this one, however far. Use it to check whether an alert continues a clearing already reported, and to link it to that clearing.
+This section appears when the active set's period has earlier periods with alert sets. It lists the earlier loss near the alert: the alerts of earlier periods reviewed as **Reviewed: confirmed** or **Reviewed: needs revision**, within the distance set in **Within**, in metres (100 m by default, from 10 m to 50 km), plus every alert linked to this one, however far. Use it to check whether an alert continues a clearing already reported, and to link it to that clearing.
 
 The alerts are grouped by period, newest first. Each row shows:
 
@@ -2191,6 +2240,8 @@ Select an alert's number to zoom both maps to it.
 
 To link or unlink an alert, tick or clear its box. The change is part of the review: the footer reads "Unsaved changes on this alert", and **Save** saves it with the verdict. Ticking an alert of an earlier period makes this alert a growth alert, even if it does not touch it.
 
+A growth alert smaller than the **Minimum cluster size** is in the set only because of its link. Clearing its last link asks first (**Unlink from the earlier alert?**): for example "Alert #14 is 0.2 ha, under the 0.5 ha minimum. It is an alert only because it is linked to #12." Select **Unlink** to clear the link: the alert stays in the set as **New · under minimum area**.
+
 Some rows have no box:
 
 -   "via #12": the alert belongs to the history through another link (here, alert 12). Clearing the box of alert 12 removes it too.
@@ -2198,14 +2249,56 @@ Some rows have no box:
 
 A linked alert that was later reviewed as a false positive stays ticked with "now false positive". It is greyed and left out of the history; clear its box to remove the link.
 
-Turn on **Show on the maps** to outline the listed alerts on both maps. The colour is the period's, and a small legend lists the periods shown, with "solid: confirmed · dashed: needs revision · thick: linked". The switch starts on for a growth alert; on other alerts it keeps your last choice. When the list covers several periods, the **Periods** menu hides some of them. The badge reads "off", "none within 1 km" or, for example, "4 within 1 km · 1 linked".
+Turn on **Show on the maps** to outline the listed alerts on both maps. The colour is the period's, and a small legend lists the periods shown, with "solid: confirmed · dashed: needs revision · thick: linked". The switch starts on for a growth alert; on other alerts it keeps your last choice. When the list covers several periods, the **Periods** menu hides some of them. The badge reads "off", "none within 100 m" or, for example, "4 within 100 m · 1 linked".
 
 In a `review copy <defo-evaluation-return_>`_, the list comes from a snapshot of the earlier alerts taken when the packages were built: the section reads "Earlier alerts as of (date)", or "No earlier alerts in this copy" for a package made by an older version of the app.
+
+.. _defo-analysis-nearby:
+
+Nearby alerts
+"""""""""""""
+
+This section appears only when **Review nearby alerts together** is selected in `Evaluation <defo-evaluation-group_>`_. One clearing often makes several small alerts side by side. Review them together: one verdict, one set of answers, one pair of images and one polygon for all of them.
+
+The section lists the alerts within the distance set in **Evaluation**, measured edge to edge from the alert on screen: the ticked ones first, then the nearest others, at most 50 ("12 more in range not listed"). Each row shows:
+
+-   a box, ticked when the alert is part of the next save;
+-   the alert's number (select it to zoom both maps to it), its first detection date and its area;
+-   its distance ("40 m"), or "in this group";
+-   "group #12" when it belongs to another group;
+-   its status; and
+-   in a split set, "assigned to Ana", greyed and with no box, for an alert of another evaluator.
+
+The list offers the alerts not reviewed and the alerts reviewed in a group. Alerts reviewed before grouping was on are offered only with **Include already reviewed alerts**.
+
+The listed alerts are outlined on both maps (*Nearby alerts* layer). Click on a map near an outline to tick or clear that alert. **Select all** ticks every listed alert and **Clear** clears them. The badge reads "3 selected", "5 within 300 m" or "none within 300 m". When a ticked alert lies outside the images, a line says "Some selected alerts are outside the image area: pick a larger area on the timeline."
+
+To review a group:
+
+1.  Tick the alerts that show the same clearing.
+2.  Give the verdict, answer the questions, choose the images and draw the polygon as for one alert.
+3.  Select **Save**, which then reads "Save for 4 alerts".
+
+When the save changes other reviews, the **Save this group?** dialog lists them first, for example:
+
+-   "#15 (Reviewed: confirmed): its review is replaced";
+-   "#16 (Reviewed: confirmed): moves from group #9" or "joins with group #9" (a whole group joins when its main alert is ticked); and
+-   "#17 (Not reviewed): leaves the group and goes back to not reviewed" (an alert of this group left unticked).
+
+Select **Save** or **Cancel**.
+
+Every alert of the group gets the same verdict, answers, images and links to earlier alerts. The alert on screen when the group is first saved is its *main* alert: it keeps the drawn polygon. When the group has a drawing, the other alerts get an area of 0, so that the loss counts once.
+
+An alert of a saved group opens with the banner "Reviewed as a group of 4 (main alert #12)", and the **Group** row of the panel reads "group of 4". The *Original alert* layer outlines the whole group. On an alert other than the main one, **Remove from group** takes it out of the group: confirm with **Remove**. The alert goes back to not reviewed.
+
+A group needs one evaluator: "These alerts are assigned to different evaluators: a group needs one." In a review copy, only your own alerts can join: "Some of these alerts are not assigned to you."
+
+.. _defo-analysis-save:
 
 Save the review
 ^^^^^^^^^^^^^^^
 
-The footer stays at the bottom of the panel:
+The *dock* stays at the bottom of the panel: the **Export this alert** section, then the buttons, then a state line.
 
 .. list-table::
     :header-rows: 1
@@ -2214,11 +2307,17 @@ The footer stays at the bottom of the panel:
     *   -   Button
         -   Description
     *   -   **Save**
-        -   Saves the review and stays on the alert.
+        -   Saves the review and stays on the alert. With nearby alerts ticked, it reads "Save for 4 alerts".
     *   -   **Next**
-        -   Opens the next alert (the next match under a filter). With unsaved changes, it asks first: **Discard** drops them and moves on, **Stay** keeps you on the alert.
+        -   Opens the next alert (the next match under a filter).
+    *   -   **Next unreviewed alert** icon
+        -   Opens the next alert without a verdict, as in the top bar.
 
-The line under the buttons reads "Unsaved changes on this alert", "Save your drawing before saving this review" or "Saved 14:32".
+The filled button shows the next step: **Save** while the alert has unsaved changes or no saved review, **Next** once the review is saved.
+
+With unsaved changes, **Next**, the icon and the top bar's **Previous**, **Next**, **Go** and icon ask first. The buttons give way to "This alert has unsaved changes": **Discard** drops the changes and moves on, **Stay** keeps you on the alert.
+
+The state line reads "Unsaved changes on this alert", "Save your drawing before saving this review" or "Saved 14:32".
 
 A save writes into the alert set:
 
@@ -2226,7 +2325,8 @@ A save writes into the alert set:
 -   the answers to the questions asked for that verdict (the others are left empty);
 -   the before and after images chosen, so that the alert reopens on them;
 -   the polygon saved in **Refine polygon**, with its area as the alert's area;
--   the earlier alerts ticked in `Earlier alerts <defo-analysis-earlier_>`_, as the alert's links; and
+-   the earlier alerts ticked in `Earlier alerts <defo-analysis-earlier_>`_, as the alert's links;
+-   with nearby alerts ticked, the group (see `Nearby alerts <defo-analysis-nearby_>`_); and
 -   the names of the administrative areas under the alert, from the FAO GAUL 2015 boundaries in GEE (this takes a few seconds).
 
 Reviews show at once in the progress bar, in the set selector and in the `Overview <defo-overview_>`_. A review can change at any time: open the alert, change it and save again.
@@ -2234,9 +2334,9 @@ Reviews show at once in the progress bar, in the set selector and in the `Overvi
 Export the alert
 ^^^^^^^^^^^^^^^^
 
-**Export this alert**, in the footer, builds the alert's files once it is saved: a .zip file with its GeoPackage and images, a Word report and, for a true alert, an animated GIF. See `One alert, from Analysis <defo-export-alert_>`_.
+**Export this alert**, at the top of the dock, builds the alert's files once it is saved: a .zip file with its GeoPackage and images, a Word report and, for a true alert, an animated GIF. See `One alert, from Analysis <defo-export-alert_>`_.
 
-.. shot: analysis-footer | The footer of the review panel after Save on a true alert: Export this alert open with its badge "ready to build", the dashed Build alert files tile, the Timelapse tile "Animated GIF · click to create it", then Save & next, Save and the green "Saved 14:32" line. Crop to the footer.
+.. shot: analysis-footer | The dock of the review panel after Save on a true alert: Export this alert open with its badge "ready to build", the Alert data, Alert report and Timelapse tiles greyed, the Build files tile "Makes the files above from the saved review", then Save outlined, Next filled, the next-unreviewed icon and the green "Saved 14:32" line. Crop to the dock.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-footer.png
     :alt: The footer: export section and save buttons
@@ -2405,6 +2505,8 @@ Right column:
         -   A table: per status, the number of alerts, their area, their share of the measure and the median alert size, with a **Total** row.
     *   -   **History of growing clearings**
         -   Only when the set has `growth alerts <defo-integrate-growth_>`_ (see below).
+    *   -   **Nearby alerts**
+        -   How the set's alerts gather into groups of nearby alerts (see below).
     *   -   **When the loss was detected**
         -   The alerts by the week they were first detected. Greyed weeks are look-back weeks: they fall before the period started (see `What earlier periods already reported <defo-integrate-earlier_>`_).
     *   -   One card per question
@@ -2439,6 +2541,17 @@ Its table lists the histories that include an alert of this set, the largest con
         -   The area of this set's alerts in the history, false positives left out.
     *   -   **Review**
         -   Closes the Overview and opens this set's alert of the history in `Analysis <defo-analysis_>`_.
+
+Nearby alerts
+"""""""""""""
+
+The **Nearby alerts** card shows how the set's alerts chain into groups: alerts within the distance of **Review nearby alerts together** (see `Evaluation <defo-evaluation-group_>`_), edge to edge, form one group. A split gives each group to one evaluator.
+
+-   The headline counts the groups ("6 groups of nearby alerts"), or reads "No alert within 300 m of another".
+-   The line under it reads, for example, "In a group: 20 of 48 alerts · Alone: 28 · Largest: 5 alerts".
+-   The last line counts the groups saved in Analysis ("2 groups saved in Analysis (7 alerts)"), or reads "No group saved in Analysis yet".
+
+When grouping is off, the card uses the project's distance and adds "Reviewing nearby alerts together is off: turn it on in the Evaluation step."
 
 Export the set
 ^^^^^^^^^^^^^^
@@ -2477,9 +2590,9 @@ Every file is written into the alert set's folder in the project (``periods/<sta
 One alert, from Analysis
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-The **Export this alert** section sits in the footer of the `Analysis <defo-analysis_>`_ review panel. It works on the alert on screen, once its review is saved: its badge reads "available after save", then "ready to build", then "3 files ready".
+The **Export this alert** section sits at the top of the dock of the `Analysis <defo-analysis-save_>`_ review panel. It works on the alert on screen, once its review is saved: its badge reads "available after save", then "ready to build", then "3 files ready".
 
-.. shot: export-alert-files | The Export this alert section of the Analysis footer after Build alert files on a true alert of the demo project: badge "3 files ready", the Alert data tile "GeoPackage + before/after GeoTIFF", the Alert report tile "Word, from the project's template", the Timelapse tile "Animated GIF" as a download link, and the Rebuild files tile; Save & next and Save under them, the green "Saved 14:32" line. Crop to the footer.
+.. shot: export-alert-files | The Export this alert section of the Analysis dock after Build files on a true alert of the demo project: badge "3 files ready", the Alert data tile "GeoPackage + before/after GeoTIFF · 2.9 MB", the Alert report tile "Word, from the project's template", the Timelapse tile "Animated GIF", each as a download link, and the Rebuild files tile "Makes them again from the saved review"; Save, Next and the next-unreviewed icon under them, the green "Saved 14:32" line. Crop to the dock.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/export-alert-files.png
     :alt: The alert's files, ready to download
@@ -2491,7 +2604,7 @@ The **Export this alert** section sits in the footer of the `Analysis <defo-anal
     *   -   Tile
         -   Description
     *   -   **Build files**
-        -   Builds the alert's data and report. It reads "Save this alert first" and is disabled until **Save** is selected on this alert in this session. It runs in the task list and takes a while: it downloads the before and after images.
+        -   Builds the alert's data and report from the saved review ("Makes the files above from the saved review"). It is disabled until the review on screen is saved: it then reads "Save this alert first", or "Save your changes first" when there are unsaved changes. A reviewed alert opened on the images it was saved with is ready at once. It runs in the task list ("Building files…") and takes a while: it downloads the before and after images.
     *   -   **Alert data**
         -   Downloads a .zip file: the alert's GeoPackage, its before and after images as one GeoTIFF and, for a true alert, its GIF.
     *   -   **Alert report**
@@ -2499,7 +2612,7 @@ The **Export this alert** section sits in the footer of the `Analysis <defo-anal
     *   -   **Rebuild files**
         -   Builds the files again (e.g. after the review changed).
     *   -   **Timelapse**
-        -   Makes and downloads an animated GIF of the alert (see below).
+        -   Makes and downloads an animated GIF of the alert (see below). For an alert not saved as a true alert, it reads "True alerts only".
 
 The files are named after the alert's row in the set (the counter's number minus one):
 
@@ -2520,6 +2633,8 @@ The files are named after the alert's row in the set (the counter's number minus
     *   -   ``alert_<n>.docx``
         -   The Word report.
 
+For an alert of a group (see `Nearby alerts <defo-analysis-nearby_>`_), the files describe the whole group: the GeoPackage holds one feature with the group's summed area, its first and last detection dates, its sources, ``group_size`` (the number of alerts) and ``group_alerts`` (their numbers, e.g. "12, 15, 16"), and the GIF outlines every alert of the group.
+
 The links of the tiles are for the review on screen. Choosing other images, saving the alert again or changing the report template hides them: build the files again.
 
 The report
@@ -2530,7 +2645,7 @@ The report is built from the project's Word template, chosen in the `Questionnai
 The timelapse
 """""""""""""
 
-The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame is labelled with its collection and date. The before and after frames also name their side ("Before · Sentinel-2 2026-07-28").
+The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame stays 2.5 seconds and is labelled with its collection and date. The before and after frames also name their side ("Before · Sentinel-2 2026-07-28").
 
 It is offered for a true alert only: the tile is active when the alert is saved as **Reviewed: confirmed** and the images on screen are those it was saved with. Otherwise, it reads "Save as a true alert, with the images on screen, to create it".
 
@@ -2727,7 +2842,7 @@ Ana works through them with **Save** and **Next**:
 -   the counter numbers her alerts from 1 to 23; and
 -   her third alert, for example, is saved as **True alert** with **Mining**: the after image shows bare, sandy ground with a green pond at the edge of the forest, which looks like the pits that alluvial gold mining leaves.
 
-.. shot: use-case-ana-copy | The Analysis screen of Ana's review copy (project madre-de-dios__e01-ana): the filled funnel with the "Evaluator: Ana" chip, the tally "5 reviewed · 18 left · filtered · 48 total", the counter "03 / 23"; before and after images of one of her alerts; the review panel with Status "Reviewed: confirmed", True alert chosen and the Loss driver answered "Mining"; the after image shows sandy ground and a pond. No crop.
+.. shot: use-case-ana-copy | The Analysis screen of Ana's review copy (project madre-de-dios__e01-ana): the filled funnel with the "Evaluator: Ana" chip, the tally "5 reviewed · 18 left · filtered · 48 total", the counter "03 / 23"; before and after images of one of her alerts; the review panel with Status "Reviewed: confirmed", True alert chosen and the Loss driver answered "Mining"; the dock with "ready to build" and Next filled; the after image shows sandy ground and a pond. No crop.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/use-case-ana-copy.png
     :alt: Ana's review copy on the Analysis screen
@@ -2759,7 +2874,7 @@ Because the questionnaire changed after the packages were built, their cloud ico
 
 From then on, a true alert or an alert that needs review gets both answers (a false positive gets neither: both questions are asked only for the other two verdicts). For example, alert 10 is saved as **True alert**, with **Agriculture expansion** as the loss driver and "No" for the access road. Its status reads **Reviewed: confirmed**, and the **Questions** section reads "2 of 2 answered".
 
-.. shot: use-case-reviewed-alert | The Analysis screen of the demo project on alert 10 / 48 of the September set (tally "13 reviewed · 35 left"), reviewed: before and after images; the review panel with Status "Reviewed: confirmed", True alert chosen, the Questions section open with "2 of 2 answered", Loss driver = Agriculture expansion and "Access road nearby?" = No; Export this alert "available after save". No crop.
+.. shot: use-case-reviewed-alert | The Analysis screen of the demo project on alert 10 / 48 of the September set (tally "13 reviewed · 35 left"), reviewed: before and after images; the review panel with Status "Reviewed: confirmed", True alert chosen, the Questions section open with "2 of 2 answered", Loss driver = Agriculture expansion and "Access road nearby?" = No; the dock with Export this alert "ready to build" and Next filled. No crop.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/use-case-reviewed-alert.png
     :alt: A reviewed alert: its verdict and its two answers

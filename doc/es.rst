@@ -456,8 +456,8 @@ Los píxeles de una alerta reportada forman parte de la huella, así que la retr
 
 Cuando la alerta anterior se guardó como **Alerta verdadera** o **Requiere revisión**, `Integrar y vectorizar <defo-integrate-growth_>`_ no pierde de vista este crecimiento:
 
--   Una alerta nueva que toca o se superpone a la alerta anterior es una *alerta de crecimiento*, vinculada a ella.
--   Un grupo bajo el tamaño mínimo se conserva cuando toca la alerta anterior: es una alerta de crecimiento *bajo el área mínima*. Un grupo pequeño que no toca nada se deja de lado, y la retrospección aún puede recuperarlo en el período siguiente.
+-   Una alerta nueva que toca la alerta anterior, o que está a un píxel de la cuadrícula o menos de ella, es una *alerta de crecimiento*, vinculada a ella.
+-   Un grupo bajo el tamaño mínimo se conserva cuando toca la alerta anterior: es una alerta de crecimiento *bajo el área mínima* (salvo que **Conservar los grupos más pequeños que tocan una pérdida confirmada anterior** esté desmarcada). Un grupo pequeño que no toca nada se deja de lado, y la retrospección aún puede recuperarlo en el período siguiente.
 -   La ejecución busca alertas anteriores en todos los períodos anteriores, sea cual sea la retrospección.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
@@ -649,9 +649,9 @@ Una fuente personalizada lee tu propio raster de alertas a través de uno de cua
         -   El nombre de la fuente en listas, leyendas y nombres de archivo.
         -   Se sugiere a partir del nombre del recurso o del archivo. Como máximo 24 caracteres, al menos una letra o cifra, único en el proyecto. GLAD-L, RADD y GLAD-S2 están reservados.
     *   -   **Fuente**
-        -   De dónde se lee el raster: **Earth Engine** (un recurso) o **GeoTIFF** (un archivo de tu carpeta de SEPAL).
+        -   De dónde se lee el raster: **Earth Engine** (un recurso) o **GeoTIFF / VRT** (un archivo de tu carpeta de SEPAL: un GeoTIFF, o un VRT, un raster virtual de GDAL que se lee como los GeoTIFF a los que apunta).
         -   **Earth Engine**.
-    *   -   Recurso o **GeoTIFF**
+    *   -   Recurso o **GeoTIFF / VRT**
         -   La imagen o colección de imágenes de GEE, o el archivo .tif.
         -   Una colección de imágenes se usa completa, con la imagen más reciente encima. Para una colección de instantáneas semanales (como la propia de RADD), indica en su lugar el identificador de la última imagen. El GeoTIFF necesita un sistema de referencia de coordenadas.
     *   -   **Formato de las alertas**
@@ -846,9 +846,9 @@ Selecciona **Añadir máscara** para abrir el diálogo **Añadir una máscara**.
         -   El nombre de la máscara en listas, leyendas y nombres de archivo.
         -   Se sugiere a partir del nombre del recurso o del archivo. Como máximo 24 caracteres, al menos una letra o cifra, único entre las máscaras del proyecto.
     *   -   **Fuente**
-        -   **Earth Engine** (un recurso) o **GeoTIFF** (un archivo de tu carpeta de SEPAL).
+        -   **Earth Engine** (un recurso) o **GeoTIFF / VRT** (un archivo de tu carpeta de SEPAL).
         -   **Earth Engine**.
-    *   -   Recurso o **GeoTIFF**
+    *   -   Recurso o **GeoTIFF / VRT**
         -   La imagen o colección de imágenes de GEE, o el archivo .tif.
         -
     *   -   **Banda**
@@ -1024,8 +1024,8 @@ Este paso convierte las fuentes armonizadas del período activo en un *conjunto 
 
 -   combina las fuentes píxel a píxel;
 -   elimina lo que los períodos anteriores ya reportaron;
--   agrupa los píxeles de alerta vecinos en alertas; y
--   dibuja un polígono por alerta.
+-   agrupa los píxeles de alerta vecinos en *grupos*; y
+-   dibuja un polígono por grupo. Cada grupo que conserva es una alerta del conjunto.
 
 Abre el paso **Integrar y vectorizar** del panel **Flujo de trabajo**. Se desbloquea en cuanto al menos una fuente del período activo está lista en `Armonizar <defo-harmonize_>`_.
 
@@ -1072,9 +1072,10 @@ Crecimiento de una pérdida anterior
 
 Un desmonte suele seguir creciendo de un mes a otro. La ejecución vincula cada alerta nueva a la *pérdida anterior* de la que crece: las alertas de los conjuntos de períodos anteriores que se guardaron como **Alerta verdadera** o **Requiere revisión**. La forma de una alerta anterior es el polígono dibujado para ella en `Precisar el polígono <defo-analysis-refine_>`_ o, si no lo hay, su grupo detectado.
 
--   Una alerta nueva que toca o se superpone a la forma de una alerta anterior es una *alerta de crecimiento*, vinculada a todas las alertas anteriores que toca. Una alerta sin vínculo es una alerta *nueva*.
--   Un grupo más pequeño que el **Tamaño mínimo de grupo** se conserva cuando toca una pérdida anterior: es una alerta de crecimiento *bajo el área mínima*. Un grupo pequeño que no toca nada se deja de lado como *no analizable*, como antes.
+-   Un grupo nuevo que está a un píxel de la cuadrícula o menos de la forma de una alerta anterior, de borde a borde, es una *alerta de crecimiento*, vinculada a todas las alertas anteriores así de cercanas. Un grupo a un píxel vacío de distancia todavía cuenta; un hueco diagonal de un píxel queda más lejos. Una alerta sin vínculo es una alerta *nueva*.
+-   Con **Conservar los grupos más pequeños que tocan una pérdida confirmada anterior** marcada (el valor predeterminado), un grupo más pequeño que el **Tamaño mínimo de grupo** se conserva cuando está así de cerca de una pérdida anterior: es una alerta de crecimiento *bajo el área mínima*. Si se desmarca, todos los grupos pequeños se dejan de lado. Un grupo pequeño que no toca nada siempre se deja de lado como *no analizable*.
 -   Las alertas de crecimiento se ordenan y se limitan junto con las demás: **Limitar el número de grupos** puede dejarlas fuera.
+-   Los conjuntos generados antes de este alcance de un píxel conservan los vínculos con los que se generaron hasta que se vuelven a ejecutar.
 -   Solo cuentan las revisiones guardadas cuando empieza la ejecución. Una alerta anterior confirmada después no se vincula, pero se puede vincular a mano en `Alertas anteriores <defo-analysis-earlier_>`_.
 
 Las alertas vinculadas entre sí, a lo largo de todos los períodos, forman el *historial* de un desmonte. Análisis lo muestra en cada alerta, y el `Resumen <defo-overview-growth_>`_ lo resume.
@@ -1100,13 +1101,16 @@ El formulario se abre con la configuración del conjunto de alertas activo (todo
         -   Solo aparece cuando al menos una de las fuentes seleccionadas tiene una clase *probable* (confianza baja). Un único interruptor para todas esas fuentes. Si está desactivado, sus píxeles probables se descartan antes que nada, y solo cuentan sus píxeles confirmados. Con dos o más fuentes de ese tipo, **Definir por fuente** despliega un interruptor por fuente (ver más abajo).
         -   Activado.
     *   -   **Tamaño mínimo de grupo**
-        -   Se descartan los grupos más pequeños que este tamaño. La ayuda indica ese tamaño en píxeles de la cuadrícula (a 10 m, 0,5 ha son "50 píxeles en la cuadrícula").
-        -   0,5 ha. Cualquier número de hectáreas, 0 o más. Incluso con 0, una alerta tiene al menos un píxel.
+        -   Se descartan los grupos más pequeños que este tamaño, salvo que la opción siguiente los conserve. La ayuda indica ese tamaño en píxeles de la cuadrícula (a 10 m, 0,5 ha son "50 píxeles en la cuadrícula").
+        -   0,5 ha. Cualquier número de hectáreas, 0 o más. Incluso con 0, un grupo tiene al menos un píxel.
+    *   -   **Conservar los grupos más pequeños que tocan una pérdida confirmada anterior**
+        -   Conserva un grupo bajo el tamaño mínimo cuando está a un píxel o menos de una alerta anterior revisada como **Alerta verdadera** o **Requiere revisión** (consulta `Crecimiento de una pérdida anterior <defo-integrate-growth_>`_). Una línea debajo indica cuándo la ejecución no tiene nada con lo que vincular: "Ningún período anterior tiene aún un conjunto de alertas: nada se vincula en esta ejecución." o "Aún no se ha revisado ninguna alerta de un período anterior: nada se vincula en esta ejecución."
+        -   Marcada.
     *   -   **Orden**
-        -   El orden de las alertas en el conjunto, que es el orden de revisión: **Grupos más grandes primero**, **Grupos más pequeños primero**, **Grupos más recientes primero** (por la última fecha de detección) o **Grupos más antiguos primero** (por la primera fecha de detección).
+        -   El orden de los grupos en el conjunto, que es el orden de revisión: **Grupos más grandes primero**, **Grupos más pequeños primero**, **Grupos más recientes primero** (por la última fecha de detección) o **Grupos más antiguos primero** (por la primera fecha de detección).
         -   **Grupos más grandes primero**.
     *   -   **Limitar el número de grupos**
-        -   Si se marca, muestra **Número máximo de grupos**: solo se conservan las primeras alertas según el **Orden** elegido. Su ayuda indica cuáles (por ejemplo, "Conserva los 100 grupos más grandes." o "Conserva los 100 grupos más recientes."). Si no se marca, se conservan todas las alertas.
+        -   Si se marca, muestra **Número máximo de grupos**: solo se conservan los primeros grupos según el **Orden** elegido. Su ayuda indica cuáles (por ejemplo, "Conserva los 100 grupos más grandes." o "Conserva los 100 grupos más recientes."). Si no se marca, se conservan todos los grupos.
         -   Sin marcar. Al marcarlo, el límite empieza en 100. Debe ser un número entero mayor que 0.
     *   -   **Capas de atributos**
         -   Rasters cuyas estadísticas de bandas se añaden a cada alerta (ver más abajo).
@@ -1135,8 +1139,8 @@ Para añadir una capa de atributos:
 
 1.  Selecciona **Añadir capa de atributos** para abrir el diálogo **Añadir una capa de atributos**.
 2.  Comprueba el **Nombre de la capa**, sugerido a partir del raster una vez elegido. Las columnas se llaman *nombre de la capa*\_\ *banda*.
-3.  Elige la **Fuente** (**Earth Engine**, una imagen, o **GeoTIFF**, un archivo de tu carpeta de SEPAL) y luego elige el raster. Sus bandas se leen enseguida.
-4.  Con una banda, el formulario indica "Una banda (…): su estadística se añade a cada alerta." Con dos o más, selecciona una o varias en **Bandas**.
+3.  Elige la **Fuente** (**Earth Engine**, una imagen, o **GeoTIFF / VRT**, un archivo de tu carpeta de SEPAL) y luego elige el raster. Sus bandas se leen enseguida.
+4.  Con una banda, el formulario indica "Una banda (…): su estadística se añade a cada grupo." Con dos o más, selecciona una o varias en **Bandas**.
 5.  Para cada banda, elige la estadística que se calcula sobre la alerta: **Mayoría** (para clases), **Media**, **Mínimo**, **Máximo** o **Mediana**. Empieza en **Mayoría** cuando el nombre de la banda parece de clases (por ejemplo, ``landcover``), y en **Media** en los demás casos, marcada "(sugerido)". El nombre de la columna aparece al lado.
 6.  Selecciona **Añadir capa de atributos**.
 
@@ -1158,9 +1162,9 @@ La línea gris sobre el botón indica qué conjunto genera la ejecución: "Crea 
 
 Selecciona **Integrar y vectorizar**. El botón sigue desactivado hasta que haya al menos una fuente seleccionada y, cuando **Limitar el número de grupos** está marcado, el límite sea válido ("Introduce un número entero mayor que 0." bajo el campo).
 
-La ejecución pasa por "Combinando fuentes", "Vectorizando grupos", "Guardando las alertas", "Escribiendo la huella" y "Generando las teselas del mapa". Al terminar, un mensaje indica "N alertas listas para revisar", seguido de "Se vincularon N alertas a pérdidas anteriores (M por debajo del área mínima)" cuando encontró `alertas de crecimiento <defo-integrate-growth_>`_, y el nuevo conjunto pasa a ser el *conjunto activo*: aquel con el que trabajan `Cuestionario <defo-questionnaire_>`_, `Evaluación <defo-evaluation_>`_, `Análisis <defo-analysis_>`_ y `Resumen <defo-overview_>`_. El paso sigue abierto.
+La ejecución pasa por "Combinando fuentes", "Vectorizando grupos", "Guardando los grupos", "Escribiendo la huella" y "Generando las teselas del mapa". Al terminar, un mensaje indica "N grupos listos para revisar", seguido de "Se vincularon N grupos a pérdidas anteriores (M por debajo del área mínima)" cuando encontró `alertas de crecimiento <defo-integrate-growth_>`_, y el nuevo conjunto pasa a ser el *conjunto activo*: aquel con el que trabajan `Cuestionario <defo-questionnaire_>`_, `Evaluación <defo-evaluation_>`_, `Análisis <defo-analysis_>`_ y `Resumen <defo-overview_>`_. El paso sigue abierto.
 
-Si no queda ninguna alerta, el conjunto se genera igualmente, vacío, y el mensaje indica el motivo para cada fuente (por ejemplo, "GLAD-L: los 56 píxeles de alerta eliminados por máscaras" o "RADD: se dejaron fuera las alertas probables (no confirmadas)").
+Si no queda ningún grupo, el conjunto se genera igualmente, vacío: el mensaje indica "No hay grupos nuevos en este período: el conjunto de alertas está vacío." y da el motivo para cada fuente (por ejemplo, "GLAD-L: los 56 píxeles de alerta eliminados por máscaras" o "RADD: se dejaron fuera las alertas probables (no confirmadas)").
 
 .. _defo-integrate-replace:
 
@@ -1170,7 +1174,7 @@ Reemplazar un conjunto
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/integrate-replace.png
     :alt: Confirmación del reemplazo de un conjunto de alertas
 
-Cuando el conjunto que se va a reemplazar tiene alertas revisadas o un `reparto entre evaluadores <defo-evaluation_>`_, el diálogo **¿Reemplazar este conjunto de alertas?** enumera lo que se perdería: las alertas revisadas (hasta 20, y luego "… y N más"), y el reparto con las revisiones que los evaluadores todavía no han devuelto. Cuando hay alertas de períodos posteriores que crecen de este conjunto, añade "N alertas de períodos posteriores están vinculadas a este conjunto; sus vínculos se romperán.": tras la ejecución, esos vínculos aparecen como "el conjunto anterior se volvió a ejecutar" (consulta `Alertas anteriores <defo-analysis-earlier_>`_). Selecciona **Reemplazar** para continuar. Un conjunto sin nada que perder se reemplaza sin confirmación.
+Cuando el conjunto que se va a reemplazar tiene alertas revisadas o un `reparto entre evaluadores <defo-evaluation_>`_, el diálogo **¿Reemplazar este conjunto de alertas?** enumera lo que se perdería: las alertas revisadas (hasta 20, y luego "… y N más"), y el reparto con las revisiones que los evaluadores todavía no han devuelto. Cuando hay alertas de períodos posteriores que crecen de este conjunto, añade "N grupos de períodos posteriores están vinculados a este conjunto; sus vínculos se romperán.": tras la ejecución, esos vínculos aparecen como "el conjunto anterior se volvió a ejecutar" (consulta `Alertas anteriores <defo-analysis-earlier_>`_). Selecciona **Reemplazar** para continuar. Un conjunto sin nada que perder se reemplaza sin confirmación.
 
 .. attention::
 
@@ -1255,7 +1259,7 @@ La lista de capas
 Cada fila de **Capas de visualización** muestra:
 
 -   el **Nombre** de la capa;
--   una etiqueta con su fuente (**Earth Engine** o **GeoTIFF**);
+-   una etiqueta con su fuente (**Earth Engine** o **GeoTIFF / VRT**);
 -   una etiqueta **en Análisis** cuando se muestra en los mapas de Análisis; y
 -   una nota con sus bandas y su rango de valores o, para una capa categórica, su banda y su número de clases ("banda Map · 9 clases").
 
@@ -1281,9 +1285,9 @@ Selecciona **Añadir capa** para abrir el diálogo **Añadir una capa de visuali
         -   El nombre de la capa en la lista, en los mapas y en la leyenda.
         -   Si lo dejas vacío, se toma del nombre del recurso o del archivo, más la banda o la combinación. Como máximo 24 caracteres, único en el proyecto.
     *   -   **Fuente**
-        -   **Earth Engine** (un recurso de imagen) o **GeoTIFF** (un archivo de tu carpeta de SEPAL).
+        -   **Earth Engine** (un recurso de imagen) o **GeoTIFF / VRT** (un archivo de tu carpeta de SEPAL).
         -   **Earth Engine**.
-    *   -   Recurso o **GeoTIFF**
+    *   -   Recurso o **GeoTIFF / VRT**
         -   Una *imagen* de GEE (no una colección), o un archivo .tif.
         -   Hay que poder escribir en la carpeta del GeoTIFF: la aplicación escribe a su lado un archivo de pirámides para que la capa se dibuje rápido.
 
@@ -1532,7 +1536,9 @@ La línea **Plantilla del informe** indica la plantilla en uso, con una etiqueta
     *   -   ``{alert_system}``
         -   Las fuentes que detectaron la alerta.
     *   -   ``{area_loss}``
-        -   La superficie de la alerta, en hectáreas.
+        -   La superficie de la alerta, en hectáreas (la del grupo, para un grupo).
+    *   -   ``{group_size}``, ``{group_alerts}``
+        -   Para una alerta revisada en un grupo: el número de alertas del grupo y sus números ("12, 15, 16"). En los demás casos, "1" y el número de la propia alerta.
     *   -   ``{verdict}`` (verde)
         -   El veredicto, en el idioma de la aplicación.
     *   -   Uno por pregunta (verde)
@@ -1615,6 +1621,33 @@ Un proyecto empieza sin ninguna casilla marcada. La nota debajo indica "Elige qu
 -   **Varios evaluadores** completa el paso en cuanto las alertas están repartidas.
 -   Mientras exista un reparto, las dos casillas quedan desactivadas en **Varios evaluadores** (**Quita el reparto para pasar a evaluación individual.**).
 
+.. _defo-evaluation-group:
+
+Revisar juntas las alertas cercanas
+"""""""""""""""""""""""""""""""""""
+
+Bajo el modo de revisión, la casilla **Revisar juntas las alertas cercanas** permite que `Análisis <defo-analysis-nearby_>`_ revise alertas vecinas como un solo grupo: "En Análisis, las alertas a esta distancia pueden revisarse con un solo veredicto, un solo conjunto de respuestas y un solo polígono." Funciona en los dos modos. Una vez marcada:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 30 45 25
+
+    *   -   Campo
+        -   Descripción
+        -   Valor predeterminado y límites
+    *   -   **Distancia (m)**
+        -   A qué distancia, de borde a borde, debe estar una alerta para que se ofrezca en el grupo.
+        -   300. De 10 a 5000.
+    *   -   **Incluir las alertas ya revisadas**
+        -   Ofrece también las alertas revisadas antes de activar la agrupación. "Sin marcar, las alertas revisadas antes de activar la agrupación nunca se ofrecen."
+        -   Sin marcar.
+
+Algunos cambios quedan bloqueados:
+
+-   Una vez guardados los grupos, la agrupación no se puede desactivar y la distancia no puede cambiar: "Hay 2 grupos guardados: quítalos para desactivar la agrupación."
+-   Un reparto fija los tres ajustes: "Las alertas se repartieron con agrupación: quita el reparto para cambiarla." (o "sin agrupación").
+-   En una copia de revisión, aparecen como "Definido por el creador del proyecto."
+
 .. _defo-evaluation-split:
 
 Repartir las alertas
@@ -1646,6 +1679,8 @@ Con **Varios evaluadores** marcado, selecciona **Repartir alertas…** encima de
         -   Sin marcar.
 
 Selecciona **Repartir**. Las alertas se reparten una a una en el orden del conjunto (el **Orden** elegido en `Integrar y vectorizar <defo-integrate-options_>`_), como cartas: la primera al evaluador 1, la segunda al evaluador 2, y así sucesivamente, dando la vuelta a la lista. Cada evaluador recibe más o menos el mismo número de alertas, distribuidas a lo largo de todo el orden.
+
+Con **Revisar juntas las alertas cercanas** marcada, el reparto nunca separa un grupo. Las alertas que están a la distancia elegida unas de otras, de borde a borde, se encadenan en un grupo de alertas cercanas. Cada grupo va entero al evaluador que tiene menos alertas hasta ese momento. Cuando un grupo tiene más de una parte equitativa, el diálogo avisa: "Un grupo de alertas cercanas contiene 30 alertas, más de una parte equitativa."
 
 La tabla de evaluadores
 """""""""""""""""""""""
@@ -1758,6 +1793,8 @@ Para integrar una copia revisada:
     *   -   ignoradas
         -   Alertas que no están asignadas a este evaluador. Nunca se incorporan.
 
+Con la agrupación activada, cada recuento indica también su número de grupos ("3 revisiones nuevas (1 grupo)"). Un grupo se integra entero: cuando una de sus alertas está en conflicto, todo el grupo es un conflicto.
+
 Después de la integración, las alertas del conjunto se actualizan, un mensaje indica "N revisiones de (evaluador) integradas." y la columna **Integrado** muestra la fecha.
 
 La vista previa también puede avisar de que "El cuestionario cambió desde que se crearon los paquetes; las respuestas se fusionan por clave de pregunta.", o enumerar columnas que ignora. Si la alerta abierta en Análisis está entre las integradas, se vuelve a cargar.
@@ -1777,6 +1814,9 @@ Mensajes frecuentes
 
 "Este zip es un paquete de revisión, no una copia revisada."
     Elige el archivo que devolvió el evaluador.
+
+"Esta revisión devuelta rompería un grupo de alertas, así que no se fusionó nada. Elija Conservar las mías o pida al evaluador que actualice la aplicación y vuelva a enviar la revisión."
+    Aceptar las revisiones del evaluador separaría un grupo guardado en tu proyecto. Elige **Conservar las mías**, o pide una copia revisada hecha con una aplicación actualizada.
 
 "Una copia de revisión no puede fusionar copias revisadas; abra el proyecto del creador."
     Integra la copia en el proyecto original.
@@ -1873,7 +1913,11 @@ De izquierda a derecha:
     *   -   **Anterior** / **Siguiente**
         -   La alerta anterior o siguiente en el orden del conjunto. Se detienen en la primera y la última alerta.
     *   -   Contador
-        -   El número de la alerta en el conjunto ("13 / 48"). Selecciónalo para abrir un pequeño menú: **Ir al número de alerta** (escribe un número y selecciona **Ir**, o pulsa **Intro**) y **Siguiente alerta sin revisar**, que va a la siguiente alerta sin veredicto y vuelve a empezar desde arriba después de la última.
+        -   El número de la alerta en el conjunto ("13 / 48"). Selecciónalo para abrir **Ir al número de alerta**: escribe un número y selecciona **Ir**, o pulsa **Intro**.
+    *   -   Icono **Siguiente alerta sin revisar**
+        -   Va a la siguiente alerta sin veredicto y vuelve a empezar desde arriba después de la última. Desactivado cuando no queda ninguna otra alerta por revisar.
+
+Cuando la alerta en pantalla tiene cambios sin guardar, cualquier forma de pasar a otra alerta pregunta primero (consulta `Guardar la revisión <defo-analysis-save_>`_).
 
 El orden de las alertas es el **Orden** elegido en `Integrar y vectorizar <defo-integrate-options_>`_.
 
@@ -1891,7 +1935,7 @@ El filtro conserva los valores de un atributo y oculta las demás alertas de la 
 
 Con un filtro activo:
 
--   **Anterior**, **Siguiente** y **Siguiente alerta sin revisar** se mueven solo entre las alertas que coinciden;
+-   **Anterior**, **Siguiente** y el icono **Siguiente alerta sin revisar** se mueven solo entre las alertas que coinciden;
 -   el contador cuenta las coincidencias ("06 / 24"), o indica "– / 24" mientras la alerta en pantalla no es una de ellas, y la línea de progreso termina con "filtradas · 48 en total";
 -   el menú de salto sigue aceptando el número de la alerta en todo el conjunto, pero rechaza uno que el filtro oculta ("La alerta 12 no está en el filtro actual"); y
 -   cuando nada coincide, el contador indica "Ninguna alerta coincide con este filtro".
@@ -1921,6 +1965,9 @@ Los dos mapas se centran en la alerta cuando se abre. Un recuadro amarillo disco
     *   -   **Acercar a la alerta**
         -   Esquina superior izquierda del mapa de después
         -   Vuelve a acercar los dos mapas a la alerta.
+    *   -   Barra de escala
+        -   Esquina inferior izquierda de cada mapa, bajo la miniatura del mapa base
+        -   La escala del mapa, en metros o kilómetros.
 
 El menú **Capas** contiene:
 
@@ -1933,7 +1980,7 @@ El menú **Capas** contiene:
     *   -   **Imágenes**
         -   *True Color* (activada) y *False Color* (infrarrojo cercano, rojo y verde; desactivada): la imagen elegida para ese mapa.
     *   -   **Alertas**
-        -   *Original Alert*: los píxeles de alerta del conjunto, semitransparentes (desactivada). *Alert BB*: el recuadro que delimita la alerta. *Defo Layer*: el polígono guardado para la alerta (consulta `Precisar el polígono <defo-analysis-refine_>`_). *Alertas anteriores* (consulta `Alertas anteriores <defo-analysis-earlier_>`_).
+        -   *Original alert*: el contorno del polígono de la alerta de `Integrar y vectorizar <defo-integrate_>`_, y de las demás alertas de su grupo (consulta `Alertas cercanas <defo-analysis-nearby_>`_), activada de forma predeterminada y oculta mientras dibujas. *All alerts*: los píxeles de alerta de todo el conjunto, semitransparentes (desactivada). *Alert BB*: el recuadro que delimita la alerta. *Defo Layer*: el polígono guardado para la alerta (consulta `Precisar el polígono <defo-analysis-refine_>`_). *Alertas anteriores* (consulta `Alertas anteriores <defo-analysis-earlier_>`_). *Nearby alerts*, solo cuando las alertas cercanas se revisan juntas.
     *   -   **Capas adicionales**
         -   Las `capas adicionales <defo-layers_>`_ marcadas con **Mostrar en Análisis**, desactivadas.
 
@@ -2021,6 +2068,8 @@ La parte superior del panel muestra lo que dice la tabla de alertas:
         -   Sus fechas de primera y última detección.
     *   -   Fila **Estado**
         -   Su estado de revisión, con su color: **No revisada**, **Revisada: confirmada**, **Revisada: falso positivo** o **Revisada: necesita revisión**.
+    *   -   **Grupo**
+        -   Para una alerta revisada con alertas cercanas: "grupo de 4". Oculta en los demás casos.
     *   -   **Tipo**
         -   Si la alerta crece de una pérdida anterior (consulta `Crecimiento de una pérdida anterior <defo-integrate-growth_>`_): **Crecimiento** (una etiqueta morada), **Crecimiento · bajo el área mínima** o **Nueva · bajo el área mínima** (una alerta pequeña a la que se le quitaron todos sus vínculos). Oculta para una alerta nueva.
     *   -   **Historial**
@@ -2114,7 +2163,7 @@ Elegir otras imágenes u otra **Área de imagen** descarta los resultados de los
 Alertas anteriores
 """"""""""""""""""
 
-Esta sección aparece cuando el período del conjunto activo tiene períodos anteriores con conjuntos de alertas. Enumera la pérdida anterior cercana a la alerta: las alertas de períodos anteriores revisadas como **Revisada: confirmada** o **Revisada: necesita revisión**, dentro de la distancia fijada en **Dentro de** (1 km por defecto, de 0,1 a 50 km), más todas las alertas vinculadas a esta, por lejos que estén. Úsala para comprobar si una alerta continúa un desmonte ya reportado, y para vincularla a ese desmonte.
+Esta sección aparece cuando el período del conjunto activo tiene períodos anteriores con conjuntos de alertas. Enumera la pérdida anterior cercana a la alerta: las alertas de períodos anteriores revisadas como **Revisada: confirmada** o **Revisada: necesita revisión**, dentro de la distancia fijada en **Dentro de**, en metros (100 m por defecto, de 10 m a 50 km), más todas las alertas vinculadas a esta, por lejos que estén. Úsala para comprobar si una alerta continúa un desmonte ya reportado, y para vincularla a ese desmonte.
 
 Las alertas se agrupan por período, del más reciente al más antiguo. Cada fila muestra:
 
@@ -2127,6 +2176,8 @@ Selecciona el número de una alerta para acercar los dos mapas a ella.
 
 Para vincular o desvincular una alerta, marca o desmarca su casilla. El cambio forma parte de la revisión: el pie indica "Cambios sin guardar en esta alerta", y **Guardar** lo guarda con el veredicto. Marcar una alerta de un período anterior convierte esta alerta en una alerta de crecimiento, aunque no la toque.
 
+Una alerta de crecimiento más pequeña que el **Tamaño mínimo de grupo** está en el conjunto solo por su vínculo. Desmarcar su último vínculo pregunta primero (**¿Desvincular de la alerta anterior?**): por ejemplo, "La alerta #14 tiene 0,2 ha, por debajo del mínimo de 0,5 ha. Es una alerta solo porque está vinculada a #12." Selecciona **Desvincular** para quitar el vínculo: la alerta sigue en el conjunto como **Nueva · bajo el área mínima**.
+
 Algunas filas no tienen casilla:
 
 -   "vía #12": la alerta pertenece al historial a través de otro vínculo (aquí, la alerta 12). Desmarcar la casilla de la alerta 12 la quita también.
@@ -2134,14 +2185,56 @@ Algunas filas no tienen casilla:
 
 Una alerta vinculada que después se revisó como falso positivo sigue marcada, con "ahora falso positivo". Aparece en gris y queda fuera del historial; desmarca su casilla para quitar el vínculo.
 
-Activa **Mostrar en los mapas** para contornear las alertas de la lista en los dos mapas. El color es el del período, y una pequeña leyenda enumera los períodos mostrados, con "continua: confirmada · discontinua: requiere revisión · gruesa: vinculada". El interruptor empieza activado en una alerta de crecimiento; en las demás alertas conserva tu última elección. Cuando la lista abarca varios períodos, el menú **Períodos** oculta algunos de ellos. El indicador muestra "desactivado", "ninguna a menos de 1 km" o, por ejemplo, "4 a menos de 1 km · vínculos: 1".
+Activa **Mostrar en los mapas** para contornear las alertas de la lista en los dos mapas. El color es el del período, y una pequeña leyenda enumera los períodos mostrados, con "continua: confirmada · discontinua: requiere revisión · gruesa: vinculada". El interruptor empieza activado en una alerta de crecimiento; en las demás alertas conserva tu última elección. Cuando la lista abarca varios períodos, el menú **Períodos** oculta algunos de ellos. El indicador muestra "desactivado", "ninguna a menos de 100 m" o, por ejemplo, "4 a menos de 100 m · vínculos: 1".
 
 En una `copia de revisión <defo-evaluation-return_>`_, la lista proviene de una instantánea de las alertas anteriores tomada al generar los paquetes: la sección indica "Alertas anteriores al (fecha)", o "No hay alertas anteriores en esta copia" en un paquete creado con una versión anterior de la aplicación.
+
+.. _defo-analysis-nearby:
+
+Alertas cercanas
+""""""""""""""""
+
+Esta sección solo aparece cuando **Revisar juntas las alertas cercanas** está marcada en `Evaluación <defo-evaluation-group_>`_. Un mismo desmonte suele generar varias alertas pequeñas una al lado de otra. Revísalas juntas: un solo veredicto, un solo conjunto de respuestas, un solo par de imágenes y un solo polígono para todas ellas.
+
+La sección enumera las alertas que están dentro de la distancia fijada en **Evaluación**, medida de borde a borde desde la alerta en pantalla: primero las marcadas, luego las demás más cercanas, como máximo 50 ("12 más en el radio, no listadas"). Cada fila muestra:
+
+-   una casilla, marcada cuando la alerta forma parte del próximo guardado;
+-   el número de la alerta (selecciónalo para acercar los dos mapas a ella), su primera fecha de detección y su superficie;
+-   su distancia ("40 m"), o "en este grupo";
+-   "grupo n.º 12" cuando pertenece a otro grupo;
+-   su estado; y
+-   en un conjunto repartido, "asignada a Ana", en gris y sin casilla, para una alerta de otro evaluador.
+
+La lista ofrece las alertas sin revisar y las alertas revisadas en un grupo. Las alertas revisadas antes de activar la agrupación solo se ofrecen con **Incluir las alertas ya revisadas**.
+
+Las alertas de la lista se contornean en los dos mapas (capa *Nearby alerts*). Haz clic en un mapa cerca de un contorno para marcar o desmarcar esa alerta. **Seleccionar todas** marca todas las alertas de la lista y **Borrar** las desmarca. El indicador muestra "3 seleccionadas", "5 a menos de 300 m" o "ninguna a menos de 300 m". Cuando una alerta marcada queda fuera de las imágenes, una línea indica "Algunas alertas seleccionadas quedan fuera del área de la imagen: elija un área mayor en la línea de tiempo."
+
+Para revisar un grupo:
+
+1.  Marca las alertas que muestran el mismo desmonte.
+2.  Da el veredicto, responde a las preguntas, elige las imágenes y dibuja el polígono como para una sola alerta.
+3.  Selecciona **Guardar**, que entonces indica "Guardar para 4 alertas".
+
+Cuando el guardado cambia otras revisiones, el diálogo **¿Guardar este grupo?** las enumera primero, por ejemplo:
+
+-   "#15 (Revisada: confirmada): se reemplaza su revisión";
+-   "#16 (Revisada: confirmada): pasa desde el grupo n.º 9" o "se une con el grupo n.º 9" (un grupo entero se une cuando se marca su alerta principal); y
+-   "#17 (No revisada): sale del grupo y vuelve a sin revisar" (una alerta de este grupo que se dejó sin marcar).
+
+Selecciona **Guardar** o **Cancelar**.
+
+Todas las alertas del grupo reciben el mismo veredicto, las mismas respuestas, las mismas imágenes y los mismos vínculos a alertas anteriores. La alerta en pantalla cuando el grupo se guarda por primera vez es su alerta *principal*: conserva el polígono dibujado. Cuando el grupo tiene un dibujo, las demás alertas reciben una superficie de 0, para que la pérdida cuente una sola vez.
+
+Una alerta de un grupo guardado se abre con el aviso "Revisada en un grupo de 4 (alerta principal #12)", y la fila **Grupo** del panel indica "grupo de 4". La capa *Original alert* contornea todo el grupo. En una alerta que no es la principal, **Quitar del grupo** la saca del grupo: confirma con **Quitar**. La alerta vuelve a estar sin revisar.
+
+Un grupo necesita un solo evaluador: "Estas alertas están asignadas a evaluadores distintos: un grupo necesita uno solo." En una copia de revisión, solo pueden unirse tus propias alertas: "Algunas de estas alertas no te están asignadas."
+
+.. _defo-analysis-save:
 
 Guardar la revisión
 ^^^^^^^^^^^^^^^^^^^
 
-El pie queda fijo en la parte inferior del panel:
+La *barra de acciones* queda fija en la parte inferior del panel: la sección **Exportar esta alerta**, luego los botones y luego una línea de estado.
 
 .. list-table::
     :header-rows: 1
@@ -2150,11 +2243,17 @@ El pie queda fijo en la parte inferior del panel:
     *   -   Botón
         -   Descripción
     *   -   **Guardar**
-        -   Guarda la revisión y se queda en la alerta.
+        -   Guarda la revisión y se queda en la alerta. Con alertas cercanas marcadas, indica "Guardar para 4 alertas".
     *   -   **Siguiente**
-        -   Abre la siguiente alerta (la siguiente coincidencia si hay un filtro). Con cambios sin guardar, pregunta antes: **Descartar** los desecha y avanza, **Quedarse** te mantiene en la alerta.
+        -   Abre la siguiente alerta (la siguiente coincidencia si hay un filtro).
+    *   -   Icono **Siguiente alerta sin revisar**
+        -   Abre la siguiente alerta sin veredicto, como en la barra superior.
 
-La línea bajo los botones indica "Cambios sin guardar en esta alerta", "Guarde su dibujo antes de guardar esta revisión" o "Guardada a las 14:32".
+El botón relleno muestra el paso siguiente: **Guardar** mientras la alerta tiene cambios sin guardar o ninguna revisión guardada, **Siguiente** una vez guardada la revisión.
+
+Con cambios sin guardar, **Siguiente**, el icono y los botones **Anterior**, **Siguiente**, **Ir** e icono de la barra superior preguntan primero. Los botones dejan paso a "Esta alerta tiene cambios sin guardar": **Descartar** desecha los cambios y avanza, **Quedarse** te mantiene en la alerta.
+
+La línea de estado indica "Cambios sin guardar en esta alerta", "Guarde su dibujo antes de guardar esta revisión" o "Guardada a las 14:32".
 
 Un guardado escribe en el conjunto de alertas:
 
@@ -2162,7 +2261,8 @@ Un guardado escribe en el conjunto de alertas:
 -   las respuestas a las preguntas que se hacen para ese veredicto (las demás quedan vacías);
 -   las imágenes de antes y de después elegidas, para que la alerta se vuelva a abrir con ellas;
 -   el polígono guardado en **Precisar el polígono**, con su superficie como superficie de la alerta;
--   las alertas anteriores marcadas en `Alertas anteriores <defo-analysis-earlier_>`_, como vínculos de la alerta; y
+-   las alertas anteriores marcadas en `Alertas anteriores <defo-analysis-earlier_>`_, como vínculos de la alerta;
+-   con alertas cercanas marcadas, el grupo (consulta `Alertas cercanas <defo-analysis-nearby_>`_); y
 -   los nombres de las áreas administrativas bajo la alerta, a partir de los límites FAO GAUL 2015 de GEE (esto tarda unos segundos).
 
 Las revisiones aparecen de inmediato en la barra de progreso, en el selector de conjuntos y en el `Resumen <defo-overview_>`_. Una revisión puede cambiar en cualquier momento: abre la alerta, cámbiala y vuelve a guardar.
@@ -2170,7 +2270,7 @@ Las revisiones aparecen de inmediato en la barra de progreso, en el selector de 
 Exportar la alerta
 ^^^^^^^^^^^^^^^^^^
 
-**Exportar esta alerta**, en el pie, genera los archivos de la alerta una vez guardada: un archivo .zip con su GeoPackage y sus imágenes, un informe de Word y, para una alerta verdadera, un GIF animado. Consulta `Una alerta, desde Análisis <defo-export-alert_>`_.
+**Exportar esta alerta**, en la parte superior de la barra de acciones, genera los archivos de la alerta una vez guardada: un archivo .zip con su GeoPackage y sus imágenes, un informe de Word y, para una alerta verdadera, un GIF animado. Consulta `Una alerta, desde Análisis <defo-export-alert_>`_.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/analysis-footer.png
     :alt: El pie: sección de exportación y botones de guardado
@@ -2335,6 +2435,8 @@ Columna derecha:
         -   Una tabla: por estado, el número de alertas, su superficie, su proporción de la medida y el tamaño mediano de las alertas, con una fila **Total**.
     *   -   **Historial de talas que crecen**
         -   Solo cuando el conjunto tiene `alertas de crecimiento <defo-integrate-growth_>`_ (ver más abajo).
+    *   -   **Alertas cercanas**
+        -   Cómo se reúnen las alertas del conjunto en grupos de alertas cercanas (ver más abajo).
     *   -   **Cuándo se detectó la pérdida**
         -   Las alertas según la semana en que se detectaron por primera vez. Las semanas en gris son semanas de retrospección: caen antes del inicio del período (consulta `Lo que ya reportaron los períodos anteriores <defo-integrate-earlier_>`_).
     *   -   Una tarjeta por pregunta
@@ -2369,6 +2471,17 @@ Su tabla enumera los historiales que incluyen una alerta de este conjunto, prime
         -   La superficie de las alertas de este conjunto en el historial, sin los falsos positivos.
     *   -   **Revisar**
         -   Cierra el Resumen y abre la alerta de este conjunto del historial en `Análisis <defo-analysis_>`_.
+
+Alertas cercanas
+""""""""""""""""
+
+La tarjeta **Alertas cercanas** muestra cómo se encadenan en grupos las alertas del conjunto: las alertas que están a la distancia de **Revisar juntas las alertas cercanas** (consulta `Evaluación <defo-evaluation-group_>`_), de borde a borde, forman un grupo. Al repartir, cada grupo va a un solo evaluador.
+
+-   El titular cuenta los grupos ("6 grupos de alertas cercanas"), o indica "Ninguna alerta a menos de 300 m de otra".
+-   La línea de debajo indica, por ejemplo, "En un grupo: 20 de 48 alertas · Solas: 28 · El mayor: 5 alertas".
+-   La última línea cuenta los grupos guardados en Análisis ("2 grupos guardados en Análisis (7 alertas)"), o indica "Aún no hay ningún grupo guardado en Análisis".
+
+Cuando la agrupación está desactivada, la tarjeta usa la distancia del proyecto y añade "Revisar juntas las alertas cercanas está desactivado: actívalo en el paso Evaluación."
 
 Exportar el conjunto
 ^^^^^^^^^^^^^^^^^^^^
@@ -2407,7 +2520,7 @@ Cada archivo se escribe en la carpeta del conjunto de alertas dentro del proyect
 Una alerta, desde Análisis
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-La sección **Exportar esta alerta** está en el pie del panel de revisión de `Análisis <defo-analysis_>`_. Trabaja con la alerta en pantalla, una vez guardada su revisión: su indicador muestra "disponible después de guardar", luego "listo para generar" y luego "3 archivos listos".
+La sección **Exportar esta alerta** está en la parte superior de la barra de acciones del panel de revisión de `Análisis <defo-analysis-save_>`_. Trabaja con la alerta en pantalla, una vez guardada su revisión: su indicador muestra "disponible después de guardar", luego "listo para generar" y luego "3 archivos listos".
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/export-alert-files.png
     :alt: Los archivos de la alerta, listos para descargar
@@ -2419,7 +2532,7 @@ La sección **Exportar esta alerta** está en el pie del panel de revisión de `
     *   -   Mosaico
         -   Descripción
     *   -   **Generar archivos**
-        -   Genera los datos y el informe de la alerta. Indica "Guarda primero esta alerta" y está desactivado hasta que se selecciona **Guardar** en esta alerta durante esta sesión. Se ejecuta en la lista de tareas y tarda un poco: descarga las imágenes de antes y de después.
+        -   Genera los datos y el informe de la alerta a partir de la revisión guardada ("Genera los archivos de arriba a partir de la revisión guardada"). Está desactivado hasta que se guarda la revisión en pantalla: entonces indica "Guarda primero esta alerta", o "Guarda primero tus cambios" cuando hay cambios sin guardar. Una alerta revisada que se abre con las imágenes con las que se guardó está lista enseguida. Se ejecuta en la lista de tareas ("Generando archivos…") y tarda un poco: descarga las imágenes de antes y de después.
     *   -   **Datos de la alerta**
         -   Descarga un archivo .zip: el GeoPackage de la alerta, sus imágenes de antes y de después en un solo GeoTIFF y, para una alerta verdadera, su GIF.
     *   -   **Informe de la alerta**
@@ -2427,7 +2540,7 @@ La sección **Exportar esta alerta** está en el pie del panel de revisión de `
     *   -   **Regenerar archivos**
         -   Vuelve a generar los archivos (por ejemplo, después de cambiar la revisión).
     *   -   **Secuencia temporal**
-        -   Crea y descarga un GIF animado de la alerta (ver más abajo).
+        -   Crea y descarga un GIF animado de la alerta (ver más abajo). Para una alerta no guardada como alerta verdadera, indica "Solo alertas verdaderas".
 
 Los archivos llevan el nombre de la fila de la alerta en el conjunto (el número del contador menos uno):
 
@@ -2448,6 +2561,8 @@ Los archivos llevan el nombre de la fila de la alerta en el conjunto (el número
     *   -   ``alert_<n>.docx``
         -   El informe de Word.
 
+Para una alerta de un grupo (consulta `Alertas cercanas <defo-analysis-nearby_>`_), los archivos describen todo el grupo: el GeoPackage contiene una entidad con la superficie sumada del grupo, sus fechas de primera y última detección, sus fuentes, ``group_size`` (el número de alertas) y ``group_alerts`` (sus números, por ejemplo "12, 15, 16"), y el GIF contornea todas las alertas del grupo.
+
 Los enlaces de los mosaicos corresponden a la revisión en pantalla. Elegir otras imágenes, volver a guardar la alerta o cambiar la plantilla del informe los oculta: vuelve a generar los archivos.
 
 El informe
@@ -2458,7 +2573,7 @@ El informe se genera a partir de la plantilla de Word del proyecto, elegida en e
 La secuencia temporal
 """""""""""""""""""""
 
-El mosaico **Secuencia temporal** crea un GIF animado que recorre las imágenes del área de la alerta, de antes a después, con el contorno de la alerta encima. Cada fotograma lleva su colección y su fecha. Los fotogramas de antes y de después también indican su lado ("Antes · Sentinel-2 2026-07-28").
+El mosaico **Secuencia temporal** crea un GIF animado que recorre las imágenes del área de la alerta, de antes a después, con el contorno de la alerta encima. Cada fotograma dura 2,5 segundos y lleva su colección y su fecha. Los fotogramas de antes y de después también indican su lado ("Antes · Sentinel-2 2026-07-28").
 
 Solo se ofrece para una alerta verdadera: el mosaico se activa cuando la alerta está guardada como **Revisada: confirmada** y las imágenes en pantalla son aquellas con las que se guardó. Si no, indica "Guárdela como alerta verdadera, con las imágenes que se muestran, para crearlo".
 

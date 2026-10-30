@@ -458,8 +458,8 @@ Les pixels d'une alerte signalée font partie de l'empreinte : la rétrospection
 
 Quand l'alerte antérieure a été enregistrée comme **Alerte réelle** ou **À réexaminer**, `Intégrer et vectoriser <defo-integrate-growth_>`_ garde cette extension en vue :
 
--   Une nouvelle alerte qui touche ou chevauche l'alerte antérieure est une *alerte d'extension*, liée à celle-ci.
--   Un groupe sous la taille minimale est conservé s'il touche l'alerte antérieure : c'est une alerte d'extension *sous la surface minimale*. Un petit groupe qui ne touche rien est mis de côté, et la rétrospection peut encore le faire revenir à la période suivante.
+-   Une nouvelle alerte qui touche l'alerte antérieure, ou se trouve à un pixel de la grille au plus, est une *alerte d'extension*, liée à celle-ci.
+-   Un groupe sous la taille minimale est conservé s'il touche l'alerte antérieure : c'est une alerte d'extension *sous la surface minimale* (sauf si **Garder les groupes plus petits qui touchent une perte confirmée antérieure** est décoché). Un petit groupe qui ne touche rien est mis de côté, et la rétrospection peut encore le faire revenir à la période suivante.
 -   L'exécution cherche les alertes antérieures dans toutes les périodes antérieures, quelle que soit la rétrospection.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
@@ -651,9 +651,9 @@ Une source personnalisée lit votre propre raster d'alertes selon l'un des quatr
         -   Le nom de la source dans les listes, les légendes et les noms de fichiers.
         -   Proposé à partir du nom de l'asset ou du fichier. 24 caractères au plus, au moins une lettre ou un chiffre, unique dans le projet. GLAD-L, RADD et GLAD-S2 sont réservés.
     *   -   **Source**
-        -   L'endroit d'où le raster est lu : **Earth Engine** (un asset) ou **GeoTIFF** (un fichier de votre dossier SEPAL).
+        -   L'endroit d'où le raster est lu : **Earth Engine** (un asset) ou **GeoTIFF / VRT** (un fichier de votre dossier SEPAL : un GeoTIFF, ou un VRT, un raster virtuel GDAL lu comme les GeoTIFF vers lesquels il pointe).
         -   **Earth Engine**.
-    *   -   Asset ou **GeoTIFF**
+    *   -   Asset ou **GeoTIFF / VRT**
         -   L'image ou la collection d'images GEE, ou le fichier .tif.
         -   Une collection d'images est utilisée en entier, l'image la plus récente au-dessus. Pour une collection d'instantanés hebdomadaires (comme celle de RADD), indiquez plutôt l'identifiant de la dernière image. Le GeoTIFF doit avoir un système de référence de coordonnées.
     *   -   **Format des alertes**
@@ -848,9 +848,9 @@ Sélectionnez **Ajouter un masque** pour ouvrir la boîte de dialogue **Ajouter 
         -   Le nom du masque dans les listes, les légendes et les noms de fichiers.
         -   Proposé à partir du nom de l'asset ou du fichier. 24 caractères au plus, au moins une lettre ou un chiffre, unique parmi les masques du projet.
     *   -   **Source**
-        -   **Earth Engine** (un asset) ou **GeoTIFF** (un fichier de votre dossier SEPAL).
+        -   **Earth Engine** (un asset) ou **GeoTIFF / VRT** (un fichier de votre dossier SEPAL).
         -   **Earth Engine**.
-    *   -   Asset ou **GeoTIFF**
+    *   -   Asset ou **GeoTIFF / VRT**
         -   L'image ou la collection d'images GEE, ou le fichier .tif.
         -
     *   -   **Bande**
@@ -1026,8 +1026,8 @@ Cette étape transforme les sources harmonisées de la période active en un *je
 
 -   combine les sources pixel par pixel ;
 -   retire ce que les périodes antérieures ont déjà signalé ;
--   regroupe les pixels d'alerte voisins en alertes ;
--   dessine un polygone par alerte.
+-   regroupe les pixels d'alerte voisins en *groupes* ;
+-   dessine un polygone par groupe. Chaque groupe conservé est une alerte du jeu.
 
 Ouvrez l'étape **Intégrer et vectoriser** du panneau **Flux de travail**. Elle se déverrouille dès qu'au moins une source de la période active est prête dans `Harmoniser <defo-harmonize_>`_.
 
@@ -1074,9 +1074,10 @@ Extension d'une perte antérieure
 
 Un défrichement continue souvent de s'étendre d'un mois à l'autre. L'exécution relie chaque nouvelle alerte à la *perte antérieure* dont elle est l'extension : les alertes des jeux des périodes antérieures enregistrées comme **Alerte réelle** ou **À réexaminer**. La forme d'une alerte antérieure est le polygone dessiné pour elle dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut son groupe détecté.
 
--   Une nouvelle alerte qui touche ou chevauche la forme d'une alerte antérieure est une *alerte d'extension*, liée à chaque alerte antérieure qu'elle touche. Une alerte sans lien est une *nouvelle* alerte.
--   Un groupe plus petit que la **Taille minimale de groupe** est conservé s'il touche une perte antérieure : c'est une alerte d'extension *sous la surface minimale*. Un petit groupe qui ne touche rien est mis de côté comme *non analysable*, comme avant.
+-   Un nouveau groupe situé à un pixel de la grille au plus de la forme d'une alerte antérieure, de bord à bord, est une *alerte d'extension*, liée à chaque alerte antérieure aussi proche. Un groupe séparé par un pixel vide compte encore ; un écart d'un pixel en diagonale est plus loin. Une alerte sans lien est une *nouvelle* alerte.
+-   Avec **Garder les groupes plus petits qui touchent une perte confirmée antérieure** coché (par défaut), un groupe plus petit que la **Taille minimale de groupe** est conservé s'il est aussi proche d'une perte antérieure : c'est une alerte d'extension *sous la surface minimale*. Décoché, tout petit groupe est mis de côté. Un petit groupe qui ne touche rien est toujours mis de côté comme *non analysable*.
 -   Les alertes d'extension sont triées et limitées avec les autres : **Limiter le nombre de groupes** peut les écarter.
+-   Les jeux créés avant cette portée d'un pixel gardent leurs liens d'origine jusqu'à leur prochaine exécution.
 -   Seules les révisions enregistrées au lancement de l'exécution comptent. Une alerte antérieure confirmée ensuite n'est pas liée, mais elle peut l'être à la main dans `Alertes précédentes <defo-analysis-earlier_>`_.
 
 Les alertes liées entre elles, toutes périodes confondues, forment l'*historique* d'un défrichement. Analyse l'affiche sur chaque alerte, et l'`Aperçu <defo-overview-growth_>`_ en fait la synthèse.
@@ -1102,13 +1103,16 @@ Le formulaire s'ouvre avec les paramètres du jeu d'alertes actif (tous sauf les
         -   Affiché seulement si au moins une source cochée a une classe *probable* (confiance faible). Un seul interrupteur pour toutes ces sources. Désactivé, leurs pixels probables sont écartés avant tout le reste, et seuls leurs pixels confirmés comptent. Avec deux sources de ce type ou plus, **Régler par source** déplie un interrupteur par source (voir plus bas).
         -   Activé.
     *   -   **Taille minimale de groupe**
-        -   Les groupes plus petits sont écartés. L'aide donne cette taille en pixels de la grille (à 10 m, 0,5 ha correspond à « 50 pixels sur la grille »).
-        -   0,5 ha. N'importe quel nombre d'hectares, 0 ou plus. Même à 0, une alerte fait au moins un pixel.
+        -   Les groupes plus petits sont écartés, sauf si l'option suivante les garde. L'aide donne cette taille en pixels de la grille (à 10 m, 0,5 ha correspond à « 50 pixels sur la grille »).
+        -   0,5 ha. N'importe quel nombre d'hectares, 0 ou plus. Même à 0, un groupe fait au moins un pixel.
+    *   -   **Garder les groupes plus petits qui touchent une perte confirmée antérieure**
+        -   Garde un groupe sous la taille minimale quand il se trouve à un pixel au plus d'une alerte antérieure examinée comme **Alerte réelle** ou **À réexaminer** (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_). Une ligne en dessous indique quand l'exécution n'a rien à quoi lier : « Aucune période antérieure n'a encore de jeu d'alertes : rien ne se lie lors de cette exécution. » ou « Aucune alerte d'une période antérieure n'est encore examinée : rien ne se lie lors de cette exécution. »
+        -   Coché.
     *   -   **Ordre**
-        -   L'ordre des alertes dans le jeu, qui est l'ordre d'examen : **Groupes les plus grands en premier**, **Groupes les plus petits en premier**, **Groupes les plus récents en premier** (selon la date de dernière détection) ou **Groupes les plus anciens en premier** (selon la date de première détection).
+        -   L'ordre des groupes dans le jeu, qui est l'ordre d'examen : **Groupes les plus grands en premier**, **Groupes les plus petits en premier**, **Groupes les plus récents en premier** (selon la date de dernière détection) ou **Groupes les plus anciens en premier** (selon la date de première détection).
         -   **Groupes les plus grands en premier**.
     *   -   **Limiter le nombre de groupes**
-        -   Coché, affiche **Nombre maximal de groupes** : seules les premières alertes selon l'**Ordre** choisi sont conservées. Son aide indique lesquelles (par exemple « Conserve les 100 groupes les plus grands. » ou « Conserve les 100 groupes les plus récents. »). Décoché, toutes les alertes sont conservées.
+        -   Coché, affiche **Nombre maximal de groupes** : seuls les premiers groupes selon l'**Ordre** choisi sont conservés. Son aide indique lesquelles (par exemple « Conserve les 100 groupes les plus grands. » ou « Conserve les 100 groupes les plus récents. »). Décoché, tous les groupes sont conservés.
         -   Décoché. Une fois coché, la limite part de 100. Ce doit être un nombre entier supérieur à 0.
     *   -   **Couches d'attributs**
         -   Des rasters dont les statistiques de bandes sont ajoutées à chaque alerte (voir plus bas).
@@ -1137,8 +1141,8 @@ Pour ajouter une couche d'attributs :
 
 1.  Sélectionnez **Ajouter une couche d'attributs** pour ouvrir la boîte de dialogue **Ajouter une couche d'attributs**.
 2.  Vérifiez le **Nom de la couche**, proposé à partir du raster une fois celui-ci choisi. Les colonnes se nomment *nom de la couche*\_\ *bande*.
-3.  Choisissez la **Source** (**Earth Engine**, une image, ou **GeoTIFF**, un fichier de votre dossier SEPAL), puis choisissez le raster. Ses bandes sont lues aussitôt.
-4.  Avec une bande, le formulaire indique « Une bande (…) : sa statistique est ajoutée à chaque alerte. » Avec deux ou plus, sélectionnez-en une ou plusieurs dans **Bandes**.
+3.  Choisissez la **Source** (**Earth Engine**, une image, ou **GeoTIFF / VRT**, un fichier de votre dossier SEPAL), puis choisissez le raster. Ses bandes sont lues aussitôt.
+4.  Avec une bande, le formulaire indique « Une bande (…) : sa statistique est ajoutée à chaque groupe. » Avec deux ou plus, sélectionnez-en une ou plusieurs dans **Bandes**.
 5.  Pour chaque bande, choisissez la statistique calculée sur l'alerte : **Majorité** (pour des classes), **Moyenne**, **Minimum**, **Maximum** ou **Médiane**. Elle démarre sur **Majorité** quand le nom de la bande ressemble à des classes (par exemple ``landcover``), et sur **Moyenne** sinon, marquée « (suggéré) ». Le nom de la colonne s'affiche à côté.
 6.  Sélectionnez **Ajouter une couche d'attributs**.
 
@@ -1160,9 +1164,9 @@ La ligne grise au-dessus du bouton nomme le jeu que l'exécution produit : « Cr
 
 Sélectionnez **Intégrer et vectoriser**. Le bouton reste désactivé tant qu'aucune source n'est cochée et, lorsque **Limiter le nombre de groupes** est coché, tant que la limite n'est pas valide (« Saisissez un nombre entier supérieur à 0. » sous le champ).
 
-L'exécution passe par « Combinaison des sources », « Vectorisation des groupes », « Enregistrement des alertes », « Écriture de l'empreinte » et « Construction des tuiles de carte ». À la fin, un message indique « N alertes prêtes à être examinées », suivi de « N alertes liées à des pertes antérieures (M sous la surface minimale) » quand elle a trouvé des `alertes d'extension <defo-integrate-growth_>`_, et le nouveau jeu devient le *jeu actif* : celui sur lequel travaillent `Questionnaire <defo-questionnaire_>`_, `Évaluation <defo-evaluation_>`_, `Analyse <defo-analysis_>`_ et `Aperçu <defo-overview_>`_. L'étape reste ouverte.
+L'exécution passe par « Combinaison des sources », « Vectorisation des groupes », « Enregistrement des groupes », « Écriture de l'empreinte » et « Construction des tuiles de carte ». À la fin, un message indique « N groupes prêts à être examinés », suivi de « N groupes liés à des pertes antérieures (M sous la surface minimale) » quand elle a trouvé des `alertes d'extension <defo-integrate-growth_>`_, et le nouveau jeu devient le *jeu actif* : celui sur lequel travaillent `Questionnaire <defo-questionnaire_>`_, `Évaluation <defo-evaluation_>`_, `Analyse <defo-analysis_>`_ et `Aperçu <defo-overview_>`_. L'étape reste ouverte.
 
-S'il ne reste aucune alerte, le jeu est tout de même créé, vide, et le message en donne la raison pour chaque source (par exemple « GLAD-L : les 56 pixels d'alerte supprimés par les masques » ou « RADD : les alertes probables (non confirmées) ont été écartées »).
+S'il ne reste aucun groupe, le jeu est tout de même créé, vide : le message indique « Aucun nouveau groupe dans cette période : le jeu d'alertes est vide. » et donne la raison pour chaque source (par exemple « GLAD-L : les 56 pixels d'alerte supprimés par les masques » ou « RADD : les alertes probables (non confirmées) ont été écartées »).
 
 .. _defo-integrate-replace:
 
@@ -1172,7 +1176,7 @@ Remplacer un jeu
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/integrate-replace.png
     :alt: Confirmation du remplacement d'un jeu d'alertes
 
-Quand le jeu sur le point d'être remplacé a des alertes examinées ou une `répartition entre évaluateurs <defo-evaluation_>`_, la boîte de dialogue **Remplacer ce jeu d'alertes ?** liste ce qui serait perdu : les alertes examinées (jusqu'à 20, puis « … et N de plus »), ainsi que la répartition avec les révisions que les évaluateurs n'ont pas encore renvoyées. Quand des alertes de périodes ultérieures sont l'extension de ce jeu, elle ajoute « N alertes de périodes ultérieures sont liées à ce jeu ; leurs liens seront rompus. » : après l'exécution, ces liens apparaissent comme « l'ensemble précédent a été relancé » (voir `Alertes précédentes <defo-analysis-earlier_>`_). Sélectionnez **Remplacer** pour continuer. Un jeu qui n'a rien à perdre est remplacé sans confirmation.
+Quand le jeu sur le point d'être remplacé a des alertes examinées ou une `répartition entre évaluateurs <defo-evaluation_>`_, la boîte de dialogue **Remplacer ce jeu d'alertes ?** liste ce qui serait perdu : les alertes examinées (jusqu'à 20, puis « … et N de plus »), ainsi que la répartition avec les révisions que les évaluateurs n'ont pas encore renvoyées. Quand des alertes de périodes ultérieures sont l'extension de ce jeu, elle ajoute « N groupes de périodes ultérieures sont liés à ce jeu ; leurs liens seront rompus. » : après l'exécution, ces liens apparaissent comme « l'ensemble précédent a été relancé » (voir `Alertes précédentes <defo-analysis-earlier_>`_). Sélectionnez **Remplacer** pour continuer. Un jeu qui n'a rien à perdre est remplacé sans confirmation.
 
 .. attention::
 
@@ -1257,7 +1261,7 @@ La liste des couches
 Chaque ligne de **Couches de visualisation** affiche :
 
 -   le **Nom** de la couche ;
--   une pastille avec sa source (**Earth Engine** ou **GeoTIFF**) ;
+-   une pastille avec sa source (**Earth Engine** ou **GeoTIFF / VRT**) ;
 -   une pastille **dans Analyse** lorsqu'elle est affichée sur les cartes d'Analyse ;
 -   une note avec ses bandes et sa plage de valeurs ou, pour une couche catégorielle, sa bande et son nombre de classes (« bande Map · 9 classes »).
 
@@ -1283,9 +1287,9 @@ Sélectionnez **Ajouter une couche** pour ouvrir la boîte de dialogue **Ajouter
         -   Le nom de la couche dans la liste, sur les cartes et dans la légende.
         -   Laissé vide, il est repris du nom de l'asset ou du fichier, suivi de la bande ou de la combinaison. 24 caractères au plus, unique dans le projet.
     *   -   **Source**
-        -   **Earth Engine** (un asset d'image) ou **GeoTIFF** (un fichier de votre dossier SEPAL).
+        -   **Earth Engine** (un asset d'image) ou **GeoTIFF / VRT** (un fichier de votre dossier SEPAL).
         -   **Earth Engine**.
-    *   -   Asset ou **GeoTIFF**
+    *   -   Asset ou **GeoTIFF / VRT**
         -   Une *image* GEE (pas une collection), ou un fichier .tif.
         -   Le dossier du GeoTIFF doit être accessible en écriture : l'application écrit un fichier de pyramides à côté pour que la couche s'affiche rapidement.
 
@@ -1534,7 +1538,9 @@ La ligne **Modèle de rapport** nomme le modèle utilisé, avec une pastille : *
     *   -   ``{alert_system}``
         -   Les sources qui ont détecté l'alerte.
     *   -   ``{area_loss}``
-        -   La superficie de l'alerte, en hectares.
+        -   La superficie de l'alerte, en hectares (celle du groupe, pour un groupe).
+    *   -   ``{group_size}``, ``{group_alerts}``
+        -   Pour une alerte examinée en groupe : le nombre d'alertes du groupe et leurs numéros (« 12, 15, 16 »). Sinon « 1 » et le numéro de l'alerte elle-même.
     *   -   ``{verdict}`` (en vert)
         -   Le verdict, dans la langue de l'application.
     *   -   Une par question (en vert)
@@ -1617,6 +1623,33 @@ Un projet démarre sans case cochée. La note en dessous indique « Choisissez q
 -   **Plusieurs évaluateurs** termine l'étape une fois les alertes réparties.
 -   Tant qu'une répartition existe, les deux cases restent désactivées sur **Plusieurs évaluateurs** (**Supprimez la répartition pour passer en évaluation individuelle.**).
 
+.. _defo-evaluation-group:
+
+Réviser ensemble les alertes proches
+""""""""""""""""""""""""""""""""""""
+
+Sous le mode de revue, la case **Réviser ensemble les alertes proches** permet à `Analyse <defo-analysis-nearby_>`_ d'examiner des alertes voisines comme un seul groupe : « Dans Analyse, les alertes à cette distance peuvent être révisées avec un seul verdict, un seul jeu de réponses et un seul polygone. » Elle fonctionne dans les deux modes. Une fois cochée :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 30 45 25
+
+    *   -   Champ
+        -   Description
+        -   Valeur par défaut et limites
+    *   -   **Distance (m)**
+        -   La distance maximale, de bord à bord, à laquelle une alerte est proposée dans le groupe.
+        -   300. De 10 à 5 000.
+    *   -   **Inclure les alertes déjà révisées**
+        -   Propose aussi les alertes examinées avant l'activation du regroupement. « Décochée, les alertes révisées avant l'activation du regroupement ne sont jamais proposées. »
+        -   Décochée.
+
+Certaines modifications sont verrouillées :
+
+-   Une fois des groupes enregistrés, le regroupement ne peut plus être désactivé et la distance ne peut plus changer : « 2 groupes sont enregistrés : supprimez-les pour désactiver le regroupement. »
+-   Une répartition fige les trois réglages : « Les alertes ont été réparties avec regroupement : supprimez la répartition pour le modifier. » (ou « sans regroupement »).
+-   Dans une copie de révision, ils sont « Défini par le créateur du projet. »
+
 .. _defo-evaluation-split:
 
 Répartir les alertes
@@ -1648,6 +1681,8 @@ Avec **Plusieurs évaluateurs** coché, sélectionnez **Répartir les alertes…
         -   Décochée.
 
 Sélectionnez **Répartir**. Les alertes sont distribuées une à une dans l'ordre du jeu (l'**Ordre** choisi dans `Intégrer et vectoriser <defo-integrate-options_>`_), comme des cartes : la première à l'évaluateur 1, la deuxième à l'évaluateur 2, et ainsi de suite en faisant le tour de la liste. Chaque évaluateur reçoit à peu près le même nombre d'alertes, réparties sur tout l'ordre.
+
+Avec **Réviser ensemble les alertes proches** coché, la répartition ne sépare jamais un groupe. Les alertes situées à la distance choisie les unes des autres, de bord à bord, s'enchaînent en un groupe d'alertes proches. Chaque groupe va entier à l'évaluateur qui a le moins d'alertes jusque-là. Quand un groupe contient plus qu'une part équitable, la boîte de dialogue prévient : « Un groupe d'alertes proches contient 30 alertes, plus qu'une part équitable. »
 
 Le tableau des évaluateurs
 """"""""""""""""""""""""""
@@ -1760,6 +1795,8 @@ Pour fusionner une copie révisée :
     *   -   ignorées
         -   Les alertes qui ne sont pas attribuées à cet évaluateur. Elles ne sont jamais reprises.
 
+Avec le regroupement activé, chaque compteur donne aussi son nombre de groupes (« 3 nouvelles révisions (1 groupe) »). Un groupe est fusionné entier : quand l'une de ses alertes est en conflit, tout le groupe est un conflit.
+
 Après la fusion, les alertes du jeu sont mises à jour, un message indique « N révisions de (évaluateur) fusionnées. », et la colonne **Fusionné** affiche la date.
 
 L'aperçu peut aussi avertir que « Le questionnaire a changé depuis la création des paquets ; les réponses sont fusionnées par clé de question. », ou lister des colonnes qu'il ignore. Si l'alerte ouverte dans Analyse fait partie des alertes fusionnées, elle est rechargée.
@@ -1779,6 +1816,9 @@ Messages fréquents
 
 « Ce zip est un paquet de révision, pas une copie révisée. »
     Choisissez le fichier que l'évaluateur a renvoyé.
+
+« Ce retour casserait un groupe d'alertes : rien n'a été fusionné. Choisissez Garder les miennes, ou demandez à l'évaluateur de mettre à jour l'application et de renvoyer la révision. »
+    Reprendre les révisions de l'évaluateur scinderait un groupe enregistré dans votre projet. Choisissez **Garder les miennes**, ou demandez une copie révisée faite avec une application à jour.
 
 « Une copie de révision ne peut pas fusionner de copies révisées ; ouvrez le projet du créateur. »
     Fusionnez dans le projet d'origine.
@@ -1875,7 +1915,11 @@ De gauche à droite :
     *   -   **Précédente** / **Suivante**
         -   L'alerte précédente ou suivante dans l'ordre du jeu. Elles s'arrêtent à la première et à la dernière alerte.
     *   -   Compteur
-        -   Le numéro de l'alerte dans le jeu (« 13 / 48 »). Sélectionnez-le pour ouvrir un petit menu : **Aller au numéro d'alerte** (saisissez un numéro et sélectionnez **Aller**, ou appuyez sur **Entrée**) et **Prochaine alerte non révisée**, qui passe à l'alerte suivante sans verdict, en reprenant depuis le début après la dernière.
+        -   Le numéro de l'alerte dans le jeu (« 13 / 48 »). Sélectionnez-le pour ouvrir **Aller au numéro d'alerte** : saisissez un numéro et sélectionnez **Aller**, ou appuyez sur **Entrée**.
+    *   -   Icône **Prochaine alerte non révisée**
+        -   Passe à l'alerte suivante sans verdict, en reprenant depuis le début après la dernière. Désactivée quand il ne reste aucune autre alerte à examiner.
+
+Quand l'alerte à l'écran a des modifications non enregistrées, chaque moyen de passer à une autre alerte demande d'abord (voir `Enregistrer la révision <defo-analysis-save_>`_).
 
 L'ordre des alertes est l'**Ordre** choisi dans `Intégrer et vectoriser <defo-integrate-options_>`_.
 
@@ -1893,7 +1937,7 @@ Le filtre retient certaines valeurs d'un attribut et masque les autres alertes d
 
 Quand un filtre est actif :
 
--   **Précédente**, **Suivante** et **Prochaine alerte non révisée** ne parcourent que les alertes correspondantes ;
+-   **Précédente**, **Suivante** et l'icône **Prochaine alerte non révisée** ne parcourent que les alertes correspondantes ;
 -   le compteur compte les correspondances (« 06 / 24 »), ou indique « – / 24 » tant que l'alerte à l'écran n'en fait pas partie, et la ligne d'avancement se termine par « filtrées · 48 au total » ;
 -   le menu de saut prend toujours le numéro de l'alerte dans le jeu entier, mais refuse un numéro que le filtre masque (« L'alerte 12 n'est pas dans le filtre actuel ») ; et
 -   quand rien ne correspond, le compteur indique « Aucune alerte ne correspond à ce filtre ».
@@ -1923,6 +1967,9 @@ Les deux cartes se centrent sur l'alerte à son ouverture. Un cadre jaune en poi
     *   -   **Zoomer sur l'alerte**
         -   En haut à gauche de la carte d'après
         -   Recentre les deux cartes sur l'alerte.
+    *   -   Barre d'échelle
+        -   En bas à gauche de chaque carte, sous la vignette du fond de carte
+        -   L'échelle de la carte, en mètres ou en kilomètres.
 
 Le menu **Couches** liste :
 
@@ -1935,7 +1982,7 @@ Le menu **Couches** liste :
     *   -   **Imagerie**
         -   *True Color* (activée) et *False Color* (proche infrarouge, rouge et vert ; désactivée) : l'image choisie pour cette carte.
     *   -   **Alertes**
-        -   *Original Alert* : les pixels d'alerte du jeu, en semi-transparence (désactivée). *Alert BB* : le cadre de l'alerte. *Defo Layer* : le polygone enregistré pour l'alerte (voir `Affiner le polygone <defo-analysis-refine_>`_). *Alertes précédentes* (voir `Alertes précédentes <defo-analysis-earlier_>`_).
+        -   *Original alert* : le contour du polygone de l'alerte issu d'`Intégrer et vectoriser <defo-integrate_>`_, et celui des autres alertes de son groupe (voir `Alertes proches <defo-analysis-nearby_>`_), activée par défaut et masquée pendant le dessin. *All alerts* : les pixels d'alerte de tout le jeu, en semi-transparence (désactivée). *Alert BB* : le cadre de l'alerte. *Defo Layer* : le polygone enregistré pour l'alerte (voir `Affiner le polygone <defo-analysis-refine_>`_). *Alertes précédentes* (voir `Alertes précédentes <defo-analysis-earlier_>`_). *Nearby alerts*, seulement quand les alertes proches sont révisées ensemble.
     *   -   **Couches supplémentaires**
         -   Les `couches supplémentaires <defo-layers_>`_ marquées **Afficher dans Analyse**, désactivées.
 
@@ -2023,6 +2070,8 @@ Le haut du panneau montre ce que dit la table des alertes :
         -   Ses dates de première et de dernière détection.
     *   -   Ligne **Statut**
         -   Son état d'examen, avec sa couleur : **Non examinée**, **Examinée : confirmée**, **Examinée : faux positif** ou **Examinée : à revoir**.
+    *   -   **Groupe**
+        -   Pour une alerte examinée avec des alertes proches : « groupe de 4 ». Masquée sinon.
     *   -   **Type**
         -   Si l'alerte est l'extension d'une perte antérieure (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_) : **Extension** (une pastille violette), **Extension · sous la surface minimale**, ou **Nouvelle · sous la surface minimale** (une petite alerte dont tous les liens ont été retirés). Masquée pour une nouvelle alerte.
     *   -   **Historique**
@@ -2116,7 +2165,7 @@ Choisir d'autres images ou une autre **Zone d'image** efface les résultats des 
 Alertes précédentes
 """""""""""""""""""
 
-Cette section apparaît quand la période du jeu actif est précédée de périodes ayant des jeux d'alertes. Elle liste la perte antérieure proche de l'alerte : les alertes des périodes antérieures examinées comme **Examinée : confirmée** ou **Examinée : à revoir**, dans la distance fixée par **Dans un rayon de** (1 km par défaut, de 0,1 à 50 km), ainsi que toutes les alertes liées à celle-ci, quelle que soit leur distance. Servez-vous-en pour vérifier si une alerte prolonge une coupe déjà signalée, et pour la lier à cette coupe.
+Cette section apparaît quand la période du jeu actif est précédée de périodes ayant des jeux d'alertes. Elle liste la perte antérieure proche de l'alerte : les alertes des périodes antérieures examinées comme **Examinée : confirmée** ou **Examinée : à revoir**, dans la distance fixée par **Dans un rayon de**, en mètres (100 m par défaut, de 10 m à 50 km), ainsi que toutes les alertes liées à celle-ci, quelle que soit leur distance. Servez-vous-en pour vérifier si une alerte prolonge une coupe déjà signalée, et pour la lier à cette coupe.
 
 Les alertes sont regroupées par période, de la plus récente à la plus ancienne. Chaque ligne affiche :
 
@@ -2129,6 +2178,8 @@ Sélectionnez le numéro d'une alerte pour zoomer les deux cartes sur elle.
 
 Pour lier ou délier une alerte, cochez ou décochez sa case. La modification fait partie de la révision : le pied du panneau indique « Modifications non enregistrées sur cette alerte », et **Sauvegarder** l'enregistre avec le verdict. Cocher une alerte d'une période antérieure fait de cette alerte une alerte d'extension, même si elle ne la touche pas.
 
+Une alerte d'extension plus petite que la **Taille minimale de groupe** n'est dans le jeu que grâce à son lien. Décocher son dernier lien demande d'abord (**Délier de l'alerte antérieure ?**) : par exemple « L'alerte #14 fait 0,2 ha, sous le minimum de 0,5 ha. Elle n'est une alerte que parce qu'elle est liée à #12. » Sélectionnez **Délier** pour retirer le lien : l'alerte reste dans le jeu comme **Nouvelle · sous la surface minimale**.
+
 Certaines lignes n'ont pas de case :
 
 -   « par #12 » : l'alerte appartient à l'historique par un autre lien (ici, l'alerte 12). Décocher la case de l'alerte 12 la retire aussi.
@@ -2136,14 +2187,56 @@ Certaines lignes n'ont pas de case :
 
 Une alerte liée examinée ensuite comme faux positif reste cochée avec « désormais faux positif ». Elle est grisée et exclue de l'historique ; décochez sa case pour retirer le lien.
 
-Activez **Afficher sur les cartes** pour tracer le contour des alertes listées sur les deux cartes. La couleur est celle de la période, et une petite légende liste les périodes affichées, avec « continu : confirmée · tirets : à réviser · épais : liée ». L'interrupteur démarre activé pour une alerte d'extension ; sur les autres alertes, il garde votre dernier choix. Quand la liste couvre plusieurs périodes, le menu **Périodes** en masque certaines. Le badge indique « désactivé », « aucune à moins de 1 km » ou, par exemple, « 4 à moins de 1 km · liens : 1 ».
+Activez **Afficher sur les cartes** pour tracer le contour des alertes listées sur les deux cartes. La couleur est celle de la période, et une petite légende liste les périodes affichées, avec « continu : confirmée · tirets : à réviser · épais : liée ». L'interrupteur démarre activé pour une alerte d'extension ; sur les autres alertes, il garde votre dernier choix. Quand la liste couvre plusieurs périodes, le menu **Périodes** en masque certaines. Le badge indique « désactivé », « aucune à moins de 100 m » ou, par exemple, « 4 à moins de 100 m · liens : 1 ».
 
 Dans une `copie de révision <defo-evaluation-return_>`_, la liste provient d'un instantané des alertes antérieures pris lors de la génération des paquets : la section indique « Alertes précédentes au (date) », ou « Aucune alerte précédente dans cette copie » pour un paquet créé par une ancienne version de l'application.
+
+.. _defo-analysis-nearby:
+
+Alertes proches
+"""""""""""""""
+
+Cette section n'apparaît que si **Réviser ensemble les alertes proches** est coché dans `Évaluation <defo-evaluation-group_>`_. Un même défrichement produit souvent plusieurs petites alertes côte à côte. Examinez-les ensemble : un seul verdict, un seul jeu de réponses, une seule paire d'images et un seul polygone pour toutes.
+
+La section liste les alertes situées à la distance fixée dans **Évaluation**, mesurée de bord à bord depuis l'alerte à l'écran : d'abord les alertes cochées, puis les plus proches des autres, 50 au plus (« 12 autres dans le rayon, non listées »). Chaque ligne affiche :
+
+-   une case, cochée quand l'alerte fait partie du prochain enregistrement ;
+-   le numéro de l'alerte (sélectionnez-le pour zoomer les deux cartes sur elle), sa date de première détection et sa superficie ;
+-   sa distance (« 40 m »), ou « dans ce groupe » ;
+-   « groupe n° 12 » quand elle appartient à un autre groupe ;
+-   son statut ; et
+-   dans un jeu réparti, « attribuée à Ana », grisée et sans case, pour une alerte d'un autre évaluateur.
+
+La liste propose les alertes non examinées et les alertes examinées dans un groupe. Les alertes examinées avant l'activation du regroupement ne sont proposées qu'avec **Inclure les alertes déjà révisées**.
+
+Le contour des alertes listées est tracé sur les deux cartes (couche *Nearby alerts*). Cliquez sur une carte près d'un contour pour cocher ou décocher cette alerte. **Tout sélectionner** coche toutes les alertes listées et **Effacer** les décoche. Le badge indique « 3 sélectionnées », « 5 à moins de 300 m » ou « aucune à moins de 300 m ». Quand une alerte cochée se trouve hors des images, une ligne indique « Certaines alertes sélectionnées sont hors de la zone d’image : choisissez une zone plus grande sur la frise. »
+
+Pour examiner un groupe :
+
+1.  Cochez les alertes qui montrent le même défrichement.
+2.  Donnez le verdict, répondez aux questions, choisissez les images et dessinez le polygone comme pour une seule alerte.
+3.  Sélectionnez **Sauvegarder**, qui indique alors « Sauvegarder pour 4 alertes ».
+
+Quand l'enregistrement modifie d'autres révisions, la boîte de dialogue **Sauvegarder ce groupe ?** les liste d'abord, par exemple :
+
+-   « #15 (Examinée : confirmée) : son examen est remplacé » ;
+-   « #16 (Examinée : confirmée) : quitte le groupe n° 9 » ou « rejoint le groupe n° 9 » (tout un groupe le rejoint quand son alerte principale est cochée) ; et
+-   « #17 (Non examinée) : quitte le groupe et redevient non examinée » (une alerte de ce groupe laissée décochée).
+
+Sélectionnez **Sauvegarder** ou **Annuler**.
+
+Chaque alerte du groupe reçoit le même verdict, les mêmes réponses, les mêmes images et les mêmes liens vers des alertes antérieures. L'alerte à l'écran lors du premier enregistrement du groupe est son alerte *principale* : elle garde le polygone dessiné. Quand le groupe a un dessin, les autres alertes reçoivent une superficie de 0, pour que la perte ne compte qu'une fois.
+
+Une alerte d'un groupe enregistré s'ouvre avec le bandeau « Examinée en groupe de 4 (alerte principale #12) », et la ligne **Groupe** du panneau indique « groupe de 4 ». La couche *Original alert* trace le contour de tout le groupe. Sur une alerte autre que la principale, **Retirer du groupe** la sort du groupe : confirmez avec **Retirer**. L'alerte redevient non examinée.
+
+Un groupe n'a qu'un seul évaluateur : « Ces alertes sont attribuées à des évaluateurs différents : un groupe n’en a qu’un. » Dans une copie de révision, seules vos propres alertes peuvent le rejoindre : « Certaines de ces alertes ne vous sont pas attribuées. »
+
+.. _defo-analysis-save:
 
 Enregistrer la révision
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Le pied du panneau reste en bas :
+Le *dock* reste en bas du panneau : la section **Exporter cette alerte**, puis les boutons, puis une ligne d'état.
 
 .. list-table::
     :header-rows: 1
@@ -2152,11 +2245,17 @@ Le pied du panneau reste en bas :
     *   -   Bouton
         -   Description
     *   -   **Sauvegarder**
-        -   Enregistre la révision et reste sur l'alerte.
+        -   Enregistre la révision et reste sur l'alerte. Avec des alertes proches cochées, il indique « Sauvegarder pour 4 alertes ».
     *   -   **Suivante**
-        -   Ouvre l'alerte suivante (la correspondance suivante sous un filtre). S'il y a des modifications non enregistrées, il demande d'abord : **Abandonner** les supprime et passe à la suivante, **Rester** vous garde sur l'alerte.
+        -   Ouvre l'alerte suivante (la correspondance suivante sous un filtre).
+    *   -   Icône **Prochaine alerte non révisée**
+        -   Ouvre l'alerte suivante sans verdict, comme dans la barre du haut.
 
-La ligne sous les boutons indique « Modifications non enregistrées sur cette alerte », « Enregistrez votre dessin avant d'enregistrer cette revue » ou « Enregistrée à 14:32 ».
+Le bouton plein indique l'étape suivante : **Sauvegarder** tant que l'alerte a des modifications non enregistrées ou aucune révision enregistrée, **Suivante** une fois la révision enregistrée.
+
+Avec des modifications non enregistrées, **Suivante**, l'icône et, dans la barre du haut, **Précédente**, **Suivante**, **Aller** et l'icône demandent d'abord. Les boutons laissent la place à « Cette alerte a des modifications non enregistrées » : **Abandonner** supprime les modifications et passe à une autre alerte, **Rester** vous garde sur l'alerte.
+
+La ligne d'état indique « Modifications non enregistrées sur cette alerte », « Enregistrez votre dessin avant d'enregistrer cette revue » ou « Enregistrée à 14:32 ».
 
 Un enregistrement écrit dans le jeu d'alertes :
 
@@ -2164,7 +2263,8 @@ Un enregistrement écrit dans le jeu d'alertes :
 -   les réponses aux questions posées pour ce verdict (les autres restent vides) ;
 -   les images d'avant et d'après choisies, pour que l'alerte se rouvre sur elles ;
 -   le polygone enregistré dans **Affiner le polygone**, avec sa superficie comme superficie de l'alerte ;
--   les alertes antérieures cochées dans `Alertes précédentes <defo-analysis-earlier_>`_, comme liens de l'alerte ; et
+-   les alertes antérieures cochées dans `Alertes précédentes <defo-analysis-earlier_>`_, comme liens de l'alerte ;
+-   avec des alertes proches cochées, le groupe (voir `Alertes proches <defo-analysis-nearby_>`_) ; et
 -   les noms des zones administratives sous l'alerte, d'après les limites FAO GAUL 2015 dans GEE (cela prend quelques secondes).
 
 Les révisions apparaissent aussitôt dans la barre d'avancement, dans le sélecteur de jeux et dans l'`Aperçu <defo-overview_>`_. Une révision peut changer à tout moment : ouvrez l'alerte, modifiez-la et enregistrez à nouveau.
@@ -2172,7 +2272,7 @@ Les révisions apparaissent aussitôt dans la barre d'avancement, dans le sélec
 Exporter l'alerte
 ^^^^^^^^^^^^^^^^^
 
-**Exporter cette alerte**, dans le pied du panneau, génère les fichiers de l'alerte une fois celle-ci enregistrée : un fichier .zip avec son GeoPackage et ses images, un rapport Word et, pour une alerte réelle, un GIF animé. Voir `Une alerte, depuis Analyse <defo-export-alert_>`_.
+**Exporter cette alerte**, en haut du dock, génère les fichiers de l'alerte une fois celle-ci enregistrée : un fichier .zip avec son GeoPackage et ses images, un rapport Word et, pour une alerte réelle, un GIF animé. Voir `Une alerte, depuis Analyse <defo-export-alert_>`_.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/analysis-footer.png
     :alt: Le pied du panneau : section d'export et boutons d'enregistrement
@@ -2337,6 +2437,8 @@ Colonne de droite :
         -   Un tableau : par statut, le nombre d'alertes, leur superficie, leur part de la mesure et la taille médiane des alertes, avec une ligne **Total**.
     *   -   **Historique des coupes qui s'étendent**
         -   Seulement quand le jeu a des `alertes d'extension <defo-integrate-growth_>`_ (voir plus bas).
+    *   -   **Alertes proches**
+        -   La façon dont les alertes du jeu se rassemblent en groupes d'alertes proches (voir plus bas).
     *   -   **Quand la perte a été détectée**
         -   Les alertes par semaine de première détection. Les semaines grisées relèvent de la rétrospection : elles précèdent le début de la période (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_).
     *   -   Une carte par question
@@ -2371,6 +2473,17 @@ Son tableau liste les historiques qui comprennent une alerte de ce jeu, la plus 
         -   La superficie des alertes de ce jeu dans l'historique, faux positifs exclus.
     *   -   **Examiner**
         -   Ferme l'Aperçu et ouvre l'alerte de ce jeu appartenant à l'historique dans `Analyse <defo-analysis_>`_.
+
+Alertes proches
+"""""""""""""""
+
+La carte **Alertes proches** montre comment les alertes du jeu s'enchaînent en groupes : les alertes situées à la distance de **Réviser ensemble les alertes proches** (voir `Évaluation <defo-evaluation-group_>`_), de bord à bord, forment un groupe. Une répartition confie chaque groupe à un seul évaluateur.
+
+-   Le titre compte les groupes (« 6 groupes d'alertes proches »), ou indique « Aucune alerte à moins de 300 m d'une autre ».
+-   La ligne en dessous indique, par exemple, « Dans un groupe : 20 alertes sur 48 · Seules : 28 · Le plus grand : 5 alertes ».
+-   La dernière ligne compte les groupes enregistrés dans Analyse (« 2 groupes enregistrés dans Analyse (7 alertes) »), ou indique « Aucun groupe enregistré dans Analyse pour l'instant ».
+
+Quand le regroupement est désactivé, la carte utilise la distance du projet et ajoute « La révision groupée des alertes proches est désactivée : activez-la à l'étape Évaluation. »
 
 Exporter le jeu
 ^^^^^^^^^^^^^^^
@@ -2409,7 +2522,7 @@ Chaque fichier est écrit dans le dossier du jeu d'alertes, dans le projet (``pe
 Une alerte, depuis Analyse
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-La section **Exporter cette alerte** se trouve dans le pied du panneau d'examen d'`Analyse <defo-analysis_>`_. Elle porte sur l'alerte affichée, une fois sa révision enregistrée : son badge indique « disponible après l'enregistrement », puis « prêt à générer », puis « 3 fichiers prêts ».
+La section **Exporter cette alerte** se trouve en haut du dock du panneau d'examen d'`Analyse <defo-analysis-save_>`_. Elle porte sur l'alerte affichée, une fois sa révision enregistrée : son badge indique « disponible après l'enregistrement », puis « prêt à générer », puis « 3 fichiers prêts ».
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/export-alert-files.png
     :alt: Les fichiers de l'alerte, prêts à être téléchargés
@@ -2421,7 +2534,7 @@ La section **Exporter cette alerte** se trouve dans le pied du panneau d'examen 
     *   -   Tuile
         -   Description
     *   -   **Générer les fichiers**
-        -   Génère les données et le rapport de l'alerte. Elle indique « Enregistrez d'abord cette alerte » et reste désactivée tant que **Sauvegarder** n'a pas été sélectionné sur cette alerte au cours de cette session. Elle s'exécute dans la liste des tâches et prend un moment : elle télécharge les images d'avant et d'après.
+        -   Génère les données et le rapport de l'alerte à partir de la révision enregistrée (« Génère les fichiers ci-dessus à partir de la révision enregistrée »). Elle reste désactivée tant que la révision affichée n'est pas enregistrée : elle indique alors « Enregistrez d'abord cette alerte », ou « Enregistrez d'abord vos modifications » s'il y a des modifications non enregistrées. Une alerte examinée, ouverte sur les images avec lesquelles elle a été enregistrée, est prête aussitôt. Elle s'exécute dans la liste des tâches (« Génération des fichiers… ») et prend un moment : elle télécharge les images d'avant et d'après.
     *   -   **Données de l'alerte**
         -   Télécharge un fichier .zip : le GeoPackage de l'alerte, ses images d'avant et d'après réunies dans un seul GeoTIFF et, pour une alerte réelle, son GIF.
     *   -   **Rapport de l'alerte**
@@ -2429,7 +2542,7 @@ La section **Exporter cette alerte** se trouve dans le pied du panneau d'examen 
     *   -   **Régénérer les fichiers**
         -   Génère à nouveau les fichiers (par exemple après une modification de la révision).
     *   -   **Timelapse**
-        -   Crée et télécharge un GIF animé de l'alerte (voir plus bas).
+        -   Crée et télécharge un GIF animé de l'alerte (voir plus bas). Pour une alerte qui n'est pas enregistrée comme alerte réelle, elle indique « Alertes réelles uniquement ».
 
 Les fichiers sont nommés d'après la ligne de l'alerte dans le jeu (le numéro du compteur moins un) :
 
@@ -2450,6 +2563,8 @@ Les fichiers sont nommés d'après la ligne de l'alerte dans le jeu (le numéro 
     *   -   ``alert_<n>.docx``
         -   Le rapport Word.
 
+Pour une alerte d'un groupe (voir `Alertes proches <defo-analysis-nearby_>`_), les fichiers décrivent tout le groupe : le GeoPackage contient une seule entité avec la superficie cumulée du groupe, ses dates de première et de dernière détection, ses sources, ``group_size`` (le nombre d'alertes) et ``group_alerts`` (leurs numéros, par exemple « 12, 15, 16 »), et le GIF trace le contour de chaque alerte du groupe.
+
 Les liens des tuiles valent pour la révision affichée. Choisir d'autres images, enregistrer à nouveau l'alerte ou changer le modèle de rapport les masque : générez à nouveau les fichiers.
 
 Le rapport
@@ -2460,7 +2575,7 @@ Le rapport est construit à partir du modèle Word du projet, choisi à l'étape
 Le timelapse
 """"""""""""
 
-La tuile **Timelapse** crée un GIF animé qui fait défiler les images de la zone de l'alerte, d'avant en après, avec le contour de l'alerte par-dessus. Chaque image est légendée avec sa collection et sa date. Les images d'avant et d'après indiquent aussi leur côté (« Avant · Sentinel-2 2026-07-28 »).
+La tuile **Timelapse** crée un GIF animé qui fait défiler les images de la zone de l'alerte, d'avant en après, avec le contour de l'alerte par-dessus. Chaque image reste 2,5 secondes et est légendée avec sa collection et sa date. Les images d'avant et d'après indiquent aussi leur côté (« Avant · Sentinel-2 2026-07-28 »).
 
 Il n'est proposé que pour une alerte réelle : la tuile est active quand l'alerte est enregistrée comme **Examinée : confirmée** et que les images affichées sont celles avec lesquelles elle a été enregistrée. Sinon, elle indique « Enregistrez-la comme alerte réelle, avec les images affichées, pour le créer ».
 
