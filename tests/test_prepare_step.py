@@ -140,7 +140,8 @@ def test_run_rows_applies_artifacts_and_stops_on_project_switch(monkeypatch, tmp
 def test_a_download_shows_its_percent_on_its_row_and_in_the_pill(monkeypatch, tmp_path):
     """Bug 2026-10-16: a download said nothing while it ran. Its percent is
     published by row (``row_progress``) and in the task's title, and both go
-    once the row ends; a finished download says the harmonize has begun."""
+    once the row ends; a finished download says no harmonize has begun
+    (option C: it never chains)."""
     s = AppState()
     s.new_project_state(_project("d", "GLAD-L"))
     bus = NotificationBus()
@@ -156,7 +157,6 @@ def test_a_download_shows_its_percent_on_its_row_and_in_the_pill(monkeypatch, tm
         return _arts(job.source)
 
     monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
-    monkeypatch.setattr(prepare_jobs, "harmonize_ready", lambda p, pdir, period: True)  # the download chains
     prepare_jobs.run_rows(_ctx(s, pdir=tmp_path / "d", notifier=Notifier(bus), row_progress=progress,
                                errors_lock=threading.Lock()), ["GLAD-L"])
 
@@ -166,7 +166,7 @@ def test_a_download_shows_its_percent_on_its_row_and_in_the_pill(monkeypatch, tm
                     (100, title)]  # the download is done: the pill is back on its milestones
     (task,) = bus.tasks.value
     assert task.title == title and progress.value == {}
-    assert t("steps.prepare.job_harmonize_row", source="GLAD-L") in [m.message for m in task.milestones]
+    assert t("steps.prepare.job_harmonize_row", source="GLAD-L") not in [m.message for m in task.milestones]
 
 
 def test_run_rows_stops_when_the_project_is_closed(monkeypatch, tmp_path):

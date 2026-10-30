@@ -43,9 +43,10 @@ def test_glad_l_and_radd_month_end_to_end(gee, tiny_aoi, tmp_path, real_cover):
     p.active_period = PERIOD.id
     for name in ("GLAD-L", "RADD"):
         meta = catalogue.meta_request("GLAD-L").getInfo() if name == "GLAD-L" else None
-        arts = run_source_row(SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=PERIOD,
-                                        source=name, meta=meta, aoi=tiny_aoi))
-        apply_artifacts(p, arts)
+        for mode in ("download", "harmonize"):  # the Alerts step, then the Harmonize step (no chain)
+            arts = run_source_row(SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=PERIOD,
+                                            source=name, meta=meta, aoi=tiny_aoi, mode=mode))
+            apply_artifacts(p, arts)
     harm = [a for k, a in p.artifacts.items() if k.startswith("harm:")]
     assert len(harm) == 2
     for a in harm:

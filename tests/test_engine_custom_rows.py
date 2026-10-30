@@ -62,6 +62,13 @@ def _job(p, tmp_path, source, meta=None, force=False, mode="download"):
                             meta=meta, aoi="AOI", force=force, mode=mode)
 
 
+def _both(p, tmp_path, source):
+    """The Alerts step's download, then the Harmonize step's run (option C: no chain)."""
+    arts = runner.run_source_row(_job(p, tmp_path, source))
+    runner.apply_artifacts(p, arts)
+    return {**arts, **runner.run_source_row(_job(p, tmp_path, source, mode="harmonize"))}
+
+
 @pytest.fixture
 def no_ee(monkeypatch):
     """Records any Earth Engine use; a download fails the test."""
@@ -124,7 +131,7 @@ def test_a_geotiff_source_runs_locally_and_is_clipped_to_the_aoi_polygon(tmp_pat
     p = _project(tmp_path)
     _file_source(p, tmp_path)
     cover(p, "tif")
-    arts = runner.run_source_row(_job(p, tmp_path, "tif"))
+    arts = _both(p, tmp_path, "tif")
     assert no_ee == [] and set(arts) == {fp.AOI_KEY, fp.raw_key(JAN.id, "tif"), fp.harm_key(JAN.id, "tif")}
     runner.apply_artifacts(p, arts)
     harm = arts[fp.harm_key(JAN.id, "tif")]
@@ -134,7 +141,7 @@ def test_a_geotiff_source_runs_locally_and_is_clipped_to_the_aoi_polygon(tmp_pat
     assert harm.stats["alert_pixels"] == int((a > 0).sum()) and harm.stats["date_min"] == 2026010
     row = plan_prepare(p, tmp_path, JAN)[0]
     assert row.ready and row.stats == harm.stats
-    assert runner.run_source_row(_job(p, tmp_path, "tif")) == {}  # current: nothing to do
+    assert _both(p, tmp_path, "tif") == {}  # current: nothing to do
 
 
 def test_a_geotiff_row_waits_for_the_aoi_geometry(tmp_path, cover, no_ee):
@@ -142,16 +149,13 @@ def test_a_geotiff_row_waits_for_the_aoi_geometry(tmp_path, cover, no_ee):
     _file_source(p, tmp_path)
     cover(p, "tif")
     (tmp_path / paths.AOI_SIDECAR).unlink()
-    # the download needs no AOI raster; the harmonize it chains into waits, keeping the raw record
-    with pytest.raises(runner.HarmonizeFailed) as err:
-        runner.run_source_row(_job(p, tmp_path, "tif"))
-    assert isinstance(err.value.__cause__, runner.AoiGeometryMissing)
-    assert err.value.key == runner.AoiGeometryMissing.key
-    assert set(err.value.artifacts) == {fp.raw_key(JAN.id, "tif")}
+    # the download needs no AOI raster; the harmonize waits for it
+    arts = runner.run_source_row(_job(p, tmp_path, "tif"))
+    assert set(arts) == {fp.raw_key(JAN.id, "tif")}
     assert not paths.aoi_raster_path(tmp_path).exists()
-    runner.apply_artifacts(p, err.value.artifacts)
+    runner.apply_artifacts(p, arts)
     with pytest.raises(runner.AoiGeometryMissing):
-        runner.run_source_row(_job(p, tmp_path, "tif"))
+        runner.run_source_row(_job(p, tmp_path, "tif", mode="harmonize"))
 
 
 def test_a_moved_user_file_reads_missing_not_stale(tmp_path, cover, no_ee):
@@ -206,14 +210,14 @@ def test_an_aoi_change_rebuilds_the_aoi_raster_before_a_geotiff_row(tmp_path, co
     p = _project(tmp_path)
     _file_source(p, tmp_path)
     cover(p, "tif")
-    runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, "tif")))
+    runner.apply_artifacts(p, _both(p, tmp_path, "tif"))
     old_aoi = p.artifacts[fp.AOI_KEY].content_id
     # a new AOI, the eastern half, its sidecar in place as the loader stages it
     aoi_io.write_sidecar(tmp_path, gpd.GeoDataFrame(geometry=[box((_W + _E) / 2, _S, _E, _N)], crs="EPSG:4326"))
     p.aoi = p.aoi.model_copy(update={"digest": "g2"})
     cover(p, "tif")
     assert plan_prepare(p, tmp_path, JAN)[0].harmonized is fp.Status.STALE  # its AOI raster is the old AOI's
-    arts = runner.run_source_row(_job(p, tmp_path, "tif"))
+    arts = _both(p, tmp_path, "tif")
     assert arts[fp.AOI_KEY].content_id != old_aoi
     runner.apply_artifacts(p, arts)
     with rasterio.open(tmp_path / arts[fp.harm_key(JAN.id, "tif")].rel_path) as r:
@@ -224,7 +228,7 @@ def test_an_aoi_change_rebuilds_the_aoi_raster_before_a_geotiff_row(tmp_path, co
 def test_a_geotiff_row_asks_twice_the_compressed_estimate_before_each_write(tmp_path, cover, no_ee, monkeypatch):
     """Spec §13 "free-space gates ask for exactly twice the compressed
     estimate" (user decision 2026-10-01): the normalized raw, then the AOI
-    raster and the harmonized file of the harmonize it chains into."""
+    raster and the harmonized file of the Harmonize step's run."""
     from deforestation_alerts.engine import grid as gridmod
     from deforestation_alerts.engine import normalize
     from deforestation_alerts.engine.raster_io import compressed_estimate
@@ -234,7 +238,7 @@ def test_a_geotiff_row_asks_twice_the_compressed_estimate_before_each_write(tmp_
     cover(p, "tif")
     seen = []
     monkeypatch.setattr(runner, "ensure_free_space", lambda folder, needed: seen.append(needed))
-    runner.run_source_row(_job(p, tmp_path, "tif"))
+    _both(p, tmp_path, "tif")
     aoi_raster = 2 * compressed_estimate(gridmod.estimate_bytes(GRID, bands=1))
     raw = 2 * compressed_estimate(normalize.estimate_bytes(src, BOUNDS))
     harm = runner._harmonize_space(p)
@@ -249,7 +253,7 @@ def test_a_source_not_covered_with_current_files_does_not_unlock_integrate(tmp_p
     p = _project(tmp_path)
     _file_source(p, tmp_path)
     cover(p, "tif")
-    runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, "tif")))
+    runner.apply_artifacts(p, _both(p, tmp_path, "tif"))
     monkeypatch.setattr(ws.paths, "project_dir", lambda name, root=None: tmp_path)
     integrate_step = ws.STEPS[ws.step_index("integrate")]
     assert integrate_step.unlocked(p)
@@ -354,7 +358,7 @@ def test_a_deleted_aoi_raster_realigns_a_geotiff_mask_before_a_geotiff_row_harmo
                     runner.MaskJob(p.model_copy(deep=True), tmp_path, row.name, "AOI")))
         for row in plan_prepare(p, tmp_path, JAN):
             if row.needs_run:
-                runner.apply_artifacts(p, runner.run_source_row(_job(p, tmp_path, row.source)))
+                runner.apply_artifacts(p, _both(p, tmp_path, row.source))
 
     run_all()
     assert plan_prepare(p, tmp_path, JAN)[0].ready
@@ -362,7 +366,7 @@ def test_a_deleted_aoi_raster_realigns_a_geotiff_mask_before_a_geotiff_row_harmo
 
     row = plan_masks(p, tmp_path, JAN)[0]
     assert row.aligned is fp.Status.STALE and row.needs_run
-    # a forced download no longer waits for the mask; it does not chain, and builds no AOI raster
+    # a forced download never waits for the mask, and builds no AOI raster
     assert set(runner.run_source_row(_job(p, tmp_path, "tif", force=True))) == {fp.raw_key(JAN.id, "tif")}
     with pytest.raises(runner.MaskNotReady):
         runner.run_source_row(_job(p, tmp_path, "tif", mode="harmonize"))

@@ -18,10 +18,12 @@ downloads. The harmonize stats are recorded on the harmonized artifact.
 
 The worker gets a deep copy of the project and returns the artifacts it wrote;
 the UI applies them to the live project (``apply_artifacts``) only if that
-project is still open. A harmonize that fails after a new download raises
-``HarmonizeFailed``, which carries the raw artifact so the caller records it
-the same way: the next run then harmonizes from the file on disk instead of
-downloading again. Nothing here touches Solara.
+project is still open. A source row either downloads or harmonizes, never
+both (option C, user decision 2026-10-30). A harmonize (a mask's alignment)
+that fails after this run wrote a new file (a mask's download, the AOI raster)
+raises ``HarmonizeFailed``, which carries those artifacts so the caller
+records them the same way: the next run then starts from the file on disk
+instead of writing it again. Nothing here touches Solara.
 """
 
 from dataclasses import dataclass
@@ -51,7 +53,7 @@ __all__ = [
     "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "MaskFileMissing", "MaskJob", "MaskNativeUnknown",
     "MaskNotReady", "RawNotReady",
     "SourceJob",
-    "apply_artifacts", "ensure_aoi_raster", "harmonize_ready", "plan_prepare", "run_mask_row", "run_source_row",
+    "apply_artifacts", "ensure_aoi_raster", "plan_prepare", "run_mask_row", "run_source_row",
 ]
 
 
@@ -130,7 +132,7 @@ class SourceJob:
     meta: Optional[dict]  # GLAD-L's evaluated catalogue.meta_request; None for the other sources
     aoi: Any  # ee.FeatureCollection
     force: bool = False
-    mode: str = "download"  # "download" (chains into harmonizing when ready) or "harmonize" (never downloads)
+    mode: str = "download"  # "download" (the raw file only) or "harmonize" (never downloads)
 
 
 def _drop_superseded(p: Project, pdir: Path, key: str, new_path: Optional[Path]) -> None:
@@ -166,18 +168,6 @@ def _require_masks_ready(p: Project, pdir: Path, period: Period, source: str) ->
                            "run the masks first")
 
 
-def harmonize_ready(p: Project, pdir: Path, period: Period) -> bool:
-    """The grid exists and ``_require_masks_ready`` would pass: a download
-    chains into harmonizing only then (spec §2)."""
-    if p.grid is None:
-        return False
-    try:
-        _require_masks_ready(p, pdir, period, "")
-    except (MaskFileMissing, MaskNotReady):
-        return False
-    return True
-
-
 def _raw_estimate(p: Project, src) -> int:
     if src.kind == "predefined":
         return estimate_native_bytes(p.aoi.bounds, src.catalogue_key)
@@ -207,9 +197,9 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     ``project.artifacts``.
 
     ``mode="download"`` downloads (when the raw file is missing, out of date or
-    ``force``d) and needs no grid and no aligned masks; it then chains into
-    harmonizing only when ``harmonize_ready``, else it returns the raw
-    artifact alone (spec §2). ``mode="harmonize"`` never downloads: a raw file
+    ``force``d) and needs no grid and no aligned masks; it returns the raw
+    artifact alone, never harmonizing (spec §2, option C: the Harmonize step
+    harmonizes on its own click). ``mode="harmonize"`` never downloads: a raw file
     that is not current raises ``RawNotReady``; it harmonizes (when the
     harmonized file is not current, or ``force``d) once the grid and the
     period's masks are ready, else ``MaskNotReady``/``MaskFileMissing``.
@@ -220,8 +210,8 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     catalogue metadata ``ValueError``, before anything else. Each free-space
     check asks for twice the file's compressed size estimate
     (``raster_io.compressed_estimate``): the ``.part`` and the old file it
-    replaces. If harmonizing (or a GeoTIFF's AOI-raster build) fails after a
-    download, ``HarmonizeFailed`` carries the new artifacts.
+    replaces. If harmonizing fails after a GeoTIFF's AOI-raster build,
+    ``HarmonizeFailed`` carries the new AOI-raster artifact.
     """
     p, pdir, period = job.project, Path(job.pdir), job.period
     harmonizing = job.mode == "harmonize"
@@ -268,11 +258,10 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
         else:
             normalize.normalize_file(src, p.aoi.bounds, win_start, win_end, raw_path)
         _drop_superseded(p, pdir, rkey, raw_path)
-        # recorded in the job's copy too, so harmonized_inputs sees the new content_id
-        out[rkey] = p.artifacts[rkey] = make_artifact(rkey, "raw_alert", pdir, raw_path, raw_in)
+        out[rkey] = make_artifact(rkey, "raw_alert", pdir, raw_path, raw_in)
+    if not harmonizing:
+        return out  # the row waits in Harmonize for its click (option C: no chain)
 
-    if not harmonizing and not harmonize_ready(p, pdir, period):
-        return out  # the row waits in Harmonize
     try:
         if file_source:
             aoi_art = ensure_aoi_raster(p, pdir)
@@ -283,7 +272,7 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
         # raster on disk) and the AOI-raster build leave every input recorded.
         if harm_in is None:
             raise RuntimeError(f"{job.source}: its harmonize inputs are not recorded")
-        if job.force or rkey in out or status(p, pdir, hkey, harm_in) is not Status.CURRENT:
+        if job.force or status(p, pdir, hkey, harm_in) is not Status.CURRENT:
             ensure_free_space(harm_path.parent, _harmonize_space(p))
             masks = [
                 (paths.resolve(pdir, p.artifacts[mask_key(n)].rel_path), mode)
@@ -296,7 +285,7 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
             _drop_superseded(p, pdir, hkey, harm_path)
             out[hkey] = make_artifact(hkey, "harmonized", pdir, harm_path, harm_in, stats=stats)
     except Exception as exc:
-        if rkey in out or AOI_KEY in out:
+        if AOI_KEY in out:  # the AOI raster is built: record it
             raise HarmonizeFailed(exc, dict(out)) from exc
         raise
     return out

@@ -171,14 +171,17 @@ def main():
     for s in sources:
         t0 = time.time()
         meta = catalogue.meta_request("GLAD-L").getInfo() if s == "GLAD-L" else None
-        job = SourceJob(project=p.model_copy(deep=True), pdir=out, period=per, source=s, meta=meta, aoi=fc)
+        arts = {}
         try:
-            arts = run_source_row(job)
+            for mode in ("download", "harmonize"):  # the Alerts step, then the Harmonize step (no chain)
+                job = SourceJob(project=p.model_copy(deep=True), pdir=out, period=per, source=s, meta=meta, aoi=fc,
+                                mode=mode)
+                arts.update(run_source_row(job))
+                apply_artifacts(p, arts)
         except runner.CoverageRefused as exc:
             print(f"{s}: skipped, {exc.state}")  # Run all skips such a row the same way
             continue
         ran.append(s)
-        apply_artifacts(p, arts)
         sizes = {k: v.size_bytes / 1e6 for k, v in arts.items()}
         print(f"{s}: {time.time() - t0:.0f} s, files MB {sizes}, "
               f"harmonize peak {harmonize_peak():.2f} GB, peak RSS {peak_gb():.2f} GB")

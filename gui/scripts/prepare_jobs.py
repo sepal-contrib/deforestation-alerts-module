@@ -38,14 +38,14 @@ message (``error_text``), any other error its own text.
 A download says how far it has got (bug 2026-10-16): pysepal's pill draws no
 progress bar, so each whole percent of the tiles goes into the task's title
 and into ``row_progress``, which the row's Download cell reads. Both go back
-when the download is done, and a milestone says the harmonize (alignment)
+when the download is done, and for a mask a milestone says its alignment
 has begun.
 
 Each row also says which stage it is in (``row_stage``): ``download`` while an
-item of ``downloads`` fetches its tiles, then ``harmonize`` (a mask:
-``align``) when the run goes on to it (a download chains only when
-``harmonize_ready``; else its row stays ``download`` to its end); a row
-that downloads nothing starts at that second stage. The
+item of ``downloads`` fetches its tiles, then a mask goes on to ``align``; a
+source row of a download job stays ``download`` to its end (option C: a
+download never chains into harmonizing) and one of a harmonize job reads
+``harmonize`` throughout; a mask that downloads nothing starts at ``align``. The
 stage goes when the row ends, and ``on_row_end`` is called for every row the
 run reached, whether it succeeded, failed or was skipped: the step's footer
 counts the running, queued and done rows from them.
@@ -69,7 +69,6 @@ from deforestation_alerts.engine.runner import (
     MaskJob,
     SourceJob,
     apply_artifacts,
-    harmonize_ready,
     run_mask_row,
     run_source_row,
 )
@@ -400,9 +399,8 @@ def _run_item(ctx: PrepareContext, task, title: str, scope: tuple, live, kind: s
                         meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L"
                         else None)
         run, error_key = run_source_row, name
-        # a download chains into harmonizing only when ``harmonize_ready`` (the
-        # runner's own test, on the same copy): else its row never reads harmonizing
-        if ctx.mode == "harmonize" or harmonize_ready(job.project, ctx.pdir, ctx.period):
+        # a download never chains into harmonizing (option C): its row never reads harmonizing
+        if ctx.mode == "harmonize":
             done_step, then = t("steps.prepare.job_harmonize_row", source=name), "harmonize"
         else:
             done_step, then = None, "download"

@@ -82,9 +82,10 @@ def _run_all(p, pdir, period):
             runner.apply_artifacts(p, runner.run_mask_row(runner.MaskJob(p.model_copy(deep=True), pdir, row.name,
                                                                           "AOI")))
     for row in plan_prepare(p, pdir, period):
-        if row.needs_run:
-            runner.apply_artifacts(p, runner.run_source_row(runner.SourceJob(p.model_copy(deep=True), pdir, period,
-                                                                             row.source, {"bands": []}, "AOI")))
+        if row.needs_run:  # the Alerts step's download, then the Harmonize step's run (no chain)
+            for mode in ("download", "harmonize"):
+                runner.apply_artifacts(p, runner.run_source_row(runner.SourceJob(
+                    p.model_copy(deep=True), pdir, period, row.source, {"bands": []}, "AOI", mode=mode)))
 
 
 def _set(p, pdir, period):

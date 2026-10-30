@@ -272,9 +272,11 @@ def _stage_ctx(p, **over):
     return prepare_jobs.PrepareContext(**kw)
 
 
-def test_run_rows_reports_each_rows_stage(monkeypatch):
-    monkeypatch.setattr(prepare_jobs, "harmonize_ready", lambda p, pdir, period: True)  # the downloads chain
-    ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L")}))
+@pytest.mark.parametrize("mode, stage", [("download", "download"), ("harmonize", "harmonize")])
+def test_run_rows_reports_each_rows_stage(monkeypatch, mode, stage):
+    """A download job's rows read download, a harmonize job's harmonize
+    (option C: a download never chains into harmonizing)."""
+    ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L")}), mode=mode)
     seen = {}
 
     def run(job, **kw):
@@ -284,41 +286,25 @@ def test_run_rows_reports_each_rows_stage(monkeypatch):
     monkeypatch.setattr(prepare_jobs, "run_source_row", run)
     prepare_jobs.run_rows(ctx, ["GLAD-L", "RADD"])
     key = lambda s: prepare_jobs.progress_key("r", JAN.id, "source", s)  # noqa: E731
-    assert seen == {"GLAD-L": {key("GLAD-L"): "download"}, "RADD": {key("RADD"): "harmonize"}}
+    assert seen == {"GLAD-L": {key("GLAD-L"): stage}, "RADD": {key("RADD"): stage}}
     assert ctx.row_stage.value == {}
 
 
-def test_the_stage_turns_to_harmonize_at_100_percent(monkeypatch):
-    monkeypatch.setattr(prepare_jobs, "harmonize_ready", lambda p, pdir, period: True)  # the download chains
-    ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L")}))
-    key = prepare_jobs.progress_key("r", JAN.id, "source", "GLAD-L")
-
-    def run(job, on_tiles, **kw):
-        on_tiles(5, 10)
-        assert ctx.row_stage.value == {key: "download"}
-        on_tiles(10, 10)  # the reporter's on_pct(100)
-        assert ctx.row_stage.value == {key: "harmonize"}
-        return {}
-
-    monkeypatch.setattr(prepare_jobs, "run_source_row", run)
-    prepare_jobs.run_rows(ctx, ["GLAD-L"])
-    assert ctx.row_stage.history == [{key: "download"}, {key: "harmonize"}, {}]
-
-
-def test_a_download_that_does_not_chain_stays_downloading_at_100_percent(monkeypatch):
-    """Carry (Task 2/4): no grid or masks not aligned, so the run stops after
-    the download (``harmonize_ready``): its row never reads Harmonizing, and
-    the task gets no harmonize milestone."""
+def test_a_download_stays_downloading_at_100_percent(monkeypatch):
+    """Option C (user decision 2026-10-30): the run stops after the download,
+    whatever the grid and masks: its row never reads Harmonizing, and the
+    task gets no harmonize milestone."""
     from pysepal.solara.notifications.bus import NotificationBus
     from pysepal.solara.notifications.notifier import Notifier
 
     bus = NotificationBus()
     ctx = _stage_ctx(_p(), downloads=frozenset({("source", "GLAD-L"), ("source", "RADD")}),
-                     notifier=Notifier(bus))  # _p() has no grid: nothing chains
+                     notifier=Notifier(bus))
     key = prepare_jobs.progress_key("r", JAN.id, "source", "RADD")
 
     def run(job, on_tiles, **kw):
-        on_tiles(10, 10)
+        on_tiles(5, 10)
+        on_tiles(10, 10)  # the reporter's on_pct(100)
         return {}
 
     monkeypatch.setattr(prepare_jobs, "run_source_row", run)
