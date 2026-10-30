@@ -39,7 +39,6 @@ from gui.scripts import aoi_io
 from gui.scripts.setup_guard import banner_text
 from gui.store.project_writers import is_writing, writing
 from gui.tile.project_dialog import create_project, names_on_disk
-from gui.widget.help import StepIntro
 
 
 class _Busy(Exception):
@@ -204,7 +203,6 @@ def AoiStep(app_state, map_, gee_interface, layers):
     )
 
     with solara.Column(style="gap:16px;").key(column_key):
-        StepIntro(t("steps.aoi.description"), t("steps.aoi.info_header"), t("steps.aoi.info_md"))
         if locked and not ro:
             # Inline on purpose: a persistent state description, not the outcome
             # of an action (spec §11 routes outcomes through notifications).

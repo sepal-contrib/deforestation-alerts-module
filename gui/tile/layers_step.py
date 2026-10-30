@@ -10,7 +10,6 @@ from gui.i18n import t
 from gui.scripts import legend_specs, vis_layers
 from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.widget.confirm_dialog import ConfirmDialog
-from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.vis_layer_modal import VisLayerModal
 
@@ -106,7 +105,6 @@ def LayersStep(app_state, map_, gee_interface, layers):
                      ]})
 
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.layers.description"), t("steps.layers.info_header"), t("steps.layers.info_md"))
         solara.Button(t("steps.layers.add"), icon_name="mdi-plus", color="primary", small=True, block=True,
                       disabled=ro, on_click=_open_add)
         ProductTable(title=t("steps.layers.list_title"), columns=layer_columns(), rows=rows,

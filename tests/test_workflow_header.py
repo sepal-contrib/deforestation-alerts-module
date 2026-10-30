@@ -13,7 +13,7 @@ import reacton
 import solara
 
 from gui.store.state_manager import AppState
-from gui.store.workflow_steps import STEPS
+from gui.store.workflow_steps import STEPS, steps_of
 
 
 def _spy_on_pipeline_header(monkeypatch):
@@ -52,7 +52,8 @@ def test_render_smoke():
     segments = [
         w for w in rc.find(v.Html).widgets if "data-step-key" in (w.attributes or {})
     ]
-    assert [w.attributes["data-step-key"] for w in segments] == [s.key for s in STEPS]
+    # The strip shows the active step's level only (two levels §1).
+    assert [w.attributes["data-step-key"] for w in segments] == [STEPS[i].key for i in steps_of("prepare")]
     rc.close()
 
 

@@ -90,7 +90,6 @@ from gui.widget.batch_footer import BatchFooter, footer_counts
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.details_dialog import DetailsDialog
 from gui.widget.grid_form import GridForm
-from gui.widget.help import StepIntro
 from gui.widget.product_table import STATUS_PX, ProductTable
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts")
@@ -386,7 +385,6 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs, stage: str = "harm
                             writing=is_writing(p.name), stopped=stopped)
 
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.harmonize.description"), t("steps.harmonize.info_header"), t("steps.harmonize.info_md"))
         GridForm(app_state=app_state)  # remounts its fields per project and AOI (ruling #18)
         if p.grid is not None:
             # between the grid card and the sources table (spec §7.3); a mask row

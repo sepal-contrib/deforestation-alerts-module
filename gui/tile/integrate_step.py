@@ -50,7 +50,6 @@ from gui.store import workflow_steps
 from gui.widget.attribute_form import layer_label
 from gui.widget.attribute_modal import AttributeModal
 from gui.widget.confirm_dialog import ConfirmDialog
-from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.text_style import MUTED
 
@@ -239,7 +238,6 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         set_attr_layers(lambda cur: [old for j, old in enumerate(cur) if j != index])
 
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.integrate.description"), t("steps.integrate.info_header"), t("steps.integrate.info_md"))
         solara.Text(t("steps.integrate.sources"), style="font-weight:600;")
         for c in choices:  # a disabled one shows why it is left out
             s = c["source"]

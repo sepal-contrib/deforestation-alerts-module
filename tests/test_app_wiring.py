@@ -279,17 +279,30 @@ STEP_FILES = {
 }
 
 
-def test_workflow_tiles_open_with_description_and_info_button():
-    """Spec §14 slice 6: every step shows its description and an info button."""
+def test_every_step_shows_its_instruction_and_info_button_in_the_header():
+    """Two levels §1: the header's instruction line and ⓘ replaced each step
+    body's description line, so no step body opens with StepIntro."""
+    import ipyvuetify as v
+    import reacton
+    import solara
+
+    from gui.i18n import t
     from gui.store.workflow_steps import STEPS
+    from gui.widget.pipeline_header import PipelineHeader
 
     assert set(STEP_FILES) == {s.key for s in STEPS}
-    text_keys = {s.key: s.text_key for s in STEPS}
-    for key, rel in STEP_FILES.items():
-        src = _src(rel)
-        assert src.count("StepIntro(") == 1, rel
-        for part in ("description", "info_header", "info_md"):
-            assert f'"{text_keys[key]}.{part}"' in src, (rel, part)
+    for rel in STEP_FILES.values():
+        assert "StepIntro" not in _src(rel), rel
+    for i, spec in enumerate(STEPS):
+        box, rc = reacton.render(
+            PipelineHeader(active_step=i, on_navigate=lambda i: None, project=solara.reactive(None)),
+            handle_error=False,
+        )
+        texts = [w.children[0] for w in rc.find(v.Html).widgets if w.tag == "span" and w.children]
+        assert t(f"{spec.text_key}.instruction") in texts, spec.key
+        dialog = rc.find(v.Dialog).widget
+        assert t(f"{spec.text_key}.info_header") in str(dialog.children), spec.key
+        rc.close()
     analysis = _src("gui/tile/analysis/analysis_tile.py")
     assert "info_button(" in analysis and "analysis_tile.description" in analysis
 

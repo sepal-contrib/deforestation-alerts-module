@@ -54,7 +54,6 @@ from gui.store.project_writers import writing
 from gui.store.workflow_steps import active_set
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import field_group, form_card, use_form_dialog
-from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable, link_action
 from gui.widget.text_style import MUTED
 
@@ -934,8 +933,6 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
     p = app_state.project.value
     s = active_set(p)
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.evaluators.description"), t("steps.evaluators.info_header"),
-                  t("steps.evaluators.info_md"))
         if p is None:
             solara.Info(t("workflow.lock_project"))
         elif s is not None and read_only(p):

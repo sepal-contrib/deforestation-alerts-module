@@ -82,6 +82,9 @@
     "step_badge": "{n} / {total}",
     "count_empty": "nothing yet",
     "count_optional": "optional",
+    "optional": "optional",
+    "level_prepare": "Prepare alerts",
+    "level_review": "Set up review",
     "start_analysis": "Start analysis",
     "count_evaluators": {
       "one": "{count} evaluator",

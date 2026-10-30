@@ -1,10 +1,12 @@
 """Compact pipeline header for the workflow panel.
 
-Replaces the overflowing ``rv.Tabs`` strip: a segment strip (one cell per STEPS entry) mapping the
-pipeline (has-outputs / empty / locked, with a ring on the current step), a
+Two levels (spec: workflow two levels §1): a tab row (Prepare alerts | Set
+up review), then the active level's segment strip (one cell per step of that
+level) mapping the pipeline (has-outputs / empty / locked, with a ring on the current step), a
 title row with the active step's name, output count and position, a unified
-clickable title (badge + name + count + caret) that opens the jump menu, and
-Back / Next buttons.
+clickable title (badge + name + count + caret) that opens the jump menu,
+Back / Next buttons, and the step's instruction line with its info button.
+``STEPS`` stays one flat list: Back / Next cross the level boundary.
 
 Semantics are outputs, not completion — steps are revisitable workspaces,
 never "done". Segment/badge data all derives from the STEPS registry.
@@ -15,7 +17,8 @@ import solara
 import solara.lab
 
 from gui.i18n import t
-from gui.store.workflow_steps import STEPS, StepStatus, nav_targets, step_states
+from gui.store.workflow_steps import LEVELS, STEPS, StepStatus, nav_targets, step_states, steps_of
+from gui.widget.help import InfoButton
 from gui.widget.text_style import MUTED
 
 # Empty / locked tones stay theme-neutral grey; the HAS_OUTPUTS fill and the
@@ -26,6 +29,9 @@ _SEG_LOCKED = (
     "repeating-linear-gradient(90deg, rgba(128,128,128,0.30) 0 3px,"
     " rgba(128,128,128,0.10) 3px 6px)"
 )
+
+
+_LEVEL_LABELS = {"prepare": "workflow.level_prepare", "review": "workflow.level_review"}
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
@@ -70,8 +76,33 @@ def _SegmentCell(key: str, tip: str, seg_style: str, locked: bool, on_activate):
 
 
 @solara.component
+def _LevelTab(level: str, mark: str, label: str, tip: str, active: bool, locked: bool, primary: str, on_activate):
+    """One level tab. Same per-cell hook rule as ``_SegmentCell``; a locked
+    tab keeps its handler and the caller's handler only shows the reason.
+    ``data-level-key`` lets the headless driver click a tab by key."""
+    tone = primary if active else "rgba(128, 128, 128, 0.75)"
+    line = f"border-bottom: 2px solid {primary};" if active else "border-bottom: 2px solid transparent;"
+    with rv.Html(
+        tag="div",
+        style_=f"flex: 1; text-align: center; padding: 8px 4px 6px; font-size: 12px; color: {tone};"
+        f" {line}{' font-weight: 600;' if active else ''}"
+        f" cursor: {'not-allowed; opacity: 0.6' if locked else 'pointer'};",
+        attributes={"title": tip, "data-level-key": level},
+    ) as tab:
+        rv.Html(
+            tag="span",
+            children=[mark],
+            style_=f"display: inline-block; width: 16px; height: 16px; line-height: 16px;"
+            f" border-radius: 50%; color: #ffffff; font-size: 10px; margin-right: 4px;"
+            f" background: {primary if active or mark == '✓' else 'rgba(128, 128, 128, 0.45)'};",
+        )
+        rv.Html(tag="span", children=[label])
+    rv.use_event(tab, "click", lambda *_: on_activate())
+
+
+@solara.component
 def _JumpMenuRow(
-    index: int, label: str, sub_text: str, locked: bool, active: bool, on_jump
+    index: int, number: int, label: str, sub_text: str, locked: bool, active: bool, on_jump
 ):
     """One row of the step-jump dropdown.
 
@@ -95,7 +126,7 @@ def _JumpMenuRow(
             )
         else:
             solara.Text(
-                str(index + 1),
+                str(number),
                 style="width: 18px; text-align: center;"
                 " font-weight: 600; font-size: 12px;"
                 " margin-right: 10px;",
@@ -131,6 +162,9 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     states = step_states(p)
     prev_t, next_t = nav_targets(active_step, states)
     menu_open, set_menu_open = solara.use_state(False)
+    lock_note, set_lock_note = solara.use_state("")
+    active = STEPS[active_step]
+    level_steps = steps_of(active.level)
 
     # Filled segments + the current-step ring use the app's theme "primary"
     # accent (green in light mode, gold in dark) — the same colour as the Next
@@ -144,14 +178,30 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     ring_css = f"box-shadow: 0 0 0 2px {_rgba(primary, 0.55)};"
 
     def _seg_style(i: int) -> str:
-        """Style of the inner visual bar (the padded wrapper owns the click)."""
+        """Style of the inner visual bar (the padded wrapper owns the click).
+        An optional step is dashed, hollow until it has its own outputs (a
+        passed-but-empty optional step is HAS_OUTPUTS, yet nothing was made)."""
         if states[i] is StepStatus.LOCKED:
             bg = f"background: {_SEG_LOCKED};"
+        elif STEPS[i].optional:
+            bg = f"background: {primary if STEPS[i].count(p) else 'transparent'};"
         else:
             fill = primary if states[i] is StepStatus.HAS_OUTPUTS else _SEG_EMPTY
             bg = f"background: {fill};"
+        if STEPS[i].optional:
+            bg += f" border: 1.5px dashed {primary}; box-sizing: border-box;"
         ring = ring_css if i == active_step else ""
         return f"width: 100%; height: 7px; border-radius: 3.5px; {bg}{ring}"
+
+    def _open_level(level: str):
+        """A tab opens its level's first unlocked step; a locked level only
+        shows why, and the current level's own tab changes nothing."""
+        first = next((i for i in steps_of(level) if states[i] is not StepStatus.LOCKED), None)
+        if first is None:
+            set_lock_note(t(STEPS[steps_of(level)[0]].lock_reason_key))
+        elif level != active.level:
+            set_lock_note("")
+            on_navigate(first)
 
     def _jump(i: int):
         """Navigate from the dropdown, then close it.
@@ -170,11 +220,38 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
         style="gap: 0px; padding: 10px 12px 6px;"
         " border-bottom: 1px solid rgba(128, 128, 128, 0.25);"
     ):
+        # Level tabs, edge to edge across the header (negative margins undo
+        # the column's padding). A level is ticked once its last required step
+        # has outputs.
+        with solara.Row(
+            style="gap: 0; margin: -10px -12px 4px; border-bottom: 1px solid rgba(128, 128, 128, 0.25);"
+        ):
+            for n, level in enumerate(LEVELS, start=1):
+                idx = steps_of(level)
+                locked = all(states[i] is StepStatus.LOCKED for i in idx)
+                last_required = [i for i in idx if not STEPS[i].optional][-1]
+                _LevelTab(
+                    level=level,
+                    mark="✓" if states[last_required] is StepStatus.HAS_OUTPUTS else str(n),
+                    label=t(_LEVEL_LABELS[level]),
+                    tip=t(STEPS[idx[0]].lock_reason_key) if locked else "",
+                    active=level == active.level,
+                    locked=locked,
+                    primary=primary,
+                    on_activate=lambda level=level: _open_level(level),
+                )
+        # Only while the level it explains is still locked.
+        if lock_note and any(
+            all(states[i] is StepStatus.LOCKED for i in steps_of(lv)) for lv in LEVELS
+        ):
+            solara.Text(lock_note, style=MUTED + "font-size: 11px; padding: 0 2px;")
+
         # Segment strip. Each cell is a padded transparent WRAPPER (~21 px
         # tall) carrying the tooltip and click handler — the 7 px bar inside
         # is purely visual, so the hit area meets the spec's >=20 px.
         with solara.Row(style="gap: 4px; align-items: center;"):
-            for i, spec in enumerate(STEPS):
+            for i in level_steps:
+                spec = STEPS[i]
                 locked = states[i] is StepStatus.LOCKED
                 _SegmentCell(
                     key=spec.key,
@@ -186,7 +263,6 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     on_activate=lambda i=i: on_navigate(i),
                 )
 
-        active = STEPS[active_step]
         with solara.Row(style="gap: 8px; align-items: center; padding: 4px 0;"):
             solara.Button(
                 icon_name="mdi-chevron-left",
@@ -220,13 +296,17 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     " width: 100%; padding: 5px 10px 5px 8px; border-radius: 6px;"
                     " cursor: pointer;",
                 ) as activator:
+                    # An optional step left empty reads "optional", not its place.
                     rv.Html(
                         tag="span",
+                        class_="defo-step-badge",
                         children=[
-                            t(
+                            t("workflow.optional")
+                            if active.optional and not active.count(p)
+                            else t(
                                 "workflow.step_badge",
-                                n=active_step + 1,
-                                total=len(STEPS),
+                                n=level_steps.index(active_step) + 1,
+                                total=len(level_steps),
                             )
                         ],
                         style_=f"background: {primary}; color: #ffffff;"
@@ -261,10 +341,12 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     use_activator_width=True,
                 ):
                     with rv.List(dense=True, style_="width: 100%; padding: 4px 0;"):
-                        for i, spec in enumerate(STEPS):
+                        for n, i in enumerate(level_steps, start=1):
+                            spec = STEPS[i]
                             locked = states[i] is StepStatus.LOCKED
                             _JumpMenuRow(
                                 index=i,
+                                number=n,
                                 label=t(spec.label_key),
                                 sub_text=t(spec.lock_reason_key)
                                 if locked
@@ -281,3 +363,9 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                 disabled=next_t is None,
                 on_click=lambda: next_t is not None and on_navigate(next_t),
             )
+
+        # The step's instruction, with its longer explanation behind the info
+        # button (this replaced each step body's description line).
+        with solara.Row(style="gap: 6px; align-items: center; flex-wrap: nowrap; padding: 0 2px;"):
+            solara.Text(t(f"{active.text_key}.instruction"), style="flex: 1 1 auto; font-weight: 500;")
+            InfoButton(t(f"{active.text_key}.info_header"), t(f"{active.text_key}.info_md"))

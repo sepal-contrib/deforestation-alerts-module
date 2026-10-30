@@ -51,7 +51,6 @@ from gui.tile.prepare_step import mine_keys, mine_rows, redownload_items, refres
 from gui.widget.batch_footer import BatchFooter, footer_counts
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.details_dialog import DetailsDialog
-from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.source_modal import SourceModal
 
@@ -351,7 +350,6 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
                       and status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is not Status.CURRENT)
 
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.alerts.description"), t("steps.alerts.info_header"), t("steps.alerts.info_md"))
         solara.Text(t("steps.alerts.period_box", start=period.start.isoformat(), end=end.isoformat(),
                       window=start.isoformat(), days=period.look_back_days),
                     style="padding: 8px 12px; border: 1px solid rgba(128,128,128,0.4); border-radius: 4px;"

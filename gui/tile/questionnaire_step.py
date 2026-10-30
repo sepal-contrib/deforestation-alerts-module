@@ -19,7 +19,6 @@ from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store.workflow_steps import active_set
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.copy_chip import CopyChipWidget
-from gui.widget.help import StepIntro
 from gui.widget.product_table import ProductTable
 from gui.widget.question_modal import QuestionModal
 from gui.widget.report_template import ReportTemplateField, template_state
@@ -192,8 +191,6 @@ def QuestionnaireStep(app_state):
     doomed = next((q for q in p.questions if q.key == pending_delete), None)
 
     with solara.Column(style="gap:16px;"):
-        StepIntro(t("steps.questionnaire.description"), t("steps.questionnaire.info_header"),
-                  t("steps.questionnaire.info_md"))
         with rv.Card(outlined=True, class_="pa-3"):
             solara.Button(t("steps.questionnaire.add"), icon_name="mdi-plus", color="primary", small=True, outlined=True,
                           block=True, disabled=ro, on_click=_open_add)
