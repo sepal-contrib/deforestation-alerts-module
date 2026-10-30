@@ -21,7 +21,7 @@ from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.engine import harmonize as hz
 from deforestation_alerts.project.models import (
-    AoiRecord, GridSpec, Period, Project, add_predefined_source,
+    AoiRecord, GridSpec, NativeGrid, Period, Project, add_mask, add_predefined_source,
 )
 from deforestation_alerts.scripts import gee_progress
 
@@ -84,11 +84,61 @@ def job_factory(tmp_path, monkeypatch, cover):
     monkeypatch.setattr(runner, "export_native", fake_export)
     monkeypatch.setattr(runner.catalogue, "build_image", lambda *a, **k: "IMAGE")
 
-    def make(force=False, meta=META):
+    def make(force=False, meta=META, mode="download"):
         return runner.SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=JAN,
-                                source="GLAD-L", meta=meta, aoi="AOI", force=force)
+                                source="GLAD-L", meta=meta, aoi="AOI", force=force, mode=mode)
 
     return p, make, calls
+
+
+def _mask_on_not_aligned(p):
+    add_mask(p, name="forest", origin="gee", ref="UMD/x", asset_type="IMAGE", band="b",
+             native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=JAN.id)
+
+
+def test_download_mode_skips_harmonize_when_masks_not_ready(job_factory, tmp_path):
+    p, make, calls = job_factory
+    _mask_on_not_aligned(p)
+    assert not runner.harmonize_ready(p, tmp_path, JAN)
+    arts = runner.run_source_row(make(force=True))
+    assert set(arts) == {RKEY} and len(calls) == 1
+
+
+def test_download_mode_chains_into_harmonize_when_ready(job_factory, tmp_path):
+    p, make, calls = job_factory
+    assert runner.harmonize_ready(p, tmp_path, JAN)
+    assert set(runner.run_source_row(make(mode="download"))) == {RKEY, HKEY}
+
+
+def test_download_mode_needs_no_grid(job_factory, tmp_path):
+    p, make, calls = job_factory
+    p.grid = None
+    assert not runner.harmonize_ready(p, tmp_path, JAN)
+    assert set(runner.run_source_row(make())) == {RKEY}
+
+
+def test_harmonize_mode_refuses_missing_raw(job_factory):
+    p, make, calls = job_factory
+    with pytest.raises(runner.RawNotReady) as err:
+        runner.run_source_row(make(mode="harmonize"))
+    assert err.value.key == "errors.raw_not_ready" and calls == []
+
+
+def test_harmonize_mode_never_downloads(job_factory):
+    p, make, calls = job_factory
+    runner.apply_artifacts(p, runner.run_source_row(make()))
+    p.grid = GRID.model_copy(update={"resolution": 20, "width": 15, "height": 10})  # harmonized STALE
+    assert set(runner.run_source_row(make(mode="harmonize", force=True))) == {HKEY}
+    assert len(calls) == 1
+
+
+def test_harmonize_mode_keeps_the_mask_precondition(job_factory):
+    p, make, calls = job_factory
+    _mask_on_not_aligned(p)
+    runner.apply_artifacts(p, runner.run_source_row(make()))  # the raw file only
+    with pytest.raises(runner.MaskNotReady):
+        runner.run_source_row(make(mode="harmonize"))
+    assert len(calls) == 1
 
 
 def test_run_writes_raw_and_harmonized(job_factory, tmp_path):
@@ -163,15 +213,17 @@ def test_not_enough_space_for_harmonizing_fails_before_it(job_factory, tmp_path,
     assert not list(tmp_path.rglob("*.part"))
 
 
-def test_not_enough_space_to_harmonize_a_download_fails_before_downloading(job_factory, tmp_path, disk_100_gb):
-    """The raw file fits but its harmonized file would not: hours of download
-    must not come first (the harmonize demand can be ~7x the raw one)."""
+def test_not_enough_space_to_harmonize_a_download_keeps_the_raw_record(job_factory, tmp_path, disk_100_gb):
+    """The raw file fits but its harmonized file would not: the download no
+    longer checks the harmonize's room (spec §2); the chained harmonize fails
+    and the raw record is kept, so Harmonize can retry from disk."""
     p, make, calls = job_factory
     p.grid = GRID.model_copy(update={"width": 10**6, "height": 10**6})  # needs 800 GB, as above
-    with pytest.raises(raster_io.NotEnoughSpaceError, match="needs 800 GB free"):
+    with pytest.raises(runner.HarmonizeFailed, match="needs 800 GB free") as err:
         runner.run_source_row(make())
-    assert calls == []
-    assert not [f for f in tmp_path.rglob("*") if f.is_file()]
+    assert isinstance(err.value.__cause__, raster_io.NotEnoughSpaceError)
+    assert set(err.value.artifacts) == {RKEY} and len(calls) == 1
+    assert not list(tmp_path.rglob("*.part"))
 
 
 def _record_space_checks(monkeypatch, *, fail_at=None):
@@ -197,8 +249,8 @@ def test_the_row_gates_ask_for_twice_the_compressed_estimate(job_factory, tmp_pa
     raw = 2 * raster_io.compressed_estimate(download.estimate_native_bytes(AOI_BOUNDS, "GLAD-L"))
     harm = 2 * raster_io.compressed_estimate(gridmod.estimate_bytes(GRID))
     raw_dir, harm_dir = (tmp_path / arts[k].rel_path for k in (RKEY, HKEY))
-    # raw before the download, harmonize before the download and again before harmonizing
-    assert seen == [(raw_dir.parent, raw), (harm_dir.parent, harm), (harm_dir.parent, harm)]
+    # raw before the download, harmonize before harmonizing
+    assert seen == [(raw_dir.parent, raw), (harm_dir.parent, harm)]
     assert harm == 2 * math.ceil(GRID.width * GRID.height * 2 * 4 * 0.05)  # 480 bytes for 30 x 20 px
 
     # a grid change re-harmonizes only: one harmonize check, the same compressed figure
@@ -221,7 +273,7 @@ PARAGUAY_10M = GridSpec(epsg="EPSG:32721", resolution=10, xmin=200000, ymax=7870
 def test_a_national_10m_row_needs_under_7_gb(job_factory, tmp_path, monkeypatch, cover, source):
     """Twice the uncompressed estimate asked for ~132 GB to harmonize Paraguay
     at 10 m; the compressed estimate asks for ~6.6 GB, and RADD's 10 m download
-    for ~6.9 GB. The harmonize gate fails here, so nothing is downloaded."""
+    for ~6.9 GB. The harmonize gate fails here, after the download."""
     p, make, calls = job_factory
     p.aoi = p.aoi.model_copy(update={"bounds": PARAGUAY_BOUNDS})
     p.grid = PARAGUAY_10M
@@ -230,9 +282,9 @@ def test_a_national_10m_row_needs_under_7_gb(job_factory, tmp_path, monkeypatch,
     seen = _record_space_checks(monkeypatch, fail_at=2)
     job = runner.SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=JAN,
                            source=source, meta=META, aoi="AOI")
-    with pytest.raises(raster_io.NotEnoughSpaceError):
+    with pytest.raises(runner.HarmonizeFailed) as err:
         runner.run_source_row(job)
-    assert calls == []
+    assert isinstance(err.value.__cause__, raster_io.NotEnoughSpaceError) and len(calls) == 1
     (_, raw), (_, harm) = seen
     assert raw == 2 * raster_io.compressed_estimate(download.estimate_native_bytes(PARAGUAY_BOUNDS, source))
     assert raw < 7e9  # was 17.8 GB (GLAD-L) and 138 GB (RADD)
@@ -253,7 +305,7 @@ def _space_gone_after_download(monkeypatch):
 
     def check(folder, needed):
         seen.append(folder)
-        if len(seen) > 2:  # the two pre-download checks passed
+        if len(seen) > 1:  # the pre-download check passed
             raise raster_io.NotEnoughSpaceError("needs 1 GB free")
         return real(folder, needed)
 

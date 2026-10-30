@@ -158,7 +158,7 @@ def test_every_error_the_engine_raises_with_a_text_names_a_message():
                                  "errors.mask_not_as_asked", "errors.no_aoi_or_grid", "errors.file_not_found",
                                  "errors.not_a_source", "errors.not_ready", "errors.footprint_missing",
                                  "errors.no_sources", "errors.no_tippecanoe",
-                                 "errors.bands_not_loaded", "errors.project_unreadable",
+                                 "errors.bands_not_loaded", "errors.raw_not_ready", "errors.project_unreadable",
                                  "errors.project_not_a_manifest", "errors.project_newer_schema",
                                  "errors.project_invalid", "errors.no_images", "errors.folder_not_writable",
                                  "errors.source_native_unknown", "errors.attribute_band_missing",

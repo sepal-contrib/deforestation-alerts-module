@@ -7,6 +7,7 @@
     "no_aoi_or_grid": "El proyecto necesita una AOI y una cuadrícula antes de descargar nada.",
     "source_native_unknown": "{source}: se desconoce su cuadrícula nativa (proyección y escala); edita la fuente.",
     "bands_not_loaded": "{source}: su lista de bandas aún no se ha cargado desde Earth Engine; inténtalo de nuevo en un momento.",
+    "raw_not_ready": "Descarga esta fuente en Alertas antes de armonizarla.",
     "file_not_found": "Archivo no encontrado: {path}",
     "not_a_source": "{source} no es una fuente de este proyecto.",
     "not_ready": "{source} no está descargada y armonizada para este período; ejecuta primero Descargar y armonizar.",

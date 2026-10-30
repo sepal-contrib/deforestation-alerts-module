@@ -122,14 +122,25 @@ def test_a_switch_in_one_period_touches_only_that_period(two_periods):
     assert a[:, :15].max() == 0 and a[:, 15:].min() == 1  # exclude: the forest half is removed
 
 
-def test_a_mask_on_an_old_grid_blocks_harmonize_before_any_download(two_periods):
+def _download_then_harmonize(p, pdir):
+    """The download does not wait for the masks and does not chain; the
+    harmonize-only run is refused with the mask's own error."""
+    arts = runner.run_source_row(runner.SourceJob(p.model_copy(deep=True), pdir, FEB, "GLAD-L", {"bands": []},
+                                                  "AOI"))
+    assert set(arts) == {fp.raw_key(FEB.id, "GLAD-L")}
+    runner.apply_artifacts(p, arts)
+    return runner.SourceJob(p.model_copy(deep=True), pdir, FEB, "GLAD-L", {"bands": []}, "AOI", mode="harmonize")
+
+
+def test_a_mask_on_an_old_grid_blocks_harmonize_not_the_download(two_periods):
     p, pdir, downloads = two_periods
     runner.apply_artifacts(p, runner.run_mask_row(runner.MaskJob(p.model_copy(deep=True), pdir, "forest", "AOI")))
     p.grid = GRID.model_copy(update={"resolution": 20, "width": 15, "height": 10})
     assert not fp.mask_current(p, "forest")
+    job = _download_then_harmonize(p, pdir)
     with pytest.raises(runner.MaskNotReady):
-        runner.run_source_row(runner.SourceJob(p.model_copy(deep=True), pdir, FEB, "GLAD-L", {"bands": []}, "AOI"))
-    assert downloads == []
+        runner.run_source_row(job)
+    assert len(downloads) == 1
 
 
 def test_mask_rows_and_their_on_pixels(two_periods):
@@ -213,24 +224,25 @@ def test_a_mask_switch_turns_the_prepare_badge_down(two_periods, monkeypatch):
     assert prepare.count(p) == 0
 
 
-def test_a_deleted_aligned_mask_blocks_harmonize_before_any_download(two_periods):
+def test_a_deleted_aligned_mask_blocks_harmonize_not_the_download(two_periods):
     """The fingerprint alone says current; the file is gone from disk. The mask
-    row offers a re-run and the source row is refused before the download."""
+    row offers a re-run and the source row's harmonize is refused."""
     p, pdir, downloads = two_periods
     runner.apply_artifacts(p, runner.run_mask_row(runner.MaskJob(p.model_copy(deep=True), pdir, "forest", "AOI")))
     (pdir / p.artifacts[fp.mask_key("forest")].rel_path).unlink()
     assert fp.mask_current(p, "forest")  # fingerprint only, no disk access
     row = plan_masks(p, pdir, FEB)[0]
     assert row.aligned is fp.Status.MISSING and row.needs_run
+    job = _download_then_harmonize(p, pdir)
     with pytest.raises(runner.MaskNotReady):
-        runner.run_source_row(runner.SourceJob(p.model_copy(deep=True), pdir, FEB, "GLAD-L", {"bands": []}, "AOI"))
-    assert downloads == []
+        runner.run_source_row(job)
+    assert len(downloads) == 1
 
 
 def test_a_moved_geotiff_mask_reads_file_not_found_not_an_input_change(two_periods):
     """Spec §5.3 "file not found": the period's sets keep their state, the mask
-    row is not offered to Run all, and a source row is refused with the mask's
-    own refusal before any download."""
+    row is not offered to Run all, and a source row's harmonize is refused
+    with the mask's own refusal (its download does not wait)."""
     from gui.i18n import t
 
     p, pdir, downloads = two_periods
@@ -243,9 +255,10 @@ def test_a_moved_geotiff_mask_reads_file_not_found_not_an_input_change(two_perio
     row = plan_masks(p, pdir, FEB)[0]
     assert row.file_missing == ref and row.aligned is fp.Status.MISSING and not row.needs_run
     n = len(downloads)
+    job = _download_then_harmonize(p, pdir)
     with pytest.raises(runner.MaskFileMissing) as err:
-        runner.run_source_row(runner.SourceJob(p.model_copy(deep=True), pdir, FEB, "GLAD-L", {"bands": []}, "AOI"))
-    assert len(downloads) == n
+        runner.run_source_row(job)
+    assert len(downloads) == n + 1
     assert err.value.values == {"name": "forest", "path": ref}
     assert ref in t(err.value.key, **err.value.values)
     # the mask's own row (a race: the file went after the click) reads the same keyed refusal

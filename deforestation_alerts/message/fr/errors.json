@@ -7,6 +7,7 @@
     "no_aoi_or_grid": "Le projet a besoin d'une AOI et d'une grille avant de télécharger quoi que ce soit.",
     "source_native_unknown": "{source} : sa grille native (projection et échelle) est inconnue ; modifiez la source.",
     "bands_not_loaded": "{source} : sa liste de bandes n'est pas encore chargée depuis Earth Engine ; réessayez dans un instant.",
+    "raw_not_ready": "Téléchargez cette source dans Alertes avant de l'harmoniser.",
     "file_not_found": "Fichier introuvable : {path}",
     "not_a_source": "{source} n'est pas une source de ce projet.",
     "not_ready": "{source} n'est pas téléchargée et harmonisée pour cette période ; lancez d'abord Télécharger et harmoniser.",

@@ -57,9 +57,9 @@ def _file_source(p, tmp_path):
                                                bounds=BOUNDS), period_id=p.active_period)
 
 
-def _job(p, tmp_path, source, meta=None, force=False):
+def _job(p, tmp_path, source, meta=None, force=False, mode="download"):
     return runner.SourceJob(project=p.model_copy(deep=True), pdir=tmp_path, period=JAN, source=source,
-                            meta=meta, aoi="AOI", force=force)
+                            meta=meta, aoi="AOI", force=force, mode=mode)
 
 
 @pytest.fixture
@@ -142,9 +142,16 @@ def test_a_geotiff_row_waits_for_the_aoi_geometry(tmp_path, cover, no_ee):
     _file_source(p, tmp_path)
     cover(p, "tif")
     (tmp_path / paths.AOI_SIDECAR).unlink()
+    # the download needs no AOI raster; the harmonize it chains into waits, keeping the raw record
+    with pytest.raises(runner.HarmonizeFailed) as err:
+        runner.run_source_row(_job(p, tmp_path, "tif"))
+    assert isinstance(err.value.__cause__, runner.AoiGeometryMissing)
+    assert err.value.key == runner.AoiGeometryMissing.key
+    assert set(err.value.artifacts) == {fp.raw_key(JAN.id, "tif")}
+    assert not paths.aoi_raster_path(tmp_path).exists()
+    runner.apply_artifacts(p, err.value.artifacts)
     with pytest.raises(runner.AoiGeometryMissing):
         runner.run_source_row(_job(p, tmp_path, "tif"))
-    assert not list(tmp_path.glob("periods/**/*.tif"))
 
 
 def test_a_moved_user_file_reads_missing_not_stale(tmp_path, cover, no_ee):
@@ -216,9 +223,8 @@ def test_an_aoi_change_rebuilds_the_aoi_raster_before_a_geotiff_row(tmp_path, co
 
 def test_a_geotiff_row_asks_twice_the_compressed_estimate_before_each_write(tmp_path, cover, no_ee, monkeypatch):
     """Spec §13 "free-space gates ask for exactly twice the compressed
-    estimate" (user decision 2026-10-01): the AOI raster, the normalized raw,
-    then the harmonized file (checked before the raw is written and again
-    before the harmonize)."""
+    estimate" (user decision 2026-10-01): the normalized raw, then the AOI
+    raster and the harmonized file of the harmonize it chains into."""
     from deforestation_alerts.engine import grid as gridmod
     from deforestation_alerts.engine import normalize
     from deforestation_alerts.engine.raster_io import compressed_estimate
@@ -232,7 +238,7 @@ def test_a_geotiff_row_asks_twice_the_compressed_estimate_before_each_write(tmp_
     aoi_raster = 2 * compressed_estimate(gridmod.estimate_bytes(GRID, bands=1))
     raw = 2 * compressed_estimate(normalize.estimate_bytes(src, BOUNDS))
     harm = runner._harmonize_space(p)
-    assert seen == [aoi_raster, raw, harm, harm]
+    assert seen == [raw, aoi_raster, harm]
 
 
 def test_a_source_not_covered_with_current_files_does_not_unlock_integrate(tmp_path, cover, no_ee, monkeypatch):
@@ -356,8 +362,10 @@ def test_a_deleted_aoi_raster_realigns_a_geotiff_mask_before_a_geotiff_row_harmo
 
     row = plan_masks(p, tmp_path, JAN)[0]
     assert row.aligned is fp.Status.STALE and row.needs_run
+    # a forced download no longer waits for the mask; it does not chain, and builds no AOI raster
+    assert set(runner.run_source_row(_job(p, tmp_path, "tif", force=True))) == {fp.raw_key(JAN.id, "tif")}
     with pytest.raises(runner.MaskNotReady):
-        runner.run_source_row(_job(p, tmp_path, "tif", force=True))
+        runner.run_source_row(_job(p, tmp_path, "tif", mode="harmonize"))
     assert not paths.aoi_raster_path(tmp_path).exists()
 
     run_all()

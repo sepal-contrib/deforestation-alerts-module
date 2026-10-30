@@ -107,6 +107,7 @@ class PrepareContext:
     row_stage: Optional[solara.Reactive] = None  # {progress_key: "download"|"harmonize"|"align"}; None in tests
     downloads: frozenset = frozenset()  # the items (``("source", name)`` / ``("mask", name)``) that download
     on_row_end: Optional[Callable[[], None]] = None  # called once each row the run reached is over
+    mode: str = "download"  # the source rows' SourceJob.mode: "download" or "harmonize"
 
 
 def progress_key(project: str, period_id: str, kind: str, name: str) -> tuple:
@@ -391,12 +392,14 @@ def _run_item(ctx: PrepareContext, task, title: str, scope: tuple, live, kind: s
             return True  # removed from the project meanwhile
         task.step(t("steps.prepare.job_row", source=name))
         job = SourceJob(project=live.model_copy(deep=True), pdir=ctx.pdir, period=ctx.period,
-                        source=name, aoi=ctx.aoi, force=force,
+                        source=name, aoi=ctx.aoi, force=force, mode=ctx.mode,
                         meta=ctx.meta.get("GLAD-L") if getattr(src, "catalogue_key", None) == "GLAD-L"
                         else None)
         run, error_key = run_source_row, name
         done_step, then = t("steps.prepare.job_harmonize_row", source=name), "harmonize"
-    _set_stage(ctx, key, "download" if (kind, name) in ctx.downloads else then)
+    # a harmonize-only source row never downloads, whatever ``downloads`` says
+    downloads = (kind, name) in ctx.downloads and (kind == "mask" or ctx.mode == "download")
+    _set_stage(ctx, key, "download" if downloads else then)
     try:
         arts = run(job, on_tiles=_row_reporter(ctx, task, title, key, done_step, then))
     except Exception as exc:  # noqa: BLE001 - one failed row must not stop the others (spec §12)

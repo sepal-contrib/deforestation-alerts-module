@@ -345,3 +345,22 @@ def test_a_switch_during_run_all_leaves_the_row_in_flight_out_of_date(tmp_path, 
     assert row.raw is fp.Status.CURRENT and row.harmonized is fp.Status.STALE and row.needs_run
     # the next Run all re-harmonizes it without a download (the raw file is current)
     assert prepare_step.run_all_items(live, tmp_path, live.periods[FEB.id]) == [("source", "GLAD-L")]
+
+
+def test_source_rows_run_in_the_context_mode_and_report_its_stage(tmp_path, cover, monkeypatch):
+    """A harmonize-only run passes its mode to the runner and reads "harmonize"
+    from the start, even for a row listed in ``downloads``."""
+    state = AppState()
+    state.load_project_state(_project(tmp_path, cover))
+    stages = solara.reactive({})
+    seen = []
+
+    def source_row(job, **kw):
+        seen.append((job.mode, stages.value[prepare_jobs.progress_key("mj", FEB.id, "source", job.source)]))
+        return {}
+
+    monkeypatch.setattr(prepare_jobs, "run_source_row", source_row)
+    for mode in ("download", "harmonize"):
+        prepare_jobs.run_rows(_ctx(state, tmp_path, [], row_stage=stages, mode=mode,
+                                   downloads=frozenset({("source", "GLAD-L")})), [("source", "GLAD-L")])
+    assert seen == [("download", "download"), ("harmonize", "harmonize")]
