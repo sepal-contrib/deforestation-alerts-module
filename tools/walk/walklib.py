@@ -352,7 +352,11 @@ def goto_step(page, key, wait=1500):
         wait_for(lambda: page.locator(SCREEN_ON).count(), 30, "the analysis screen")
         page.wait_for_timeout(wait)
         return
-    _segment(page, key).first.click()
+    # A locked bar is aria-disabled, which Playwright will not click, and a
+    # walk clicks one to see that the step stays locked: force only that one,
+    # as force also skips the wait for a bar the header is re-rendering
+    bar = _segment(page, key).first
+    bar.click(force=bar.get_attribute("aria-disabled") == "true")
     page.wait_for_timeout(wait)
 
 

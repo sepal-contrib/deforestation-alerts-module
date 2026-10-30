@@ -243,12 +243,13 @@ def e_sets(page, rec, *, out):
     selected = page.locator('.v-select:has(label:text-is("Alert set")) .v-select__selection:visible').first
     w.wait_for(lambda: selected.inner_text().startswith(JUNE_START), 60, "Analysis's selector on June's set")
     rec["analysis_set"] = selected.inner_text()
-    _, field = ph.analysis_jump_field(page)
-    # Block A's jump field holds the alert's position in the set's store
-    # (``actual_alert_id``), 1-based as its counter shows it, not its ``alert_id``.
-    w.wait_for(lambda: field.input_value() == str(pos + 1), 60,
-               f"the jump field at position {pos + 1}")
-    rec["id_field"] = field.input_value()
+    # The queue counter ("2 / 2", the button that opens the jump menu) shows the
+    # alert's position in the set's store (``actual_alert_id``), 1-based, not its
+    # ``alert_id``. Not the jump field: opening the menu empties it on purpose.
+    counter = page.locator('button[aria-label="Jump to alert number"]:visible').first
+    w.wait_for(lambda: counter.inner_text().split("/")[0].strip() == str(pos + 1), 60,
+               f"the counter at position {pos + 1}")
+    rec["counter"] = counter.inner_text()
     w.shot(page, out, "go_analysis")
     ph.open_overview(page)
     ph.choose(page, "Alert set", JULY_START, scope=".dialog-card")
