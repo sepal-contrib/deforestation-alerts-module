@@ -119,7 +119,10 @@
       "name_separator": "Don't use \", \" or the separate word \"and\": they join source names in lists.",
       "edit_used": "An alert set already uses this source: add a new one instead.",
       "cap_reached": "This period already has 6 custom sources.",
-      "period_box": "Period {start} → {end} · search window from {window} ({days} days of look-back)",
+      "period_box": {
+        "one": "Period {start} → {end} · search window from {window} ({n} day of look-back)",
+        "other": "Period {start} → {end} · search window from {window} ({n} days of look-back)"
+      },
       "chip_aoi": "AOI {pct} %",
       "chip_dates_ok": "✓ data to {last}",
       "chip_dates_part": "data to {last} only",

@@ -126,7 +126,11 @@
       "name_separator": "N'utilisez pas « , » ni le mot isolé « and » : ils relient les noms de sources dans les listes.",
       "edit_used": "Un jeu d'alertes utilise déjà cette source : ajoutez-en une nouvelle à la place.",
       "cap_reached": "Cette période a déjà 6 sources personnalisées.",
-      "period_box": "Période {start} → {end} · fenêtre de recherche depuis le {window} ({days} jours de période antérieure)",
+      "period_box": {
+        "one": "Période {start} → {end} · fenêtre de recherche depuis le {window} ({n} jour de période antérieure)",
+        "many": "Période {start} → {end} · fenêtre de recherche depuis le {window} ({n} de jours de période antérieure)",
+        "other": "Période {start} → {end} · fenêtre de recherche depuis le {window} ({n} jours de période antérieure)"
+      },
       "chip_aoi": "AOI : {pct} %",
       "chip_dates_ok": "✓ données jusqu'au {last}",
       "chip_dates_part": "données jusqu'au {last} seulement",

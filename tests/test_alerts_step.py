@@ -259,6 +259,19 @@ def test_without_a_period_the_step_is_locked(monkeypatch, tmp_path):
         rc.close()
 
 
+def test_the_period_box_counts_one_day_of_look_back_in_the_singular(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _stub_children(monkeypatch)
+    p = _project_with_source()
+    p.periods = {PER.id: PER.model_copy(update={"look_back_days": 1})}
+    box, rc = _render(_app_state(p))
+    try:
+        texts = [str(w.children) for w in rc.find(v.Html).widgets]
+        assert any("(1 day of look-back)" in s for s in texts), texts
+    finally:
+        rc.close()
+
+
 def test_toggle_on_reports_the_ee_aoi_error_and_stays_off(monkeypatch, tmp_path):
     """Not-ready path (nothing downloaded) + the ee_aoi ValueError catch."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))

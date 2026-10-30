@@ -126,7 +126,11 @@
       "name_separator": "Não use \", \" nem a palavra isolada \"and\": elas unem os nomes de fontes nas listas.",
       "edit_used": "Um conjunto de alertas já usa esta fonte: adicione uma nova em vez disso.",
       "cap_reached": "Este período já tem 6 fontes personalizadas.",
-      "period_box": "Período {start} → {end} · janela de busca desde {window} ({days} dias de busca retroativa)",
+      "period_box": {
+        "one": "Período {start} → {end} · janela de busca desde {window} ({n} dia de busca retroativa)",
+        "many": "Período {start} → {end} · janela de busca desde {window} ({n} de dias de busca retroativa)",
+        "other": "Período {start} → {end} · janela de busca desde {window} ({n} dias de busca retroativa)"
+      },
       "chip_aoi": "AOI {pct}%",
       "chip_dates_ok": "✓ dados até {last}",
       "chip_dates_part": "dados só até {last}",

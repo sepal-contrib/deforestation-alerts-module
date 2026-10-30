@@ -350,8 +350,8 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
                       and status(p, pdir, AOI_KEY, aoi_raster_inputs(p)) is not Status.CURRENT)
 
     with solara.Column(style="gap:16px;"):
-        solara.Text(t("steps.alerts.period_box", start=period.start.isoformat(), end=end.isoformat(),
-                      window=start.isoformat(), days=period.look_back_days),
+        solara.Text(tn("steps.alerts.period_box", period.look_back_days, start=period.start.isoformat(),
+                       end=end.isoformat(), window=start.isoformat()),
                     style="padding: 8px 12px; border: 1px solid rgba(128,128,128,0.4); border-radius: 4px;"
                           "font-size: 13px;")
         # spec D4: a step list's Add button sits above it, full width
