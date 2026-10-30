@@ -120,7 +120,7 @@ SAME_IN = {
         # "timelapse" is the word Brazilian Portuguese uses.
         "analysis_tile.export_labels.tile_gif",
         # "download" is the same word in Brazilian Portuguese.
-        "steps.prepare.sec_download",
+        "steps.prepare.sec_download", "steps.prepare.job_title",
     },
 }
 

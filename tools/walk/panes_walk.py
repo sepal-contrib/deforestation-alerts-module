@@ -31,7 +31,7 @@ Then ``check_screen`` (phase ``screen``, Review Focus 5):
  9. a window resize while the screen shows, then *← Workflow*: back on the
     workflow, the main map has loaded tiles over its whole area (the views'
     hide nudge re-measured it), the right panel is back and shows
-    Questionnaire
+    Evaluation (the step *Start analysis* left)
 10. *Start analysis* again: the screen beside the rail, tiles on both views;
     the right panel closed once on the screen: its tab stays hidden there and
     is back on the workflow
@@ -432,7 +432,8 @@ def rail_language(page, code):
     back = catalogue_text(code, "app.panel_workflow_title")
     labels = {"menus": [catalogue_text(code, "analysis.panes.layers")] * 2,
               "fit": [catalogue_text(code, "analysis.panes.zoom_alert")]}
-    w.wait_for(lambda: back in page.locator(".defo-back-to-workflow").first.inner_text(), 60,
+    # the button is upper-cased by CSS, and inner_text reads it so
+    w.wait_for(lambda: back.casefold() in page.locator(".defo-back-to-workflow").first.inner_text().casefold(), 60,
                f"{code}: the screen's back button")
     w.wait_for(lambda: page.evaluate(VIEW_LABELS) == labels, 30, f"{code}: the views' labels")
     w.wait_for(lambda: not page.locator(w.MODAL).count(), 10, f"{code}: the language dialog closed")
@@ -500,7 +501,7 @@ def check_screen(page, out, report):
     # and the tiles loaded after leaving cover that whole box (MAIN_MAP_COVERED)
     assert report["main_map_after_back"]["client"][0] >= 300, report["main_map_after_back"]
     assert shown(page, ".right-panel") >= 1, "the right panel did not come back"
-    assert "Questionnaire" in w.panel_text(page), w.panel_text(page)[:300]
+    assert "Evaluation" in w.panel_text(page), w.panel_text(page)[:300]
     w.shot(page, out, "07_back_on_the_workflow")
     page.set_viewport_size({"width": 1400, "height": 1000})
     page.wait_for_timeout(1500)
