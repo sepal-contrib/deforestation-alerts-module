@@ -4,8 +4,8 @@ A walk script (``tools/walk/slice<N>_walk.py``) starts the app with
 ``start_server``, drives it with these helpers, writes a JSON report and
 screenshots under its ``--out`` folder, and always calls ``stop_server``.
 Selectors are the ones the slice-1 walks proved: ``[data-step-id=N]`` for
-rail items, ``[data-step-key=KEY]`` for the pipeline header (the active
-level's steps only; ``[data-level-key=LEVEL]`` for its tabs), ``.right-panel``
+rail items, ``[data-step-key=KEY]`` for the pipeline header's bars (both
+levels'; ``[data-level-key=LEVEL]`` for the level labels), ``.right-panel``
 for the workflow panel (``PANEL``: that panel, or the analysis screen's
 console ``.defo-analysis-right`` while that screen shows), ``.dialog-card`` for
 rail dialogs and
@@ -308,21 +308,23 @@ def back_to_workflow(page, wait=1000):
 
 
 def step_active(page, key) -> bool:
-    """Whether the Workflow panel shows step ``key``. The strip holds only the
-    active level's segments, and the badge reads "<its number> / <the level's
-    steps>" (any language). An optional step left empty reads a word instead
-    of its place; then the ringed (active) segment tells which step shows."""
+    """Whether the Workflow panel shows step ``key``. The strip holds both
+    levels' segments, each level's in its own row; the current one is
+    ``aria-current="step"``, and the badge reads "<its number> / <its level's
+    steps>" (any language), so it is checked too: the header re-renders the
+    mark and the badge together. An optional step left empty reads a word
+    instead of its place."""
     return page.evaluate("""key => {
-        const segs = [...document.querySelectorAll('.right-panel [data-step-key]')];
-        const keys = segs.map(e => e.dataset.stepKey);
-        if (!keys.includes(key)) return false;
+        const seg = [...document.querySelectorAll('.right-panel [data-step-key]')]
+            .find(e => e.dataset.stepKey === key);
+        if (!seg || seg.getAttribute('aria-current') !== 'step') return false;
         const badge = [...document.querySelectorAll('.right-panel .defo-step-badge')]
             .find(e => e.getBoundingClientRect().width > 0);
         if (!badge) return false;
         const text = badge.textContent.trim();
-        if (/^\\d+ \\/ \\d+$/.test(text)) return text === `${keys.indexOf(key) + 1} / ${keys.length}`;
-        const bar = segs[keys.indexOf(key)].firstElementChild;
-        return !!bar && bar.style.boxShadow !== '' && bar.style.boxShadow !== 'none';
+        if (!/^\\d+ \\/ \\d+$/.test(text)) return true;
+        const keys = [...seg.parentElement.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey);
+        return text === `${keys.indexOf(key) + 1} / ${keys.length}`;
     }""", key)
 
 
@@ -333,8 +335,7 @@ def _segment(page, key):
 def goto_step(page, key, wait=1500):
     """A workflow step by key, from the workflow or from the analysis screen.
 
-    The strip shows only the active level's steps: a step of the other level
-    is reached through its level tab (``[data-level-key]``) first.
+    The strip shows both levels' steps, so any step is one click on its bar.
     ``"analysis"`` is not a step: it is the analysis screen, which
     Evaluation's *Start analysis* opens (enabled once an alert set exists).
     """
@@ -351,15 +352,6 @@ def goto_step(page, key, wait=1500):
         wait_for(lambda: page.locator(SCREEN_ON).count(), 30, "the analysis screen")
         page.wait_for_timeout(wait)
         return
-    if not _segment(page, key).count():
-        # the other level: its tab opens its first unlocked step, the current tab does nothing
-        for tab in page.locator(".right-panel [data-level-key]").all():
-            tab.click()
-            try:
-                wait_for(lambda: _segment(page, key).count(), 5, f"the {key} segment")
-                break
-            except AssertionError:
-                continue
     _segment(page, key).first.click()
     page.wait_for_timeout(wait)
 

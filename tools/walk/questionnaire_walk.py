@@ -162,14 +162,14 @@ def step_keys(page):
 
 # ------------------------------------------------------------------- checks
 def check_1_rail(page, rec, *, out):
-    # two levels; the strip shows the active level's steps only
+    # two levels in one strip: both levels' steps
     levels = page.evaluate("() => [...document.querySelectorAll('[data-level-key]')].map(e => e.dataset.levelKey)")
     rec["levels"] = levels
     assert levels == ["prepare", "review"], levels
     w.goto_step(page, "questionnaire", 2000)
     keys = step_keys(page)
     rec["steps"] = keys
-    assert keys == ["layers", "questionnaire", "evaluators"] and "analysis" not in keys, keys
+    assert keys[-3:] == ["layers", "questionnaire", "evaluators"] and len(keys) == 8, keys
     assert "Questionnaire" in w.panel_text(page), w.panel_text(page)[:300]
     # Analysis is a screen of its own: the last step (Evaluation) ends with *Start analysis*.
     assert page.locator(".defo-start-analysis:visible").count() == 0, "Start analysis on Questionnaire"

@@ -200,8 +200,6 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <nav class="left-drawer"><div data-step-id="1">About</div></nav>
   <div id="map-container"></div>
   <div class="right-panel">
-    <div data-level-key="prepare" onclick="tab('prepare')">Prepare alerts</div>
-    <div data-level-key="review" onclick="tab('review')">Set up review</div>
     <div id="strip"></div>
     <span class="defo-step-badge" id="badge"></span>
     <p id="showing"></p>
@@ -213,8 +211,9 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <div class="defo-analysis-right"><p>the review console</p></div>
 </div>
 <script>
-// Two levels, as the pipeline header: the strip holds the active level's
-// steps only; an empty optional step's badge reads a word, its segment a ring.
+// Two levels, as the pipeline header: one strip, per level its label over
+// its bars, the current bar aria-current="step"; the badge counts within the
+// level, and an empty optional step's badge reads a word.
 const LEVELS = {prepare: ['aoi', 'integrate'], review: ['questionnaire', 'evaluators']};
 const OPTIONAL = ['questionnaire'];
 let current = 'integrate';
@@ -222,14 +221,15 @@ function level(key) { return Object.keys(LEVELS).find(l => LEVELS[l].includes(ke
 function step(key) {
   current = key;
   const steps = LEVELS[level(key)];
-  document.getElementById('strip').innerHTML = steps.map(k =>
-    `<div data-step-key="${k}" onclick="step('${k}')" style="padding: 7px 0;"><div style="height: 7px;${k === key ? ' box-shadow: 0 0 0 2px blue;' : ''}"></div></div>`
+  document.getElementById('strip').innerHTML = Object.keys(LEVELS).map(l =>
+    `<div><button data-level-key="${l}">${l}</button><div>` + LEVELS[l].map(k =>
+      `<button data-step-key="${k}" onclick="step('${k}')" aria-current="${k === key ? 'step' : 'false'}" style="display: block; width: 40px; padding: 7px 0;"><div style="height: 7px;"></div></button>`
+    ).join('') + '</div></div>'
   ).join('');
   document.getElementById('showing').textContent = 'workflow on ' + key;
   document.getElementById('badge').textContent =
     OPTIONAL.includes(key) ? 'optional' : (steps.indexOf(key) + 1) + ' / ' + steps.length;
 }
-function tab(l) { if (l !== level(current)) step(LEVELS[l][0]); }
 function openScreen() {
   const s = document.getElementById('screen');
   s.style.display = ''; s.classList.add('defo-analysis-screen--on');
@@ -293,28 +293,29 @@ def test_goto_step_reaches_analysis_through_start_analysis(screens):
 
 def test_step_active_counts_within_the_level(screens):
     """The badge counts the active level's steps: Integrate is "2 / 2" in
-    Prepare, and Evaluators' "2 / 2" in Review does not read as Integrate."""
+    Prepare, and Evaluators' "2 / 2" in Review does not read as Integrate
+    (both levels' bars are in the strip; only the current one is marked)."""
     assert walklib.step_active(screens, "integrate")
     assert not walklib.step_active(screens, "aoi")
-    assert not walklib.step_active(screens, "evaluators")  # not in the strip
+    assert not walklib.step_active(screens, "evaluators")
     screens.evaluate("() => step('evaluators')")
     assert walklib.step_active(screens, "evaluators")
     assert not walklib.step_active(screens, "integrate")
 
 
-def test_step_active_reads_an_empty_optional_step_by_its_ring(screens):
+def test_step_active_reads_an_empty_optional_step_by_its_mark(screens):
     screens.evaluate("() => step('questionnaire')")
     assert screens.locator("#badge").text_content() == "optional"
     assert walklib.step_active(screens, "questionnaire")
     assert not walklib.step_active(screens, "evaluators")
 
 
-def test_goto_step_crosses_levels_through_the_tab(screens):
+def test_goto_step_crosses_levels_through_the_bar(screens):
     walklib.goto_step(screens, "evaluators", 100)
     assert walklib.step_active(screens, "evaluators")
-    walklib.goto_step(screens, "aoi", 100)  # back across, then the segment
+    walklib.goto_step(screens, "aoi", 100)  # back across, straight to the bar
     assert walklib.step_active(screens, "aoi")
-    walklib.goto_step(screens, "integrate", 100)  # same level: the segment only
+    walklib.goto_step(screens, "integrate", 100)
     assert walklib.step_active(screens, "integrate")
 
 
