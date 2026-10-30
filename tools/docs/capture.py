@@ -167,11 +167,21 @@ def T_forms(dotted: str) -> list[str]:
 
 
 def prepare_labels():
-    """The Prepare panel's labels in the run's language, for ``phases.run_all``."""
+    """The Harmonize step's labels in the run's language, for ``phases.run_all``."""
     from tools.walk import phases as ph
 
-    return ph.prepare_labels(T_forms("steps.prepare.run_all"), T("steps.prepare.state_ready"),
+    return ph.prepare_labels(T_forms("steps.harmonize.run_all"), T("steps.prepare.state_ready"),
                              [T(k) for k in ph.RUNNING_KEYS], T("steps.prepare.footer_stop"))
+
+
+def download_labels():
+    """The Alerts step's labels in the run's language: "Download {n} pending"
+    and "Downloaded", as ``phases.en_download``."""
+    from tools.walk import phases as ph
+
+    return ph.prepare_labels(T_forms("steps.alerts.download_all"), T("steps.alerts.state_downloaded"),
+                             [T(k) for k in ph.RUNNING_KEYS] + [T("steps.alerts.state_reading")],
+                             T("steps.prepare.footer_stop"))
 
 
 def set_language(page, lang: str) -> None:
@@ -641,6 +651,23 @@ def ensure_side_aoi(page):
         wait(page, 4000)
 
 
+def ensure_side_period(page):
+    """The capture's second project with its AOI and one period, as the New
+    period dialog suggests it: the Alerts step unlocks with a period."""
+    ensure_side_aoi(page)
+    if not manifest(SIDE).get("periods"):
+        from tools.walk import phases as ph
+
+        step(page, "period")
+        btn(page, T("steps.period.new"), ".right-panel").click()
+        w.wait_for(lambda: modal_open(page), 15, "the New period dialog")
+        wait(page, 1500)
+        t0 = w.now_ms(page)
+        page.locator(f"{w.MODAL} {w.ENTER_BUTTON}:visible").last.click()
+        ph.wait_toast(page, t0, T("steps.period.created"))
+        w.wait_for(lambda: not modal_open(page), 15, "the period dialog closed")
+
+
 def shot_aoi_admin(page):
     ensure_side_aoi(page)
     quiet(page)
@@ -673,7 +700,7 @@ def open_add_source(page):
 def shot_alerts_add_predefined(page):
     """On the capture's second project, with GLAD-L alone added, so RADD and
     GLAD-S2 are still offered."""
-    ensure_side_aoi(page)
+    ensure_side_period(page)
     if "GLAD-L" not in (manifest(SIDE).get("sources") or {}):
         step(page, "alerts")
         open_add_source(page)
@@ -817,7 +844,7 @@ def fit_panel(page):
 
 def shot_prepare_step(page):
     ensure_open(page)
-    step(page, "prepare")
+    step(page, "harmonize")
     fit_panel(page)
     panel_shot(page, "prepare-step")
     normal(page)
@@ -830,7 +857,7 @@ MASK_BAND = "treecover2000"
 
 def shot_prepare_mask_add(page):
     ensure_open(page)
-    step(page, "prepare")
+    step(page, "harmonize")
     btn(page, T("steps.prepare.mask_add"), ".right-panel").click()
     w.wait_for(lambda: modal_open(page), 15, "the Add mask dialog")
     wait(page, 1000)
@@ -847,7 +874,7 @@ def shot_prepare_mask_add(page):
 def shot_prepare_details(page):
     """The Details dialog of the demo's GLAD-L row (ready)."""
     ensure_open(page)
-    step(page, "prepare")
+    step(page, "harmonize")
     from tools.walk import phases as ph
 
     ph.row_button(page, "GLAD-L", "mdi-information-outline").click()
@@ -1602,20 +1629,26 @@ def ensure_later_period(page):
         raise AssertionError(f"the later period ends {p['end']}, not {LATER_END}")
     if manifest()["active_period"] != p["id"]:
         select_period(page, p["start"], p["end"])
-    step(page, "prepare")
+    step(page, "alerts")
+    dl = download_labels()
+    if ph.pending_count(page, dl):
+        # one Downloaded cell per source row
+        ph.run_all(page, {}, out=RUN.data / "_capture", expect_ready=3, timeout=3600,
+                   shot_name="later_period_downloaded", labels=dl, step="alerts")
+    step(page, "harmonize")
     labels = prepare_labels()
     # The footer's main button is always rendered once the project has a grid
-    # (the demo's is saved): "Run 0 pending" and disabled when nothing is
+    # (the demo's is saved): "Harmonize 0 pending" and disabled when nothing is
     # left, or when the project is read-only; while a run of this period is
     # going, "Stop" takes its place. So wait out a run already going, then run
     # only when it has rows to run, and fail at once otherwise.
     run = ph.run_button(page, labels)
-    w.wait_for(lambda: run.count() or ph.job_running(page, labels), 60, "the Run … pending or Stop button")
+    w.wait_for(lambda: run.count() or ph.job_running(page, labels), 60, "the Harmonize … pending or Stop button")
     if ph.job_running(page, labels):  # the footer's Stop replaces Run while a job of this period runs
         w.wait_for(lambda: not ph.job_running(page, labels), 3600, "the running prepare job")
-    w.wait_for(lambda: run.count(), 60, "the Run … pending button")
+    w.wait_for(lambda: run.count(), 60, "the Harmonize … pending button")
     if ph.pending_count(page, labels) and not run.is_enabled():
-        raise AssertionError(f"Run {ph.pending_count(page, labels)} pending is disabled and no prepare job "
+        raise AssertionError(f"Harmonize {ph.pending_count(page, labels)} pending is disabled and no prepare job "
                              f"runs: is the project read-only?")
     if ph.pending_count(page, labels):
         # one Ready cell per row: the three sources and the mask

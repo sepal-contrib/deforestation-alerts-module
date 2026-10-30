@@ -116,9 +116,9 @@ def test_typed_values_exist_in_every_language():
 
 @pytest.mark.parametrize("code", ["en", "es-ES", "fr", "pt-BR"])
 def test_the_run_button_pattern_reads_every_language(code):
-    """``phases.prepare_labels`` matches the Run … pending button in each catalogue."""
+    """``phases.prepare_labels`` matches the Harmonize … pending button in each catalogue."""
     msgs = REPO / "deforestation_alerts" / "message" / code / "steps.json"
-    forms = json.loads(msgs.read_text(encoding="utf-8"))["steps"]["prepare"]["run_all"]
+    forms = json.loads(msgs.read_text(encoding="utf-8"))["steps"]["harmonize"]["run_all"]
     prepare = json.loads(msgs.read_text(encoding="utf-8"))["steps"]["prepare"]
     labels = ph.prepare_labels(forms.values(), "Ready", ["Queued"], prepare["footer_stop"])
     for form in forms.values():
