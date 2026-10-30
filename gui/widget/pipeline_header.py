@@ -162,7 +162,9 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
     states = step_states(p)
     prev_t, next_t = nav_targets(active_step, states)
     menu_open, set_menu_open = solara.use_state(False)
-    lock_note, set_lock_note = solara.use_state("")
+    # The step a locked-tab click happened on: the note clears by itself on
+    # the next navigation, with no effect to reset it.
+    lock_note_at, set_lock_note_at = solara.use_state(None)
     active = STEPS[active_step]
     level_steps = steps_of(active.level)
 
@@ -198,9 +200,8 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
         shows why, and the current level's own tab changes nothing."""
         first = next((i for i in steps_of(level) if states[i] is not StepStatus.LOCKED), None)
         if first is None:
-            set_lock_note(t(STEPS[steps_of(level)[0]].lock_reason_key))
+            set_lock_note_at(active_step)
         elif level != active.level:
-            set_lock_note("")
             on_navigate(first)
 
     def _jump(i: int):
@@ -240,11 +241,11 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     primary=primary,
                     on_activate=lambda level=level: _open_level(level),
                 )
-        # Only while the level it explains is still locked.
-        if lock_note and any(
-            all(states[i] is StepStatus.LOCKED for i in steps_of(lv)) for lv in LEVELS
-        ):
-            solara.Text(lock_note, style=MUTED + "font-size: 11px; padding: 0 2px;")
+        # Only Review can lock; the note shows on the step it was clicked from,
+        # while Review is still locked.
+        review = steps_of("review")
+        if lock_note_at == active_step and all(states[i] is StepStatus.LOCKED for i in review):
+            solara.Text(t(STEPS[review[0]].lock_reason_key), style=MUTED + "font-size: 11px; padding: 0 2px;")
 
         # Segment strip. Each cell is a padded transparent WRAPPER (~21 px
         # tall) carrying the tooltip and click handler — the 7 px bar inside
@@ -296,13 +297,15 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     " width: 100%; padding: 5px 10px 5px 8px; border-radius: 6px;"
                     " cursor: pointer;",
                 ) as activator:
-                    # An optional step left empty reads "optional", not its place.
+                    # An optional step left empty reads "optional", not its
+                    # place, and drops the chip (which would say it again).
+                    empty_optional = active.optional and not active.count(p)
                     rv.Html(
                         tag="span",
                         class_="defo-step-badge",
                         children=[
                             t("workflow.optional")
-                            if active.optional and not active.count(p)
+                            if empty_optional
                             else t(
                                 "workflow.step_badge",
                                 n=level_steps.index(active_step) + 1,
@@ -314,7 +317,8 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                         " padding: 2px 6px; white-space: nowrap;",
                     )
                     solara.Text(t(active.label_key), style="font-weight: 700;")
-                    rv.Chip(children=[count_text(active, p)], x_small=True)
+                    if not empty_optional:
+                        rv.Chip(children=[count_text(active, p)], x_small=True)
                     rv.Icon(
                         children=["mdi-menu-down"],
                         small=True,

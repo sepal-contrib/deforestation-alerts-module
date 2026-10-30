@@ -239,6 +239,64 @@ def test_optional_badge():
     rc.close()
 
 
+def _title_strings(rc):
+    import ipyvuetify as v
+
+    (wrap,) = [w for w in rc.find(v.Html).widgets if w.class_ == "sr-step-jump-wrap"]
+    return _strings(wrap.children[0].activator[0])
+
+
+def test_an_empty_optional_step_says_optional_once():
+    from gui.i18n import t
+
+    box, rc, _ = _render("layers", _project(n_alerts=3))
+    assert _title_strings(rc).count(t("workflow.optional")) == 1
+    rc.close()
+
+
+def test_an_optional_step_with_outputs_shows_its_place_again():
+    from deforestation_alerts.project.models import GeeVisLayer
+    from gui.i18n import t
+
+    p = _project(n_alerts=3)
+    p.vis_layers = {"gee": GeeVisLayer(name="gee", asset="users/x/img")}
+    box, rc, _ = _render("layers", p)
+    assert _badge(rc) == t("workflow.step_badge", n=1, total=3)
+    assert t("workflow.count_layers", count=1) in _title_strings(rc)
+    rc.close()
+
+
+def test_prepare_tab_ticked_once_integrate_has_outputs(monkeypatch):
+    from gui.store import workflow_steps
+
+    monkeypatch.setattr(workflow_steps, "_ready", lambda p: ["GLAD-L"])  # Integrate unlocked
+    box, rc, _ = _render("layers", _project(n_alerts=3))
+    tabs = {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}
+    assert "".join(_strings(tabs["prepare"])).startswith("✓")
+    rc.close()
+
+
+def test_lock_note_clears_on_navigation():
+    from gui.i18n import t
+    from gui.widget.pipeline_header import PipelineHeader
+
+    project = _reactive(_project(aoi_name="Acre"))
+
+    @solara.component
+    def Host():
+        active, set_active = solara.use_state(0)
+        PipelineHeader(active_step=active, on_navigate=set_active, project=project)
+
+    box, rc = reacton.render(Host(), handle_error=False)
+    review = {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}["review"]
+    review.fire_event("click", None)
+    assert t("workflow.lock_review") in "".join(_strings(box))
+    seg = {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}["period"]
+    seg.fire_event("click", None)  # Period is unlocked once an AOI exists
+    assert t("workflow.lock_review") not in "".join(_strings(box))
+    rc.close()
+
+
 def test_optional_segments_are_dashed():
     import ipyvuetify as v
 
