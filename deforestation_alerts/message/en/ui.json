@@ -165,7 +165,7 @@
       "basemap_sepal_dark": "SEPAL Dark",
       "section_imagery": "Imagery",
       "section_alerts": "Alerts",
-      "section_optional": "Optional layers"
+      "section_optional": "Additional layers"
     }
   },
   "analysis_tile": {

@@ -207,7 +207,7 @@ def _modal_check(page, label):
 
 
 def add_layer(page, rec, *, origin, ref, name, fill, out) -> bool:
-    """Optional layers → Add layer: Name, the Source select and its picker
+    """Additional layers → Add layer: Name, the Source select and its picker
     (``origin`` "gee" or "file", ``ref`` an asset id or a path), then, once the
     raster's bands are read, ``fill(has_bands_select)`` sets the rest; shown in
     Analysis. False when the modal refuses it."""

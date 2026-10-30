@@ -200,7 +200,7 @@
     },
     "layers": {
       "instruction": "Adicione camadas que ajudem a revisar os alertas.",
-      "info_header": "Sobre as camadas opcionais",
+      "info_header": "Sobre as camadas adicionais",
       "info_md": "As camadas de visualização apoiam a análise dos alertas; elas nunca os alteram.\n\n- **Imagem do Earth Engine** e **GeoTIFF** (na sua pasta do SEPAL). Lidas as bandas da imagem, uma banda é desenhada sozinha, duas são escolhidas em **Banda** e três ou mais perguntam **Bandas**: uma banda ou uma **Composição RGB** (sugerida quando os nomes das bandas dão vermelho, verde e azul). Uma banda recebe um **Tipo de raster**: *Contínuo*, uma rampa de cores entre um mínimo e um máximo (**Ajustar à AOI** os preenche com os percentis 2–98 % da banda na AOI); ou *Categórico*, uma cor e um rótulo por classe (**Encontrar as classes na AOI** lista os valores inteiros presentes, no máximo 50; oculte uma classe pelo seu olho; valores não listados e classes ocultas ficam transparentes; com só 0 e 1, o 1 recebe o nome da banda e o 0 começa oculto). **RGB** desenha três bandas a partir de uma **Composição** (cor verdadeira, infravermelho falsa-cor, SWIR / NIR / vermelho) ou com as bandas que você escolher (Personalizada), entre um mínimo e um máximo comuns.\n- Uma camada GeoTIFF: o app grava um arquivo de pirâmides ao lado dela, então a pasta precisa permitir gravação.\n\nExiba uma camada neste mapa com o botão de mapa da sua linha; a legenda aparece junto. Marque **Mostrar na Análise** para adicioná-la, desligada, aos dois mapas da Análise.",
       "list_title": "Camadas de visualização",
       "col_name": "Nome",

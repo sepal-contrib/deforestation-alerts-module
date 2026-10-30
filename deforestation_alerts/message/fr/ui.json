@@ -170,7 +170,7 @@
       "basemap_sepal_dark": "SEPAL Sombre",
       "section_imagery": "Imagerie",
       "section_alerts": "Alertes",
-      "section_optional": "Couches facultatives"
+      "section_optional": "Couches supplémentaires"
     }
   },
   "analysis_tile": {

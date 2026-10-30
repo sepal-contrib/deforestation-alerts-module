@@ -3,7 +3,7 @@
 Session bootstrap (pysepal solara pattern) + MapApp.element() shell: the rail
 (About, Project, Overview) and the project workflow in the right panel, in
 two levels: Prepare data (AOI → Period → Alerts → Harmonize → Integrate &
-vectorize) and Review (Optional layers → Questionnaire → Evaluators); and
+vectorize) and Review (Additional layers → Questionnaire → Evaluators); and
 beside MapApp the analysis screen (``app_state.screen``), which *Start analysis* opens.
 Run: ./run_ui.sh (Voila, as on SEPAL) or
 solara run gui/solara_app.py --port 8900 --no-open

@@ -1,4 +1,4 @@
-"""Optional layers step (spec §6.3): the project's visualization layers (an
+"""Additional layers step (spec §6.3): the project's visualization layers (an
 Earth Engine image, a GeoTIFF), each one shown on the shared map with its
 legend (§9.4) under ``vis:<name>``."""
 

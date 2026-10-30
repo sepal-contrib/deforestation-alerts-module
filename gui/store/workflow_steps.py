@@ -3,7 +3,7 @@
 Two registries:
 
 * ``STEPS`` — the gated workflow steps, in two levels: prepare (AOI → Period →
-  Alerts → Harmonize → Integrate) and review (Optional layers → Questionnaire →
+  Alerts → Harmonize → Integrate) and review (Additional layers → Questionnaire →
   Evaluators). Analysis is not a step: *Start analysis* (the last step,
   Evaluation) opens its own screen (``app_state.screen``), gated by ``active_set``. Gates and counts
   read only the Project. Order, labels, gates, lock reasons and

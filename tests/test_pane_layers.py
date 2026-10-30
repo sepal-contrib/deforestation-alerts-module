@@ -54,12 +54,12 @@ def test_the_basemap_and_section_labels_are_translated():
     assert english["basemapSwitcher.sepal_dark"] == "SEPAL Dark"
     assert english["layerMenu.section.imagery"] == "Imagery"
     assert english["layerMenu.section.alerts"] == "Alerts"
-    assert english["layerMenu.section.optional"] == "Optional layers"
+    assert english["layerMenu.section.optional"] == "Additional layers"
     set_locale("es-ES")
     spanish = pane_labels()
     assert spanish["basemapSwitcher.title"] == "Mapa base"
     assert spanish["basemapSwitcher.sepal_dark"] == "SEPAL Oscuro"
-    assert spanish["layerMenu.section.optional"] == "Capas opcionales"
+    assert spanish["layerMenu.section.optional"] == "Capas adicionales"
     for locale in ("fr", "pt-BR"):
         set_locale(locale)
         translated = pane_labels()

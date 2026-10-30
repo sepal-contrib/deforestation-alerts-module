@@ -182,7 +182,7 @@ def _project():
     add_mask(p, name="forest", origin="gee", ref="UMD/x", asset_type="IMAGE", band="b",
              native=NativeGrid(crs="EPSG:4326", scale=30.0), mode="keep", period_id=JAN.id)
     set_period_mask(p, JAN.id, "forest", on=False)
-    # a visualization layer: the Optional layers step renders its row on every publish
+    # a visualization layer: the Additional layers step renders its row on every publish
     p.vis_layers = {"s2": GeeVisLayer(name="s2", asset="COPERNICUS/S2/x", bands=["B4", "B3", "B2"], min=0, max=3000)}
     p.coverage = {k: SourceCoverage(aoi_digest="d1", checked_on=date.today(), fraction=1.0,
                                     regions=[RegionCoverage(name=k, fraction=1.0, first=date(2000, 1, 1),

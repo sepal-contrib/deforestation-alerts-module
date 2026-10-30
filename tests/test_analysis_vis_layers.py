@@ -27,7 +27,7 @@ def test_wanted_and_plan():
 
 def _panes(removed, asked=None):
     """Stand-in views: ``vis_sync`` asks ``panes`` for one target (every
-    view, group ``vis``, the menu's Optional layers) and builds and removes on it."""
+    view, group ``vis``, the menu's Additional layers) and builds and removes on it."""
 
     def target(view, *, group, section=None):
         if asked is not None:
@@ -47,7 +47,7 @@ def test_the_sync_adds_switched_off_layers_to_every_view_and_removes_them(monkey
     layer = GeeVisLayer(name="s2", asset="x", bands=["B4"], show_in_analysis=True)
     state.load_project_state(_p(layer))
     unsubscribe = vis_sync.wire(widgets, state, spawn=lambda target, args=(): target(*args))
-    assert asked == [("all", "vis", "optional")], "one spec on every view, in the vis group, under Optional layers"
+    assert asked == [("all", "vis", "optional")], "one spec on every view, in the vis group, under Additional layers"
     assert built == [("all", "vis:s2", False)]
     removed.clear()  # a build first clears its own key
     state.update_project("a", lambda p: setattr(p, "vis_layers", {}))

@@ -200,7 +200,7 @@
     },
     "layers": {
       "instruction": "Añade capas que ayuden a revisar las alertas.",
-      "info_header": "Acerca de las capas opcionales",
+      "info_header": "Acerca de las capas adicionales",
       "info_md": "Las capas de visualización apoyan el análisis de las alertas; nunca las cambian.\n\n- **Imagen de Earth Engine** y **GeoTIFF** (en tu carpeta de SEPAL). Leídas las bandas de la imagen, una banda se dibuja sola, dos se eligen en **Banda** y tres o más preguntan **Bandas**: una banda o un **Compuesto RGB** (sugerido cuando los nombres de banda dan el rojo, el verde y el azul). Una banda lleva un **Tipo de raster**: *Continuo*, una rampa de color entre un mínimo y un máximo (**Ajustar al AOI** los rellena con los percentiles 2–98 % de la banda en el AOI); o *Categórico*, un color y una etiqueta por clase (**Buscar las clases en el AOI** lista los valores enteros presentes, 50 como máximo; oculta una clase con su ojo; los valores no listados y las clases ocultas son transparentes; con solo 0 y 1, el 1 lleva el nombre de la banda y el 0 empieza oculto). **RGB** dibuja tres bandas desde un **Compuesto** (color verdadero, infrarrojo falso color, SWIR / NIR / rojo) o con las bandas que elijas (Personalizado), entre un mínimo y un máximo comunes.\n- Una capa GeoTIFF: la aplicación escribe un archivo de pirámides junto a él, así que su carpeta debe permitir escritura.\n\nMuestra una capa en este mapa con el botón de mapa de su fila; su leyenda aparece junto a ella. Marca **Mostrar en Análisis** para añadirla, desactivada, a los dos mapas de Análisis.",
       "list_title": "Capas de visualización",
       "col_name": "Nombre",

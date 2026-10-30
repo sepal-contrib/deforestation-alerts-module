@@ -112,7 +112,7 @@ def test_gates_follow_the_project(tmp_path, monkeypatch):
     p.active_set = "x"
     s = _states(p)
     assert s["integrate"] is StepStatus.HAS_OUTPUTS
-    # Optional layers, left empty, is done once an alert set exists
+    # Additional layers, left empty, is done once an alert set exists
     assert s["layers"] is StepStatus.HAS_OUTPUTS
 
 
