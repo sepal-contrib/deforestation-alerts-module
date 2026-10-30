@@ -23,40 +23,40 @@ Workflow at a glance
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/workflow.gif
     :alt: The workflow steps, from the area of interest to the analysis
 
-The steps of the **Workflow** panel are numbered. The other tools open from the left rail (see `The app window <defo-window_>`_).
+The **Workflow** panel holds the steps in two levels: **Prepare alerts** builds an alert set, and **Set up review** prepares its review. The other tools open from the left rail (see `The app window <defo-window_>`_).
 
 .. list-table::
     :header-rows: 1
-    :widths: 10 30 60
+    :widths: 20 30 50
 
-    *   -   Step
+    *   -   Level
         -   Subsection
         -   Purpose
     *   -   –
         -   `Project <defo-project_>`_
         -   Create, open, import or delete a project, the folder that holds all your work.
-    *   -   1
+    *   -   **Prepare alerts**
         -   `Area of interest <defo-aoi_>`_
         -   Choose the area to monitor.
-    *   -   2
-        -   `Alert sources <defo-alerts_>`_
-        -   Choose the alert datasets to download.
-    *   -   3
-        -   `Optional layers <defo-layers_>`_
-        -   Add reference layers to judge the alerts by.
-    *   -   4
+    *   -
         -   `Monitoring period <defo-period_>`_
         -   Set the dates of a monitoring round.
-    *   -   5
-        -   `Download & harmonize <defo-prepare_>`_
-        -   Download the sources of the period onto one grid.
-    *   -   6
+    *   -
+        -   `Alert sources <defo-alerts_>`_
+        -   Choose the alert datasets of the period and download them.
+    *   -
+        -   `Harmonize <defo-harmonize_>`_
+        -   Align the downloads on one grid and apply the masks.
+    *   -
         -   `Integrate & vectorize <defo-integrate_>`_
         -   Combine the sources into an alert set, one polygon per alert.
-    *   -   7
-        -   `Questionnaire <defo-questionnaire_>`_
+    *   -   **Set up review**
+        -   `Additional layers <defo-layers_>`_ (optional)
+        -   Add reference layers to judge the alerts by.
+    *   -
+        -   `Questionnaire <defo-questionnaire_>`_ (optional)
         -   Write the questions asked for every alert, and choose the report template.
-    *   -   8
+    *   -
         -   `Evaluation <defo-evaluation_>`_
         -   Review alone, or split the alerts among evaluators.
     *   -   –
@@ -68,6 +68,8 @@ The steps of the **Workflow** panel are numbered. The other tools open from the 
     *   -   –
         -   `Export <defo-export_>`_
         -   Export the files of one alert, or the alerts of a whole set.
+
+**Set up review** stays locked until the project has an alert set: build one in **Prepare alerts** first.
 
 For a worked example from start to finish, see `Use case: alert review in Madre de Dios, Peru <defo-use-case_>`_.
 
@@ -95,7 +97,13 @@ The app runs in your SEPAL session and keeps your projects in your SEPAL home, u
 The app window
 ^^^^^^^^^^^^^^
 
-The map fills the window. The **Workflow** panel on the right side holds the numbered steps. A narrow rail of icons runs down the left side.
+The map fills the window. The **Workflow** panel on the right side holds the steps. A narrow rail of icons runs down the left side.
+
+The header of the **Workflow** panel stays in view while the step under it scrolls:
+
+-   One strip shows both levels side by side, **Prepare alerts** and **Set up review**, each with its name over one bar per step. A filled bar has outputs (an AOI, periods, sources…), a grey bar is still empty and a striped bar is locked: hover over it to read why (e.g. "Build an alert set first."). The two optional steps, **Additional layers** and **Questionnaire**, have a dashed bar. A level's name gets a check mark once its last required step has outputs. Select a bar to open its step.
+-   Under the strip, the step's position in its level (e.g. "3 / 5"), its name and what it holds ("3 sources"). An optional step that is still empty reads "optional". Select the name to jump to another step from a list, or use the arrows on each side to go to the step before or after.
+-   Under the name, one line says what to do in the step (e.g. "Set the monitoring period."). The information button at the right side of that line opens the step's help.
 
 To use the left rail:
 
@@ -286,7 +294,7 @@ Each project is a folder named after the project, under ``module_results/defores
     *   -   ``aoi.geojson``
         -   The AOI, when it is a drawn shape, a vector file or a point file. An administrative area or a GEE asset is read from GEE instead.
     *   -   ``masks/``
-        -   The masks of `Download & harmonize <defo-prepare_>`_, aligned on the project's grid.
+        -   The masks of `Harmonize <defo-harmonize_>`_, aligned on the project's grid.
     *   -   ``imagery/``
         -   The index of satellite scenes used on the Analysis screen.
     *   -   ``periods/<start>_<end>/``
@@ -361,7 +369,7 @@ The area is drawn on the map and saved with the project at once.
         -   A GEE table (feature collection) or image you can read, chosen in **Select an asset** or pasted as its full ID.
         -   For a table, keep only the features whose **Column** has a given **Value**.
 
-When the selection is done, the app confirms: "AOI saved: (name)". The **Workflow** panel shows the AOI's name under the step, and the `Alerts <defo-alerts_>`_ and `Optional layers <defo-layers_>`_ steps unlock.
+When the selection is done, the app confirms: "AOI saved: (name)". The **Workflow** panel shows the AOI's name in the header, and the `Period <defo-period_>`_ step unlocks.
 
 .. tip::
 
@@ -389,6 +397,171 @@ In a review copy (see `Import a review package <defo-project-import_>`_), the st
 
     The AOI cannot change while a task is writing into the project (a download or an **Integrate & vectorize** run). The app displays: "A job is writing into this project; change the AOI once it has finished." Wait for the task to end, then select the area again.
 
+.. _defo-period:
+
+Monitoring period
+-----------------
+
+A *period* is one monitoring round, usually a month. For each period, the app downloads the period's alert sources over its dates plus a *look-back* before them, and builds that period's alert sets. A project usually holds a series of consecutive periods.
+
+Open the **Period** step of the **Workflow** panel. It unlocks once the project has an `AOI <defo-aoi_>`_.
+
+.. shot: period-list | The Period step of the demo project with its one period listed: "start → end" in the Period column, the Sets count, the Status column, the period's radio selected (active), and the notes under it ("Search window: … → …", "No earlier set: every alert in the search window is kept", and "Its dates are fixed: it has alert sets." if it has a set). Crop to the Workflow panel.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/period-list.png
+    :alt: The Period step with one period
+
+.. _defo-period-tracking:
+
+Loss that spans several periods
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each period is processed on its own, but forest loss does not keep to the period's dates. Some loss could be missed between two periods:
+
+-   a clearing that starts too small to be an alert;
+-   alerts that the providers publish late, after their period was processed; or
+-   a clearing that keeps growing at the edge of an alert reported in an earlier period.
+
+The app tracks this loss from one period to the next, and never reports the same loss twice:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 35 65
+
+    *   -   Case
+        -   What the app does
+    *   -   Loss already reported by an earlier period
+        -   Its pixels (the *footprint* of the earlier alert set) are removed from the new period's run, so it is not reported again.
+    *   -   A cluster too small to be an alert, or an alert published late
+        -   The `look-back <defo-period-lookback_>`_ searches back into the earlier period: the pixels set aside come back and can join new pixels to form an alert.
+    *   -   A clearing that grows next to a reviewed alert
+        -   The new alert is `linked to the earlier alert <defo-period-growth_>`_ as a *growth alert*, and kept even when it is under the minimum size.
+
+.. _defo-period-lookback:
+
+The search window and the look-back
+"""""""""""""""""""""""""""""""""""
+
+A clearing often starts small and grows over the following weeks. In the period where it starts, its cluster of alert pixels is still smaller than the **Minimum cluster size** of `Integrate & vectorize <defo-integrate_>`_, so it does not become an alert: its pixels are set aside as *not analysable*.
+
+The look-back keeps these pixels in play:
+
+-   Each period searches a wider *search window*: its own dates plus the look-back days before its start.
+-   The pixels set aside by the earlier period come back into the run and join the new pixels that touch them.
+-   If the cluster they form together reaches the minimum size, it becomes an alert. Its first detection date is the date of its earliest pixel, in the earlier period.
+
+To avoid reporting the same loss twice, every pixel already reported by an alert set of an *earlier* period is removed before the new period's alerts are built: only what was set aside comes back. The look-back also catches alerts that the providers published late, after the earlier period was processed.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/lookback.gif
+    :alt: The look-back: a cluster too small in one period joins the next period's pixels and becomes an alert, and a reported alert is never reported again
+
+.. note::
+
+    The first period has no earlier set to compare with, so every alert in its search window is kept. Its row reads **No earlier set: every alert in the search window is kept**. With a look-back, that includes alerts dated before the period's start.
+
+    A new project's first period starts with no look-back, so it searches only its own dates unless a look-back is set. A project made with **Duplicate** keeps the look-back of the project it was copied from.
+
+.. _defo-period-growth:
+
+Growth next to earlier alerts
+"""""""""""""""""""""""""""""
+
+The pixels of a reported alert are part of the footprint, so the look-back does not bring them back. But a clearing often keeps growing at the edge of an alert reported in an earlier period. The new pixels then form a cluster of their own, often smaller than the **Minimum cluster size**, which would be set aside like any small cluster.
+
+When the earlier alert was saved as **True alert** or **Needs review**, `Integrate & vectorize <defo-integrate-growth_>`_ keeps this growth in view:
+
+-   A new alert that touches or overlaps the earlier alert is a *growth alert*, linked to it.
+-   A cluster under the minimum size is kept when it touches the earlier alert: it is a growth alert *under the minimum area*. A small cluster that touches nothing is set aside, and the look-back can still bring it back in the next period.
+-   The run looks for earlier alerts in every earlier period, whatever the look-back.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
+    :alt: Growth: a confirmed alert grows at its edge in the next period, and the small new cluster is kept and linked to it, while a small cluster that touches nothing is set aside
+
+The alerts linked to each other, across all periods, make the *history* of a clearing. Analysis shows it on each alert (see `Earlier alerts <defo-analysis-earlier_>`_), and the `Overview <defo-overview-growth_>`_ sums it up.
+
+.. tip::
+
+    Only the reviews saved when `Integrate & vectorize <defo-integrate_>`_ starts count. Review the alerts of a period before you run the next one, so that their growth is linked. An alert reviewed later can still be linked by hand in `Earlier alerts <defo-analysis-earlier_>`_.
+
+The period list
+^^^^^^^^^^^^^^^
+
+Each row of **Periods** shows:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Column
+        -   Description
+    *   -   **Period**
+        -   The period's dates ("start → end"), with notes under them: its search window and any warnings.
+    *   -   **Sets**
+        -   The number of alert sets built for this period.
+    *   -   **Status**
+        -   **out of date** when a source download or an alert set no longer matches the current settings (run it again in `Alerts <defo-alerts_>`_, `Harmonize <defo-harmonize_>`_ or `Integrate & vectorize <defo-integrate_>`_); **missing** when an alert set's files are gone; a dash when everything is current.
+
+The icons on the right side of each row:
+
+-   the radio button makes the period *active*: `Alerts <defo-alerts_>`_, `Harmonize <defo-harmonize_>`_ and `Integrate & vectorize <defo-integrate_>`_ work on the active period;
+-   the pencil icon changes its dates or look-back; and
+-   the bin icon deletes it.
+
+.. _defo-period-add:
+
+Add a period
+^^^^^^^^^^^^
+
+.. shot: period-new | The "New period" dialog pre-filled for a second period: Start = the day after the demo period's end, End = today, Look-back (days) = 90 (the last value used, the demo period's) with its hint, the "Search window: … → …" preview line and the masks note, Add period enabled. Crop to the dialog.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/period-new.png
+    :alt: The New period dialog
+
+Select **New period**. The dialog is pre-filled so that the new period continues the series.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 35 45
+
+    *   -   Field
+        -   Description
+        -   Default and limits
+    *   -   **Start**
+        -   The first day of the period.
+        -   The day after the latest period ends. For the first period, the first day of the current month.
+    *   -   **End**
+        -   The last day of the period.
+        -   Today. Must be after **Start**. Two periods cannot have the same dates.
+    *   -   **Look-back (days)**
+        -   The number of days before **Start** that are also searched.
+        -   0 (no look-back) for a new project's first period (a duplicated project keeps the look-back of its source), then the last value used. A whole number from 0 to 3650.
+
+Under the fields, the dialog previews the search window ("Search window: start → end"). Select **Add period**: the period is created and becomes the active period.
+
+A new period starts with the mask choices of the latest period. Change them in `Harmonize <defo-harmonize_>`_. Its alert sources are the ones marked **Add to new periods** in `Alerts <defo-alerts-new-periods_>`_; add or remove sources there.
+
+.. tip::
+
+    For the set-aside clusters to come back, the look-back must reach into the previous period. With a look-back of 0, the search window starts on the period's own first day and nothing set aside earlier is reconsidered.
+
+    A cluster that stays too small stays in play in later periods for as long as their look-back reaches back to its pixels. A longer look-back gives a slowly growing clearing more time to reach the minimum size, but makes every download bigger (see `What earlier periods already reported <defo-integrate-earlier_>`_).
+
+Change a period
+^^^^^^^^^^^^^^^
+
+For a period without alert sets, the pencil icon opens a dialog to change its dates. New dates give the period a new identity: its downloads and harmonized files are deleted, because they were made for the old window.
+
+A period with alert sets has fixed dates (its note reads **Its dates are fixed: it has alert sets.**). The pencil icon then opens a dialog where only the look-back can change. The period's downloads then show as out of date.
+
+Delete a period
+^^^^^^^^^^^^^^^
+
+Select the bin icon. The confirmation dialog lists what is deleted: the period's downloads and harmonized files, and its alert sets with their reviewed alerts.
+
+.. important::
+
+    A period with alert sets can be deleted only when it is the latest period. An earlier period's sets are the footprint the later sets were built from, so delete the later periods first. Periods cannot change or be deleted while a task is writing into the project.
+
 .. _defo-alerts:
 
 Alert sources
@@ -396,14 +569,14 @@ Alert sources
 
 An *alert source* is a dataset of forest-loss alerts. Each alert pixel is *confirmed* (high confidence) or *probable* (low confidence) and carries the day it was first detected.
 
-The **Alerts** step lists the sources the project monitors and how much of the AOI each one covers. Every source is downloaded for every period, cut to the AOI and to the period's search window.
+The **Alerts** step lists the sources of the active `period <defo-period_>`_, shows how much of the AOI and of the period each one covers, and downloads them. Each period has its own sources: a source added here is added to the active period only.
 
-Open the **Alerts** step of the **Workflow** panel. It unlocks once the project has an `AOI <defo-aoi_>`_.
+Open the **Alerts** step of the **Workflow** panel. It unlocks once the project has a `period <defo-period_>`_. It works on the active period: to work on another period, make it active in the `Period <defo-period_>`_ step first. The box at the top of the step names the period and its search window, e.g. "Period 2026-09-01 → 2026-09-30 · search window from 2026-06-03 (90 days of look-back)".
 
-.. shot: alerts-list | The Alerts step of the demo project with three sources listed (GLAD-L, RADD, GLAD-S2), each with its green "covers the AOI" (or orange partial) coverage chip, the grey note line "predefined · first → last" under each row, the RADD info note, and the map / delete icons on the right. Crop to the Workflow panel.
+.. shot: alerts-list | The Alerts step of the demo project: the period box ("Period 2026-09-01 → 2026-09-30 · search window from 2026-06-03 (90 days of look-back)"), Add source, and the Sources table with GLAD-L, RADD and GLAD-S2, each with its "downloaded … · … MB" line, its green "AOI 100 %" and "✓ data to …" chips, the green "Downloaded" status and the map / Details / Download again / Remove from this period icons; the RADD info note; the "Download 0 pending" footer button with its menu arrow. Crop to the Workflow panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/alerts-list.png
-    :alt: The Alerts step with three predefined sources
+    :alt: The Alerts step with three downloaded sources
 
 The source list
 ^^^^^^^^^^^^^^^
@@ -417,15 +590,20 @@ Each row of **Sources** shows:
     *   -   Part of the row
         -   Description
     *   -   **Source**
-        -   The source's name, then a note with its kind (**predefined**, or "custom · format") and the first and last dates of data found over the AOI.
-    *   -   **Coverage**
-        -   The share of the AOI inside the source's footprint: **covers the AOI** (green), "covers 62% of the AOI" (orange: the rest of the AOI gets no alerts from it), **does not cover the AOI**, **checking coverage…** while the check runs, or **coverage not checked** when it has not run or has failed.
+        -   The source's name, then a line with what the row holds ("downloaded 2026-10-20 · 4.7 MB") or why it needs a download (e.g. "the search window changed (…): download again"), and two chips:
+
+            -   **AOI**: the share of the AOI inside the source's footprint, e.g. "AOI 100 %". A source that covers only part of the AOI gets no alerts over the rest of it.
+            -   The dates: "✓ data to 2026-10-30" (green) when the source has data up to the end of the search window, "data to … only" (orange) when its data stop inside the window, or "✗ data ends …" (red) when it has none in the window.
+    *   -   **Status**
+        -   The row's state, or a button to download it (see `Download the sources <defo-alerts-download_>`_).
     *   -   Map icon
-        -   Shows the source on the map: the alerts of the active period's search window, or every date the source holds over the AOI when there is no period yet. A GeoTIFF source is shown only once it is harmonized.
-    *   -   Pencil icon
-        -   Edits a custom source (see below).
-    *   -   Bin icon
-        -   Removes the source, with its downloads and harmonized files.
+        -   Shows the source on the map: the alerts of the active period's search window. A GeoTIFF source is shown only once it is harmonized.
+    *   -   Information icon
+        -   Opens the source's **Details** (see `The Details dialog <defo-harmonize-details_>`_), with the **Add to new periods** checkbox and, for a custom source, the **Edit** button.
+    *   -   **Download again**
+        -   Downloads the source again (see below).
+    *   -   **Remove from this period**
+        -   Removes the source from the active period (see `Remove a source from a period <defo-alerts-remove_>`_).
 
 The coverage is checked once, when the AOI is chosen, and saved in the project. If the check failed (e.g. GEE was not reachable), a **Check again** button appears under the list.
 
@@ -434,20 +612,24 @@ Add a source
 
 Select **Add source** to open the **Add an alert source** dialog, then choose the **Source type**:
 
--   **Predefined**: one of the catalogue sources; or
--   **Custom (0 of 6)**: your own GEE image, image collection or GeoTIFF. The count shows how many of the six custom slots are in use.
+-   **Predefined or project source**: one of the catalogue sources, or a source of the project that is not in this period (e.g. one used in an earlier period); or
+-   **Custom (0 of 6)**: your own GEE image, image collection or GeoTIFF. The count shows how many of the period's six custom slots are in use.
 
-A project holds at most three predefined and six custom sources.
+A period holds at most three predefined and six custom sources. The project keeps every source it has used, with no limit.
+
+.. _defo-alerts-new-periods:
+
+Under the source, the **Add to new periods** checkbox (selected by default) decides whether the periods created later start with this source. It never changes the existing periods. To change it later, open the source's **Details** with its information icon.
 
 Predefined sources
 """"""""""""""""""
 
-.. shot: alerts-add-predefined | The "Add an alert source" dialog with Source type = Predefined and the Predefined source list open, showing each source followed by its coverage (e.g. "GLAD-S2 (Sentinel-2, 10 m) — covers the AOI"). Use a project where only GLAD-L is added so RADD and GLAD-S2 are still offered. Crop to the dialog.
+.. shot: alerts-add-predefined | The "Add an alert source" dialog with Source type = Predefined or project source and the Alert source list open, showing each source followed by its coverage (e.g. "GLAD-S2 (Sentinel-2, 10 m) — covers the AOI"), and the Add to new periods checkbox. Use a project with one period where only GLAD-L is added, so RADD and GLAD-S2 are still offered. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/alerts-add-predefined.png
     :alt: Adding a predefined source
 
-Choose a source in the **Predefined source** dropdown menu, then select **Add source**. Each entry shows its coverage of the AOI. A source that does not cover the AOI at all is listed as disabled, with the reason.
+Choose a source in the **Alert source** dropdown menu, then select **Add source**. The list holds the predefined sources and the project's own sources that are not in this period yet. Each entry shows its coverage of the AOI. A source that does not cover the AOI at all is listed as disabled, with the reason.
 
 .. list-table::
     :header-rows: 1
@@ -466,7 +648,7 @@ Choose a source in the **Predefined source** dropdown menu, then select **Add so
         -   Sentinel-2, 10 m.
         -   90°W–30°W, 20°S–20°N.
 
-When every predefined source is in the project, the dialog reads: "Every predefined source is already in this project."
+When every source is in the period, the dialog reads: "Every source is already in this period."
 
 Custom sources
 """"""""""""""
@@ -531,14 +713,58 @@ When **Add source** is selected, the app checks the raster: the bands exist and 
 Edit a custom source
 """"""""""""""""""""
 
-Select the pencil icon to reopen the form, titled with the source's name. The name is fixed; the raster, format and bands can change. The form keeps the saved format and bands until another raster is chosen.
+Open the source's **Details** with its information icon, then select **Edit** to reopen the form, titled with the source's name. The name is fixed; the raster, format and bands can change. The form keeps the saved format and bands until another raster is chosen.
 
-Once an alert set uses the source, it can no longer be edited: delete it and add a new one.
+Once an alert set uses the source, it can no longer be edited: remove it and add a new one.
 
-Remove a source
-^^^^^^^^^^^^^^^
+.. _defo-alerts-download:
 
-Select the bin icon, then confirm. The source's downloads and harmonized files are deleted. Alert sets that already used it keep their alerts and show as out of date.
+Download the sources
+^^^^^^^^^^^^^^^^^^^^
+
+Each source is downloaded over the period's search window, in its own projection and cut to the AOI. A GeoTIFF source is not downloaded: it is read from its file. Downloading does not harmonize the source: that is the next step, `Harmonize <defo-harmonize_>`_, which runs only when you start it there.
+
+The **Status** column reads:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Status
+        -   Meaning
+    *   -   "Downloaded"
+        -   Downloaded for the current search window. The line under the name gives the download date and the size on disk.
+    *   -   **Download**
+        -   The source is not downloaded for this period's search window yet, or its download is out of date. Select the button to download it.
+    *   -   **Read file**
+        -   The same for a GeoTIFF source, which is read from its file.
+    *   -   **Retry**
+        -   The last download failed. Its error is shown in red under the row.
+    *   -   "Downloading 42%", "Reading", "Queued"
+        -   The row is running, or waits for its turn ("waiting for the row above").
+    *   -   "not covered", "no data"
+        -   The source cannot run for this period: it does not cover the AOI, or it has no data for the search window (its dates chip is red).
+    *   -   "File missing"
+        -   The file of a GeoTIFF source is gone (see `Common messages <defo-harmonize-messages_>`_).
+
+A blue button runs a row for the first time; an orange one redoes a file that is out of date. The line under the name then says why: for example "the search window changed (…): download again" or "the AOI changed: download again". In an evaluator's `review copy <defo-evaluation-return_>`_, nothing runs: the column reads "To download" instead of a button.
+
+.. note::
+
+    A downloaded row has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source ("Nothing to download again: read from a file").
+
+The footer under the table downloads in batch. Select **Download … pending** (e.g. **Download 3 pending**) to download every source that needs it, one row at a time. Rows that read "not covered" or "no data" are skipped; a row that fails shows its error in red under it, and the run goes on with the next row. While it lasts, the footer counts its rows ("1 running · 2 queued", then "1 of 3 done", with a progress bar) and the button turns into **Stop**, which stops after the row in progress ("Stopping…"). The arrow beside the button (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, after you confirm.
+
+The download also shows as a task notification titled **Download**, with the source it is on and its percentage.
+
+.. _defo-alerts-remove:
+
+Remove a source from a period
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Select the bin icon (**Remove from this period**), then confirm. The source's downloaded and harmonized files of this period are deleted. Alert sets of this period that already used it keep their alerts and show as out of date.
+
+The source stays in the project: other periods keep it, and it can be added back with **Add source**. A source is never deleted from the whole project.
 
 Common messages
 ^^^^^^^^^^^^^^^
@@ -552,28 +778,512 @@ Common messages
 "This CCDC asset stores its dates as Julian days or Unix time …"
     Only CCDC outputs dated in fractional years are supported.
 
+"This period already has 6 custom sources."
+    Remove a custom source from the period before adding another one.
+
 "A job is writing into this project; …"
     Sources cannot change during a download or an **Integrate & vectorize** run. Wait for it to end.
 
-.. _defo-layers:
+.. _defo-harmonize:
 
-Optional layers
----------------
+Harmonize
+---------
 
-Visualization layers support the review of the alerts: a land-cover map, a forest baseline, a recent mosaic. They never change the alerts. A layer is an Earth Engine image or a GeoTIFF. It can be shown on the main map and, with **Show in Analysis** selected, on the two maps of the `Analysis <defo-analysis_>`_ screen.
+This step puts every input of the active `period <defo-period_>`_ on one common grid. Each source downloaded in `Alerts <defo-alerts-download_>`_ is *harmonized*: aligned onto the project grid and cut by the period's masks. Nothing whose inputs are unchanged runs twice.
 
-Open the **Optional layers** step of the **Workflow** panel. It unlocks once the project has an `AOI <defo-aoi_>`_.
+Open the **Harmonize** step of the **Workflow** panel. It unlocks once at least one source of the active period is downloaded (or is a GeoTIFF source). It works on the active period: to harmonize another period, make it active in the `Period <defo-period_>`_ step first.
 
-The step is optional: skip it and come back at any time. Once the project has a `monitoring period <defo-period_>`_, the **Workflow** panel counts the step as done even without a layer, and its badge reads "none" instead of "nothing yet".
+From top to bottom, the step has three parts: the **Project grid**, the **Masks** and the **Sources for this period**.
+
+.. shot: prepare-step | The Harmonize step of the demo project after a full run: the Project grid card (EPSG of the UTM zone, Resolution 10 m, the "… × … pixels, about … MB per source before compression" line and "The grid is locked because the project has alert sets."), the Masks card with its one mask (Mode Keep, green "Ready", subtitle "Earth Engine · …"), and the "Sources for this period" table with GLAD-L, RADD and GLAD-S2 each green "Ready" in the Status column, each with its "downloaded … · … · N alert pixels" subtitle and its map, Details and Delete files icons; the "Harmonize 0 pending" button of the footer under it. Crop to the Workflow panel.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-step.png
+    :alt: The Harmonize step after a run
+
+The project grid
+^^^^^^^^^^^^^^^^
+
+Every raster of the project is aligned onto one grid: one projection in metres and one pixel size, over the AOI. Alerts from sources with different pixel sizes can then be combined pixel by pixel, and the minimum alert size in hectares becomes a pixel count.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 15 40 45
+
+    *   -   Field
+        -   Description
+        -   Default and limits
+    *   -   **EPSG**
+        -   The projection of the grid, as a European Petroleum Survey Group (EPSG) code. The target button at the end of the field fills in the Universal Transverse Mercator (UTM) zone of the AOI.
+        -   The UTM zone of the AOI's centre. Must be a projected system in metres: a geographic system (like 4326) or one in feet is refused.
+    *   -   **Resolution**
+        -   The pixel size, in metres.
+        -   The finest pixel size among the project's sources: 10 m with RADD or GLAD-S2, 30 m with GLAD-L only, a custom source's own pixel size, or 30 m when nothing is known. Must be greater than 0.
+
+Under the fields, the grid's size is previewed: "width × height pixels, about … per source before compression". Above 2 GB per source, a warning reads **This grid is large: downloads will take a while and use disk space.** (it does not block the step).
+
+Select **Save grid**. The masks and the sources table appear only once a grid is saved.
+
+The grid can change until the first alert set is made. A new grid only harmonizes the sources again from the files already downloaded; it does not download them again. Once the project has an alert set, the card reads **The grid is locked because the project has alert sets.**
 
 .. note::
 
-    Planet NICFI mosaics are not an optional layer: with NICFI access in your GEE account, they come with the *Planet* images of the `Analysis timeline <defo-analysis-timeline_>`_.
+    Changing the `AOI <defo-aoi_>`_ clears the grid and deletes every download and harmonized file of the project, which were made for the old area. Save the grid again here, then run the rows again.
 
-.. shot: layers-list | The Optional layers step of the demo project with its one layer listed: name, the "Earth Engine" chip, the green "in Analysis" chip, the grey summary note under it, and the map / edit / delete icons; the layer switched on, so it shows on the main map with its legend. Crop to the Workflow panel plus the visible part of the map.
+Masks
+^^^^^
+
+A *mask* limits where alerts are kept. It is a raster defined once for the project: a GEE image or image collection, or a GeoTIFF, with one band. A pixel is inside the mask where that band is not zero; zero and no-data pixels are outside it.
+
+Each period chooses a **Mode** for each mask:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Mode
+        -   Effect on the period's alerts
+    *   -   **Off**
+        -   The mask is not used in this period.
+    *   -   **Keep**
+        -   Alerts *outside* the mask are removed (e.g. keep only alerts inside a forest mask).
+    *   -   **Exclude**
+        -   Alerts *inside* the mask are removed (e.g. drop alerts in plantations or water).
+
+When several masks are on, all of them apply. Masks act on the harmonized sources, so a change of **Mode** makes the period's sources out of date. **Harmonize … pending** then harmonizes them again without downloading them. A new period starts with the mask choices of the latest period.
+
+Add a mask
+""""""""""
+
+.. shot: prepare-mask-add | The "Add a mask" dialog: Name with its hint "At most 24 characters; it also names the mask's files.", Source = Earth Engine, the Hansen forest-change image asset picked, Band = treecover2000 with the hint naming the band suggested as a mask, Mode in the active period = Keep, and the grey note under it. Crop to the dialog.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-mask-add.png
+    :alt: Adding a mask
+
+Select **Add mask** to open the **Add a mask** dialog. The bands are read as soon as the raster is chosen.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
+
+    *   -   Field
+        -   Description
+        -   Default and limits
+    *   -   **Name**
+        -   The mask's name in lists, legends and file names.
+        -   Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique among the project's masks.
+    *   -   **Source**
+        -   **Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder).
+        -   **Earth Engine**.
+    *   -   Asset or **GeoTIFF**
+        -   The GEE image or image collection, or the .tif file.
+        -   
+    *   -   **Band**
+        -   The band that defines the mask. Shown when the raster has two bands or more; with one band, the form reads "One band (…): the mask is made from it."
+        -   The band whose name looks like a mask (e.g. ``datamask``), named in the hint ("… looks like a mask; non-zero pixels are inside it."), else none: pick it.
+    *   -   **Mode in the active period**
+        -   **Keep** or **Exclude**.
+        -   **Keep**. The mask is turned on in the active period only; every other period leaves it off until it is turned on there.
+
+When **Add mask** is selected, the app checks the raster and its band. A problem is shown in red inside the dialog, which stays open for corrections.
+
+The mask list
+"""""""""""""
+
+Each row of **Masks** shows:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Column
+        -   Description
+    *   -   **Mask**
+        -   The mask's name. The line under it gives its source and size on disk once it is ready ("Earth Engine · 18.9 MB"), or why it needs a run ("not downloaded yet", "the grid changed (…): align again"). It ends with "Off" when the mask is off in the active period.
+    *   -   **Mode**
+        -   The mask's mode in the active period: **Off**, **Keep** or **Exclude**. A change applies at once; the period's sources then read out of date.
+    *   -   **Status**
+        -   "Ready", or a button for the mask's next run: **Download** (a GEE mask not downloaded yet) or **Align** (onto the grid). An orange button redoes a file that is out of date. While a run goes on, the cell reads "Downloading 42%", "Aligning" or "Queued".
+
+The icons on the right side of each row:
+
+-   the map icon shows the mask on the map: a GEE mask can be previewed before it is downloaded, a GeoTIFF mask once it is aligned;
+-   the information icon opens its **Details** (see `The Details dialog <defo-harmonize-details_>`_); and
+-   the **More actions** menu (three dots) holds:
+
+    -   **Download again** (GEE masks only), for an asset that changed. The app asks first: "This fetches the mask again from Earth Engine, replaces its download, then aligns it.";
+    -   **Edit**, which opens **Edit mask** *name*: the raster and band can change, the name cannot. Once an alert set used the mask, it can no longer be edited (**An alert set already uses this mask: add a new one instead.**); and
+    -   **Delete mask…**, which deletes the mask after you confirm. Its download and aligned file are deleted and every period stops using it. Alert sets that used it keep their alerts and show as out of date.
+
+A mask is downloaded and aligned once for the whole project, whichever period runs it.
+
+.. _defo-harmonize-sources:
+
+Sources for this period
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The table has one row per alert source of the active period, with two columns:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 80
+
+    *   -   Column
+        -   Description
+    *   -   **Source**
+        -   The source's name. The line under it says what the row holds or what it waits for (see below). Warnings, such as a partial coverage, and errors show as lines under the row.
+    *   -   **Status**
+        -   The row's state, or a button for its next run.
+
+The **Status** column reads:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Status
+        -   Meaning
+    *   -   "Ready"
+        -   Downloaded and harmonized with the current inputs. The line under the name gives the download date, the size on disk and what the harmonized file found: "downloaded 2026-10-20 · 31.7 MB · 2,362,718 alert pixels".
+    *   -   **Harmonize**
+        -   The download is current, but the harmonized file is missing or out of date (a new download, a new grid, a mask change). Select the button to run the row: it aligns any mask of the period that needs it, then harmonizes the source, without downloading it.
+    *   -   "Download or read it in Alerts first"
+        -   The source is not downloaded for this period's search window, or its download is out of date. The row has no button: download it in `Alerts <defo-alerts-download_>`_ first.
+    *   -   **Retry**
+        -   The last run of the row failed. Its error is shown in red under the row.
+    *   -   "Downloading 42%", "Harmonizing", "Queued"
+        -   The row is running, or waits for its turn in a run ("waiting for the row above"). A row being downloaded in Alerts shows as running here too, and cannot be harmonized until its download ends.
+    *   -   "not covered", "no data"
+        -   The source cannot run for this period: it does not cover the AOI, or it has no data for the search window. The line under the name gives the reason. See `Alert sources <defo-alerts_>`_ for coverage.
+    *   -   "File missing"
+        -   The file of a GeoTIFF source is gone (see `Common messages <defo-harmonize-messages_>`_).
+
+In an evaluator's `review copy <defo-evaluation-return_>`_, nothing runs: instead of a button, the column reads "To harmonize" or "To align".
+
+A blue button runs a row for the first time; an orange one redoes a file that is out of date. The line under the name then says why: for example "the grid changed (EPSG:32719 · 30 m → EPSG:32719 · 10 m): harmonize again", "it was downloaded again since: harmonize again" or "mask forest_2000 changed: harmonize again".
+
+The icons on the right side of each row:
+
+-   the map icon (**Show on the map**) shows the harmonized alerts on the map;
+-   the information icon opens the row's **Details** (see below); and
+-   **Delete files** removes this period's download and harmonized file of the source, after you confirm. The source stays in the period: download it again in `Alerts <defo-alerts-download_>`_ and harmonize it to rebuild them. The alert sets of this period built from the source read out of date; their alerts and reviews stay.
+
+.. _defo-harmonize-details:
+
+The Details dialog
+""""""""""""""""""
+
+.. shot: prepare-details | The Details dialog of the demo's GLAD-L row: the title GLAD-L, the lead "Ready · 2026-09-01 → 2026-09-30", the Source section (Catalogue, Coverage), the Download section with its date (Search window, Native grid, Size, File) and the Harmonize section with its date (Grid used, Resampling, Masks, Alert pixels, Alert dates, Size, File), and the Close button. Crop to the dialog.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-details.png
+    :alt: The Details dialog of a source
+
+The information icon of a source or a mask opens a read-only summary of what its files were made with. It starts with the row's status and, for a source, the period. When the row is out of date, an orange **Why:** line says what changed.
+
+In `Alerts <defo-alerts_>`_, the information icon of a source opens the same dialog, with two more controls: the **Add to new periods** checkbox (see `Add a source <defo-alerts-new-periods_>`_) and, for a custom source, **Edit**.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 25 75
+
+    *   -   Section
+        -   What it lists
+    *   -   **Source**
+        -   A predefined source: its **Catalogue** and **Coverage** of the AOI, with the last date of data and the day it was checked. A custom source: its **Kind**, **Reference**, **Format**, **Date encoding**, **Bands** and **Native grid**. A mask: its **Reference**, **Band**, **Native grid** and the periods it is **Used in**.
+    *   -   **Download** (**Read from file** for a GeoTIFF source)
+        -   The **Search window**, the **Native grid** the file was downloaded in, its **Size** and its **File** in the project folder.
+    *   -   **Harmonize** (**Align** for a mask)
+        -   The **Grid used**, with the current grid when it changed since, the **Resampling**, the **Masks** applied with their mode, the **Alert pixels** kept (and how many the masks removed), the **Alert dates** found, the **Size** and the **File**. For a mask: its **Mask pixels**.
+
+Each section gives the date and time its file was written, or reads "Not run yet". Select **Close**, or press **Esc**, to close the dialog.
+
+.. labels-ok: Esc
+
+Run everything
+""""""""""""""
+
+The footer under the table runs the rows in batch. Select **Harmonize … pending** (e.g. **Harmonize 4 pending**). It first aligns the masks on in the period that need it, then harmonizes every downloaded source that needs it, one row at a time:
+
+-   rows that read "not covered" or "no data", and rows still to download, are skipped;
+-   a row that fails shows its error in red under it, and the run goes on with the next row.
+
+While the run lasts, the footer counts its rows ("1 running · 3 queued", then "2 of 4 done", with a progress bar) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads "Stopping…". The rows already done stay done. This **Stop** stops only the harmonizing: a download running in `Alerts <defo-alerts-download_>`_ goes on, and the **Stop** of Alerts does not stop a harmonize run.
+
+The run also shows as a task notification titled **Harmonize**, with the row it is on (e.g. "Harmonizing GLAD-L").
+
+.. tip::
+
+    Each row needs free disk space for its files. The app checks it before writing, and stops the row with a message when the disk is too full. The grid size line gives an idea of how big a source can get.
+
+.. _defo-harmonize-messages:
+
+Common messages
+^^^^^^^^^^^^^^^
+
+"Not enough free disk space: this needs … GB in …, and … GB is free."
+    Free some space in your SEPAL folder, or use a coarser grid.
+
+"A row of this run is already being prepared …"
+    A mask is being aligned by another period's run, or the row is still running. Run it again once that has finished.
+
+"The AOI's geometry is still being fetched; run this row again in a moment."
+    GeoTIFF sources and masks need the AOI's shape. Wait a moment. If it could not be fetched, select **Check again** under the table, then run them.
+
+"Mask … covers none of the AOI: as a keep mask, every alert would be removed."
+    The mask misses the area. Check its asset or band, or turn it off.
+
+"A job is writing into this project; save the grid once it has finished."
+    The grid, masks and sources cannot change while a download or an **Integrate & vectorize** run is going.
+
+"File missing", with "missing: file not found: …" under the row, or "Mask …: file not found (…). Put the file back at this path to use the mask."
+    A GeoTIFF source or mask was moved, renamed or deleted from your SEPAL folder. Put the file back at the path shown, or edit the source or mask to point at its new place.
+
+"A mask on in this period is not aligned on the current grid yet; Harmonize … pending aligns the masks first."
+    A source cannot be harmonized before the period's masks are aligned. Select **Harmonize … pending**, or the mask's **Align** button first.
+
+"Mask …: its native grid (projection and scale) is unknown; edit the mask."
+    The app does not know how to download this GEE mask. Open it with **Edit** in its **More actions** menu and save it again, so that its raster is checked anew.
+
+.. _defo-integrate:
+
+Integrate & vectorize
+---------------------
+
+This step turns the harmonized sources of the active period into an *alert set*: the list of alerts to review in `Analysis <defo-analysis_>`_. It:
+
+-   combines the sources pixel by pixel;
+-   removes what earlier periods already reported;
+-   groups neighbouring alert pixels into alerts; and
+-   draws one polygon per alert.
+
+Open the **Integrate & vectorize** step of the **Workflow** panel. It unlocks once at least one source of the active period is ready in `Harmonize <defo-harmonize_>`_.
+
+.. shot: integrate-form | The Integrate & vectorize step of the demo project: "Sources" with GLAD-L, RADD and GLAD-S2 checked, each with its "ready · N alert pixels" note; under them the "Include probable (unconfirmed) alerts" switch (on) with the "Set per source" link; Minimum cluster size 0.5 ha with its hint; Order = Bigger clusters first; "Limit the number of clusters" ticked, with Maximum number of clusters 100 and its hint "Keeps the 100 biggest clusters."; the Attribute layers card with one layer; the grey "Creates or replaces the alert set …" line and the Integrate & vectorize button. Crop to the Workflow panel.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-form.png
+    :alt: The Integrate & vectorize form
+
+What an alert is
+^^^^^^^^^^^^^^^^
+
+An alert is a *cluster*: a group of alert pixels that touch each other, by their sides or corners, whichever source flagged each pixel. Where GLAD-L and RADD pixels touch, they form *one* alert that lists both sources. An alert is never split into one alert per source.
+
+Each alert keeps:
+
+-   the sources that detected it;
+-   its first and last detection dates (the earliest and latest date among its pixels);
+-   its area in hectares; and
+-   a statistic of each attribute layer's bands (see below).
+
+A cluster smaller than the **Minimum cluster size** (see `The options <defo-integrate-options_>`_) does not become an alert: its pixels are set aside as *not analysable*.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/integrate.gif
+    :alt: Sources on one grid become clusters; each cluster is measured against the minimum size, and becomes one polygon listing its sources or, when smaller, is set aside
+
+.. _defo-integrate-earlier:
+
+What earlier periods already reported
+"""""""""""""""""""""""""""""""""""""
+
+Pixels inside the alerts of an alert set from an *earlier* period (its *footprint*) are removed before the clusters are made. This way, the `look-back <defo-period-lookback_>`_ never reports the same loss twice.
+
+Pixels that did not become alerts (a cluster below the minimum size, or beyond the maximum number of alerts) are kept as *not analysable*. They are not in the footprint: bringing them back is the purpose of the `look-back <defo-period-lookback_>`_.
+
+A later period's run adds those pixels back when both conditions are met:
+
+-   its look-back reaches back into the earlier period (that period ends on or after the start of the new search window); and
+-   the two periods share a source.
+
+The pixels come back whatever their detection date within the earlier set's own search window. They join the new pixels that touch them, and a cluster that now reaches the minimum size becomes an alert. Its detection dates can be older than its own period and look-back. With a look-back of 0, the search window starts on the period's own first day, so nothing set aside is reconsidered.
+
+.. _defo-integrate-growth:
+
+Growth of earlier loss
+""""""""""""""""""""""
+
+A clearing often keeps growing from one month to the next. The run links each new alert to the *earlier loss* it grows from: the alerts of earlier periods' sets that were saved as **True alert** or **Needs review**. An earlier alert's shape is the polygon drawn for it in `Refine the polygon <defo-analysis-refine_>`_, or else its detected cluster.
+
+-   A new alert that touches or overlaps an earlier alert's shape is a *growth alert*, linked to every earlier alert it touches. One without a link is a *new* alert.
+-   A cluster smaller than the **Minimum cluster size** is kept when it touches earlier loss: it is a growth alert *under the minimum area*. A small cluster that touches nothing is set aside as *not analysable*, as before.
+-   Growth alerts are sorted and limited with the others: **Limit the number of clusters** can leave them out.
+-   Only the reviews saved when the run starts count. An earlier alert confirmed afterwards is not linked, but it can be linked by hand in `Earlier alerts <defo-analysis-earlier_>`_.
+
+The alerts linked to each other, across all periods, make the *history* of a clearing. Analysis shows it on each alert, and the `Overview <defo-overview-growth_>`_ sums it up.
+
+.. _defo-integrate-options:
+
+The options
+^^^^^^^^^^^
+
+The form opens with the settings of the active alert set (all but the sources), or with the defaults below when there is none.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 50 30
+
+    *   -   Option
+        -   Description
+        -   Default and limits
+    *   -   **Sources**
+        -   The sources whose alerts go into the set. Each ready source is listed with what its harmonized file found. A source that does not cover the AOI, or has no data for the period, is listed as disabled, with the reason.
+        -   Every ready source. At least one.
+    *   -   **Include probable (unconfirmed) alerts**
+        -   Shown only when at least one selected source has a *probable* (low-confidence) class. One switch for all such sources. Off, their probable pixels are dropped before anything else, and only their confirmed pixels count. With two or more such sources, **Set per source** unfolds one switch per source (see below).
+        -   On.
+    *   -   **Minimum cluster size**
+        -   Clusters smaller than this are dropped. The hint gives that size in pixels of the grid (at 10 m, 0.5 ha is "50 pixels on the grid").
+        -   0.5 ha. Any number of hectares, 0 or more. Even at 0, an alert is at least one pixel.
+    *   -   **Order**
+        -   The order of the alerts in the set, which is the review order: **Bigger clusters first**, **Smaller clusters first**, **Recent clusters first** (by last detection date) or **Older clusters first** (by first detection date).
+        -   **Bigger clusters first**.
+    *   -   **Limit the number of clusters**
+        -   When selected, shows **Maximum number of clusters**: only the first alerts in the chosen **Order** are kept. Its hint says which (e.g. "Keeps the 100 biggest clusters." or "Keeps the 100 most recent clusters."). When cleared, every alert is kept.
+        -   Cleared. When selected, the limit starts at 100. It must be a whole number greater than 0.
+    *   -   **Attribute layers**
+        -   Rasters whose band statistics are added to every alert (see below).
+        -   None.
+
+Probable alerts per source
+""""""""""""""""""""""""""
+
+With two or more selected sources that have a probable class, select **Set per source** under **Include probable (unconfirmed) alerts** to give each one its own switch, named after the source:
+
+-   A selected source without a probable class (a custom source that has only detection dates) is listed as "(source): dates only, no probable level".
+-   When the sources' switches differ, the main switch reads off, the note **Mixed: the sources below differ.** replaces **Set per source**, and the per-source switches stay open.
+-   Turning the main switch on or off sets every source at once.
+
+.. _defo-integrate-attributes:
+
+Attribute layers
+""""""""""""""""
+
+An *attribute layer* adds information to each alert from a raster (e.g. the majority land-cover class under the alert, or its mean elevation). The values are columns of the alert table: they are exported with the alerts, and columns of classes can be used in the Analysis filter.
+
+.. shot: integrate-attribute | The "Add an attribute layer" dialog: Layer name "worldcover" with its hint "Alert columns are named <layer name>_<band>.", Source = Earth Engine, the ESA WorldCover image picked, the one-band line "One band (Map): its statistic is added to every alert.", and the band's row with statistic Majority and its column name worldcover_map beside it. Crop to the dialog.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-attribute.png
+    :alt: Adding an attribute layer
+
+To add an attribute layer:
+
+1.  Select **Add attribute layer** to open the **Add an attribute layer** dialog.
+2.  Check the **Layer name**, suggested from the raster once it is chosen. The columns are named *layer name*\_\ *band*.
+3.  Choose the **Source** (**Earth Engine**, an image, or **GeoTIFF**, a file in your SEPAL folder), then choose the raster. Its bands are read at once.
+4.  With one band, the form reads "One band (…): its statistic is added to every alert." With two or more, select one or more in **Bands**.
+5.  For each band, choose the statistic computed over the alert: **Majority** (for classes), **Mean**, **Minimum**, **Maximum** or **Median**. It starts on **Majority** when the band's name looks like classes (e.g. ``landcover``), and on **Mean** otherwise, marked "(suggested)". The column name is shown beside it.
+6.  Select **Add attribute layer**.
+
+Rules:
+
+-   A layer needs at least one band (**Keep at least one band.**).
+-   Two layers cannot read the same raster (**Another attribute layer already reads this raster.**).
+-   Column names never take the name of an alert column or of another layer's column: a clash gets a suffix.
+
+The list under **Attribute layers** shows each layer with its columns. The pencil icon edits a layer and the bin icon removes it. The layers belong to this form until it runs: they are saved with the alert set.
+
+Run the step
+^^^^^^^^^^^^
+
+The grey line above the button names the set the run makes: "Creates or replaces the alert set (period) · (sources)". An alert set is identified by its period and its sources:
+
+-   a new combination of sources makes a new set: a period can hold several sets (e.g. one with GLAD-L only and one with all three sources); and
+-   the same combination again *replaces* the set.
+
+Select **Integrate & vectorize**. The button stays disabled until at least one source is selected and, when **Limit the number of clusters** is selected, the limit is valid ("Enter a whole number greater than 0." under the field).
+
+The run goes through "Combining sources", "Vectorizing clusters", "Saving the alerts", "Writing the footprint" and "Building map tiles". When it ends, a message reads "N alerts ready for review", followed by "Linked N alerts to earlier loss (M under the minimum area)" when it found `growth alerts <defo-integrate-growth_>`_, and the new set becomes the *active set*: the one the `Questionnaire <defo-questionnaire_>`_, `Evaluation <defo-evaluation_>`_, `Analysis <defo-analysis_>`_ and `Overview <defo-overview_>`_ work on. The step stays open.
+
+If no alert is left, the set is still made, empty, and the message gives the reason for each source (e.g. "GLAD-L: all 56 alert pixels removed by masks" or "RADD: probable (unconfirmed) alerts were left out").
+
+.. _defo-integrate-replace:
+
+Replace a set
+"""""""""""""
+
+.. shot: integrate-replace | The "Replace this alert set?" confirmation for the demo set, with "N reviewed alerts in this set will be discarded. The evaluator split and its pending returns will be discarded." (the demo set is split), then the list of reviewed alerts ("#0 · Reviewed: confirmed · 383.18 ha" …); the Cancel and orange Replace buttons. Crop to the dialog.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-replace.png
+    :alt: Confirming the replacement of an alert set
+
+When the set about to be replaced has reviewed alerts or an `evaluator split <defo-evaluation_>`_, the **Replace this alert set?** dialog lists what would be lost: the reviewed alerts (up to 20, then "… and N more"), and the split with the reviews that evaluators have not sent back yet. When alerts of later periods grow from this set, it adds "N alerts of later periods are linked to this set; their links will break.": after the run, those links show as "earlier set was re-run" (see `Earlier alerts <defo-analysis-earlier_>`_). Select **Replace** to continue. A set with nothing to lose is replaced without confirmation.
+
+.. attention::
+
+    Replacing a set discards its reviews. To try other settings without losing reviews, choose another combination of sources, which makes a separate set.
+
+.. _defo-integrate-outdated:
+
+When the active set is out of date
+""""""""""""""""""""""""""""""""""
+
+If the inputs of the active set changed since it was made (a source downloaded again, a mask switched, the period's look-back, the AOI or the grid changed), an orange line reads: "The active set (…) was built from inputs that have changed since." Run **Integrate & vectorize** again to rebuild it, which discards its reviews.
+
+If the set's files were deleted from the project folder, the line reads: "The active set's files (…) are missing from the project folder."
+
+.. _defo-integrate-map:
+
+View the alerts on the map
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Once the project has a set, switches under the button draw it on the map:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 35 65
+
+    *   -   Switch
+        -   Description
+    *   -   **Show these alerts on the map**
+        -   The active set's alerts, coloured by review status. Click on an alert to view "Alert (id) · (status) · (area) ha". Its **Review** button opens it in Analysis.
+    *   -   **Show not-analysable pixels**
+        -   The alert pixels that did not become alerts: **Too small** or **Over the alert cap**.
+    *   -   **Show earlier sets**
+        -   The alerts of earlier periods' sets, for context.
+
+The map keeps them in other steps. Turn them off here.
+
+Common messages
+^^^^^^^^^^^^^^^
+
+"… is not downloaded and harmonized for this period; download it in Alerts and harmonize it in Harmonize first."
+    A source's files are out of date. Download it in `Alerts <defo-alerts-download_>`_, then harmonize it in `Harmonize <defo-harmonize_>`_.
+
+"The footprint of the earlier set … is missing; run Integrate & vectorize on that set again first."
+    An earlier period's files were deleted. Make that period active and run its set again.
+
+"Not enough free disk space: …"
+    The run writes a few rasters the size of the grid. Free some space.
+
+"The project's period, area of interest or grid changed while the run was going, so the alert set was not recorded."
+    Run it again.
+
+"tippecanoe is not installed: the map will show alert points without polygons."
+    The set is made; the map shows its alerts as points instead of polygons.
+
+"The map tiles could not be shown (…): showing alert points without polygons."
+    The set is made, but its map layer could not be built. The map shows its alerts as points.
+
+"The alert store of … is missing; run Integrate & vectorize for that period again."
+    With **Show earlier sets**, an earlier set's alert file is gone from the project folder. Make that period active and run its set again.
+
+.. _defo-layers:
+
+Additional layers
+-----------------
+
+Visualization layers support the review of the alerts: a land-cover map, a forest baseline, a recent mosaic. They never change the alerts. A layer is an Earth Engine image or a GeoTIFF. It can be shown on the main map and, with **Show in Analysis** selected, on the two maps of the `Analysis <defo-analysis_>`_ screen.
+
+Open the **Additional layers** step of the **Workflow** panel, the first step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_).
+
+The step is optional: skip it and come back at any time. Its bar in the header is dashed, and the step reads "optional" until it has a layer.
+
+.. note::
+
+    Planet NICFI mosaics are not an additional layer: with NICFI access in your GEE account, they come with the *Planet* images of the `Analysis timeline <defo-analysis-timeline_>`_.
+
+.. shot: layers-list | The Additional layers step of the demo project with its one layer listed: name, the "Earth Engine" chip, the green "in Analysis" chip, the grey summary note under it, and the map / edit / delete icons; the layer switched on, so it shows on the main map with its legend. Crop to the Workflow panel plus the visible part of the map.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/layers-list.png
-    :alt: The Optional layers step with one layer
+    :alt: The Additional layers step with one layer
 
 The layer list
 ^^^^^^^^^^^^^^
@@ -740,657 +1450,6 @@ Common messages
 "The file … no longer exists."
     The file of a GeoTIFF layer was moved or deleted. Edit the layer and choose the file again.
 
-.. _defo-period:
-
-Monitoring period
------------------
-
-A *period* is one monitoring round, usually a month. For each period, the app downloads every source over the period's dates plus a *look-back* before them, and builds that period's alert sets. A project usually holds a series of consecutive periods.
-
-Open the **Period** step of the **Workflow** panel. It unlocks once the project has at least one `alert source <defo-alerts_>`_.
-
-.. shot: period-list | The Period step of the demo project with its one period listed: "start → end" in the Period column, the Sets count, the Status column, the period's radio selected (active), and the notes under it ("Search window: … → …", "No earlier set: every alert in the search window is kept", and "Its dates are fixed: it has alert sets." if it has a set). Crop to the Workflow panel.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/period-list.png
-    :alt: The Period step with one period
-
-.. _defo-period-tracking:
-
-Loss that spans several periods
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Each period is processed on its own, but forest loss does not keep to the period's dates. Some loss could be missed between two periods:
-
--   a clearing that starts too small to be an alert;
--   alerts that the providers publish late, after their period was processed; or
--   a clearing that keeps growing at the edge of an alert reported in an earlier period.
-
-The app tracks this loss from one period to the next, and never reports the same loss twice:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 35 65
-
-    *   -   Case
-        -   What the app does
-    *   -   Loss already reported by an earlier period
-        -   Its pixels (the *footprint* of the earlier alert set) are removed from the new period's run, so it is not reported again.
-    *   -   A cluster too small to be an alert, or an alert published late
-        -   The `look-back <defo-period-lookback_>`_ searches back into the earlier period: the pixels set aside come back and can join new pixels to form an alert.
-    *   -   A clearing that grows next to a reviewed alert
-        -   The new alert is `linked to the earlier alert <defo-period-growth_>`_ as a *growth alert*, and kept even when it is under the minimum size.
-
-.. _defo-period-lookback:
-
-The search window and the look-back
-"""""""""""""""""""""""""""""""""""
-
-A clearing often starts small and grows over the following weeks. In the period where it starts, its cluster of alert pixels is still smaller than the **Minimum alert size** of `Integrate & vectorize <defo-integrate_>`_, so it does not become an alert: its pixels are set aside as *not analysable*.
-
-The look-back keeps these pixels in play:
-
--   Each period searches a wider *search window*: its own dates plus the look-back days before its start.
--   The pixels set aside by the earlier period come back into the run and join the new pixels that touch them.
--   If the cluster they form together reaches the minimum size, it becomes an alert. Its first detection date is the date of its earliest pixel, in the earlier period.
-
-To avoid reporting the same loss twice, every pixel already reported by an alert set of an *earlier* period is removed before the new period's alerts are built: only what was set aside comes back. The look-back also catches alerts that the providers published late, after the earlier period was processed.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/lookback.gif
-    :alt: The look-back: a cluster too small in one period joins the next period's pixels and becomes an alert, and a reported alert is never reported again
-
-.. note::
-
-    The first period has no earlier set to compare with, so every alert in its search window is kept. Its row reads **No earlier set: every alert in the search window is kept**. With a look-back, that includes alerts dated before the period's start.
-
-    A new project's first period starts with no look-back, so it searches only its own dates unless a look-back is set. A project made with **Duplicate** keeps the look-back of the project it was copied from.
-
-.. _defo-period-growth:
-
-Growth next to earlier alerts
-"""""""""""""""""""""""""""""
-
-The pixels of a reported alert are part of the footprint, so the look-back does not bring them back. But a clearing often keeps growing at the edge of an alert reported in an earlier period. The new pixels then form a cluster of their own, often smaller than the **Minimum alert size**, which would be set aside like any small cluster.
-
-When the earlier alert was saved as **True alert** or **Needs review**, `Integrate & vectorize <defo-integrate-growth_>`_ keeps this growth in view:
-
--   A new alert that touches or overlaps the earlier alert is a *growth alert*, linked to it.
--   A cluster under the minimum size is kept when it touches the earlier alert: it is a growth alert *under the minimum area*. A small cluster that touches nothing is set aside, and the look-back can still bring it back in the next period.
--   The run looks for earlier alerts in every earlier period, whatever the look-back.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/growth.gif
-    :alt: Growth: a confirmed alert grows at its edge in the next period, and the small new cluster is kept and linked to it, while a small cluster that touches nothing is set aside
-
-The alerts linked to each other, across all periods, make the *history* of a clearing. Analysis shows it on each alert (see `Earlier alerts <defo-analysis-earlier_>`_), and the `Overview <defo-overview-growth_>`_ sums it up.
-
-.. tip::
-
-    Only the reviews saved when `Integrate & vectorize <defo-integrate_>`_ starts count. Review the alerts of a period before you run the next one, so that their growth is linked. An alert reviewed later can still be linked by hand in `Earlier alerts <defo-analysis-earlier_>`_.
-
-The period list
-^^^^^^^^^^^^^^^
-
-Each row of **Periods** shows:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Column
-        -   Description
-    *   -   **Period**
-        -   The period's dates ("start → end"), with notes under them: its search window and any warnings.
-    *   -   **Sets**
-        -   The number of alert sets built for this period.
-    *   -   **Status**
-        -   **out of date** when a source download or an alert set no longer matches the current settings (run it again in `Download & harmonize <defo-prepare_>`_ or `Integrate & vectorize <defo-integrate_>`_); **missing** when an alert set's files are gone; a dash when everything is current.
-
-The icons on the right side of each row:
-
--   the radio button makes the period *active*: `Download & harmonize <defo-prepare_>`_ and `Integrate & vectorize <defo-integrate_>`_ work on the active period;
--   the pencil icon changes its dates or look-back; and
--   the bin icon deletes it.
-
-.. _defo-period-add:
-
-Add a period
-^^^^^^^^^^^^
-
-.. shot: period-new | The "New period" dialog pre-filled for a second period: Start = the day after the demo period's end, End = today, Look-back (days) = 90 (the last value used, the demo period's) with its hint, the "Search window: … → …" preview line and the masks note, Add period enabled. Crop to the dialog.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/period-new.png
-    :alt: The New period dialog
-
-Select **New period**. The dialog is pre-filled so that the new period continues the series.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 35 45
-
-    *   -   Field
-        -   Description
-        -   Default and limits
-    *   -   **Start**
-        -   The first day of the period.
-        -   The day after the latest period ends. For the first period, the first day of the current month.
-    *   -   **End**
-        -   The last day of the period.
-        -   Today. Must be after **Start**. Two periods cannot have the same dates.
-    *   -   **Look-back (days)**
-        -   The number of days before **Start** that are also searched.
-        -   0 (no look-back) for a new project's first period (a duplicated project keeps the look-back of its source), then the last value used. A whole number from 0 to 3650.
-
-Under the fields, the dialog previews the search window ("Search window: start → end"). Select **Add period**: the period is created and becomes the active period.
-
-A new period starts with the mask choices of the latest period. Change them in `Download & harmonize <defo-prepare_>`_.
-
-.. tip::
-
-    For the set-aside clusters to come back, the look-back must reach into the previous period. With a look-back of 0, the search window starts on the period's own first day and nothing set aside earlier is reconsidered.
-
-    A cluster that stays too small stays in play in later periods for as long as their look-back reaches back to its pixels. A longer look-back gives a slowly growing clearing more time to reach the minimum size, but makes every download bigger (see `What earlier periods already reported <defo-integrate-earlier_>`_).
-
-Change a period
-^^^^^^^^^^^^^^^
-
-For a period without alert sets, the pencil icon opens a dialog to change its dates. New dates give the period a new identity: its downloads and harmonized files are deleted, because they were made for the old window.
-
-A period with alert sets has fixed dates (its note reads **Its dates are fixed: it has alert sets.**). The pencil icon then opens a dialog where only the look-back can change. The period's downloads then show as out of date.
-
-Delete a period
-^^^^^^^^^^^^^^^
-
-Select the bin icon. The confirmation dialog lists what is deleted: the period's downloads and harmonized files, and its alert sets with their reviewed alerts.
-
-.. important::
-
-    A period with alert sets can be deleted only when it is the latest period. An earlier period's sets are the footprint the later sets were built from, so delete the later periods first. Periods cannot change or be deleted while a task is writing into the project.
-
-.. _defo-prepare:
-
-Download & harmonize
---------------------
-
-This step prepares every input of the active `period <defo-period_>`_ on one common grid. Each alert source is downloaded over the period's search window in its own projection, then *harmonized*: aligned onto the project grid and cut by the period's masks. Nothing whose inputs are unchanged runs twice.
-
-Open the **Download & harmonize** step of the **Workflow** panel. It unlocks once the project has an active period. It works on the active period: to prepare another period, make it active in the `Period <defo-period_>`_ step first.
-
-From top to bottom, the step has three parts: the **Project grid**, the **Masks** and the **Sources for this period**.
-
-.. shot: prepare-step | The Download & harmonize step of the demo project after a full run: the Project grid card (EPSG of the UTM zone, Resolution 10 m, the "… × … pixels, about … MB per source before compression" line and "The grid is locked because the project has alert sets."), the Masks card with its one mask (Mode Keep, green "Ready", subtitle "Earth Engine · …"), and the "Sources for this period" table with GLAD-L, RADD and GLAD-S2 each green "Ready" in the Status column, each with its "downloaded … · … · N alert pixels" subtitle and its map, Details, Download again and Delete files icons; the "Run 0 pending" button of the footer under it. Crop to the Workflow panel.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-step.png
-    :alt: The Download & harmonize step after a run
-
-The project grid
-^^^^^^^^^^^^^^^^
-
-Every raster of the project is aligned onto one grid: one projection in metres and one pixel size, over the AOI. Alerts from sources with different pixel sizes can then be combined pixel by pixel, and the minimum alert size in hectares becomes a pixel count.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 15 40 45
-
-    *   -   Field
-        -   Description
-        -   Default and limits
-    *   -   **EPSG**
-        -   The projection of the grid, as a European Petroleum Survey Group (EPSG) code. The target button at the end of the field fills in the Universal Transverse Mercator (UTM) zone of the AOI.
-        -   The UTM zone of the AOI's centre. Must be a projected system in metres: a geographic system (like 4326) or one in feet is refused.
-    *   -   **Resolution**
-        -   The pixel size, in metres.
-        -   The finest pixel size among the project's sources: 10 m with RADD or GLAD-S2, 30 m with GLAD-L only, a custom source's own pixel size, or 30 m when nothing is known. Must be greater than 0.
-
-Under the fields, the grid's size is previewed: "width × height pixels, about … per source before compression". Above 2 GB per source, a warning reads **This grid is large: downloads will take a while and use disk space.** (it does not block the step).
-
-Select **Save grid**. The masks and the sources table appear only once a grid is saved.
-
-The grid can change until the first alert set is made. A new grid only harmonizes the sources again from the files already downloaded; it does not download them again. Once the project has an alert set, the card reads **The grid is locked because the project has alert sets.**
-
-.. note::
-
-    Changing the `AOI <defo-aoi_>`_ clears the grid and deletes every download and harmonized file of the project, which were made for the old area. Save the grid again here, then run the rows again.
-
-Masks
-^^^^^
-
-A *mask* limits where alerts are kept. It is a raster defined once for the project: a GEE image or image collection, or a GeoTIFF, with one band. A pixel is inside the mask where that band is not zero; zero and no-data pixels are outside it.
-
-Each period chooses a **Mode** for each mask:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Mode
-        -   Effect on the period's alerts
-    *   -   **Off**
-        -   The mask is not used in this period.
-    *   -   **Keep**
-        -   Alerts *outside* the mask are removed (e.g. keep only alerts inside a forest mask).
-    *   -   **Exclude**
-        -   Alerts *inside* the mask are removed (e.g. drop alerts in plantations or water).
-
-When several masks are on, all of them apply. Masks act on the harmonized sources, so a change of **Mode** makes the period's sources out of date. **Run … pending** then harmonizes them again without downloading them. A new period starts with the mask choices of the latest period.
-
-Add a mask
-""""""""""
-
-.. shot: prepare-mask-add | The "Add a mask" dialog: Name with its hint "At most 24 characters; it also names the mask's files.", Source = Earth Engine, the Hansen forest-change image asset picked, Band = treecover2000 with the hint naming the band suggested as a mask, Mode in the active period = Keep, and the grey note under it. Crop to the dialog.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-mask-add.png
-    :alt: Adding a mask
-
-Select **Add mask** to open the **Add a mask** dialog. The bands are read as soon as the raster is chosen.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 40 40
-
-    *   -   Field
-        -   Description
-        -   Default and limits
-    *   -   **Name**
-        -   The mask's name in lists, legends and file names.
-        -   Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique among the project's masks.
-    *   -   **Source**
-        -   **Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder).
-        -   **Earth Engine**.
-    *   -   Asset or **GeoTIFF**
-        -   The GEE image or image collection, or the .tif file.
-        -   
-    *   -   **Band**
-        -   The band that defines the mask. Shown when the raster has two bands or more; with one band, the form reads "One band (…): the mask is made from it."
-        -   The band whose name looks like a mask (e.g. ``datamask``), named in the hint ("… looks like a mask; non-zero pixels are inside it."), else none: pick it.
-    *   -   **Mode in the active period**
-        -   **Keep** or **Exclude**.
-        -   **Keep**. The mask is turned on in the active period only; every other period leaves it off until it is turned on there.
-
-When **Add mask** is selected, the app checks the raster and its band. A problem is shown in red inside the dialog, which stays open for corrections.
-
-The mask list
-"""""""""""""
-
-Each row of **Masks** shows:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Column
-        -   Description
-    *   -   **Mask**
-        -   The mask's name. The line under it gives its source and size on disk once it is ready ("Earth Engine · 18.9 MB"), or why it needs a run ("not downloaded yet", "the grid changed (…): align again"). It ends with "Off" when the mask is off in the active period.
-    *   -   **Mode**
-        -   The mask's mode in the active period: **Off**, **Keep** or **Exclude**. A change applies at once; the period's sources then read out of date.
-    *   -   **Status**
-        -   "Ready", or a button for the mask's next run: **Download** (a GEE mask not downloaded yet) or **Align** (onto the grid). An orange button redoes a file that is out of date. While a run goes on, the cell reads "Downloading 42%", "Aligning" or "Queued".
-
-The icons on the right side of each row:
-
--   the map icon shows the mask on the map: a GEE mask can be previewed before it is downloaded, a GeoTIFF mask once it is aligned;
--   the information icon opens its **Details** (see `The Details dialog <defo-prepare-details_>`_); and
--   the **More actions** menu (three dots) holds:
-
-    -   **Download again** (GEE masks only), for an asset that changed. The app asks first: "This fetches the mask again from Earth Engine, replaces its download, then aligns it.";
-    -   **Edit**, which opens **Edit mask** *name*: the raster and band can change, the name cannot. Once an alert set used the mask, it can no longer be edited (**An alert set already uses this mask: add a new one instead.**); and
-    -   **Delete mask…**, which deletes the mask after you confirm. Its download and aligned file are deleted and every period stops using it. Alert sets that used it keep their alerts and show as out of date.
-
-A mask is downloaded and aligned once for the whole project, whichever period runs it.
-
-.. _defo-prepare-sources:
-
-Sources for this period
-^^^^^^^^^^^^^^^^^^^^^^^
-
-The table has one row per alert source of the project, with two columns:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 80
-
-    *   -   Column
-        -   Description
-    *   -   **Source**
-        -   The source's name. The line under it says what the row holds or what it waits for (see below). Warnings, such as a partial coverage, and errors show as lines under the row.
-    *   -   **Status**
-        -   The row's state, or a button for its next run.
-
-The **Status** column reads:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   Status
-        -   Meaning
-    *   -   "Ready"
-        -   Downloaded and harmonized with the current inputs. The line under the name gives the download date, the size on disk and what the harmonized file found: "downloaded 2026-10-20 · 31.7 MB · 2,362,718 alert pixels".
-    *   -   **Download**
-        -   The source is not downloaded for this period's search window yet, or its download is out of date. Select the button to run the row: it aligns any mask of the period that needs it, downloads the source, then harmonizes it.
-    *   -   **Harmonize**
-        -   The download is current, but the harmonized file is missing or out of date (a new grid, a mask change). The run harmonizes again without downloading. A GeoTIFF source is never downloaded: it is read from its file, so its button always reads **Harmonize**.
-    *   -   **Retry**
-        -   The last run of the row failed. Its error is shown in red under the row.
-    *   -   "Downloading 42%", "Harmonizing", "Queued"
-        -   The row is running, or waits for its turn in a run ("waiting for the row above").
-    *   -   "not covered", "no data"
-        -   The source cannot run for this period: it does not cover the AOI, or it has no data for the search window. The line under the name gives the reason. See `Alert sources <defo-alerts_>`_ for coverage.
-    *   -   "File missing"
-        -   The file of a GeoTIFF source is gone (see `Common messages <defo-prepare-messages_>`_).
-
-In an evaluator's `review copy <defo-evaluation-return_>`_, nothing runs: instead of a button, the column reads "To download", "To harmonize" or "To align".
-
-A blue button runs a row for the first time; an orange one redoes a file that is out of date. The line under the name then says why, and what the run does about it: for example "the grid changed (EPSG:32719 · 30 m → EPSG:32719 · 10 m): harmonize again", "the search window changed (…): download again", "mask forest_2000 changed: harmonize again" or "the AOI changed: download again".
-
-.. note::
-
-    A row that is ready has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**.
-
-The icons on the right side of each row:
-
--   the map icon (**Show on the map**) shows the harmonized alerts on the map;
--   the information icon opens the row's **Details** (see below);
--   **Download again** fetches the source again even if nothing changed, then harmonizes it. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source ("Nothing to download again: read from a file"), and waits while a mask of the period needs a run ("Run the pending masks first"); and
--   **Delete files** removes this period's download and harmonized file of the source, after you confirm. The source stays in the project: run the row again to rebuild them. The alert sets of this period built from the source read out of date; their alerts and reviews stay.
-
-.. _defo-prepare-details:
-
-The Details dialog
-""""""""""""""""""
-
-.. shot: prepare-details | The Details dialog of the demo's GLAD-L row: the title GLAD-L, the lead "Ready · 2026-09-01 → 2026-09-30", the Source section (Catalogue, Coverage), the Download section with its date (Search window, Native grid, Size, File) and the Harmonize section with its date (Grid used, Resampling, Masks, Alert pixels, Alert dates, Size, File), and the Close button. Crop to the dialog.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-details.png
-    :alt: The Details dialog of a source
-
-The information icon of a source or a mask opens a read-only summary of what its files were made with. It starts with the row's status and, for a source, the period. When the row is out of date, an orange **Why:** line says what changed.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   Section
-        -   What it lists
-    *   -   **Source**
-        -   A predefined source: its **Catalogue** and **Coverage** of the AOI, with the last date of data and the day it was checked. A custom source: its **Kind**, **Reference**, **Format**, **Date encoding**, **Bands** and **Native grid**. A mask: its **Reference**, **Band**, **Native grid** and the periods it is **Used in**.
-    *   -   **Download** (**Read from file** for a GeoTIFF source)
-        -   The **Search window**, the **Native grid** the file was downloaded in, its **Size** and its **File** in the project folder.
-    *   -   **Harmonize** (**Align** for a mask)
-        -   The **Grid used**, with the current grid when it changed since, the **Resampling**, the **Masks** applied with their mode, the **Alert pixels** kept (and how many the masks removed), the **Alert dates** found, the **Size** and the **File**. For a mask: its **Mask pixels**.
-
-Each section gives the date and time its file was written, or reads "Not run yet". Select **Close**, or press **Esc**, to close the dialog.
-
-.. labels-ok: Esc
-
-Run everything
-""""""""""""""
-
-The footer under the table runs the rows in batch. Select **Run … pending** (e.g. **Run 4 pending**). It first aligns the masks on in the period that need it, then runs every source that needs a run, one row at a time:
-
--   rows that read "not covered" or "no data" are skipped;
--   a row that fails shows its error in red under it, and the run goes on with the next row.
-
-While the run lasts, the footer counts its rows ("1 running · 3 queued", then "2 of 4 done", with a progress bar) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads "Stopping…". The rows already done stay done.
-
-The arrow beside **Run … pending** (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, then harmonized, after you confirm.
-
-The run also shows as a task notification titled **Download & harmonize**, with the step it is on ("Preparing GLAD-L", then "Harmonizing GLAD-L") and the download's percentage ("Download & harmonize · 35%").
-
-.. tip::
-
-    Each row needs free disk space for its files. The app checks it before writing, and stops the row with a message when the disk is too full. The grid size line gives an idea of how big a source can get.
-
-.. _defo-prepare-messages:
-
-Common messages
-^^^^^^^^^^^^^^^
-
-"Not enough free disk space: this needs … GB in …, and … GB is free."
-    Free some space in your SEPAL folder, or use a coarser grid.
-
-"A row of this run is already being prepared …"
-    A mask is being aligned by another period's run, or the row is still running. Run it again once that has finished.
-
-"The AOI's geometry is still being fetched; run this row again in a moment."
-    GeoTIFF sources and masks need the AOI's shape. Wait a moment. If it could not be fetched, select **Check again** under the table, then run them.
-
-"Mask … covers none of the AOI: as a keep mask, every alert would be removed."
-    The mask misses the area. Check its asset or band, or turn it off.
-
-"A job is writing into this project; save the grid once it has finished."
-    The grid, masks and sources cannot change while a download or an **Integrate & vectorize** run is going.
-
-"File missing", with "missing: file not found: …" under the row, or "Mask …: file not found (…). Put the file back at this path to use the mask."
-    A GeoTIFF source or mask was moved, renamed or deleted from your SEPAL folder. Put the file back at the path shown, or edit the source or mask to point at its new place.
-
-"A mask on in this period is not aligned on the current grid yet; Run … pending aligns the masks first."
-    A source cannot be harmonized before the period's masks are aligned. Select **Run … pending**, or the mask's **Align** button first.
-
-"Mask …: its native grid (projection and scale) is unknown; edit the mask."
-    The app does not know how to download this GEE mask. Open it with **Edit** in its **More actions** menu and save it again, so that its raster is checked anew.
-
-.. _defo-integrate:
-
-Integrate & vectorize
----------------------
-
-This step turns the harmonized sources of the active period into an *alert set*: the list of alerts to review in `Analysis <defo-analysis_>`_. It:
-
--   combines the sources pixel by pixel;
--   removes what earlier periods already reported;
--   groups neighbouring alert pixels into alerts; and
--   draws one polygon per alert.
-
-Open the **Integrate & vectorize** step of the **Workflow** panel. It unlocks once at least one source of the active period is ready in `Download & harmonize <defo-prepare_>`_.
-
-.. shot: integrate-form | The Integrate & vectorize step of the demo project: "Sources to combine" with GLAD-L, RADD and GLAD-S2 checked, each with its "ready · N alert pixels" note; under them the "Include probable (unconfirmed) alerts" switch (on) with the "Set per source" link; Minimum alert size 0.5 ha with its hint; Order = Bigger alerts first; "Limit the number of alerts" ticked, with Maximum number of alerts 100 and its hint "Keeps the 100 biggest alerts."; the Attribute layers card with one layer; the grey "Creates or replaces the alert set …" line and the Integrate & vectorize button. Crop to the Workflow panel.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-form.png
-    :alt: The Integrate & vectorize form
-
-What an alert is
-^^^^^^^^^^^^^^^^
-
-An alert is a *cluster*: a group of alert pixels that touch each other, by their sides or corners, whichever source flagged each pixel. Where GLAD-L and RADD pixels touch, they form *one* alert that lists both sources. An alert is never split into one alert per source.
-
-Each alert keeps:
-
--   the sources that detected it;
--   its first and last detection dates (the earliest and latest date among its pixels);
--   its area in hectares; and
--   a statistic of each attribute layer's bands (see below).
-
-A cluster smaller than the **Minimum alert size** (see `The options <defo-integrate-options_>`_) does not become an alert: its pixels are set aside as *not analysable*.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/integrate.gif
-    :alt: Sources on one grid become clusters; each cluster is measured against the minimum size, and becomes one polygon listing its sources or, when smaller, is set aside
-
-.. _defo-integrate-earlier:
-
-What earlier periods already reported
-"""""""""""""""""""""""""""""""""""""
-
-Pixels inside the alerts of an alert set from an *earlier* period (its *footprint*) are removed before the clusters are made. This way, the `look-back <defo-period-lookback_>`_ never reports the same loss twice.
-
-Pixels that did not become alerts (a cluster below the minimum size, or beyond the maximum number of alerts) are kept as *not analysable*. They are not in the footprint: bringing them back is the purpose of the `look-back <defo-period-lookback_>`_.
-
-A later period's run adds those pixels back when both conditions are met:
-
--   its look-back reaches back into the earlier period (that period ends on or after the start of the new search window); and
--   the two periods share a source.
-
-The pixels come back whatever their detection date within the earlier set's own search window. They join the new pixels that touch them, and a cluster that now reaches the minimum size becomes an alert. Its detection dates can be older than its own period and look-back. With a look-back of 0, the search window starts on the period's own first day, so nothing set aside is reconsidered.
-
-.. _defo-integrate-growth:
-
-Growth of earlier loss
-""""""""""""""""""""""
-
-A clearing often keeps growing from one month to the next. The run links each new alert to the *earlier loss* it grows from: the alerts of earlier periods' sets that were saved as **True alert** or **Needs review**. An earlier alert's shape is the polygon drawn for it in `Refine the polygon <defo-analysis-refine_>`_, or else its detected cluster.
-
--   A new alert that touches or overlaps an earlier alert's shape is a *growth alert*, linked to every earlier alert it touches. One without a link is a *new* alert.
--   A cluster smaller than the **Minimum alert size** is kept when it touches earlier loss: it is a growth alert *under the minimum area*. A small cluster that touches nothing is set aside as *not analysable*, as before.
--   Growth alerts are sorted and limited with the others: **Limit the number of alerts** can leave them out.
--   Only the reviews saved when the run starts count. An earlier alert confirmed afterwards is not linked, but it can be linked by hand in `Earlier alerts <defo-analysis-earlier_>`_.
-
-The alerts linked to each other, across all periods, make the *history* of a clearing. Analysis shows it on each alert, and the `Overview <defo-overview-growth_>`_ sums it up.
-
-.. _defo-integrate-options:
-
-The options
-^^^^^^^^^^^
-
-The form opens with the settings of the active alert set (all but the sources), or with the defaults below when there is none.
-
-.. list-table::
-    :header-rows: 1
-    :widths: 20 50 30
-
-    *   -   Option
-        -   Description
-        -   Default and limits
-    *   -   **Sources to combine**
-        -   The sources whose alerts go into the set. Each ready source is listed with what its harmonized file found. A source that does not cover the AOI, or has no data for the period, is listed as disabled, with the reason.
-        -   Every ready source. At least one.
-    *   -   **Include probable (unconfirmed) alerts**
-        -   Shown only when at least one selected source has a *probable* (low-confidence) class. One switch for all such sources. Off, their probable pixels are dropped before anything else, and only their confirmed pixels count. With two or more such sources, **Set per source** unfolds one switch per source (see below).
-        -   On.
-    *   -   **Minimum alert size**
-        -   Clusters smaller than this are dropped. The hint gives that size in pixels of the grid (at 10 m, 0.5 ha is "50 pixels on the grid").
-        -   0.5 ha. Any number of hectares, 0 or more. Even at 0, an alert is at least one pixel.
-    *   -   **Order**
-        -   The order of the alerts in the set, which is the review order: **Bigger alerts first**, **Smaller alerts first**, **Recent alerts first** (by last detection date) or **Older alerts first** (by first detection date).
-        -   **Bigger alerts first**.
-    *   -   **Limit the number of alerts**
-        -   When selected, shows **Maximum number of alerts**: only the first alerts in the chosen **Order** are kept. Its hint says which (e.g. "Keeps the 100 biggest alerts." or "Keeps the 100 most recent alerts."). When cleared, every alert is kept.
-        -   Cleared. When selected, the limit starts at 100. It must be a whole number greater than 0.
-    *   -   **Attribute layers**
-        -   Rasters whose band statistics are added to every alert (see below).
-        -   None.
-
-Probable alerts per source
-""""""""""""""""""""""""""
-
-With two or more selected sources that have a probable class, select **Set per source** under **Include probable (unconfirmed) alerts** to give each one its own switch, named after the source:
-
--   A selected source without a probable class (a custom source that has only detection dates) is listed as "(source): dates only, no probable level".
--   When the sources' switches differ, the main switch reads off, the note **Mixed: the sources below differ.** replaces **Set per source**, and the per-source switches stay open.
--   Turning the main switch on or off sets every source at once.
-
-.. _defo-integrate-attributes:
-
-Attribute layers
-""""""""""""""""
-
-An *attribute layer* adds information to each alert from a raster (e.g. the majority land-cover class under the alert, or its mean elevation). The values are columns of the alert table: they are exported with the alerts, and columns of classes can be used in the Analysis filter.
-
-.. shot: integrate-attribute | The "Add an attribute layer" dialog: Layer name "worldcover" with its hint "Alert columns are named <layer name>_<band>.", Source = Earth Engine, the ESA WorldCover image picked, the one-band line "One band (Map): its statistic is added to every alert.", and the band's row with statistic Majority and its column name worldcover_map beside it. Crop to the dialog.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-attribute.png
-    :alt: Adding an attribute layer
-
-To add an attribute layer:
-
-1.  Select **Add attribute layer** to open the **Add an attribute layer** dialog.
-2.  Check the **Layer name**, suggested from the raster once it is chosen. The columns are named *layer name*\_\ *band*.
-3.  Choose the **Source** (**Earth Engine**, an image, or **GeoTIFF**, a file in your SEPAL folder), then choose the raster. Its bands are read at once.
-4.  With one band, the form reads "One band (…): its statistic is added to every alert." With two or more, select one or more in **Bands**.
-5.  For each band, choose the statistic computed over the alert: **Majority** (for classes), **Mean**, **Minimum**, **Maximum** or **Median**. It starts on **Majority** when the band's name looks like classes (e.g. ``landcover``), and on **Mean** otherwise, marked "(suggested)". The column name is shown beside it.
-6.  Select **Add attribute layer**.
-
-Rules:
-
--   A layer needs at least one band (**Keep at least one band.**).
--   Two layers cannot read the same raster (**Another attribute layer already reads this raster.**).
--   Column names never take the name of an alert column or of another layer's column: a clash gets a suffix.
-
-The list under **Attribute layers** shows each layer with its columns. The pencil icon edits a layer and the bin icon removes it. The layers belong to this form until it runs: they are saved with the alert set.
-
-Run the step
-^^^^^^^^^^^^
-
-The grey line above the button names the set the run makes: "Creates or replaces the alert set (period) · (sources)". An alert set is identified by its period and its sources:
-
--   a new combination of sources makes a new set: a period can hold several sets (e.g. one with GLAD-L only and one with all three sources); and
--   the same combination again *replaces* the set.
-
-Select **Integrate & vectorize**. The button stays disabled until at least one source is selected and, when **Limit the number of alerts** is selected, the limit is valid ("Enter a whole number greater than 0." under the field).
-
-The run goes through "Combining sources", "Vectorizing clusters", "Saving the alerts", "Writing the footprint" and "Building map tiles". When it ends, a message reads "N alerts ready for review", followed by "Linked N alerts to earlier loss (M under the minimum area)" when it found `growth alerts <defo-integrate-growth_>`_, and the new set becomes the *active set*: the one the `Questionnaire <defo-questionnaire_>`_, `Evaluation <defo-evaluation_>`_, `Analysis <defo-analysis_>`_ and `Overview <defo-overview_>`_ work on. The step stays open.
-
-If no alert is left, the set is still made, empty, and the message gives the reason for each source (e.g. "GLAD-L: all 56 alert pixels removed by masks" or "RADD: probable (unconfirmed) alerts were left out").
-
-.. _defo-integrate-replace:
-
-Replace a set
-"""""""""""""
-
-.. shot: integrate-replace | The "Replace this alert set?" confirmation for the demo set, with "N reviewed alerts in this set will be discarded. The evaluator split and its pending returns will be discarded." (the demo set is split), then the list of reviewed alerts ("#0 · Reviewed: confirmed · 383.18 ha" …); the Cancel and orange Replace buttons. Crop to the dialog.
-
-.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-replace.png
-    :alt: Confirming the replacement of an alert set
-
-When the set about to be replaced has reviewed alerts or an `evaluator split <defo-evaluation_>`_, the **Replace this alert set?** dialog lists what would be lost: the reviewed alerts (up to 20, then "… and N more"), and the split with the reviews that evaluators have not sent back yet. When alerts of later periods grow from this set, it adds "N alerts of later periods are linked to this set; their links will break.": after the run, those links show as "earlier set was re-run" (see `Earlier alerts <defo-analysis-earlier_>`_). Select **Replace** to continue. A set with nothing to lose is replaced without confirmation.
-
-.. attention::
-
-    Replacing a set discards its reviews. To try other settings without losing reviews, choose another combination of sources, which makes a separate set.
-
-.. _defo-integrate-outdated:
-
-When the active set is out of date
-""""""""""""""""""""""""""""""""""
-
-If the inputs of the active set changed since it was made (a source downloaded again, a mask switched, the period's look-back, the AOI or the grid changed), an orange line reads: "The active set (…) was built from inputs that have changed since." Run **Integrate & vectorize** again to rebuild it, which discards its reviews.
-
-If the set's files were deleted from the project folder, the line reads: "The active set's files (…) are missing from the project folder."
-
-.. _defo-integrate-map:
-
-View the alerts on the map
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Once the project has a set, switches under the button draw it on the map:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 35 65
-
-    *   -   Switch
-        -   Description
-    *   -   **Show these alerts on the map**
-        -   The active set's alerts, coloured by review status. Click on an alert to view "Alert (id) · (status) · (area) ha". Its **Review** button opens it in Analysis.
-    *   -   **Show not-analysable pixels**
-        -   The alert pixels that did not become alerts: **Too small** or **Over the alert cap**.
-    *   -   **Show earlier sets**
-        -   The alerts of earlier periods' sets, for context.
-
-The map keeps them in other steps. Turn them off here.
-
-Common messages
-^^^^^^^^^^^^^^^
-
-"… is not downloaded and harmonized for this period; run Download & harmonize first."
-    A source's files are out of date. Run it in `Download & harmonize <defo-prepare_>`_.
-
-"The footprint of the earlier set … is missing; run Integrate & vectorize on that set again first."
-    An earlier period's files were deleted. Make that period active and run its set again.
-
-"Not enough free disk space: …"
-    The run writes a few rasters the size of the grid. Free some space.
-
-"The project's period, area of interest or grid changed while the run was going, so the alert set was not recorded."
-    Run it again.
-
-"tippecanoe is not installed: the map will show alert points without polygons."
-    The set is made; the map shows its alerts as points instead of polygons.
-
-"The map tiles could not be shown (…): showing alert points without polygons."
-    The set is made, but its map layer could not be built. The map shows its alerts as points.
-
-"The alert store of … is missing; run Integrate & vectorize for that period again."
-    With **Show earlier sets**, an earlier set's alert file is gone from the project folder. Make that period active and run its set again.
-
 .. _defo-questionnaire:
 
 Questionnaire
@@ -1405,7 +1464,7 @@ The *questionnaire* holds the questions answered for every alert in `Analysis <d
 
 This step also chooses the report template.
 
-Open the **Questionnaire** step of the **Workflow** panel. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). The questionnaire belongs to the project: every alert set of the project is reviewed with it.
+Open the **Questionnaire** step of the **Workflow** panel, in **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). The questionnaire belongs to the project: every alert set of the project is reviewed with it. The step is optional: without changes, Analysis asks the default question.
 
 .. shot: questionnaire-list | The Questionnaire step of the demo project with two questions: the default "Loss driver" (chips "several answers", "9 options", "typed answers", "True alert", "Needs review", note {loss_driver}) and one added question (e.g. "Access road nearby?", "one answer", "2 options", "required" in red, "True alert", "Needs review"); the "Show the questions expanded in Analysis" switch and its hint; the Report template line collapsed ("Report template · Default template", chip "default"). Crop to the Workflow panel.
 
@@ -1572,7 +1631,7 @@ This step decides who reviews the alerts of the active set:
 -   review them all yourself; or
 -   split them among several evaluators. Each evaluator gets a *review package*, reviews their own alerts in their own SEPAL account, and sends back a *reviewed copy*, which is then merged into the project.
 
-Open the **Evaluation** step of the **Workflow** panel. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). It works on the active set: a split belongs to one alert set.
+Open the **Evaluation** step of the **Workflow** panel, the last step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). It works on the active set: a split belongs to one alert set.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/evaluators.gif
     :alt: The alert set is split into packages, each evaluator reviews theirs, and the reviews are merged back
@@ -1890,7 +1949,7 @@ The filter keeps one attribute's values and hides the other alerts from the navi
 
 With a filter on:
 
--   **Previous**, **Next**, **Next unreviewed alert** and **Save & next** move among the matching alerts only;
+-   **Previous**, **Next** and **Next unreviewed alert** move among the matching alerts only;
 -   the counter counts the matches ("06 / 24"), or reads "– / 24" while the alert on screen is not one of them, and the progress line ends with "filtered · 48 total";
 -   the jump menu still takes the alert's number in the whole set, but refuses one the filter hides ("Alert 12 is not in the current filter"); and
 -   when nothing matches, the counter reads "No alerts match this filter".
@@ -1933,8 +1992,8 @@ The **Layers** menu lists:
         -   *True Color* (on) and *False Color* (near infrared, red and green; off): the image chosen for that map.
     *   -   **Alerts**
         -   *Original Alert*: the alert pixels of the set, half transparent (off). *Alert BB*: the alert's bounding box. *Defo Layer*: the polygon saved for the alert (see `Refine the polygon <defo-analysis-refine_>`_). *Earlier alerts* (see `Earlier alerts <defo-analysis-earlier_>`_).
-    *   -   **Optional layers**
-        -   The `optional layers <defo-layers_>`_ marked **Show in Analysis**, turned off.
+    *   -   **Additional layers**
+        -   The `additional layers <defo-layers_>`_ marked **Show in Analysis**, turned off.
 
 A map displays "Imagery failed to load" when the tiles of its image do not load.
 
@@ -2098,7 +2157,7 @@ To refine the polygon:
 
 .. important::
 
-    **Save drawing** does not save the review: select **Save** or **Save & next** afterwards. Until the drawing is saved, the footer reads "Save your drawing before saving this review" and the review cannot be saved.
+    **Save drawing** does not save the review: select **Save** afterwards. Until the drawing is saved, the footer reads "Save your drawing before saving this review" and the review cannot be saved.
 
 The two models
 ##############
@@ -2108,7 +2167,7 @@ Under the drawing buttons, two convolutional neural networks (CNNs) can find the
 To use a model:
 
 1.  Select **Run** on a model's row. The app downloads the two images (the area set by **Image area**) and runs the model. It takes a while; the run shows in the task list.
-2.  Read the result on the row (e.g. "Found 3 patches · 2.1 ha"). Patches smaller than the set's **Minimum alert size** are left out. When the model found nothing, a red warning icon appears instead ("Model did not find forest loss polygons").
+2.  Read the result on the row (e.g. "Found 3 patches · 2.1 ha"). Patches smaller than the set's **Minimum cluster size** are left out. When the model found nothing, a red warning icon appears instead ("Model did not find forest loss polygons").
 3.  Select the map icon with a plus sign (**Add to map**) to add the patches to the drawing (it starts drawing mode if needed): lime for **Model 1**, purple for **Model 2**. The icon then turns into a minus sign (**Remove from map**), which takes them off again.
 4.  Edit the result like any drawing, then select **Save drawing**.
 
@@ -2130,7 +2189,7 @@ The alerts are grouped by period, newest first. Each row shows:
 
 Select an alert's number to zoom both maps to it.
 
-To link or unlink an alert, tick or clear its box. The change is part of the review: the footer reads "Unsaved changes on this alert", and **Save** or **Save & next** saves it with the verdict. Ticking an alert of an earlier period makes this alert a growth alert, even if it does not touch it.
+To link or unlink an alert, tick or clear its box. The change is part of the review: the footer reads "Unsaved changes on this alert", and **Save** saves it with the verdict. Ticking an alert of an earlier period makes this alert a growth alert, even if it does not touch it.
 
 Some rows have no box:
 
@@ -2154,10 +2213,10 @@ The footer stays at the bottom of the panel:
 
     *   -   Button
         -   Description
-    *   -   **Save & next**
-        -   Saves the review, then opens the next alert (the next match under a filter). It moves on only if the save worked.
     *   -   **Save**
         -   Saves the review and stays on the alert.
+    *   -   **Next**
+        -   Opens the next alert (the next match under a filter). With unsaved changes, it asks first: **Discard** drops them and moves on, **Stay** keeps you on the alert.
 
 The line under the buttons reads "Unsaved changes on this alert", "Save your drawing before saving this review" or "Saved 14:32".
 
@@ -2431,8 +2490,8 @@ The **Export this alert** section sits in the footer of the `Analysis <defo-anal
 
     *   -   Tile
         -   Description
-    *   -   **Build alert files**
-        -   Builds the alert's data and report. It reads "(save first)" and is disabled until **Save** or **Save & next** is selected on this alert in this session. It runs in the task list and takes a while: it downloads the before and after images.
+    *   -   **Build files**
+        -   Builds the alert's data and report. It reads "Save this alert first" and is disabled until **Save** is selected on this alert in this session. It runs in the task list and takes a while: it downloads the before and after images.
     *   -   **Alert data**
         -   Downloads a .zip file: the alert's GeoPackage, its before and after images as one GeoTIFF and, for a true alert, its GIF.
     *   -   **Alert report**
@@ -2573,12 +2632,6 @@ The coordinator sets up the project as follows:
 
 1.  **Project**: in the app, select **New project** and name it ``madre_de_dios`` (see `Create a project <defo-project-create_>`_).
 2.  **AOI**: in the `AOI <defo-aoi_>`_ step, choose **Admin level 1**, then Peru, then "Madre De Dios" (as the list spells it), and select **Select AOI**. The area is saved as ``PER_Madre_De_Dios``. A whole department is a large area: every later step takes longer than for a district.
-3.  **Alert sources**: in `Alert sources <defo-alerts_>`_, add the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**. Each one **covers the AOI**. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts.
-4.  **Optional layers**: to judge alerts against a recent image, add one `optional layer <defo-layers_>`_: an **Earth Engine** Sentinel-2 image of 27 September 2026 (tile 19LDF, east of Puerto Maldonado), drawn as an **RGB composite** in **True colour** (B4, B3, B2), **Min** 0 and **Max** 3000, named ``Sentinel-2 2026-09-27``, and **Show in Analysis** selected.
-
-.. note::
-
-    Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why the Analysis timeline in the screenshots below has no *Planet* chip.
 
 The September round
 ^^^^^^^^^^^^^^^^^^^
@@ -2595,16 +2648,21 @@ In `Monitoring period <defo-period_>`_, the coordinator:
 
 The search window runs from 2026-06-03 to 2026-09-30, so clusters that started between June and August, and alerts the sources published late, are found too. As the first period, it has no earlier set: every alert in its search window is kept.
 
-Download & harmonize
-""""""""""""""""""""
+Alerts
+""""""
 
-In `Download & harmonize <defo-prepare_>`_, the coordinator:
+In `Alert sources <defo-alerts_>`_, the coordinator adds the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**, each with **Add to new periods** left selected, so that the next periods start with them. Each one covers the whole AOI. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts. Then **Download 3 pending** in the footer downloads the three sources over the search window.
+
+Harmonize
+"""""""""
+
+In `Harmonize <defo-harmonize_>`_, the coordinator:
 
 1.  keeps the suggested grid, the UTM zone of the department (``EPSG:32719``) at 10 m, and selects **Save grid**. The grid is 41425 × 38561 pixels, about 12.8 GB per source before compression, so the app warns that the downloads will take a while;
 2.  adds a mask so that only alerts in forest count: **Add mask**, the Hansen Global Forest Change image ``UMD/hansen/global_forest_change_2025_v1_13``, band ``treecover2000``, named ``forest_2000``, mode **Keep**; and
-3.  selects **Run … pending** in the footer of the table, which aligns the mask, then downloads and harmonizes the three sources.
+3.  selects **Harmonize … pending** in the footer of the table, which aligns the mask, then harmonizes the three sources.
 
-The run took about 15 minutes. The mask and each source then read "Ready": GLAD-L with 2362718 alert pixels, RADD with 1508527 and GLAD-S2 with 1462458.
+Downloading and harmonizing took about 15 minutes. The mask and each source then read "Ready": GLAD-L with 2362718 alert pixels, RADD with 1508527 and GLAD-S2 with 1462458.
 
 Integrate & vectorize
 """""""""""""""""""""
@@ -2612,12 +2670,21 @@ Integrate & vectorize
 In `Integrate & vectorize <defo-integrate_>`_, the coordinator:
 
 -   keeps the three sources and **Include probable (unconfirmed) alerts** on;
--   sets **Minimum alert size** to 1 ha and **Order** to **Bigger alerts first**; and
--   selects **Limit the number of alerts**, with **Maximum number of alerts** set to 48: the team can review about 48 alerts a month, so it starts with the biggest ones.
+-   sets **Minimum cluster size** to 1 ha and **Order** to **Bigger clusters first**; and
+-   selects **Limit the number of clusters**, with **Maximum number of clusters** set to 48: the team can review about 48 alerts a month, so it starts with the biggest ones.
 
 The run makes the alert set "2026-09-01 → 2026-09-30 · GLAD-L + GLAD-S2 + RADD" with 48 alerts, from 383.18 ha down to 27.84 ha: 2870 ha in all.
 
 The clusters beyond the cap are kept as not analysable. The next period reconsiders them only if its look-back reaches back into September and it uses the same sources. October's 90-day look-back does (see `What earlier periods already reported <defo-integrate-earlier_>`_).
+
+Additional layers
+"""""""""""""""""
+
+With the alert set built, **Set up review** unlocks. To judge alerts against a recent image, the coordinator adds one `additional layer <defo-layers_>`_: an **Earth Engine** Sentinel-2 image of 27 September 2026 (tile 19LDF, east of Puerto Maldonado), drawn as an **RGB composite** in **True colour** (B4, B3, B2), **Min** 0 and **Max** 3000, named ``Sentinel-2 2026-09-27``, and **Show in Analysis** selected.
+
+.. note::
+
+    Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why the Analysis timeline in the screenshots below has no *Planet* chip.
 
 Review alone, then together
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2654,7 +2721,7 @@ Ana's review copy
 
 Ana copies the package into her SEPAL folder and imports it with **Import** in the `Project <defo-project-import_>`_ dialog. It opens as the project ``madre-de-dios__e01-ana``, on the Analysis screen, already filtered to her alerts ("Evaluator: Ana").
 
-Ana works through them with **Save & next**:
+Ana works through them with **Save** and **Next**:
 
 -   the top bar counts "5 reviewed · 18 left · filtered · 48 total" (the coordinator's two reviews of her alerts and three of her own);
 -   the counter numbers her alerts from 1 to 23; and
@@ -2714,11 +2781,11 @@ With 13 of the 48 alerts reviewed, most dots are still grey. Most alerts lie in 
 The October round
 ^^^^^^^^^^^^^^^^^
 
-At the start of the next round, the coordinator selects **New period** in `Monitoring period <defo-period-add_>`_. The dialog is pre-filled: from 2026-10-01 (the day after September ends) to today, with the 90 days of look-back used last time. The coordinator sets the end to 2026-10-20, the day of this round. **Add period** makes it the active period, with the September period's mask choices.
+At the start of the next round, the coordinator selects **New period** in `Monitoring period <defo-period-add_>`_. The dialog is pre-filled: from 2026-10-01 (the day after September ends) to today, with the 90 days of look-back used last time. The coordinator sets the end to 2026-10-20, the day of this round. **Add period** makes it the active period, with the September period's mask choices and the three sources marked **Add to new periods**.
 
 Then:
 
--   **Run … pending** in `Download & harmonize <defo-prepare_>`_ downloads the three sources for the new window; the grid and the mask are already there.
+-   **Download 3 pending** in `Alerts <defo-alerts_>`_ downloads the three sources for the new window, and **Harmonize … pending** in `Harmonize <defo-harmonize_>`_ harmonizes them; the grid and the mask are already there.
 -   In `Integrate & vectorize <defo-integrate_>`_, the coordinator uses the same settings as in September (1 ha, the 48 biggest alerts). Before grouping the pixels into alerts, the run removes every pixel inside September's 48 alerts, so that nothing is reported twice. The new set holds 48 alerts again, for 1177 ha. None of them touches an alert confirmed in September, so the run links none to earlier loss (see `Growth of earlier loss <defo-integrate-growth_>`_).
 
 The team reviews them as in September; 16 are reviewed so far, 11 of them as true alerts. With **Show these alerts on the map** and **Show earlier sets** both on, the map shows the October alerts next to September's, which are drawn in fainter colours. The October alerts lie in the same parts of the department as September's.
@@ -2767,7 +2834,7 @@ At the bottom of the Overview, the **Export alerts** card writes the October set
 One alert
 """""""""
 
-To report on one alert, the coordinator opens it in Analysis, saves it, and selects **Build alert files** under **Export this alert**. The result is a .zip file with the alert's GeoPackage and its before and after images, and a Word report built from the project's template. For a true alert, the **Timelapse** tile also makes an animated GIF of the images from before to after. See `One alert, from Analysis <defo-export-alert_>`_.
+To report on one alert, the coordinator opens it in Analysis, saves it, and selects **Build files** under **Export this alert**. The result is a .zip file with the alert's GeoPackage and its before and after images, and a Word report built from the project's template. For a true alert, the **Timelapse** tile also makes an animated GIF of the images from before to after. See `One alert, from Analysis <defo-export-alert_>`_.
 
 Every file is also kept in the alert set's folder of the project, under ``periods/2026-10-01_2026-10-20/sets/glad-l-glad-s2-radd/``.
 
