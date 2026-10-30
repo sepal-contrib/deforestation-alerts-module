@@ -51,7 +51,7 @@
   "workflow": {
     "lock_alerts": "Ajoutez d'abord une période.",
     "lock_project": "Ouvrez d'abord un projet.",
-    "lock_review": "Construisez d'abord un ensemble d'alertes.",
+    "lock_review": "Construisez d'abord un jeu d'alertes.",
     "lock_period": "Choisissez d'abord la zone d'intérêt.",
     "lock_harmonize": "Téléchargez d'abord une source.",
     "lock_integrate": "Téléchargez et harmonisez d'abord au moins une source.",
@@ -90,7 +90,7 @@
     "count_optional": "facultatif",
     "optional": "facultatif",
     "level_prepare": "Préparer les alertes",
-    "level_review": "Préparer la revue",
+    "level_review": "Configurer la revue",
     "start_analysis": "Lancer l'analyse",
     "count_evaluators": {
       "one": "{count} évaluateur",

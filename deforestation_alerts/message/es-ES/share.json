@@ -11,7 +11,7 @@
       "missing_member": "A este zip le falta {member}.",
       "too_large": "Este zip contiene más datos de los que acepta esta aplicación.",
       "no_set": "El conjunto de alertas {set_id} no está en este proyecto.",
-      "no_aoi": "La geometría del AOI aún no está disponible; espere a que el paso AOI la cargue y vuelva a intentarlo.",
+      "no_aoi": "La geometría de la AOI aún no está disponible; espere a que el paso AOI la cargue y vuelva a intentarlo.",
       "no_split": "Primero reparta las alertas entre los evaluadores.",
       "unknown_evaluator": "{evaluator} no es un evaluador de este reparto.",
       "store_missing": "Falta el archivo de alertas del conjunto {set_id}.",
@@ -22,7 +22,7 @@
       "unknown_kind": "Este zip no es un paquete de revisión.",
       "bad_manifest": "No se puede leer el archivo de proyecto de este paquete.",
       "payload_mismatch": "Este paquete es incoherente ({what}); pida uno nuevo al creador.",
-      "bad_aoi": "No se puede leer el AOI de este paquete.",
+      "bad_aoi": "No se puede leer la AOI de este paquete.",
       "bad_store": "No se pueden leer las alertas de este paquete.",
       "no_free_name": "No queda ningún nombre de proyecto libre para {name}.",
       "import_failed": "No se pudo importar el paquete: {error}"
