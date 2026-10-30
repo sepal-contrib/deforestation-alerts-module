@@ -1,5 +1,5 @@
 """Slice 6 gate walk (spec §14 row 6): a report from the project's template,
-an info button and description on every step, Manage projects' search, the
+an info button and instruction line on every step, Manage projects' search, the
 Project dialog's "saved X ago", and the app in Spanish and French.
 
     python -m tools.walk.slice6_walk --port 8986 --out /tmp/slice6_walk
@@ -26,7 +26,7 @@ OTHERS = ("north_s6", "north_s6_b", "south_s6")
 REPO = Path(__file__).resolve().parents[2]
 MESSAGES = REPO / "deforestation_alerts" / "message"
 MARKER = "MARKER-SLICE6"
-STEP_KEYS = ("aoi", "alerts", "layers", "period", "prepare", "integrate")
+STEP_KEYS = ("aoi", "period", "alerts", "harmonize", "integrate", "layers", "questionnaire", "evaluators")
 DATA = Path.home() / "module_results" / "deforestation_alerts_walk_slice6"
 
 
@@ -82,7 +82,7 @@ def info_buttons(page, rec, *, out):
     seen = {}
     for key in STEP_KEYS:
         w.goto_step(page, key, 2000)
-        assert steps[key]["description"][:60] in w.panel_text(page), f"{key}: no description"
+        assert steps[key]["instruction"][:60] in w.panel_text(page), f"{key}: no instruction line"
         page.locator(".right-panel .mdi-information-outline:visible").first.click()
         w.wait_for(lambda: page.locator(ph.MODAL).count(), 15, f"{key}: info dialog")
         text = page.locator(ph.MODAL).last.inner_text()
@@ -186,31 +186,31 @@ def english_left(text, code) -> list:
 
 def _switch(page, code):
     """Pick ``code`` in the language selector and wait until the pipeline
-    header reads that language (the prepare segment's tooltip is its label)."""
+    header reads that language (the harmonize segment's tooltip is its label)."""
     page.locator("button:has(.mdi-translate)").first.click()
     page.locator(f'{ph.MODAL} .v-list-item:has-text("({code})")').first.click()
-    label = catalogue(code, "app")["app"]["drawer_item"]["prepare"]
-    page.locator(f'[data-step-key="prepare"][title^="{label}"]').first.wait_for(state="attached", timeout=60000)
+    label = catalogue(code, "app")["app"]["drawer_item"]["harmonize"]
+    page.locator(f'[data-step-key="harmonize"][title^="{label}"]').first.wait_for(state="attached", timeout=60000)
 
 
 def languages(page, rec, *, out):
     english_legend = {v for v in leaves(catalogue("en", "legend")) if len(re.sub(r"[^A-Za-z]", "", v)) >= 4}
-    english_title = catalogue("en", "steps")["steps"]["prepare"]["title"]
+    english_title = catalogue("en", "app")["app"]["drawer_item"]["harmonize"]  # the header's title
     # The active set's layer is switched on in Integrate & vectorize (while the
     # app is still in English) and stays on for the rest of the walk, so every
     # language's status legend can be read off the shared map.
     ph.show_alerts(page)
     for code in ("es-ES", "fr"):
-        w.goto_step(page, "prepare", 2000)
+        w.goto_step(page, "harmonize", 2000)
         _switch(page, code)
-        title = catalogue(code, "steps")["steps"]["prepare"]["title"]
-        description = catalogue(code, "steps")["steps"]["prepare"]["description"]
+        title = catalogue(code, "app")["app"]["drawer_item"]["harmonize"]
+        description = catalogue(code, "steps")["steps"]["harmonize"]["instruction"]
         w.wait_for(lambda: title in w.panel_text(page) and english_title not in w.panel_text(page)
-                   and description[:60] in w.panel_text(page), 60, f"{code}: the prepare panel translated")
+                   and description[:60] in w.panel_text(page), 60, f"{code}: the harmonize panel translated")
         body = page.evaluate("() => document.body.innerText")
         assert "⟦" not in body, f"{code}: a missing key renders"
         assert title in w.panel_text(page) and english_title not in w.panel_text(page), f"{code}: step not translated"
-        assert description[:60] in w.panel_text(page), f"{code}: the step's description is not translated"
+        assert description[:60] in w.panel_text(page), f"{code}: the step's instruction is not translated"
         rec[f"{code}_title"] = title
         for key in STEP_KEYS:  # every step's panel reads translated
             w.goto_step(page, key, 1500)
@@ -231,7 +231,7 @@ def languages(page, rec, *, out):
         # Analysis covers the shared map with its own before/after maps and
         # hides the map legend (slice4 asserts it), so the legend is read on a
         # step that shows the shared map.
-        w.goto_step(page, "prepare", 1500)
+        w.goto_step(page, "harmonize", 1500)
         w.wait_for(lambda: all(v in ph.legend_text(page) for v in statuses), 60,
                    f"{code}: the alert set's legend")
         ph.open_overview(page)  # the dashboard: a dialog, read with dialog_text
@@ -245,9 +245,9 @@ def languages(page, rec, *, out):
         assert all(v in legend for v in statuses), f"{code}: the legend lacks {statuses}"
         w.shot(page, out, f"lang_{code}")
         assert w.close_dialog(page), f"{code}: the Overview dialog did not close"
-        page.locator('[data-step-key="prepare"]:visible').first.wait_for(timeout=30000)
+        page.locator('[data-step-key="harmonize"]:visible').first.wait_for(timeout=30000)
     _switch(page, "en")
-    w.goto_step(page, "prepare", 2000)
+    w.goto_step(page, "harmonize", 2000)
     w.wait_for(lambda: english_title in w.panel_text(page), 60, "the app back in English")
     rec["back_to_en"] = True
 

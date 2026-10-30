@@ -57,6 +57,7 @@ def harm_stats(source="GLAD-L") -> dict:
 
 
 def setup(page, rec, *, out):
+    ph.download_all(page, rec, out=out, expect_ready=1)  # GLAD-L, in Alerts
     ph.save_grid(page)
     ph.add_mask(page, rec, name="hansen", origin="gee", ref=HANSEN, band="treecover2000", mode="Keep", out=out)
     ph.run_all(page, rec, out=out, expect_ready=2)  # the mask, then GLAD-L: one Ready cell each
@@ -73,7 +74,7 @@ def a_switch(page, rec, *, out):
     for label, act in (("exclude", lambda: ph.row_mode(page, "hansen", "Exclude")),
                        ("off", lambda: ph.row_mode(page, "hansen", ph.MODE_OFF)),
                        ("on", lambda: ph.row_mode(page, "hansen", "Exclude"))):
-        w.goto_step(page, "prepare", 2000)
+        w.goto_step(page, "harmonize", 2000)
         t0 = w.now_ms(page)
         act()
         ph.wait_toast(page, t0, SOURCES_STALE)
@@ -130,7 +131,7 @@ def add_predefined(page, key):
     w.goto_step(page, "alerts", 2000)
     ph.visible_btn(page, "Add source", ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the source modal")
-    ph.choose(page, "Predefined source", key)
+    ph.choose(page, w.en("steps.alerts.predefined_label"), key)
     button = ph.modal_button(page, "Add source")
     w.wait_for(lambda: button.count() and button.is_enabled(), 120, f"{key}'s coverage checked")
     button.click()
@@ -148,11 +149,12 @@ def d_legends(page, rec, *, out):
     assert "Confirmed (high confidence)" in rec["preview_legend"] and "Probable (low confidence)" in rec["preview_legend"]
     rec["preview_options"] = ph.legend_options(page)
     assert [o["text"] for o in rec["preview_options"] if o["selected"]] == ["RADD · preview"], rec["preview_options"]
-    w.goto_step(page, "prepare", 2000)
+    # Alerts downloads; with the grid and the mask ready the download chains into harmonizing
     ph.row_pill(page, "RADD", "download").click()
     w.wait_for(lambda: "RADD" in ph.legend_text(page) and WINDOW in ph.legend_text(page)
                and "preview" not in ph.legend_text(page), 1200, "RADD's harmonized legend", poll=3)
     assert not any("preview" in o["text"] for o in ph.legend_options(page)), ph.legend_options(page)
+    w.goto_step(page, "harmonize", 2000)  # the masks card
     ph.row_button(page, "hansen", "mdi-map-plus").click()
     w.wait_for(lambda: any(o["selected"] and o["text"] == "Mask hansen" for o in ph.legend_options(page)), 120,
                "the mask's legend selected")
@@ -167,7 +169,7 @@ def d_legends(page, rec, *, out):
     rec["after_hide"] = ph.legend_options(page) or ph.legend_text(page)
     w.goto_step(page, "analysis", 4000)
     assert ph.legend_text(page) == "", ph.legend_text(page)  # hidden while Analysis shows
-    w.goto_step(page, "prepare", 2000)
+    w.goto_step(page, "harmonize", 2000)
     w.wait_for(lambda: ph.legend_text(page), 15, "the legend back")
     # The set's own layer keeps its legend across a step change. With hansen
     # off, both sources are out of date and Integrate is locked, so
@@ -175,7 +177,7 @@ def d_legends(page, rec, *, out):
     ph.show_alerts(page)
     w.wait_for(lambda: all(s in ph.legend_text(page) for s in STATUSES), 120, "the set's four status chips")
     rec["set_legend"] = ph.legend_text(page)
-    w.goto_step(page, "prepare", 2000)
+    w.goto_step(page, "harmonize", 2000)
     assert all(s in ph.legend_text(page) for s in STATUSES), ph.legend_text(page)
     w.shot(page, out, "legends")
 

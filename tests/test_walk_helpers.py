@@ -197,11 +197,11 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <nav class="left-drawer"><div data-step-id="1">About</div></nav>
   <div id="map-container"></div>
   <div class="right-panel">
-    <button data-step-key="integrate" onclick="step('integrate')">integrate</button>
-    <button data-step-key="questionnaire" onclick="step('questionnaire')">questionnaire</button>
-    <button data-step-key="evaluators" onclick="step('evaluators')">evaluators</button>
-    <span id="badge">1 / 3</span>
-    <p id="showing">workflow on integrate</p>
+    <div data-level-key="prepare" onclick="tab('prepare')">Prepare alerts</div>
+    <div data-level-key="review" onclick="tab('review')">Set up review</div>
+    <div id="strip"></div>
+    <span class="defo-step-badge" id="badge"></span>
+    <p id="showing"></p>
     <button class="defo-start-analysis" onclick="openScreen()">Start analysis</button>
   </div>
 </div></div>
@@ -210,11 +210,23 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <div class="defo-analysis-right"><p>the review console</p></div>
 </div>
 <script>
+// Two levels, as the pipeline header: the strip holds the active level's
+// steps only; an empty optional step's badge reads a word, its segment a ring.
+const LEVELS = {prepare: ['aoi', 'integrate'], review: ['questionnaire', 'evaluators']};
+const OPTIONAL = ['questionnaire'];
+let current = 'integrate';
+function level(key) { return Object.keys(LEVELS).find(l => LEVELS[l].includes(key)); }
 function step(key) {
+  current = key;
+  const steps = LEVELS[level(key)];
+  document.getElementById('strip').innerHTML = steps.map(k =>
+    `<div data-step-key="${k}" onclick="step('${k}')" style="padding: 7px 0;"><div style="height: 7px;${k === key ? ' box-shadow: 0 0 0 2px blue;' : ''}"></div></div>`
+  ).join('');
   document.getElementById('showing').textContent = 'workflow on ' + key;
   document.getElementById('badge').textContent =
-    (['integrate', 'questionnaire', 'evaluators'].indexOf(key) + 1) + ' / 3';
+    OPTIONAL.includes(key) ? 'optional' : (steps.indexOf(key) + 1) + ' / ' + steps.length;
 }
+function tab(l) { if (l !== level(current)) step(LEVELS[l][0]); }
 function openScreen() {
   const s = document.getElementById('screen');
   s.style.display = ''; s.classList.add('defo-analysis-screen--on');
@@ -223,6 +235,7 @@ function closeScreen() {
   const s = document.getElementById('screen');
   s.classList.remove('defo-analysis-screen--on'); s.style.display = 'none';
 }
+step('integrate');
 </script></body></html>"""
 
 
@@ -273,6 +286,33 @@ def test_goto_step_reaches_analysis_through_start_analysis(screens):
     walklib.goto_step(screens, "integrate", 100)
     assert not _screen_on(screens)
     assert "workflow on integrate" in walklib.panel_text(screens)
+
+
+def test_step_active_counts_within_the_level(screens):
+    """The badge counts the active level's steps: Integrate is "2 / 2" in
+    Prepare, and Evaluators' "2 / 2" in Review does not read as Integrate."""
+    assert walklib.step_active(screens, "integrate")
+    assert not walklib.step_active(screens, "aoi")
+    assert not walklib.step_active(screens, "evaluators")  # not in the strip
+    screens.evaluate("() => step('evaluators')")
+    assert walklib.step_active(screens, "evaluators")
+    assert not walklib.step_active(screens, "integrate")
+
+
+def test_step_active_reads_an_empty_optional_step_by_its_ring(screens):
+    screens.evaluate("() => step('questionnaire')")
+    assert screens.locator("#badge").text_content() == "optional"
+    assert walklib.step_active(screens, "questionnaire")
+    assert not walklib.step_active(screens, "evaluators")
+
+
+def test_goto_step_crosses_levels_through_the_tab(screens):
+    walklib.goto_step(screens, "evaluators", 100)
+    assert walklib.step_active(screens, "evaluators")
+    walklib.goto_step(screens, "aoi", 100)  # back across, then the segment
+    assert walklib.step_active(screens, "aoi")
+    walklib.goto_step(screens, "integrate", 100)  # same level: the segment only
+    assert walklib.step_active(screens, "integrate")
 
 
 def test_back_to_workflow_leaves_the_screen_and_is_a_no_op_elsewhere(screens):

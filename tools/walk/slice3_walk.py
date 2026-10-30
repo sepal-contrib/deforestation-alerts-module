@@ -30,6 +30,7 @@ USER = DATA / "user"  # the walk's "SEPAL folder" files: under $HOME, like a use
 AMAZON = (-55.10, -10.10, -55.00, -10.00)
 CANINDEYU = (-55.5, -24.5, -55.4, -24.4)
 MONTH_STARTS = {date(2026, m, 1).timetuple().tm_yday for m in range(1, 13)}
+PREDEFINED = w.en("steps.alerts.predefined_label")  # the source form's predefined select
 ATTR_ADD = w.en("steps.integrate.attr_add")  # the card's Add button and the modal's primary
 
 
@@ -208,9 +209,9 @@ def c_not_covered(page, rec, *, out):
     w.goto_step(page, "alerts", 2000)
     ph.visible_btn(page, "Add source", ".right-panel").click()
     w.wait_for(lambda: ph.dialog_open(page), 15, "the source modal")
-    w.wait_for(lambda: "checking coverage" not in " ".join(i["text"] for i in ph.menu_items(page, "Predefined source")),
+    w.wait_for(lambda: "checking coverage" not in " ".join(i["text"] for i in ph.menu_items(page, PREDEFINED)),
                120, "the coverage check", poll=3)
-    items = {i["text"]: i["disabled"] for i in ph.menu_items(page, "Predefined source")}
+    items = {i["text"]: i["disabled"] for i in ph.menu_items(page, PREDEFINED)}
     rec["predefined_items"] = items
     s2 = next(k for k in items if k.startswith("GLAD-S2"))
     assert items[s2] and "GLAD-S2 does not cover this AOI: its area is 90°W–30°W, 20°S–20°N" in s2, items
@@ -222,15 +223,17 @@ def c_not_covered(page, rec, *, out):
     w.wait_for(lambda: "does not cover the AOI" in ph.row_text(page, "GLAD-S2"), 120, "GLAD-S2's coverage chip")
     rec["alerts_row"] = ph.row_text(page, "GLAD-S2")
     assert ph.row_button(page, "GLAD-S2", "mdi-map-plus").is_disabled()
+    # a blocked row shows its reason, not a verb pill, and cannot be fetched again (Alerts downloads)
+    assert not ph.row_pill(page, "GLAD-S2", "download").count()
+    assert ph.row_action(page, "GLAD-S2", "steps.prepare.action_download_again").is_disabled()
+    ph.download_all(page, rec, out=out, expect_ready=1)  # GLAD-L; GLAD-S2 is blocked
     ph.save_grid(page)
     rec["prepare_row"] = ph.row_text(page, "GLAD-S2")
     assert "Not covered: GLAD-S2 does not cover this AOI" in rec["prepare_row"], rec["prepare_row"]
-    # a blocked row shows its reason, not a verb pill, and cannot be fetched again
-    assert not ph.row_pill(page, "GLAD-S2", "download").count()
-    assert ph.row_action(page, "GLAD-S2", "steps.prepare.action_download_again").is_disabled()
+    assert not ph.row_pill(page, "GLAD-S2", "harmonize").count()
     assert ph.row_button(page, "GLAD-S2", "mdi-map-plus").is_disabled()
     # innerText is upper case (Vuetify buttons): compare case-insensitively
-    assert "run 1 pending" in w.panel_text(page).lower(), w.panel_text(page)[-600:]
+    assert "harmonize 1 pending" in w.panel_text(page).lower(), w.panel_text(page)[-600:]
     ph.run_all(page, rec, out=out, expect_ready=1)  # GLAD-L; GLAD-S2 is blocked
     w.goto_step(page, "integrate", 2000)
     choice = page.locator('.right-panel .v-input--checkbox:has(label:has-text("GLAD-S2"))').first
@@ -242,7 +245,7 @@ def c_not_covered(page, rec, *, out):
 
 def d_no_data(page, rec, *, out):
     w.open_project(page, "s3d")
-    ph.save_grid(page)
+    w.goto_step(page, "alerts", 2000)  # Alerts downloads: the reason, no pill, no Download again
     w.wait_for(lambda: "No data for this period" in ph.row_text(page, "RADD"), 120, "the RADD row's reason")
     rec["row"] = ph.row_text(page, "RADD")
     assert "No data for this period: RADD starts 2020-01-01 here" in rec["row"], rec["row"]

@@ -74,6 +74,7 @@ def legend_chips(page, value) -> list:
 
 
 def a_first_month(page, rec, *, out):
+    ph.download_all(page, rec, out=out, expect_ready=1)  # GLAD-L, in Alerts
     ph.save_grid(page)
     ph.add_mask(page, rec, name="south", origin="file", ref=USER / "south.tif", band="south", mode="Keep", out=out)
     ph.run_all(page, rec, out=out, expect_ready=2)  # the mask (aligned), then GLAD-L: one Ready cell each
@@ -108,7 +109,7 @@ def b_second_period(page, rec, *, out):
     p = ph.manifest(DATA, PROJECT)  # the new period copied the latest period's mask choices
     rec["july_masks_at_creation"] = p["periods"][JULY]["masks"]
     assert p["periods"][JULY]["masks"] == {"south": {"on": True, "mode": "keep"}}, p["periods"][JULY]["masks"]
-    w.goto_step(page, "prepare", 2000)
+    w.goto_step(page, "harmonize", 2000)
     rec["july_mask_row"] = ph.row_text(page, "south")
     rec["july_mask_mode"] = ph.row_mode_value(page, "south")
     assert rec["july_mask_mode"] == "Keep", rec["july_mask_row"]
@@ -128,6 +129,7 @@ def b_second_period(page, rec, *, out):
     w.goto_step(page, "period", 2000)
     rec["june_row_after_switch"] = ph.row_text(page, JUNE_ROW)
     assert "out of date" not in rec["june_row_after_switch"], rec["june_row_after_switch"]
+    ph.download_all(page, rec, out=out, expect_ready=1)  # July starts with GLAD-L (Add to new periods)
     ph.run_all(page, rec, out=out, expect_ready=2, shot_name="july_ready")  # south (aligned, off in July) and GLAD-L
     ph.integrate_and_land(page, rec, out=out)
     p = ph.manifest(DATA, PROJECT)

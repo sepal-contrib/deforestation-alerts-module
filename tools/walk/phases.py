@@ -164,6 +164,18 @@ def en_prepare():
     return EN_PREPARE
 
 
+def en_download():
+    """The Alerts step's labels, as ``en_prepare``: "Download {n} pending",
+    a downloaded row's "Downloaded" and the running texts (a file reads
+    "Reading")."""
+    from tools.walk.walklib import MESSAGES_EN
+
+    node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["alerts"]["download_all"]
+    return prepare_labels(node.values(), en("steps.alerts.state_downloaded"),
+                          [en(k) for k in RUNNING_KEYS] + [en("steps.alerts.state_reading")],
+                          en("steps.prepare.footer_stop"))
+
+
 def run_button(page, labels=None):
     """The "Run {n} pending" button of the Prepare panel's batch footer, found
     by its catalogue text (any plural form) in the labels' language. Absent
@@ -205,7 +217,7 @@ def prepare_state(page, labels=None):
 
 
 def save_grid(page, *, resolution="30"):
-    goto_step(page, "prepare", 2000)
+    goto_step(page, "harmonize", 2000)
     page.locator(".mdi-crosshairs-gps:visible").first.click()
     page.wait_for_timeout(500)
     page.locator('.right-panel .v-text-field:has(label:has-text("Resolution")) input').first.fill(resolution)
@@ -214,14 +226,16 @@ def save_grid(page, *, resolution="30"):
     page.wait_for_timeout(1500)
 
 
-def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_done", labels=None):
-    """Click "Run N pending" and wait for the job: it must start (a row reads
-    running, Stop shows, or nothing is pending any more) and end (no running
-    cell, Stop gone again) with ``expect_ready`` "Ready" status cells (one per
-    source row and one per mask row on the panel, whatever its origin) and no
-    error toast. ``labels`` (``prepare_labels``) for a language other than
-    English."""
-    goto_step(page, "prepare", 2000)
+def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_done", labels=None,
+            step="harmonize"):
+    """Click Harmonize's "Harmonize N pending" and wait for the job: it must
+    start (a row reads running, Stop shows, or nothing is pending any more)
+    and end (no running cell, Stop gone again) with ``expect_ready`` "Ready"
+    status cells (one per source row and one per mask row on the panel,
+    whatever its origin) and no error toast. ``labels`` (``prepare_labels``)
+    for a language other than English. ``step="alerts"`` with ``en_download``
+    labels runs Alerts' "Download N pending" instead (``download_all``)."""
+    goto_step(page, step, 2000)
     run = run_button(page, labels)
     t_run = now_ms(page)
     run.click()
@@ -238,15 +252,26 @@ def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_d
         if errors(toasts_since(page, t_run)) and idle:
             break
         page.wait_for_timeout(3000)
-    rec["prepare_seconds"] = round(time.time() - t0)
-    rec["prepare_panel"] = panel_text(page)[:1500].replace("\n", " | ")
-    rec["prepare_toasts"] = [f"{x['kind']}: {x['msg']}" for x in toasts_since(page, t_run)]
+    tag = "prepare" if step == "harmonize" else step
+    rec[f"{tag}_seconds"] = round(time.time() - t0)
+    rec[f"{tag}_panel"] = panel_text(page)[:1500].replace("\n", " | ")
+    rec[f"{tag}_toasts"] = [f"{x['kind']}: {x['msg']}" for x in toasts_since(page, t_run)]
     shot(page, out, shot_name)
-    assert prepare_state(page, labels)["ready"] >= expect_ready, rec["prepare_panel"]
-    assert not errors(toasts_since(page, t_run)), rec["prepare_toasts"]
+    assert prepare_state(page, labels)["ready"] >= expect_ready, rec[f"{tag}_panel"]
+    assert not errors(toasts_since(page, t_run)), rec[f"{tag}_toasts"]
+
+
+def download_all(page, rec, *, out, expect_ready=2, timeout=900):
+    """Alerts' "Download N pending", until ``expect_ready`` rows read Downloaded."""
+    run_all(page, rec, out=out, expect_ready=expect_ready, timeout=timeout, shot_name="download_done",
+            labels=en_download(), step="alerts")
+    assert pending_count(page, en_download()) == 0, rec["alerts_panel"]
 
 
 def prepare_grid_and_run_all(page, rec, *, out, resolution="30", expect_ready=2, timeout=900):
+    """Download the sources in Alerts, then save the grid and harmonize them in
+    Harmonize (``expect_ready``: the source rows plus any mask rows)."""
+    download_all(page, rec, out=out, expect_ready=0, timeout=timeout)
     save_grid(page, resolution=resolution)
     run_all(page, rec, out=out, expect_ready=expect_ready, timeout=timeout)
 
@@ -673,8 +698,8 @@ def wait_toast(page, t0_ms, text, timeout=60, kind=None):
 
 
 def add_mask(page, rec, *, name, origin, ref, band, mode="Keep", out):
-    """Download & harmonize → Masks card → Add mask, validated and listed (spec §7.3)."""
-    goto_step(page, "prepare", 2000)
+    """Harmonize → Masks card → Add mask, validated and listed (spec §7.3)."""
+    goto_step(page, "harmonize", 2000)
     visible_btn(page, "Add mask", ".right-panel").click()
     wait_for(lambda: dialog_open(page), 15, "the mask modal")
     modal_field(page, "Name").fill(name)
