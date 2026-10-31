@@ -1162,7 +1162,7 @@ Attribute layers
 
 An *attribute layer* adds information to each alert from a raster (e.g. the majority land-cover class under the alert, or its mean elevation). The values are columns of the alert table: they are exported with the alerts, and columns of classes can be used in the Analysis filter.
 
-.. shot: integrate-attribute | The "Add an attribute layer" dialog: Layer name "worldcover" with its hint "Cluster columns are named <layer name>_<band>.", Source = Earth Engine, the ESA WorldCover image picked, the one-band line "One band (Map): its statistic is added to every cluster.", and the band's row with statistic Majority and its column name worldcover_map beside it. Crop to the dialog.
+.. shot: integrate-attribute | The "Add an attribute layer" dialog: Layer name "worldcover" with its hint "Cluster columns are named <layer name>_<band>.", Source = Earth Engine with its hint "An Earth Engine image, or a GeoTIFF or VRT in your SEPAL folder.", the ESA WorldCover image picked, the one-band line "One band (Map): its statistic is added to every cluster.", and the band's row with statistic Majority and its column name worldcover_map beside it. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-attribute.png
     :alt: Adding an attribute layer
@@ -1555,7 +1555,7 @@ The report template
 
 In Analysis, each reviewed alert can be exported with a Word report (see `Export <defo-export_>`_). The report is built from a .docx template, where *placeholders* such as ``{area_loss}`` are replaced by the alert's values.
 
-.. shot: questionnaire-template | The Report template card expanded: "Report template · Default template" with its "default" chip, the "Report template (.docx)" file picker and its hint, and the placeholder chips under "Placeholders the template can use (click to copy):", the grey ones then the green {verdict}, {loss_driver} and the added question's key, with the note under them. Crop to the card.
+.. shot: questionnaire-template | The Report template card expanded: "Report template · Default template" with its "default" chip, the "Report template (.docx)" file picker and its hint, and the placeholder chips under "Placeholders the template can use (click to copy):", the grey ones (ending with {group_size} and {group_alerts}) then the green {verdict}, {loss_driver} and the added question's key, with the note under them. Crop to the card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/questionnaire-template.png
     :alt: The report template and its placeholders
@@ -2471,7 +2471,7 @@ The key figures
 The figures
 ^^^^^^^^^^^
 
-.. shot: overview-figures | The Overview dialog scrolled down, measure Area (ha): in the left column How big the alerts are and By administrative area with Province / state selected (a one-row table: Peru › Madre de Dios); in the right column The numbers (Status / Alerts / Area (ha) / Share / Median (ha) with the Total row), When the loss was detected (weekly bars with greyed look-back weeks), the card of the loss-driver question (Mining, Agriculture expansion, No answer, Logging), the Access road nearby? card (No, No answer) and By alert source. Crop to the dialog body, above the Export alerts card.
+.. shot: overview-figures | The Overview dialog scrolled down, measure Area (ha): in the left column How big the alerts are and By administrative area with Province / state selected (a one-row table: Peru › Madre de Dios); in the right column The numbers (Status / Alerts / Area (ha) / Share / Median (ha) with the Total row), the Nearby alerts card ("1 group of nearby alerts", "In a group: 3 of 48 alerts · Alone: 45 · Largest: 3 alerts", "No group saved in Analysis yet" and the grouping-off line), When the loss was detected (weekly bars with greyed look-back weeks), the card of the loss-driver question (Mining, Agriculture expansion, No answer, Logging), the Access road nearby? card (No, No answer) and By alert source. Crop to the dialog body, above the Export alerts card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/overview-figures.png
     :alt: The Overview figures

@@ -1799,7 +1799,7 @@ def shot_overview_dashboard(page):
 
 def shot_overview_figures(page):
     """The figures, the admin card on its first level below the country."""
-    open_overview(page, 2600)
+    open_overview(page, 3000)
     exact_btn(page, T("overview_tile.admin_level_1"), ".dialog-card").click()
     wait(page, 1500)
     dialog = box(page, ".dialog-card")
