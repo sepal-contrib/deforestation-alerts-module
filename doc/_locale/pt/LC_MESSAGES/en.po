@@ -37,8 +37,8 @@ msgstr "Este artigo é destinado a analistas de monitoramento florestal que usam
 msgid "Workflow at a glance"
 msgstr "O fluxo de trabalho num relance"
 
-msgid "The workflow steps, from the area of interest to the analysis"
-msgstr "As etapas do fluxo de trabalho, da área de interesse até a análise"
+msgid "The two workflow levels: the Prepare alerts steps, from the area of interest to the alert set, then the Set up review steps, locked until that set exists"
+msgstr "Os dois níveis do fluxo de trabalho: as etapas de Preparar alertas, da área de interesse até o conjunto de alertas, e depois as etapas de Preparar a revisão, bloqueadas até que esse conjunto exista"
 
 msgid "The **Workflow** panel holds the steps in two levels: **Prepare alerts** builds an alert set, and **Set up review** prepares its review. The other tools open from the left rail (see `The app window <defo-window_>`_)."
 msgstr "O painel **Fluxo de trabalho** organiza as etapas em dois níveis: **Preparar alertas** cria um conjunto de alertas, e **Preparar a revisão** prepara a revisão dele. As outras ferramentas abrem pela barra lateral esquerda (veja `A janela do app <defo-window_>`_)."
@@ -706,11 +706,11 @@ msgstr "Os pixels de um alerta reportado fazem parte da pegada, então a busca r
 msgid "When the earlier alert was saved as **True alert** or **Needs review**, `Integrate & vectorize <defo-integrate-growth_>`_ keeps this growth in view:"
 msgstr "Quando o alerta anterior foi salvo como **Alerta verdadeiro** ou **Precisa de revisão**, `Integrar e vetorizar <defo-integrate-growth_>`_ não perde esse crescimento de vista:"
 
-msgid "A new alert that touches or overlaps the earlier alert is a *growth alert*, linked to it."
-msgstr "Um alerta novo que encosta no alerta anterior ou o sobrepõe é um *alerta de crescimento*, vinculado a ele."
+msgid "A new alert that touches the earlier alert, or lies within one pixel of the grid from it, is a *growth alert*, linked to it."
+msgstr "Um alerta novo que encosta no alerta anterior, ou fica a até um pixel da grade dele, é um *alerta de crescimento*, vinculado a ele."
 
-msgid "A cluster under the minimum size is kept when it touches the earlier alert: it is a growth alert *under the minimum area*. A small cluster that touches nothing is set aside, and the look-back can still bring it back in the next period."
-msgstr "Um agrupamento abaixo do tamanho mínimo é mantido quando encosta no alerta anterior: ele é um alerta de crescimento *abaixo da área mínima*. Um agrupamento pequeno que não encosta em nada é deixado de lado, e a busca retroativa ainda pode trazê-lo de volta no período seguinte."
+msgid "A cluster under the minimum size is kept when it touches the earlier alert: it is a growth alert *under the minimum area* (unless **Keep smaller clusters that touch earlier confirmed loss** is cleared). A small cluster that touches nothing is set aside, and the look-back can still bring it back in the next period."
+msgstr "Um agrupamento abaixo do tamanho mínimo é mantido quando encosta no alerta anterior: ele é um alerta de crescimento *abaixo da área mínima* (a menos que **Manter os agrupamentos menores que tocam uma perda confirmada anterior** esteja desmarcado). Um agrupamento pequeno que não encosta em nada é deixado de lado, e a busca retroativa ainda pode trazê-lo de volta no período seguinte."
 
 msgid "The run looks for earlier alerts in every earlier period, whatever the look-back."
 msgstr "A execução procura alertas anteriores em todos os períodos anteriores, qualquer que seja a busca retroativa."
@@ -988,14 +988,14 @@ msgstr "O nome da fonte nas listas, legendas e nomes de arquivo."
 msgid "Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique in the project. GLAD-L, RADD and GLAD-S2 are reserved."
 msgstr "Sugerido a partir do nome do recurso ou do arquivo. No máximo 24 caracteres, pelo menos uma letra ou um algarismo, único no projeto. GLAD-L, RADD e GLAD-S2 são reservados."
 
-msgid "Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder)."
-msgstr "De onde o raster é lido: **Earth Engine** (um recurso) ou **GeoTIFF** (um arquivo na sua pasta do SEPAL)."
+msgid "Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF / VRT** (a file in your SEPAL folder: a GeoTIFF, or a VRT, a GDAL virtual raster read like the GeoTIFFs it points to)."
+msgstr "De onde o raster é lido: **Earth Engine** (um recurso) ou **GeoTIFF / VRT** (um arquivo na sua pasta do SEPAL)."
 
 msgid "**Earth Engine**."
 msgstr "**Earth Engine**."
 
-msgid "Asset or **GeoTIFF**"
-msgstr "Recurso ou **GeoTIFF**"
+msgid "Asset or **GeoTIFF / VRT**"
+msgstr "Recurso ou **GeoTIFF / VRT**"
 
 msgid "The GEE image or image collection, or the .tif file."
 msgstr "A imagem ou coleção de imagens do GEE, ou o arquivo .tif."
@@ -1300,8 +1300,8 @@ msgstr "O nome da máscara nas listas, legendas e nomes de arquivo."
 msgid "Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique among the project's masks."
 msgstr "Sugerido a partir do nome do recurso ou do arquivo. No máximo 24 caracteres, pelo menos uma letra ou um algarismo, único entre as máscaras do projeto."
 
-msgid "**Earth Engine** (an asset) or **GeoTIFF** (a file in your SEPAL folder)."
-msgstr "**Earth Engine** (um recurso) ou **GeoTIFF** (um arquivo na sua pasta do SEPAL)."
+msgid "**Earth Engine** (an asset) or **GeoTIFF / VRT** (a file in your SEPAL folder)."
+msgstr "**Earth Engine** (um recurso) ou **GeoTIFF / VRT** (um arquivo na sua pasta do SEPAL)."
 
 msgid "**Band**"
 msgstr "**Banda**"
@@ -1540,11 +1540,11 @@ msgstr "combina as fontes pixel a pixel;"
 msgid "removes what earlier periods already reported;"
 msgstr "remove o que os períodos anteriores já reportaram;"
 
-msgid "groups neighbouring alert pixels into alerts; and"
-msgstr "agrupa os pixels de alerta vizinhos em alertas; e"
+msgid "groups neighbouring alert pixels into *clusters*; and"
+msgstr "agrupa os pixels de alerta vizinhos em *agrupamentos*; e"
 
-msgid "draws one polygon per alert."
-msgstr "desenha um polígono por alerta."
+msgid "draws one polygon per cluster. Each cluster it keeps is an alert of the set."
+msgstr "desenha um polígono por agrupamento. Cada agrupamento que ela mantém é um alerta do conjunto."
 
 msgid "Open the **Integrate & vectorize** step of the **Workflow** panel. It unlocks once at least one source of the active period is ready in `Harmonize <defo-harmonize_>`_."
 msgstr "Abra a etapa **Integrar e vetorizar** do painel **Fluxo de trabalho**. Ela é liberada assim que pelo menos uma fonte do período ativo está pronta em `Harmonizar <defo-harmonize_>`_."
@@ -1606,14 +1606,17 @@ msgstr "Crescimento de perdas anteriores"
 msgid "A clearing often keeps growing from one month to the next. The run links each new alert to the *earlier loss* it grows from: the alerts of earlier periods' sets that were saved as **True alert** or **Needs review**. An earlier alert's shape is the polygon drawn for it in `Refine the polygon <defo-analysis-refine_>`_, or else its detected cluster."
 msgstr "Um desmatamento muitas vezes continua crescendo de um mês para o outro. A execução vincula cada alerta novo à *perda anterior* a partir da qual ele cresce: os alertas dos conjuntos de períodos anteriores que foram salvos como **Alerta verdadeiro** ou **Precisa de revisão**. A forma de um alerta anterior é o polígono desenhado para ele em `Refinar o polígono <defo-analysis-refine_>`_ ou, se não houver, o agrupamento detectado."
 
-msgid "A new alert that touches or overlaps an earlier alert's shape is a *growth alert*, linked to every earlier alert it touches. One without a link is a *new* alert."
-msgstr "Um alerta novo que encosta na forma de um alerta anterior ou a sobrepõe é um *alerta de crescimento*, vinculado a todos os alertas anteriores em que encosta. Um alerta sem vínculo é um alerta *novo*."
+msgid "A new cluster that lies within one pixel of the grid of an earlier alert's shape, edge to edge, is a *growth alert*, linked to every earlier alert that close. A cluster one empty pixel away still counts; a diagonal gap of one pixel is farther. One without a link is a *new* alert."
+msgstr "Um agrupamento novo que fica a até um pixel da grade da forma de um alerta anterior, de borda a borda, é um *alerta de crescimento*, vinculado a todos os alertas anteriores a essa distância. Um agrupamento a um pixel vazio de distância ainda conta; um intervalo diagonal de um pixel fica mais longe. Um alerta sem vínculo é um alerta *novo*."
 
-msgid "A cluster smaller than the **Minimum cluster size** is kept when it touches earlier loss: it is a growth alert *under the minimum area*. A small cluster that touches nothing is set aside as *not analysable*, as before."
-msgstr "Um agrupamento menor que o **Tamanho mínimo do agrupamento** é mantido quando encosta numa perda anterior: ele é um alerta de crescimento *abaixo da área mínima*. Um agrupamento pequeno que não encosta em nada é deixado de lado como *não analisável*, como antes."
+msgid "With **Keep smaller clusters that touch earlier confirmed loss** selected (the default), a cluster smaller than the **Minimum cluster size** is kept when it is that close to earlier loss: it is a growth alert *under the minimum area*. Cleared, every small cluster is set aside. A small cluster that touches nothing is always set aside as *not analysable*."
+msgstr "Com **Manter os agrupamentos menores que tocam uma perda confirmada anterior** marcado (o padrão), um agrupamento menor que o **Tamanho mínimo do agrupamento** é mantido quando está a essa distância de uma perda anterior: ele é um alerta de crescimento *abaixo da área mínima*. Desmarcado, todo agrupamento pequeno é deixado de lado. Um agrupamento pequeno que não encosta em nada é sempre deixado de lado como *não analisável*."
 
 msgid "Growth alerts are sorted and limited with the others: **Limit the number of clusters** can leave them out."
 msgstr "Os alertas de crescimento são ordenados e limitados junto com os outros: **Limitar o número de agrupamentos** pode deixá-los de fora."
+
+msgid "Sets made before this reach of one pixel keep the links they were made with until they are run again."
+msgstr "Os conjuntos gerados antes deste alcance de um pixel mantêm os vínculos com que foram gerados até serem executados de novo."
 
 msgid "Only the reviews saved when the run starts count. An earlier alert confirmed afterwards is not linked, but it can be linked by hand in `Earlier alerts <defo-analysis-earlier_>`_."
 msgstr "Só contam as revisões salvas quando a execução começa. Um alerta anterior confirmado depois disso não é vinculado, mas pode ser vinculado à mão em `Alertas anteriores <defo-analysis-earlier_>`_."
@@ -1651,17 +1654,26 @@ msgstr "Ligado."
 msgid "**Minimum cluster size**"
 msgstr "**Tamanho mínimo do agrupamento**"
 
-msgid "Clusters smaller than this are dropped. The hint gives that size in pixels of the grid (at 10 m, 0.5 ha is \"50 pixels on the grid\")."
-msgstr "Os agrupamentos menores que isso são descartados. A dica mostra esse tamanho em pixels da grade (a 10 m, 0,5 ha equivale a \"50 pixels na grade\")."
+msgid "Clusters smaller than this are dropped, unless the next option keeps them. The hint gives that size in pixels of the grid (at 10 m, 0.5 ha is \"50 pixels on the grid\")."
+msgstr "Os agrupamentos menores que isso são descartados, a menos que a opção seguinte os mantenha. A dica mostra esse tamanho em pixels da grade (a 10 m, 0,5 ha equivale a \"50 pixels na grade\")."
 
-msgid "0.5 ha. Any number of hectares, 0 or more. Even at 0, an alert is at least one pixel."
-msgstr "0,5 ha. Qualquer número de hectares, 0 ou mais. Mesmo com 0, um alerta tem pelo menos um pixel."
+msgid "0.5 ha. Any number of hectares, 0 or more. Even at 0, a cluster is at least one pixel."
+msgstr "0,5 ha. Qualquer número de hectares, 0 ou mais. Mesmo com 0, um agrupamento tem pelo menos um pixel."
+
+msgid "**Keep smaller clusters that touch earlier confirmed loss**"
+msgstr "**Manter os agrupamentos menores que tocam uma perda confirmada anterior**"
+
+msgid "Keeps a cluster under the minimum size when it is within one pixel of an earlier alert reviewed as **True alert** or **Needs review** (see `Growth of earlier loss <defo-integrate-growth_>`_). A line under it says when the run has nothing to link to: \"No earlier period has an alert set yet: nothing links in this run.\" or \"No alert of an earlier period is reviewed yet: nothing links in this run.\""
+msgstr "Mantém um agrupamento abaixo do tamanho mínimo quando ele está a até um pixel de um alerta anterior revisado como **Alerta verdadeiro** ou **Precisa de revisão** (veja `Crescimento de perdas anteriores <defo-integrate-growth_>`_). Uma linha abaixo dela diz quando a execução não tem nada a que vincular: \"Nenhum período anterior tem ainda um conjunto de alertas: nada se vincula nesta execução.\" ou \"Nenhum alerta de um período anterior foi revisado ainda: nada se vincula nesta execução.\""
+
+msgid "Selected."
+msgstr "Marcado."
 
 msgid "**Order**"
 msgstr "**Ordem**"
 
-msgid "The order of the alerts in the set, which is the review order: **Bigger clusters first**, **Smaller clusters first**, **Recent clusters first** (by last detection date) or **Older clusters first** (by first detection date)."
-msgstr "A ordem dos alertas no conjunto, que é a ordem de revisão: **Agrupamentos maiores primeiro**, **Agrupamentos menores primeiro**, **Agrupamentos recentes primeiro** (pela última data de detecção) ou **Agrupamentos mais antigos primeiro** (pela primeira data de detecção)."
+msgid "The order of the clusters in the set, which is the review order: **Bigger clusters first**, **Smaller clusters first**, **Recent clusters first** (by last detection date) or **Older clusters first** (by first detection date)."
+msgstr "A ordem dos agrupamentos no conjunto, que é a ordem de revisão: **Agrupamentos maiores primeiro**, **Agrupamentos menores primeiro**, **Agrupamentos recentes primeiro** (pela última data de detecção) ou **Agrupamentos mais antigos primeiro** (pela primeira data de detecção)."
 
 msgid "**Bigger clusters first**."
 msgstr "**Agrupamentos maiores primeiro**."
@@ -1669,8 +1681,8 @@ msgstr "**Agrupamentos maiores primeiro**."
 msgid "**Limit the number of clusters**"
 msgstr "**Limitar o número de agrupamentos**"
 
-msgid "When selected, shows **Maximum number of clusters**: only the first alerts in the chosen **Order** are kept. Its hint says which (e.g. \"Keeps the 100 biggest clusters.\" or \"Keeps the 100 most recent clusters.\"). When cleared, every alert is kept."
-msgstr "Quando marcado, mostra **Número máximo de agrupamentos**: só os primeiros alertas na **Ordem** escolhida são mantidos. A dica diz quais (por exemplo \"Mantém os 100 maiores alertas.\" ou \"Mantém os 100 alertas mais recentes.\"). Quando desmarcado, todos os alertas são mantidos."
+msgid "When selected, shows **Maximum number of clusters**: only the first clusters in the chosen **Order** are kept. Its hint says which (e.g. \"Keeps the 100 biggest clusters.\" or \"Keeps the 100 most recent clusters.\"). When cleared, every cluster is kept."
+msgstr "Quando marcado, mostra **Número máximo de agrupamentos**: só os primeiros agrupamentos na **Ordem** escolhida são mantidos. A dica diz quais (por exemplo \"Mantém os 100 maiores agrupamentos.\" ou \"Mantém os 100 agrupamentos mais recentes.\"). Quando desmarcado, todos os agrupamentos são mantidos."
 
 msgid "Cleared. When selected, the limit starts at 100. It must be a whole number greater than 0."
 msgstr "Desmarcado. Quando marcado, o limite começa em 100. Ele precisa ser um número inteiro maior que 0."
@@ -1717,11 +1729,11 @@ msgstr "Selecione **Adicionar camada de atributos** para abrir a janela **Adicio
 msgid "Check the **Layer name**, suggested from the raster once it is chosen. The columns are named *layer name*\\_\\ *band*."
 msgstr "Confira o **Nome da camada**, sugerido a partir do raster assim que ele é escolhido. As colunas se chamam *nome da camada*\\_\\ *banda*."
 
-msgid "Choose the **Source** (**Earth Engine**, an image, or **GeoTIFF**, a file in your SEPAL folder), then choose the raster. Its bands are read at once."
-msgstr "Escolha a **Fonte** (**Earth Engine**, uma imagem, ou **GeoTIFF**, um arquivo na sua pasta do SEPAL) e depois escolha o raster. As bandas dele são lidas na hora."
+msgid "Choose the **Source** (**Earth Engine**, an image, or **GeoTIFF / VRT**, a file in your SEPAL folder), then choose the raster. Its bands are read at once."
+msgstr "Escolha a **Fonte** (**Earth Engine**, uma imagem, ou **GeoTIFF / VRT**, um arquivo na sua pasta do SEPAL) e depois escolha o raster. As bandas dele são lidas na hora."
 
-msgid "With one band, the form reads \"One band (…): its statistic is added to every alert.\" With two or more, select one or more in **Bands**."
-msgstr "Com uma banda, o formulário diz \"Uma banda (…): sua estatística é adicionada a cada alerta.\" Com duas ou mais, selecione uma ou mais em **Bandas**."
+msgid "With one band, the form reads \"One band (…): its statistic is added to every cluster.\" With two or more, select one or more in **Bands**."
+msgstr "Com uma banda, o formulário diz \"Uma banda (…): sua estatística é adicionada a cada agrupamento.\" Com duas ou mais, selecione uma ou mais em **Bandas**."
 
 msgid "For each band, choose the statistic computed over the alert: **Majority** (for classes), **Mean**, **Minimum**, **Maximum** or **Median**. It starts on **Majority** when the band's name looks like classes (e.g. ``landcover``), and on **Mean** otherwise, marked \"(suggested)\". The column name is shown beside it."
 msgstr "Para cada banda, escolha a estatística calculada sobre o alerta: **Maioria** (para classes), **Média**, **Mínimo**, **Máximo** ou **Mediana**. Ela começa em **Maioria** quando o nome da banda parece de classes (por exemplo, ``landcover``) e em **Média** nos outros casos, marcada \"(sugerido)\". O nome da coluna aparece ao lado."
@@ -1759,11 +1771,11 @@ msgstr "a mesma combinação, de novo, *substitui* o conjunto."
 msgid "Select **Integrate & vectorize**. The button stays disabled until at least one source is selected and, when **Limit the number of clusters** is selected, the limit is valid (\"Enter a whole number greater than 0.\" under the field)."
 msgstr "Selecione **Integrar e vetorizar**. O botão fica desativado até que pelo menos uma fonte esteja marcada e, quando **Limitar o número de agrupamentos** está marcado, até que o limite seja válido (\"Digite um número inteiro maior que 0.\" abaixo do campo)."
 
-msgid "The run goes through \"Combining sources\", \"Vectorizing clusters\", \"Saving the alerts\", \"Writing the footprint\" and \"Building map tiles\". When it ends, a message reads \"N alerts ready for review\", followed by \"Linked N alerts to earlier loss (M under the minimum area)\" when it found `growth alerts <defo-integrate-growth_>`_, and the new set becomes the *active set*: the one the `Questionnaire <defo-questionnaire_>`_, `Evaluation <defo-evaluation_>`_, `Analysis <defo-analysis_>`_ and `Overview <defo-overview_>`_ work on. The step stays open."
-msgstr "A execução passa por \"Combinando as fontes\", \"Vetorizando os agrupamentos\", \"Salvando os alertas\", \"Gravando a pegada\" e \"Gerando os blocos do mapa\". Ao terminar, uma mensagem diz \"N alertas prontos para revisão\", seguida de \"N alertas vinculados a perdas anteriores (M abaixo da área mínima)\" quando ela encontra `alertas de crescimento <defo-integrate-growth_>`_, e o novo conjunto passa a ser o *conjunto ativo*: aquele sobre o qual trabalham o `Questionário <defo-questionnaire_>`_, a `Avaliação <defo-evaluation_>`_, a `Análise <defo-analysis_>`_ e a `Visão geral <defo-overview_>`_. A etapa continua aberta."
+msgid "The run goes through \"Combining sources\", \"Vectorizing clusters\", \"Saving the clusters\", \"Writing the footprint\" and \"Building map tiles\". When it ends, a message reads \"N clusters ready for review\", followed by \"Linked N clusters to earlier loss (M under the minimum area)\" when it found `growth alerts <defo-integrate-growth_>`_, and the new set becomes the *active set*: the one the `Questionnaire <defo-questionnaire_>`_, `Evaluation <defo-evaluation_>`_, `Analysis <defo-analysis_>`_ and `Overview <defo-overview_>`_ work on. The step stays open."
+msgstr "A execução passa por \"Combinando as fontes\", \"Vetorizando os agrupamentos\", \"Salvando os agrupamentos\", \"Gravando a pegada\" e \"Gerando os blocos do mapa\". Ao terminar, uma mensagem diz \"N agrupamentos prontos para revisão\", seguida de \"N agrupamentos vinculados a perdas anteriores (M abaixo da área mínima)\" quando ela encontra `alertas de crescimento <defo-integrate-growth_>`_, e o novo conjunto passa a ser o *conjunto ativo*: aquele sobre o qual trabalham o `Questionário <defo-questionnaire_>`_, a `Avaliação <defo-evaluation_>`_, a `Análise <defo-analysis_>`_ e a `Visão geral <defo-overview_>`_. A etapa continua aberta."
 
-msgid "If no alert is left, the set is still made, empty, and the message gives the reason for each source (e.g. \"GLAD-L: all 56 alert pixels removed by masks\" or \"RADD: probable (unconfirmed) alerts were left out\")."
-msgstr "Se não sobrar nenhum alerta, o conjunto é gerado mesmo assim, vazio, e a mensagem dá o motivo para cada fonte (por exemplo \"GLAD-L: todos os 56 pixels de alerta removidos pelas máscaras\" ou \"RADD: os alertas prováveis (não confirmados) ficaram de fora\")."
+msgid "If no cluster is left, the set is still made, empty: the message reads \"No new clusters in this period: the alert set is empty.\" and gives the reason for each source (e.g. \"GLAD-L: all 56 alert pixels removed by masks\" or \"RADD: probable (unconfirmed) alerts were left out\")."
+msgstr "Se não sobrar nenhum agrupamento, o conjunto é gerado mesmo assim, vazio: a mensagem diz \"Nenhum agrupamento novo neste período: o conjunto de alertas está vazio.\" e dá o motivo para cada fonte (por exemplo \"GLAD-L: todos os 56 pixels de alerta removidos pelas máscaras\" ou \"RADD: os alertas prováveis (não confirmados) ficaram de fora\")."
 
 msgid "Replace a set"
 msgstr "Substituir um conjunto"
@@ -1771,8 +1783,8 @@ msgstr "Substituir um conjunto"
 msgid "Confirming the replacement of an alert set"
 msgstr "Confirmação da substituição de um conjunto de alertas"
 
-msgid "When the set about to be replaced has reviewed alerts or an `evaluator split <defo-evaluation_>`_, the **Replace this alert set?** dialog lists what would be lost: the reviewed alerts (up to 20, then \"… and N more\"), and the split with the reviews that evaluators have not sent back yet. When alerts of later periods grow from this set, it adds \"N alerts of later periods are linked to this set; their links will break.\": after the run, those links show as \"earlier set was re-run\" (see `Earlier alerts <defo-analysis-earlier_>`_). Select **Replace** to continue. A set with nothing to lose is replaced without confirmation."
-msgstr "Quando o conjunto prestes a ser substituído tem alertas revisados ou uma `divisão entre avaliadores <defo-evaluation_>`_, a janela **Substituir este conjunto de alertas?** lista o que seria perdido: os alertas revisados (até 20, depois \"… e mais N\") e a divisão, com as revisões que os avaliadores ainda não devolveram. Quando alertas de períodos posteriores crescem a partir deste conjunto, ela acrescenta \"N alertas de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos.\": depois da execução, esses vínculos aparecem como \"o conjunto anterior foi executado de novo\" (veja `Alertas anteriores <defo-analysis-earlier_>`_). Selecione **Substituir** para continuar. Um conjunto sem nada a perder é substituído sem confirmação."
+msgid "When the set about to be replaced has reviewed alerts or an `evaluator split <defo-evaluation_>`_, the **Replace this alert set?** dialog lists what would be lost: the reviewed alerts (up to 20, then \"… and N more\"), and the split with the reviews that evaluators have not sent back yet. When alerts of later periods grow from this set, it adds \"N clusters of later periods are linked to this set; their links will break.\": after the run, those links show as \"earlier set was re-run\" (see `Earlier alerts <defo-analysis-earlier_>`_). Select **Replace** to continue. A set with nothing to lose is replaced without confirmation."
+msgstr "Quando o conjunto prestes a ser substituído tem alertas revisados ou uma `divisão entre avaliadores <defo-evaluation_>`_, a janela **Substituir este conjunto de alertas?** lista o que seria perdido: os alertas revisados (até 20, depois \"… e mais N\") e a divisão, com as revisões que os avaliadores ainda não devolveram. Quando alertas de períodos posteriores crescem a partir deste conjunto, ela acrescenta \"N agrupamentos de períodos posteriores estão vinculados a este conjunto; seus vínculos serão rompidos.\": depois da execução, esses vínculos aparecem como \"o conjunto anterior foi executado de novo\" (veja `Alertas anteriores <defo-analysis-earlier_>`_). Selecione **Substituir** para continuar. Um conjunto sem nada a perder é substituído sem confirmação."
 
 msgid "Replacing a set discards its reviews. To try other settings without losing reviews, choose another combination of sources, which makes a separate set."
 msgstr "Substituir um conjunto descarta as revisões dele. Para testar outras configurações sem perder revisões, escolha outra combinação de fontes, que gera um conjunto separado."
@@ -1885,8 +1897,8 @@ msgstr "Cada linha de **Camadas de visualização** mostra:"
 msgid "the layer's **Name**;"
 msgstr "o **Nome** da camada;"
 
-msgid "a chip with its source (**Earth Engine** or **GeoTIFF**);"
-msgstr "uma etiqueta com a fonte (**Earth Engine** ou **GeoTIFF**);"
+msgid "a chip with its source (**Earth Engine** or **GeoTIFF / VRT**);"
+msgstr "uma etiqueta com a fonte (**Earth Engine** ou **GeoTIFF / VRT**);"
 
 msgid "an **in Analysis** chip when it is shown on the Analysis maps; and"
 msgstr "uma etiqueta **na Análise** quando ela aparece nos mapas da Análise; e"
@@ -1915,8 +1927,8 @@ msgstr "O nome da camada na lista, nos mapas e na legenda."
 msgid "Left empty, it is filled from the asset or file name, plus the band or combination. At most 24 characters, unique in the project."
 msgstr "Se ficar vazio, é preenchido com o nome do recurso ou do arquivo, mais a banda ou a combinação. No máximo 24 caracteres, único no projeto."
 
-msgid "**Earth Engine** (an image asset) or **GeoTIFF** (a file in your SEPAL folder)."
-msgstr "**Earth Engine** (um recurso de imagem) ou **GeoTIFF** (um arquivo na sua pasta do SEPAL)."
+msgid "**Earth Engine** (an image asset) or **GeoTIFF / VRT** (a file in your SEPAL folder)."
+msgstr "**Earth Engine** (um recurso de imagem) ou **GeoTIFF / VRT** (um arquivo na sua pasta do SEPAL)."
 
 msgid "A GEE *image* (not a collection), or a .tif file."
 msgstr "Uma *imagem* do GEE (não uma coleção) ou um arquivo .tif."
@@ -2305,8 +2317,14 @@ msgstr "As fontes que detectaram o alerta."
 msgid "``{area_loss}``"
 msgstr "``{area_loss}``"
 
-msgid "The alert's area, in hectares."
-msgstr "A área do alerta, em hectares."
+msgid "The alert's area, in hectares (the group's, for a group)."
+msgstr "A área do alerta, em hectares (a do grupo, para um grupo)."
+
+msgid "``{group_size}``, ``{group_alerts}``"
+msgstr "``{group_size}``, ``{group_alerts}``"
+
+msgid "For an alert reviewed in a group: the number of alerts in the group and their numbers (\"12, 15, 16\"). Otherwise \"1\" and the alert's own number."
+msgstr "Para um alerta revisado num grupo: o número de alertas do grupo e os números deles (\"12, 15, 16\"). Nos outros casos, \"1\" e o número do próprio alerta."
 
 msgid "``{verdict}`` (green)"
 msgstr "``{verdict}`` (verde)"
@@ -2431,6 +2449,42 @@ msgstr "**Vários avaliadores** conclui a etapa assim que os alertas são dividi
 msgid "While a split exists, both checkboxes are disabled on **Multiple evaluators** (**Remove the split to switch to solo.**)."
 msgstr "Enquanto existir uma divisão, as duas caixas ficam desativadas em **Vários avaliadores** (**Remova a divisão para passar para o modo individual.**)."
 
+msgid "Review nearby alerts together"
+msgstr "Revisar juntos os alertas próximos"
+
+msgid "Under the review mode, the **Review nearby alerts together** checkbox lets `Analysis <defo-analysis-nearby_>`_ review neighbouring alerts as one group: \"In Analysis, alerts within this distance can be reviewed with one verdict, one set of answers and one polygon.\" It works in both modes. Once it is selected:"
+msgstr "Abaixo do modo de revisão, a caixa de seleção **Revisar juntos os alertas próximos** permite que a `Análise <defo-analysis-nearby_>`_ revise alertas vizinhos como um único grupo: \"Na Análise, os alertas dentro desta distância podem ser revisados com um único veredito, um único conjunto de respostas e um único polígono.\" Ela funciona nos dois modos. Depois que ela é marcada:"
+
+msgid "**Distance (m)**"
+msgstr "**Distância (m)**"
+
+msgid "How close, edge to edge, an alert must be to be offered in the group."
+msgstr "A que distância, de borda a borda, um alerta precisa estar para ser oferecido no grupo."
+
+msgid "From 10 to 5,000."
+msgstr "De 10 a 5.000."
+
+msgid "**Include already reviewed alerts**"
+msgstr "**Incluir os alertas já revisados**"
+
+msgid "Also offers alerts reviewed before grouping was on. \"Unchecked, alerts reviewed before grouping was on are never offered.\""
+msgstr "Oferece também os alertas revisados antes de o agrupamento ser ativado. \"Desmarcado, os alertas revisados antes de ativar o agrupamento nunca são oferecidos.\""
+
+msgid "Cleared."
+msgstr "Desmarcado."
+
+msgid "Some changes are locked:"
+msgstr "Algumas alterações ficam bloqueadas:"
+
+msgid "Once groups are saved, grouping cannot be turned off and the distance cannot change: \"2 groups are saved: remove them to turn grouping off.\""
+msgstr "Depois que grupos são salvos, o agrupamento não pode ser desativado e a distância não pode mudar: \"2 grupos estão salvos: remova-os para desativar o agrupamento.\""
+
+msgid "A split fixes all three settings: \"The alerts were split with grouping: remove the split to change it.\" (or \"without grouping\")."
+msgstr "Uma divisão fixa as três configurações: \"Os alertas foram divididos com agrupamento: remova a divisão para alterá-lo.\" (ou \"sem agrupamento\")."
+
+msgid "In a review copy, they are \"Set by the project's creator.\""
+msgstr "Numa cópia de revisão, elas aparecem como \"Definido pelo criador do projeto.\""
+
 msgid "Split the alerts"
 msgstr "Dividir os alertas"
 
@@ -2467,17 +2521,14 @@ msgstr "Com **Nomes**: uma linha por avaliador. **Adicionar avaliador** acrescen
 msgid "Two empty rows. Empty rows are skipped; two rows cannot have the same name; at most 50."
 msgstr "Duas linhas vazias. As linhas vazias são ignoradas; duas linhas não podem ter o mesmo nome; no máximo 50."
 
-msgid "**Include already reviewed alerts**"
-msgstr "**Incluir os alertas já revisados**"
-
 msgid "Also deals out alerts that are already reviewed. When cleared, they stay unassigned."
 msgstr "Distribui também os alertas que já foram revisados. Quando desmarcado, eles ficam sem atribuição."
 
-msgid "Cleared."
-msgstr "Desmarcado."
-
 msgid "Select **Split**. The alerts are dealt out one by one in the set's order (the **Order** chosen in `Integrate & vectorize <defo-integrate-options_>`_), like cards: the first to evaluator 1, the second to evaluator 2, and so on round the list. Each evaluator gets about the same number of alerts, spread over the whole order."
 msgstr "Selecione **Dividir**. Os alertas são distribuídos um a um na ordem do conjunto (a **Ordem** escolhida em `Integrar e vetorizar <defo-integrate-options_>`_), como cartas de baralho: o primeiro para o avaliador 1, o segundo para o avaliador 2, e assim por diante, dando a volta na lista. Cada avaliador recebe mais ou menos o mesmo número de alertas, espalhados por toda a ordem."
+
+msgid "With **Review nearby alerts together** selected, the split never parts a group. Alerts within the distance of each other, edge to edge, chain into one group of nearby alerts. Each group goes whole to the evaluator with the fewest alerts so far. When one group holds more than an even share, the dialog warns: \"One group of nearby alerts holds 30 alerts, more than an even share.\""
+msgstr "Com **Revisar juntos os alertas próximos** marcado, a divisão nunca separa um grupo. Os alertas a menos da distância uns dos outros, de borda a borda, se encadeiam em um grupo de alertas próximos. Cada grupo vai inteiro para o avaliador com menos alertas até então. Quando um grupo contém mais do que uma parte igual, a janela avisa: \"Um grupo de alertas próximos contém 30 alertas, mais do que uma parte igual.\""
 
 msgid "The evaluators table"
 msgstr "A tabela de avaliadores"
@@ -2644,6 +2695,9 @@ msgstr "ignoradas"
 msgid "Alerts that are not assigned to this evaluator. They are never taken."
 msgstr "Alertas que não estão atribuídos a este avaliador. Eles nunca são incorporados."
 
+msgid "With grouping on, each count also gives its number of groups (\"3 new reviews (1 group)\"). A group is merged whole: when one of its alerts conflicts, the whole group is a conflict."
+msgstr "Com o agrupamento ativado, cada contagem também dá o seu número de grupos (\"3 revisões novas (1 grupo)\"). Um grupo é mesclado inteiro: quando um dos seus alertas está em conflito, o grupo inteiro é um conflito."
+
 msgid "After the merge, the set's alerts are updated, a message reads \"Merged N reviews from (evaluator).\", and the **Merged** column shows the date."
 msgstr "Depois da mesclagem, os alertas do conjunto são atualizados, uma mensagem diz \"N revisões de (avaliador) mescladas.\" e a coluna **Mesclado** mostra a data."
 
@@ -2670,6 +2724,12 @@ msgstr "\"Este zip é um pacote de revisão, não uma cópia revisada.\""
 
 msgid "Choose the file the evaluator sent back."
 msgstr "Escolha o arquivo que o avaliador devolveu."
+
+msgid "\"This return would break a group of alerts, so nothing was merged. Choose Keep mine, or ask the evaluator to update the app and send the review again.\""
+msgstr "\"Este retorno quebraria um grupo de alertas, então nada foi mesclado. Escolha Manter as minhas ou peça ao avaliador que atualize o aplicativo e envie a revisão novamente.\""
+
+msgid "Taking the evaluator's reviews would split a group saved in your project. Choose **Keep mine**, or ask for a reviewed copy made with an up-to-date app."
+msgstr "Incorporar as revisões do avaliador dividiria um grupo salvo no seu projeto. Escolha **Manter as minhas** ou peça uma cópia revisada gerada com um app atualizado."
 
 msgid "\"A review copy cannot merge reviewed copies; open the creator's project.\""
 msgstr "\"Uma cópia de revisão não pode mesclar cópias revisadas; abra o projeto do criador.\""
@@ -2824,8 +2884,17 @@ msgstr "O alerta anterior ou o próximo na ordem do conjunto. Eles param no prim
 msgid "Counter"
 msgstr "Contador"
 
-msgid "The alert's number in the set (\"13 / 48\"). Select it to open a small menu: **Jump to alert number** (enter a number and select **Go**, or press **Enter**) and **Next unreviewed alert**, which goes to the next alert without a verdict, starting again from the top after the last one."
-msgstr "O número do alerta no conjunto (\"13 / 48\"). Selecione-o para abrir um pequeno menu: **Ir para o número do alerta** (digite um número e selecione **Ir**, ou pressione **Enter**) e **Próximo alerta não revisado**, que vai para o próximo alerta sem veredito, recomeçando do início depois do último."
+msgid "The alert's number in the set (\"13 / 48\"). Select it to open **Jump to alert number**: enter a number and select **Go**, or press **Enter**."
+msgstr "O número do alerta no conjunto (\"13 / 48\"). Selecione-o para abrir **Ir para o número do alerta**: digite um número e selecione **Ir**, ou pressione **Enter**."
+
+msgid "**Next unreviewed alert** icon"
+msgstr "Ícone **Próximo alerta não revisado**"
+
+msgid "Goes to the next alert without a verdict, starting again from the top after the last one. Disabled when no other alert is left to review."
+msgstr "Vai para o próximo alerta sem veredito, recomeçando do início depois do último. Fica desativado quando não resta nenhum outro alerta a revisar."
+
+msgid "When the alert on screen has unsaved changes, every way to another alert asks first (see `Save the review <defo-analysis-save_>`_)."
+msgstr "Quando o alerta na tela tem alterações não salvas, toda forma de ir para outro alerta pergunta antes (veja `Salvar a revisão <defo-analysis-save_>`_)."
 
 msgid "The order of the alerts is the **Order** chosen in `Integrate & vectorize <defo-integrate-options_>`_."
 msgstr "A ordem dos alertas é a **Ordem** escolhida em `Integrar e vetorizar <defo-integrate-options_>`_."
@@ -2854,8 +2923,8 @@ msgstr "**Limpar filtro** remove o filtro."
 msgid "With a filter on:"
 msgstr "Com um filtro ativo:"
 
-msgid "**Previous**, **Next** and **Next unreviewed alert** move among the matching alerts only;"
-msgstr "**Anterior**, **Próximo** e **Próximo alerta não revisado** só percorrem os alertas que correspondem ao filtro;"
+msgid "**Previous**, **Next** and the **Next unreviewed alert** icon move among the matching alerts only;"
+msgstr "**Anterior**, **Próximo** e o ícone **Próximo alerta não revisado** só percorrem os alertas que correspondem ao filtro;"
 
 msgid "the counter counts the matches (\"06 / 24\"), or reads \"– / 24\" while the alert on screen is not one of them, and the progress line ends with \"filtered · 48 total\";"
 msgstr "o contador conta as correspondências (\"06 / 24\"), ou mostra \"– / 24\" enquanto o alerta na tela não é uma delas, e a linha de progresso termina com \"filtrados · 48 no total\";"
@@ -2908,6 +2977,15 @@ msgstr "Canto superior esquerdo do mapa de depois"
 msgid "Zooms both maps back to the alert."
 msgstr "Leva os dois mapas de volta ao alerta."
 
+msgid "Scale bar"
+msgstr "Barra de escala"
+
+msgid "Lower-left corner of each map, under the basemap thumbnail"
+msgstr "Canto inferior esquerdo de cada mapa, abaixo da miniatura do mapa base"
+
+msgid "The map's scale, in metres or kilometres."
+msgstr "A escala do mapa, em metros ou quilômetros."
+
 msgid "The **Layers** menu lists:"
 msgstr "O menu **Camadas** lista:"
 
@@ -2923,8 +3001,8 @@ msgstr "*True Color* (ligada) e *False Color* (infravermelho próximo, vermelho 
 msgid "**Alerts**"
 msgstr "**Alertas**"
 
-msgid "*Original Alert*: the alert pixels of the set, half transparent (off). *Alert BB*: the alert's bounding box. *Defo Layer*: the polygon saved for the alert (see `Refine the polygon <defo-analysis-refine_>`_). *Earlier alerts* (see `Earlier alerts <defo-analysis-earlier_>`_)."
-msgstr "*Original Alert*: os pixels de alerta do conjunto, semitransparentes (desligada). *Alert BB*: o retângulo envolvente do alerta. *Defo Layer*: o polígono salvo para o alerta (veja `Refinar o polígono <defo-analysis-refine_>`_). *Alertas anteriores* (veja `Alertas anteriores <defo-analysis-earlier_>`_)."
+msgid "*Original alert*: the outline of the alert's polygon from `Integrate & vectorize <defo-integrate_>`_, and of the other alerts of its group (see `Nearby alerts <defo-analysis-nearby_>`_), on by default and hidden while drawing. *All alerts*: the alert pixels of the whole set, half transparent (off). *Alert BB*: the alert's bounding box. *Defo Layer*: the polygon saved for the alert (see `Refine the polygon <defo-analysis-refine_>`_). *Earlier alerts* (see `Earlier alerts <defo-analysis-earlier_>`_). *Nearby alerts*, only when nearby alerts are reviewed together."
+msgstr "*Original alert*: o contorno do polígono do alerta gerado em `Integrar e vetorizar <defo-integrate_>`_ e dos outros alertas do grupo dele (veja `Alertas próximos <defo-analysis-nearby_>`_), ligada por padrão e escondida durante o desenho. *All alerts*: os pixels de alerta do conjunto inteiro, semitransparentes (desligada). *Alert BB*: o retângulo envolvente do alerta. *Defo Layer*: o polígono salvo para o alerta (veja `Refinar o polígono <defo-analysis-refine_>`_). *Alertas anteriores* (veja `Alertas anteriores <defo-analysis-earlier_>`_). *Nearby alerts*, só quando os alertas próximos são revisados juntos."
 
 msgid "**Additional layers**"
 msgstr "**Camadas adicionais**"
@@ -3060,6 +3138,12 @@ msgstr "Linha **Status**"
 
 msgid "Its review status, with its colour: **Not reviewed**, **Reviewed: confirmed**, **Reviewed: false positive** or **Reviewed: needs revision**."
 msgstr "O status de revisão, com a sua cor: **Não revisado**, **Revisado: confirmado**, **Revisado: falso positivo** ou **Revisado: precisa de revisão**."
+
+msgid "**Group**"
+msgstr "**Grupo**"
+
+msgid "For an alert reviewed with nearby alerts: \"group of 4\". Hidden otherwise."
+msgstr "Para um alerta revisado com alertas próximos: \"grupo de 4\". Oculta nos outros casos."
 
 msgid "**Kind**"
 msgstr "**Tipo**"
@@ -3208,8 +3292,8 @@ msgstr "Escolher outras imagens ou outra **Área da imagem** descarta os resulta
 msgid "Earlier alerts"
 msgstr "Alertas anteriores"
 
-msgid "This section appears when the active set's period has earlier periods with alert sets. It lists the earlier loss near the alert: the alerts of earlier periods reviewed as **Reviewed: confirmed** or **Reviewed: needs revision**, within the distance set in **Within** (1 km by default, from 0.1 to 50 km), plus every alert linked to this one, however far. Use it to check whether an alert continues a clearing already reported, and to link it to that clearing."
-msgstr "Esta seção aparece quando o período do conjunto ativo tem períodos anteriores com conjuntos de alertas. Ela lista a perda anterior perto do alerta: os alertas de períodos anteriores revisados como **Revisado: confirmado** ou **Revisado: precisa de revisão**, dentro da distância definida em **Num raio de** (1 km por padrão, de 0,1 a 50 km), mais todos os alertas vinculados a este, por mais longe que estejam. Use-a para verificar se um alerta dá continuidade a um desmatamento já reportado e para vinculá-lo a esse desmatamento."
+msgid "This section appears when the active set's period has earlier periods with alert sets. It lists the earlier loss near the alert: the alerts of earlier periods reviewed as **Reviewed: confirmed** or **Reviewed: needs revision**, within the distance set in **Within**, in metres (100 m by default, from 10 m to 50 km), plus every alert linked to this one, however far. Use it to check whether an alert continues a clearing already reported, and to link it to that clearing."
+msgstr "Esta seção aparece quando o período do conjunto ativo tem períodos anteriores com conjuntos de alertas. Ela lista a perda anterior perto do alerta: os alertas de períodos anteriores revisados como **Revisado: confirmado** ou **Revisado: precisa de revisão**, dentro da distância definida em **Num raio de**, em metros (100 m por padrão, de 10 m a 50 km), mais todos os alertas vinculados a este, por mais longe que estejam. Use-a para verificar se um alerta dá continuidade a um desmatamento já reportado e para vinculá-lo a esse desmatamento."
 
 msgid "The alerts are grouped by period, newest first. Each row shows:"
 msgstr "Os alertas são agrupados por período, do mais recente para o mais antigo. Cada linha mostra:"
@@ -3232,6 +3316,9 @@ msgstr "Selecione o número de um alerta para aproximar os dois mapas dele."
 msgid "To link or unlink an alert, tick or clear its box. The change is part of the review: the footer reads \"Unsaved changes on this alert\", and **Save** saves it with the verdict. Ticking an alert of an earlier period makes this alert a growth alert, even if it does not touch it."
 msgstr "Para vincular ou desvincular um alerta, marque ou desmarque a caixa dele. A alteração faz parte da revisão: o rodapé diz \"Alterações não salvas neste alerta\", e **Salvar** a salva com o veredito. Marcar um alerta de um período anterior torna este alerta um alerta de crescimento, mesmo que não encoste nele."
 
+msgid "A growth alert smaller than the **Minimum cluster size** is in the set only because of its link. Clearing its last link asks first (**Unlink from the earlier alert?**): for example \"Alert #14 is 0.2 ha, under the 0.5 ha minimum. It is an alert only because it is linked to #12.\" Select **Unlink** to clear the link: the alert stays in the set as **New · under minimum area**."
+msgstr "Um alerta de crescimento menor que o **Tamanho mínimo do agrupamento** só está no conjunto por causa do seu vínculo. Desmarcar o último vínculo dele pergunta antes (**Desvincular do alerta anterior?**): por exemplo \"O alerta #14 tem 0,2 ha, abaixo do mínimo de 0,5 ha. Ele só é um alerta porque está vinculado a #12.\" Selecione **Desvincular** para desmarcar o vínculo: o alerta continua no conjunto como **Nova · abaixo da área mínima**."
+
 msgid "Some rows have no box:"
 msgstr "Algumas linhas não têm caixa:"
 
@@ -3244,32 +3331,110 @@ msgstr "\"o conjunto anterior foi executado de novo\": o conjunto do alerta ante
 msgid "A linked alert that was later reviewed as a false positive stays ticked with \"now false positive\". It is greyed and left out of the history; clear its box to remove the link."
 msgstr "Um alerta vinculado que depois foi revisado como falso positivo continua marcado, com \"agora falso positivo\". Ele fica acinzentado e fora do histórico; desmarque a caixa dele para remover o vínculo."
 
-msgid "Turn on **Show on the maps** to outline the listed alerts on both maps. The colour is the period's, and a small legend lists the periods shown, with \"solid: confirmed · dashed: needs revision · thick: linked\". The switch starts on for a growth alert; on other alerts it keeps your last choice. When the list covers several periods, the **Periods** menu hides some of them. The badge reads \"off\", \"none within 1 km\" or, for example, \"4 within 1 km · 1 linked\"."
-msgstr "Ligue **Mostrar nos mapas** para contornar os alertas listados nos dois mapas. A cor é a do período, e uma pequena legenda lista os períodos exibidos, com \"contínua: confirmado · tracejada: precisa de revisão · grossa: vinculado\". O interruptor começa ligado para um alerta de crescimento; nos outros alertas, ele mantém a sua última escolha. Quando a lista cobre vários períodos, o menu **Períodos** esconde alguns deles. O indicador mostra \"desativado\", \"nenhum a menos de 1 km\" ou, por exemplo, \"4 a menos de 1 km · vínculos: 1\"."
+msgid "Turn on **Show on the maps** to outline the listed alerts on both maps. The colour is the period's, and a small legend lists the periods shown, with \"solid: confirmed · dashed: needs revision · thick: linked\". The switch starts on for a growth alert; on other alerts it keeps your last choice. When the list covers several periods, the **Periods** menu hides some of them. The badge reads \"off\", \"none within 100 m\" or, for example, \"4 within 100 m · 1 linked\"."
+msgstr "Ligue **Mostrar nos mapas** para contornar os alertas listados nos dois mapas. A cor é a do período, e uma pequena legenda lista os períodos exibidos, com \"contínua: confirmado · tracejada: precisa de revisão · grossa: vinculado\". O interruptor começa ligado para um alerta de crescimento; nos outros alertas, ele mantém a sua última escolha. Quando a lista cobre vários períodos, o menu **Períodos** esconde alguns deles. O indicador mostra \"desativado\", \"nenhum a menos de 100 m\" ou, por exemplo, \"4 a menos de 100 m · vínculos: 1\"."
 
 msgid "In a `review copy <defo-evaluation-return_>`_, the list comes from a snapshot of the earlier alerts taken when the packages were built: the section reads \"Earlier alerts as of (date)\", or \"No earlier alerts in this copy\" for a package made by an older version of the app."
 msgstr "Numa `cópia de revisão <defo-evaluation-return_>`_, a lista vem de um instantâneo dos alertas anteriores tirado quando os pacotes foram gerados: a seção diz \"Alertas anteriores em (data)\", ou \"Nenhum alerta anterior nesta cópia\" para um pacote gerado por uma versão mais antiga do app."
 
+msgid "Nearby alerts"
+msgstr "Alertas próximos"
+
+msgid "This section appears only when **Review nearby alerts together** is selected in `Evaluation <defo-evaluation-group_>`_. One clearing often makes several small alerts side by side. Review them together: one verdict, one set of answers, one pair of images and one polygon for all of them."
+msgstr "Esta seção só aparece quando **Revisar juntos os alertas próximos** está marcado em `Avaliação <defo-evaluation-group_>`_. Um mesmo desmatamento muitas vezes gera vários alertas pequenos lado a lado. Revise-os juntos: um único veredito, um único conjunto de respostas, um único par de imagens e um único polígono para todos eles."
+
+msgid "The section lists the alerts within the distance set in **Evaluation**, measured edge to edge from the alert on screen: the ticked ones first, then the nearest others, at most 50 (\"12 more in range not listed\"). Each row shows:"
+msgstr "A seção lista os alertas dentro da distância definida em **Avaliação**, medida de borda a borda a partir do alerta na tela: primeiro os marcados, depois os outros mais próximos, no máximo 50 (\"mais 12 no raio, não listados\"). Cada linha mostra:"
+
+msgid "a box, ticked when the alert is part of the next save;"
+msgstr "uma caixa, marcada quando o alerta faz parte do próximo salvamento;"
+
+msgid "the alert's number (select it to zoom both maps to it), its first detection date and its area;"
+msgstr "o número do alerta (selecione-o para aproximar os dois mapas dele), a primeira data de detecção e a área dele;"
+
+msgid "its distance (\"40 m\"), or \"in this group\";"
+msgstr "a distância dele (\"40 m\"), ou \"neste grupo\";"
+
+msgid "\"group #12\" when it belongs to another group;"
+msgstr "\"grupo nº 12\" quando ele pertence a outro grupo;"
+
+msgid "its status; and"
+msgstr "o status dele; e"
+
+msgid "in a split set, \"assigned to Ana\", greyed and with no box, for an alert of another evaluator."
+msgstr "num conjunto dividido, \"atribuído a Ana\", acinzentado e sem caixa, para um alerta de outro avaliador."
+
+msgid "The list offers the alerts not reviewed and the alerts reviewed in a group. Alerts reviewed before grouping was on are offered only with **Include already reviewed alerts**."
+msgstr "A lista oferece os alertas não revisados e os alertas revisados num grupo. Os alertas revisados antes de o agrupamento ser ativado só são oferecidos com **Incluir os alertas já revisados**."
+
+msgid "The listed alerts are outlined on both maps (*Nearby alerts* layer). Click on a map near an outline to tick or clear that alert. **Select all** ticks every listed alert and **Clear** clears them. The badge reads \"3 selected\", \"5 within 300 m\" or \"none within 300 m\". When a ticked alert lies outside the images, a line says \"Some selected alerts are outside the image area: pick a larger area on the timeline.\""
+msgstr "Os alertas listados são contornados nos dois mapas (camada *Nearby alerts*). Clique num mapa perto de um contorno para marcar ou desmarcar esse alerta. **Selecionar todos** marca todos os alertas listados e **Limpar** os desmarca. O indicador mostra \"3 selecionados\", \"5 a menos de 300 m\" ou \"nenhum a menos de 300 m\". Quando um alerta marcado fica fora das imagens, uma linha diz \"Alguns alertas selecionados estão fora da área da imagem: escolha uma área maior na linha do tempo.\""
+
+msgid "To review a group:"
+msgstr "Para revisar um grupo:"
+
+msgid "Tick the alerts that show the same clearing."
+msgstr "Marque os alertas que mostram o mesmo desmatamento."
+
+msgid "Give the verdict, answer the questions, choose the images and draw the polygon as for one alert."
+msgstr "Dê o veredito, responda às perguntas, escolha as imagens e desenhe o polígono como para um único alerta."
+
+msgid "Select **Save**, which then reads \"Save for 4 alerts\"."
+msgstr "Selecione **Salvar**, que passa a dizer \"Salvar para 4 alertas\"."
+
+msgid "When the save changes other reviews, the **Save this group?** dialog lists them first, for example:"
+msgstr "Quando o salvamento altera outras revisões, a janela **Salvar este grupo?** as lista antes, por exemplo:"
+
+msgid "\"#15 (Reviewed: confirmed): its review is replaced\";"
+msgstr "\"#15 (Revisado: confirmado): sua revisão é substituída\";"
+
+msgid "\"#16 (Reviewed: confirmed): moves from group #9\" or \"joins with group #9\" (a whole group joins when its main alert is ticked); and"
+msgstr "\"#16 (Revisado: confirmado): sai do grupo nº 9\" ou \"junta-se ao grupo nº 9\" (um grupo inteiro se junta quando o alerta principal dele é marcado); e"
+
+msgid "\"#17 (Not reviewed): leaves the group and goes back to not reviewed\" (an alert of this group left unticked)."
+msgstr "\"#17 (Não revisado): sai do grupo e volta a não revisado\" (um alerta deste grupo deixado desmarcado)."
+
+msgid "Select **Save** or **Cancel**."
+msgstr "Selecione **Salvar** ou **Cancelar**."
+
+msgid "Every alert of the group gets the same verdict, answers, images and links to earlier alerts. The alert on screen when the group is first saved is its *main* alert: it keeps the drawn polygon. When the group has a drawing, the other alerts get an area of 0, so that the loss counts once."
+msgstr "Todos os alertas do grupo recebem o mesmo veredito, as mesmas respostas, as mesmas imagens e os mesmos vínculos a alertas anteriores. O alerta na tela quando o grupo é salvo pela primeira vez é o alerta *principal* dele: ele guarda o polígono desenhado. Quando o grupo tem um desenho, os outros alertas recebem uma área de 0, para que a perda seja contada uma única vez."
+
+msgid "An alert of a saved group opens with the banner \"Reviewed as a group of 4 (main alert #12)\", and the **Group** row of the panel reads \"group of 4\". The *Original alert* layer outlines the whole group. On an alert other than the main one, **Remove from group** takes it out of the group: confirm with **Remove**. The alert goes back to not reviewed."
+msgstr "Um alerta de um grupo salvo abre com o aviso \"Revisado em um grupo de 4 (alerta principal #12)\", e a linha **Grupo** do painel diz \"grupo de 4\". A camada *Original alert* contorna o grupo inteiro. Num alerta que não é o principal, **Remover do grupo** o tira do grupo: confirme com **Remover**. O alerta volta a não revisado."
+
+msgid "A group needs one evaluator: \"These alerts are assigned to different evaluators: a group needs one.\" In a review copy, only your own alerts can join: \"Some of these alerts are not assigned to you.\""
+msgstr "Um grupo precisa de um único avaliador: \"Estes alertas estão atribuídos a avaliadores diferentes: um grupo precisa de um só.\" Numa cópia de revisão, só os seus próprios alertas podem entrar: \"Alguns destes alertas não estão atribuídos a você.\""
+
 msgid "Save the review"
 msgstr "Salvar a revisão"
 
-msgid "The footer stays at the bottom of the panel:"
-msgstr "O rodapé fica fixo na parte de baixo do painel:"
+msgid "The *dock* stays at the bottom of the panel: the **Export this alert** section, then the buttons, then a state line."
+msgstr "A *barra inferior* fica fixa na parte de baixo do painel: a seção **Exportar este alerta**, depois os botões, depois uma linha de estado."
 
 msgid "**Save**"
 msgstr "**Salvar**"
 
-msgid "Saves the review and stays on the alert."
-msgstr "Salva a revisão e permanece no alerta."
+msgid "Saves the review and stays on the alert. With nearby alerts ticked, it reads \"Save for 4 alerts\"."
+msgstr "Salva a revisão e permanece no alerta. Com alertas próximos marcados, ele diz \"Salvar para 4 alertas\"."
 
 msgid "**Next**"
 msgstr "**Próximo**"
 
-msgid "Opens the next alert (the next match under a filter). With unsaved changes, it asks first: **Discard** drops them and moves on, **Stay** keeps you on the alert."
-msgstr "Abre o próximo alerta (a próxima correspondência, com um filtro ativo). Com alterações não salvas, ele pergunta antes: **Descartar** as apaga e avança, **Ficar** mantém você no alerta."
+msgid "Opens the next alert (the next match under a filter)."
+msgstr "Abre o próximo alerta (a próxima correspondência, com um filtro ativo)."
 
-msgid "The line under the buttons reads \"Unsaved changes on this alert\", \"Save your drawing before saving this review\" or \"Saved 14:32\"."
-msgstr "A linha abaixo dos botões diz \"Alterações não salvas neste alerta\", \"Salve seu desenho antes de salvar esta revisão\" ou \"Salvo às 14:32\"."
+msgid "Opens the next alert without a verdict, as in the top bar."
+msgstr "Abre o próximo alerta sem veredito, como na barra superior."
+
+msgid "The filled button shows the next step: **Save** while the alert has unsaved changes or no saved review, **Next** once the review is saved."
+msgstr "O botão preenchido mostra o próximo passo: **Salvar** enquanto o alerta tem alterações não salvas ou nenhuma revisão salva, **Próximo** depois que a revisão é salva."
+
+msgid "With unsaved changes, **Next**, the icon and the top bar's **Previous**, **Next**, **Go** and icon ask first. The buttons give way to \"This alert has unsaved changes\": **Discard** drops the changes and moves on, **Stay** keeps you on the alert."
+msgstr "Com alterações não salvas, **Próximo**, o ícone e os botões **Anterior**, **Próximo**, **Ir** e o ícone da barra superior perguntam antes. Os botões dão lugar a \"Este alerta tem alterações não salvas\": **Descartar** apaga as alterações e avança, **Ficar** mantém você no alerta."
+
+msgid "The state line reads \"Unsaved changes on this alert\", \"Save your drawing before saving this review\" or \"Saved 14:32\"."
+msgstr "A linha de estado diz \"Alterações não salvas neste alerta\", \"Salve seu desenho antes de salvar esta revisão\" ou \"Salvo às 14:32\"."
 
 msgid "A save writes into the alert set:"
 msgstr "Um salvamento grava no conjunto de alertas:"
@@ -3286,8 +3451,11 @@ msgstr "as imagens de antes e depois escolhidas, para que o alerta reabra com el
 msgid "the polygon saved in **Refine polygon**, with its area as the alert's area;"
 msgstr "o polígono salvo em **Refinar polígono**, com a área dele como área do alerta;"
 
-msgid "the earlier alerts ticked in `Earlier alerts <defo-analysis-earlier_>`_, as the alert's links; and"
-msgstr "os alertas anteriores marcados em `Alertas anteriores <defo-analysis-earlier_>`_, como os vínculos do alerta; e"
+msgid "the earlier alerts ticked in `Earlier alerts <defo-analysis-earlier_>`_, as the alert's links;"
+msgstr "os alertas anteriores marcados em `Alertas anteriores <defo-analysis-earlier_>`_, como os vínculos do alerta;"
+
+msgid "with nearby alerts ticked, the group (see `Nearby alerts <defo-analysis-nearby_>`_); and"
+msgstr "com alertas próximos marcados, o grupo (veja `Alertas próximos <defo-analysis-nearby_>`_); e"
 
 msgid "the names of the administrative areas under the alert, from the FAO GAUL 2015 boundaries in GEE (this takes a few seconds)."
 msgstr "os nomes das áreas administrativas sob o alerta, a partir dos limites FAO GAUL 2015 no GEE (isso leva alguns segundos)."
@@ -3298,8 +3466,8 @@ msgstr "As revisões aparecem na hora na barra de progresso, no seletor de conju
 msgid "Export the alert"
 msgstr "Exportar o alerta"
 
-msgid "**Export this alert**, in the footer, builds the alert's files once it is saved: a .zip file with its GeoPackage and images, a Word report and, for a true alert, an animated GIF. See `One alert, from Analysis <defo-export-alert_>`_."
-msgstr "**Exportar este alerta**, no rodapé, gera os arquivos do alerta depois que ele é salvo: um arquivo .zip com o GeoPackage e as imagens, um relatório Word e, para um alerta verdadeiro, um GIF animado. Veja `Um alerta, a partir da Análise <defo-export-alert_>`_."
+msgid "**Export this alert**, at the top of the dock, builds the alert's files once it is saved: a .zip file with its GeoPackage and images, a Word report and, for a true alert, an animated GIF. See `One alert, from Analysis <defo-export-alert_>`_."
+msgstr "**Exportar este alerta**, no topo da barra inferior, gera os arquivos do alerta depois que ele é salvo: um arquivo .zip com o GeoPackage e as imagens, um relatório Word e, para um alerta verdadeiro, um GIF animado. Veja `Um alerta, a partir da Análise <defo-export-alert_>`_."
 
 msgid "The footer: export section and save buttons"
 msgstr "O rodapé: seção de exportação e botões de salvar"
@@ -3541,6 +3709,12 @@ msgstr "**Histórico de desmatamentos que crescem**"
 msgid "Only when the set has `growth alerts <defo-integrate-growth_>`_ (see below)."
 msgstr "Só quando o conjunto tem `alertas de crescimento <defo-integrate-growth_>`_ (veja abaixo)."
 
+msgid "**Nearby alerts**"
+msgstr "**Alertas próximos**"
+
+msgid "How the set's alerts gather into groups of nearby alerts (see below)."
+msgstr "Como os alertas do conjunto se reúnem em grupos de alertas próximos (veja abaixo)."
+
 msgid "**When the loss was detected**"
 msgstr "**Quando a perda foi detectada**"
 
@@ -3598,6 +3772,21 @@ msgstr "**Revisar**"
 msgid "Closes the Overview and opens this set's alert of the history in `Analysis <defo-analysis_>`_."
 msgstr "Fecha a Visão geral e abre na `Análise <defo-analysis_>`_ o alerta deste conjunto que faz parte do histórico."
 
+msgid "The **Nearby alerts** card shows how the set's alerts chain into groups: alerts within the distance of **Review nearby alerts together** (see `Evaluation <defo-evaluation-group_>`_), edge to edge, form one group. A split gives each group to one evaluator."
+msgstr "O cartão **Alertas próximos** mostra como os alertas do conjunto se encadeiam em grupos: os alertas dentro da distância de **Revisar juntos os alertas próximos** (veja `Avaliação <defo-evaluation-group_>`_), de borda a borda, formam um único grupo. Ao dividir, cada grupo vai para um único avaliador."
+
+msgid "The headline counts the groups (\"6 groups of nearby alerts\"), or reads \"No alert within 300 m of another\"."
+msgstr "O título conta os grupos (\"6 grupos de alertas próximos\") ou diz \"Nenhum alerta a menos de 300 m de outro\"."
+
+msgid "The line under it reads, for example, \"In a group: 20 of 48 alerts · Alone: 28 · Largest: 5 alerts\"."
+msgstr "A linha abaixo dele diz, por exemplo, \"Em um grupo: 20 de 48 alertas · Sozinhos: 28 · O maior: 5 alertas\"."
+
+msgid "The last line counts the groups saved in Analysis (\"2 groups saved in Analysis (7 alerts)\"), or reads \"No group saved in Analysis yet\"."
+msgstr "A última linha conta os grupos salvos na Análise (\"2 grupos salvos na Análise (7 alertas)\") ou diz \"Nenhum grupo salvo na Análise ainda\"."
+
+msgid "When grouping is off, the card uses the project's distance and adds \"Reviewing nearby alerts together is off: turn it on in the Evaluation step.\""
+msgstr "Quando o agrupamento está desativado, o cartão usa a distância do projeto e acrescenta \"Revisar juntos os alertas próximos está desativado: ative na etapa Avaliação.\""
+
 msgid "Export the set"
 msgstr "Exportar o conjunto"
 
@@ -3646,8 +3835,8 @@ msgstr "Todo arquivo é gravado na pasta do conjunto de alertas dentro do projet
 msgid "One alert, from Analysis"
 msgstr "Um alerta, a partir da Análise"
 
-msgid "The **Export this alert** section sits in the footer of the `Analysis <defo-analysis_>`_ review panel. It works on the alert on screen, once its review is saved: its badge reads \"available after save\", then \"ready to build\", then \"3 files ready\"."
-msgstr "A seção **Exportar este alerta** fica no rodapé do painel de revisão da `Análise <defo-analysis_>`_. Ela trabalha sobre o alerta que está na tela, depois que a revisão dele é salva: o indicador dela mostra \"disponível após salvar\", depois \"pronto para gerar\" e, por fim, \"3 arquivos prontos\"."
+msgid "The **Export this alert** section sits at the top of the dock of the `Analysis <defo-analysis-save_>`_ review panel. It works on the alert on screen, once its review is saved: its badge reads \"available after save\", then \"ready to build\", then \"3 files ready\"."
+msgstr "A seção **Exportar este alerta** fica no topo da barra inferior do painel de revisão da `Análise <defo-analysis-save_>`_. Ela trabalha sobre o alerta que está na tela, depois que a revisão dele é salva: o indicador dela mostra \"disponível após salvar\", depois \"pronto para gerar\" e, por fim, \"3 arquivos prontos\"."
 
 msgid "The alert's files, ready to download"
 msgstr "Os arquivos do alerta, prontos para baixar"
@@ -3655,8 +3844,8 @@ msgstr "Os arquivos do alerta, prontos para baixar"
 msgid "**Build files**"
 msgstr "**Gerar arquivos**"
 
-msgid "Builds the alert's data and report. It reads \"Save this alert first\" and is disabled until **Save** is selected on this alert in this session. It runs in the task list and takes a while: it downloads the before and after images."
-msgstr "Gera os dados e o relatório do alerta. Mostra \"Salve este alerta primeiro\" e fica desativado até que **Salvar** seja selecionado neste alerta, nesta sessão. Roda na lista de tarefas e demora um pouco: baixa as imagens de antes e depois."
+msgid "Builds the alert's data and report from the saved review (\"Makes the files above from the saved review\"). It is disabled until the review on screen is saved: it then reads \"Save this alert first\", or \"Save your changes first\" when there are unsaved changes. A reviewed alert opened on the images it was saved with is ready at once. It runs in the task list (\"Building files…\") and takes a while: it downloads the before and after images."
+msgstr "Gera os dados e o relatório do alerta a partir da revisão salva (\"Gera os arquivos acima a partir da revisão salva\"). Fica desativado até que a revisão na tela seja salva: mostra então \"Salve este alerta primeiro\", ou \"Salve suas alterações primeiro\" quando há alterações não salvas. Um alerta revisado aberto com as imagens com que foi salvo fica pronto na hora. Roda na lista de tarefas (\"Gerando arquivos…\") e demora um pouco: baixa as imagens de antes e depois."
 
 msgid "**Alert data**"
 msgstr "**Dados do alerta**"
@@ -3679,8 +3868,8 @@ msgstr "Gera os arquivos de novo (por exemplo, depois que a revisão mudou)."
 msgid "**Timelapse**"
 msgstr "**Timelapse**"
 
-msgid "Makes and downloads an animated GIF of the alert (see below)."
-msgstr "Cria e baixa um GIF animado do alerta (veja abaixo)."
+msgid "Makes and downloads an animated GIF of the alert (see below). For an alert not saved as a true alert, it reads \"True alerts only\"."
+msgstr "Cria e baixa um GIF animado do alerta (veja abaixo). Para um alerta não salvo como alerta verdadeiro, ele diz \"Apenas alertas verdadeiros\"."
 
 msgid "The files are named after the alert's row in the set (the counter's number minus one):"
 msgstr "Os arquivos levam o número da linha do alerta no conjunto (o número do contador menos um):"
@@ -3718,6 +3907,9 @@ msgstr "``alert_<n>.docx``"
 msgid "The Word report."
 msgstr "O relatório Word."
 
+msgid "For an alert of a group (see `Nearby alerts <defo-analysis-nearby_>`_), the files describe the whole group: the GeoPackage holds one feature with the group's summed area, its first and last detection dates, its sources, ``group_size`` (the number of alerts) and ``group_alerts`` (their numbers, e.g. \"12, 15, 16\"), and the GIF outlines every alert of the group."
+msgstr "Para um alerta de um grupo (veja `Alertas próximos <defo-analysis-nearby_>`_), os arquivos descrevem o grupo inteiro: o GeoPackage contém uma única feição com a área somada do grupo, a primeira e a última data de detecção, as fontes, ``group_size`` (o número de alertas) e ``group_alerts`` (os números deles, por exemplo \"12, 15, 16\"), e o GIF contorna todos os alertas do grupo."
+
 msgid "The links of the tiles are for the review on screen. Choosing other images, saving the alert again or changing the report template hides them: build the files again."
 msgstr "Os links dos blocos valem para a revisão que está na tela. Escolher outras imagens, salvar o alerta de novo ou mudar o modelo de relatório os esconde: gere os arquivos de novo."
 
@@ -3730,8 +3922,8 @@ msgstr "O relatório é gerado a partir do modelo Word do projeto, escolhido na 
 msgid "The timelapse"
 msgstr "O timelapse"
 
-msgid "The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame is labelled with its collection and date. The before and after frames also name their side (\"Before · Sentinel-2 2026-07-28\")."
-msgstr "O bloco **Timelapse** cria um GIF animado que percorre as imagens da área do alerta, de antes para depois, com o contorno do alerta por cima. Cada quadro traz a coleção e a data. Os quadros de antes e de depois também indicam o lado (\"Antes · Sentinel-2 2026-07-28\")."
+msgid "The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame stays 2.5 seconds and is labelled with its collection and date. The before and after frames also name their side (\"Before · Sentinel-2 2026-07-28\")."
+msgstr "O bloco **Timelapse** cria um GIF animado que percorre as imagens da área do alerta, de antes para depois, com o contorno do alerta por cima. Cada quadro dura 2,5 segundos e traz a coleção e a data. Os quadros de antes e de depois também indicam o lado (\"Antes · Sentinel-2 2026-07-28\")."
 
 msgid "It is offered for a true alert only: the tile is active when the alert is saved as **Reviewed: confirmed** and the images on screen are those it was saved with. Otherwise, it reads \"Save as a true alert, with the images on screen, to create it\"."
 msgstr "Ele só é oferecido para um alerta verdadeiro: o bloco fica ativo quando o alerta está salvo como **Revisado: confirmado** e as imagens na tela são aquelas com que ele foi salvo. Caso contrário, ele diz \"Salve-o como alerta verdadeiro, com as imagens na tela, para criá-lo\"."
