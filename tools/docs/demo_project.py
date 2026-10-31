@@ -5,11 +5,13 @@
 
 Starts the app (``./run_ui.sh``, see ``tools.walk.walklib``) on ``DIR`` as its
 data directory and drives the real UI with Playwright, the way a user builds
-a project: New project, the AOI (Admin level 1: Peru / Madre de Dios), three
-predefined sources, one Sentinel-2 visualization layer shown in Analysis, one
-period, the grid, one forest mask, Download & harmonize, Integrate &
-vectorize (minimum size and maximum count), a few reviews, a split between
-two evaluators, their review packages, and one evaluator's reviewed copy.
+a project, in the order of the workflow's two levels: New project, the AOI
+(Admin level 1: Peru / Madre de Dios), one period, three predefined sources
+added and downloaded in Alerts, the grid, one forest mask and the sources
+harmonized in Harmonize, Integrate & vectorize (minimum size and maximum
+count); then one Sentinel-2 additional layer shown in Analysis, a few
+reviews, a split between two evaluators, their review packages, and one
+evaluator's reviewed copy.
 
 Every stage is skipped when its output already exists (read from the
 project's ``project.json``, its alert store or the fixture files), so a run
@@ -76,7 +78,7 @@ REVIEWS_AFTER_SPLIT = ((2, "true", "loss_driver1"), (3, "revision", "loss_driver
 COPY_REVIEWS = (("true", "loss_driver6"), ("true", "loss_driver1"), ("false", None))
 
 RIGHT = ".right-panel"
-STAGE_TIMEOUTS = {"prepare": 6 * 3600, "integrate": 2 * 3600}
+STAGE_TIMEOUTS = {"download": 3 * 3600, "harmonize": 6 * 3600, "integrate": 2 * 3600}
 
 
 # ------------------------------------------------------------------ state on disk
@@ -228,8 +230,14 @@ def st_aoi(page, rec, ctx):
     w.shot(page, ctx["shots"], "aoi")
 
 
+def period_sources(data: Path) -> list:
+    """The source keys of the active period (sources belong to a period)."""
+    m = manifest(data) or {}
+    return list(((m.get("periods") or {}).get(m.get("active_period")) or {}).get("sources") or [])
+
+
 def st_sources(page, rec, ctx):
-    have = (manifest(ctx["data"]) or {}).get("sources") or {}
+    have = period_sources(ctx["data"])
     for key in SOURCES:
         if key in have:
             continue
@@ -242,7 +250,7 @@ def st_sources(page, rec, ctx):
         button.click()
         w.wait_for(lambda: not ph.dialog_open(page), 120, f"{key} added")
         page.wait_for_timeout(1500)
-    w.wait_for(lambda: set(SOURCES) <= set((manifest(ctx["data"]) or {}).get("sources") or {}), 30, "the sources saved")
+    w.wait_for(lambda: set(SOURCES) <= set(period_sources(ctx["data"])), 30, "the sources saved")
     w.wait_for(lambda: set(SOURCES) <= set((manifest(ctx["data"]) or {}).get("coverage") or {}), 300,
                "the coverage checked")
     rec["coverage"] = {k: v.get("fraction") for k, v in manifest(ctx["data"])["coverage"].items()}
@@ -303,15 +311,21 @@ def st_mask(page, rec, ctx):
     rec["masks"] = manifest(ctx["data"])["masks"]
 
 
-def prepared(data: Path) -> bool:
+def _have_artifacts(data: Path, kind: str) -> bool:
+    """Whether every source of the active period has its ``kind`` file
+    (``raw``: downloaded, ``harm``: harmonized)."""
     m = manifest(data) or {}
     pid = m.get("active_period")
     arts = m.get("artifacts") or {}
-    return bool(pid) and all(f"harm:{pid}:{s}" in arts for s in SOURCES)
+    return bool(pid) and all(f"{kind}:{pid}:{s}" in arts for s in SOURCES)
 
 
-def st_prepare(page, rec, ctx):
-    ph.run_all(page, rec, out=ctx["shots"], expect_ready=len(SOURCES) + 1, timeout=STAGE_TIMEOUTS["prepare"])
+def st_download(page, rec, ctx):
+    ph.download_all(page, rec, out=ctx["shots"], expect_ready=len(SOURCES), timeout=STAGE_TIMEOUTS["download"])
+
+
+def st_harmonize(page, rec, ctx):
+    ph.run_all(page, rec, out=ctx["shots"], expect_ready=len(SOURCES) + 1, timeout=STAGE_TIMEOUTS["harmonize"])
     m = manifest(ctx["data"])
     rec["harmonized"] = {k: {"alert_pixels": a.get("stats", {}).get("alert_pixels"), "mb": round(
         (a.get("size_bytes") or 0) / 1e6, 1)} for k, a in m["artifacts"].items() if k.startswith("harm:")}
@@ -469,13 +483,14 @@ def st_return(page, rec, ctx):
 STAGES = (
     ("project", lambda d: manifest(d) is not None, st_project),
     ("aoi", lambda d: bool((manifest(d) or {}).get("aoi")), st_aoi),
-    ("sources", lambda d: set(SOURCES) <= set((manifest(d) or {}).get("sources") or {}), st_sources),
-    ("layer", lambda d: bool((manifest(d) or {}).get("vis_layers")), st_layer),
     ("period", lambda d: bool((manifest(d) or {}).get("periods")), st_period),
+    ("sources", lambda d: set(SOURCES) <= set(period_sources(d)), st_sources),
+    ("download", lambda d: _have_artifacts(d, "raw"), st_download),
     ("grid", lambda d: bool((manifest(d) or {}).get("grid")), st_grid),
     ("mask", lambda d: bool((manifest(d) or {}).get("masks")), st_mask),
-    ("prepare", prepared, st_prepare),
+    ("harmonize", lambda d: _have_artifacts(d, "harm"), st_harmonize),
     ("integrate", lambda d: active_set(d) is not None, st_integrate),
+    ("layer", lambda d: bool((manifest(d) or {}).get("vis_layers")), st_layer),
     ("reviews_before_split", lambda d: bool((active_set(d) or {}).get("split"))
      or reviewed_count(d) >= len(REVIEWS_BEFORE_SPLIT), st_reviews_before),
     ("split", lambda d: bool((active_set(d) or {}).get("split")), st_split),
@@ -558,6 +573,9 @@ def main(argv=None):
     ap.add_argument("--ee-project", metavar="NAME",
                     help="the Earth Engine (Cloud) project for the app server this builder starts, instead of the "
                          "one in ~/.config/earthengine/credentials; that file is not changed")
+    ap.add_argument("--raw-cache", type=Path, metavar="DIR",
+                    help="a folder of raw source downloads, reused by name and filled with new ones "
+                         "(see server_hooks/sitecustomize.py)")
     args = ap.parse_args(argv)
     data = args.data_dir.expanduser().resolve()
     build = data / "_build"

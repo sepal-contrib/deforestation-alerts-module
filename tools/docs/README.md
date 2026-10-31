@@ -78,13 +78,13 @@ with the `tools/walk/walklib.py` helpers), so it is exactly what a user gets.
 | --- | --- | --- |
 | Project | Project → New project → `madre_de_dios` | UI |
 | AOI | Admin level 1 → Peru → Madre de Dios → Select AOI | UI |
-| Alerts | GLAD-L, RADD, GLAD-S2 (predefined) | UI |
-| Optional layers | Earth Engine image `COPERNICUS/S2_SR_HARMONIZED/20260927T144729_20260927T145044_T19LDF` (Sentinel-2, 27 Sep 2026, tile 19LDF east of Puerto Maldonado), RGB true colour B4/B3/B2, Min 0, Max 3000, named `Sentinel-2 2026-09-27`, **Show in Analysis** on. The build account has no Planet NICFI access, so no NICFI layer. | UI |
 | Period | 2026-09-01 → 2026-09-30, look-back 90 days typed in (a new period starts at 0; search window 2026-06-03 → 2026-09-30) | UI |
+| Alerts | GLAD-L, RADD, GLAD-S2 (predefined) added to the period, then **Download 3 pending** | UI |
 | Grid | UTM zone (EPSG:32719), 10 m | UI |
 | Mask | `forest_2000`: `UMD/hansen/global_forest_change_2025_v1_13`, band `treecover2000`, Keep | UI |
-| Download & harmonize | Run 3 pending (the mask, then the three sources) | UI |
-| Integrate & vectorize | Minimum alert size 1 ha, Bigger alerts first, **Limit the number of alerts** on → Maximum number of alerts 48; Include probable alerts left on | UI |
+| Harmonize | **Harmonize 4 pending** (the mask, then the three sources) | UI |
+| Integrate & vectorize | **Minimum cluster size** 1 ha, Bigger alerts first, **Limit the number of clusters** on → **Maximum number of clusters** 48; Include probable alerts left on | UI |
+| Additional layers | Earth Engine image `COPERNICUS/S2_SR_HARMONIZED/20260927T144729_20260927T145044_T19LDF` (Sentinel-2, 27 Sep 2026, tile 19LDF east of Puerto Maldonado), RGB true colour B4/B3/B2, Min 0, Max 3000, named `Sentinel-2 2026-09-27`, **Show in Analysis** on. Added after Integrate: the step is in the **Set up review** level, locked until a set exists. The build account has no Planet NICFI access, so no NICFI layer. | UI |
 | Reviews | Alerts 1 (True alert, Mining) and 2 (False positive) before the split | UI |
 | Evaluation | Review mode **Multiple evaluators** checked (a new project has none) → Split alerts… → Names: Ana, Luis (reviewed alerts stay unassigned) | UI |
 | Reviews | Alerts 3 (True alert, Agriculture expansion), 4 (Needs review, Logging), 5 (True alert, Mining) | UI |
@@ -113,7 +113,7 @@ Result of the last build (2026-10-20, from scratch, `--ee-project` set to an unr
 ```
 PATH=<the defo-alerts env>/bin:$PATH \
   python -m tools.docs.demo_project --data-dir ~/defo_docs_demo --port 8931 \
-  [--ee-project my-ee-project] [--ee-max-requests 4]
+  [--ee-project my-ee-project] [--ee-max-requests 4] [--raw-cache DIR]
 ```
 
 - `--data-dir` is the app's data directory (`DEFORESTATION_ALERTS_DATA_DIR`); keep it under `$HOME`.
@@ -121,8 +121,11 @@ PATH=<the defo-alerts env>/bin:$PATH \
   review copy project they were made in) and `_build/` (report, a screenshot per stage, server log).
   Never commit it.
 - Every stage is skipped when its output exists, so after a failure just run the same command again.
-- Earth Engine runs with your own credentials. Download & harmonize is the long part (hours on a Restricted
-  Mode project, see `--ee-project`; 14 min on an unrestricted one).
+- Earth Engine runs with your own credentials. Download and Harmonize are the long part (hours on a Restricted
+  Mode project, see `--ee-project`; 14 min together on an unrestricted one).
+- `--raw-cache DIR`: reuse raw source downloads by file name (`raw_<source>_<start>_<end>.tif`) and add
+  new ones to DIR, as in the capture. To check the build without Earth Engine downloads, point it at a copy
+  of the demo's `periods/*/raw/` files.
 - `--ee-project NAME`: the Earth Engine (Cloud) project for the build's server only, instead of the
   `project` in `~/.config/earthengine/credentials` (that file is not changed). The builder hands the
   server an `EARTHENGINE_TOKEN` (the same credentials naming NAME, read by eeclient) and
