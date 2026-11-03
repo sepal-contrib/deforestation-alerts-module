@@ -9,7 +9,7 @@ import pytest
 
 from deforestation_alerts.engine import runner
 from deforestation_alerts.engine.coverage import Note
-from deforestation_alerts.engine.fingerprint import Status, raw_key
+from deforestation_alerts.engine.fingerprint import Status, harm_key, raw_key
 from deforestation_alerts.engine.plan import MaskRow, PrepareRow
 from deforestation_alerts.project.models import (
     AoiRecord, Artifact, BandMap, Period, Project, add_custom_source, add_predefined_source,
@@ -94,7 +94,7 @@ def test_three_action_slots_in_order():
     out = _build(rows, p=p)
     for r in out.values():
         assert [a["kind"] for a in r["actions"]] == ["map_toggle", "info", "delete"]
-    assert _acts(out["RADD"])["delete"]["title"] == "Delete files"
+    assert _acts(out["RADD"])["delete"]["title"] == "Delete harmonized file"
     assert out["tif"]["cells"][1]["label"] == "Harmonize"
 
 
@@ -112,12 +112,14 @@ def test_the_row_actions_call_back_with_their_source():
         "is_on"]
 
 
-def test_delete_needs_a_file():
+def test_delete_needs_a_harmonized_file():
     p = _p()
     assert _acts(_build([PrepareRow("RADD", Status.MISSING, Status.MISSING)], p=p)["RADD"])["delete"]["disabled"]
-    rkey = raw_key(JAN.id, "RADD")
-    p.artifacts = {rkey: _art(rkey, "raw_alert")}
-    assert not _acts(_build([PrepareRow("RADD", Status.CURRENT, Status.MISSING)], p=p)["RADD"])["delete"]["disabled"]
+    rkey, hkey = raw_key(JAN.id, "RADD"), harm_key(JAN.id, "RADD")
+    p.artifacts = {rkey: _art(rkey, "raw_alert")}  # the download alone is the Alerts step's to remove
+    assert _acts(_build([PrepareRow("RADD", Status.CURRENT, Status.MISSING)], p=p)["RADD"])["delete"]["disabled"]
+    p.artifacts[hkey] = _art(hkey, "harmonized")
+    assert not _acts(_build([PrepareRow("RADD", Status.CURRENT, Status.CURRENT)], p=p)["RADD"])["delete"]["disabled"]
 
 
 def test_a_review_copy_shows_text_not_verbs():
