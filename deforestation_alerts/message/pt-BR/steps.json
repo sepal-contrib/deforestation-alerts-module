@@ -586,7 +586,7 @@
       "info_header": "Sobre Integrar e vetorizar",
       "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os agrupamentos que a Análise revisa.\n\nO formulário segue a execução: **1 · Combinar pixels** cobre as etapas 1 e 2, **2 · Formar agrupamentos** as etapas 3 e 4.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada pixel de alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Os pixels de alerta vizinhos são reunidos em **agrupamentos**; cada agrupamento guarda as fontes de todos os seus pixels. Os agrupamentos menores que o **tamanho mínimo** são descartados; você pode limitar o número de agrupamentos, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada agrupamento.\n\nOs agrupamentos menores que o tamanho mínimo ficam fora do conjunto, das suas exportações e do mapa. **Manter os agrupamentos menores que tocam uma perda confirmada anterior** os mantém como *Crescimento · abaixo da área mínima*, vinculados ao alerta a partir do qual crescem; desmarcado, são descartados como qualquer agrupamento pequeno.\n\nOs pixels de agrupamentos pequenos demais para serem mantidos, ou além do número máximo de agrupamentos, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os agrupamentos revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
       "sec_combine": "Combinar pixels",
-      "sec_combine_hint": "Os pixels de alerta das fontes escolhidas, unidos na grade.",
+      "sec_combine_hint": "Os pixels de alerta das fontes escolhidas, combinados na grade.",
       "sec_clusters": "Formar agrupamentos",
       "sec_clusters_hint": "Os pixels vizinhos, reunidos nos agrupamentos que a Análise revisa.",
       "auto_footprint": {
@@ -595,9 +595,9 @@
         "other": "Remove os pixels já presentes em {n} conjuntos de alertas anteriores"
       },
       "auto_carry": {
-        "one": "Recupera os pixels não analisáveis de {n} conjunto anterior dentro do período retroativo",
-        "many": "Recupera os pixels não analisáveis de {n} de conjuntos anteriores dentro do período retroativo",
-        "other": "Recupera os pixels não analisáveis de {n} conjuntos anteriores dentro do período retroativo"
+        "one": "Recupera os pixels não analisáveis de {n} conjunto anterior dentro da busca retroativa",
+        "many": "Recupera os pixels não analisáveis de {n} de conjuntos anteriores dentro da busca retroativa",
+        "other": "Recupera os pixels não analisáveis de {n} conjuntos anteriores dentro da busca retroativa"
       },
       "sec_result": {
         "one": "Resultado · {n} agrupamento",

@@ -582,11 +582,11 @@
       "d_pixels_masked": "{kept} ({before} avant les masques : {removed} retirés)"
     },
     "integrate": {
-      "instruction": "Combinez les pixels d'alerte des sources, puis regroupez-les en groupes.",
+      "instruction": "Combinez les pixels d'alerte des sources, puis formez-en des groupes.",
       "info_header": "À propos d'Intégrer et vectoriser",
       "info_md": "Cette étape transforme les sources harmonisées de la période active en un **jeu d'alertes** : les groupes qu'Analyse passe en revue.\n\nLe formulaire suit l'exécution : **1 · Combiner les pixels** couvre les étapes 1 et 2, **2 · Former les groupes** les étapes 3 et 4.\n\n1. Les sources choisies sont combinées pixel par pixel ; chaque pixel d'alerte se souvient des sources qui l'ont détecté.\n2. Les pixels déjà signalés par les jeux des périodes antérieures (leur **empreinte**) sont retirés.\n3. Les pixels d'alerte voisins sont regroupés en **groupes** ; chaque groupe garde les sources de tous ses pixels. Les groupes plus petits que la **taille minimale** sont écartés ; vous pouvez limiter le nombre de groupes, triés comme vous le choisissez.\n4. Chaque **couche d'attributs** optionnelle (une image Earth Engine ou un GeoTIFF) ajoute une statistique de ses bandes à chaque groupe.\n\nLes groupes plus petits que la taille minimale sortent du jeu, de ses exports et de la carte. **Garder les groupes plus petits qui touchent une perte confirmée antérieure** les garde comme *Extension · sous la surface minimale*, liés à l'alerte qu'ils prolongent ; case décochée, ils sont écartés comme tout petit groupe.\n\nLes pixels des groupes trop petits pour être gardés, ou au-delà du nombre maximal de groupes, sont conservés comme **non analysables**, et l'exécution de la période suivante les réexamine dans sa rétrospection. Un interrupteur **inclure les alertes probables** vaut pour toutes les sources choisies (**Régler par source** pour choisir chacune) ; désactivé, leurs pixels probables sont écartés. La couche **Afficher les pixels non analysables** les dessine sur la carte.\n\nUn jeu d'alertes est identifié par sa période et ses sources : relancer la même combinaison le **remplace**, après une confirmation qui liste les groupes examinés qu'elle écarterait. À la fin de l'exécution, le nouveau jeu devient le jeu actif : préparez le questionnaire, puis lancez Analyse.",
       "sec_combine": "Combiner les pixels",
-      "sec_combine_hint": "Les pixels d'alerte des sources choisies, fusionnés sur la grille.",
+      "sec_combine_hint": "Les pixels d'alerte des sources choisies, combinés sur la grille.",
       "sec_clusters": "Former les groupes",
       "sec_clusters_hint": "Les pixels voisins, réunis dans les groupes qu'Analyse passe en revue.",
       "auto_footprint": {
@@ -595,9 +595,9 @@
         "other": "Retire les pixels déjà présents dans {n} jeux d'alertes antérieurs"
       },
       "auto_carry": {
-        "one": "Reprend les pixels non analysables de {n} jeu antérieur dans la période rétrospective",
-        "many": "Reprend les pixels non analysables de {n} de jeux antérieurs dans la période rétrospective",
-        "other": "Reprend les pixels non analysables de {n} jeux antérieurs dans la période rétrospective"
+        "one": "Reprend les pixels non analysables de {n} jeu antérieur dans la rétrospection",
+        "many": "Reprend les pixels non analysables de {n} de jeux antérieurs dans la rétrospection",
+        "other": "Reprend les pixels non analysables de {n} jeux antérieurs dans la rétrospection"
       },
       "sec_result": {
         "one": "Résultat · {n} groupe",
