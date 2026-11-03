@@ -654,15 +654,22 @@ def _AppShell():
         # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
         # !important since an inline style beats any stylesheet rule.
         ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
-        # The workflow panel's step strip and title stay put while a step
-        # scrolls under them; same background pair as the footer above.
-        ".defo-workflow-header { position: sticky; top: 0; z-index: 3;"
-        " background-color: var(--v-background-base, #ffffff); }\n"
-        ".theme--dark .defo-workflow-header { background-color: #1a1a1a; }\n"
-        # MapApp pads its right panel's content (`pa-4`): on top of the
-        # header's own padding that left an empty band under the "Workflow"
-        # title. The header pads itself, so drop the panel's top padding.
-        ".right-panel .pa-4:has(.defo-workflow-header) { padding-top: 0 !important; }\n"
+        # The workflow panel's step strip and title stay put and only the
+        # step under them scrolls, with its own scrollbar. pysepal's
+        # `.drawer-top` scrolls the whole panel content (an inline
+        # overflow-y): here it and its wrappers down to panel_host become a
+        # flex column that fills the panel, and the steps' body scrolls.
+        # MapApp's `pa-4` padding moves onto the header and the body, so the
+        # scrollbar sits at the panel's edge; the header pads its own top.
+        ".right-panel .drawer-top:has(.defo-workflow-panel) {"
+        " overflow-y: hidden !important; display: flex; flex-direction: column; }\n"
+        ".right-panel .drawer-top :is(.pa-4, .mb-4, .mb-3):has(.defo-workflow-panel) {"
+        " flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;"
+        " margin-bottom: 0 !important; padding: 0 !important; }\n"
+        ".defo-workflow-panel { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }\n"
+        ".defo-workflow-header { flex: none; padding: 0 16px; }\n"
+        ".defo-workflow-body { flex: 1 1 0; min-height: 0; overflow-y: auto; overflow-x: hidden;"
+        " padding: 0 16px 16px; }\n"
         # A file tile (gui/tile/analysis/file_tile.py) is a v-btn, whose
         # content is Vuetify's `flex: 1 0 auto` and never shrinks: a long
         # detail line (an out-of-date CSV) pushed the download icon out of
@@ -846,15 +853,16 @@ def _AppShell():
     # reads change.
     def _header():
         widget = render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0]
-        widget.class_ = "defo-workflow-header"  # sticky: on panel_host's own child, the tall step's sibling
+        widget.class_ = "defo-workflow-header"  # fixed above the body, which scrolls alone (CSS above)
         return widget
 
     header_widget = solara.use_memo(_header, dependencies=[])
     panel_host = solara.use_memo(
         lambda: v.Container(
             fluid=True,
-            class_="pa-0 ma-0",
-            children=[header_widget, *panel_wrappers.values()],
+            class_="pa-0 ma-0 defo-workflow-panel",
+            children=[header_widget, v.Html(tag="div", class_="defo-workflow-body",
+                                            children=[*panel_wrappers.values()])],
         ),
         dependencies=[],
     )
