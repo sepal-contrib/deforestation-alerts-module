@@ -217,7 +217,10 @@ def AoiStep(app_state, map_, gee_interface, layers):
             return
         # Keyed: the alert appearing above must not remount the picker (its
         # unmount clears the AOI from the map and the remount replays it).
-        with rv.Html(tag="div", style_="pointer-events:none;opacity:0.6;" if locked else "").key("aoi-view"):
+        # padding-top: the dense method select floats its label above its box,
+        # where the sticky Workflow header (opaque) would cover it.
+        lock = "pointer-events:none;opacity:0.6;" if locked else ""
+        with rv.Html(tag="div", style_="padding-top:12px;" + lock).key("aoi-view"):
             AoiView(
                 value=app_state.aoi_result.value,
                 on_value=_on_value,
