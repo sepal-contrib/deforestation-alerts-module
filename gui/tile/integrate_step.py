@@ -19,10 +19,10 @@ files are current, with what its harmonized file found, and shows a source of
 the period that is not covered or has no data disabled, with the reason; the
 run is told which were left out, for an empty set's toast.
 
-The form is laid out as the run: "1 Combine pixels" (the sources, their
-probable level, and lines for what the run does on its own: subtract earlier
-sets' footprints, bring back carried pixels), then "2 Build clusters" (size,
-growth, order, limit, attribute layers), then the run and its result.
+The form is laid out as the run, one outlined card per block: the sources
+(their probable level, and lines for what the run does on its own: subtract
+earlier sets' footprints, bring back carried pixels), the cluster settings
+(size, growth, order, limit), the attribute layers; then the run and its result.
 """
 
 import reacton.ipyvuetify as rv
