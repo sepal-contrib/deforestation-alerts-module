@@ -18,6 +18,11 @@ The source checklist (spec §7.4) offers every source whose raw and harmonized
 files are current, with what its harmonized file found, and shows a source of
 the period that is not covered or has no data disabled, with the reason; the
 run is told which were left out, for an empty set's toast.
+
+The form is laid out as the run: "1 Combine pixels" (the sources, their
+probable level, and lines for what the run does on its own: subtract earlier
+sets' footprints, bring back carried pixels), then "2 Build clusters" (size,
+growth, order, limit, attribute layers), then the run and its result.
 """
 
 import reacton.ipyvuetify as rv
@@ -25,7 +30,7 @@ import solara
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED
-from deforestation_alerts.engine.fingerprint import Status, set_status
+from deforestation_alerts.engine.fingerprint import Status, carry_sets, earlier_sets, set_status
 from deforestation_alerts.engine.integrate import IntegrationJob, min_cluster_pixels
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine.presets import has_probable
@@ -111,6 +116,27 @@ def attribute_rows(layers, *, edit, delete) -> list:
     } for i, layer in enumerate(layers)]
 
 
+_BADGE = ("border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;"
+          "justify-content:center;font-size:11px;font-weight:600;flex:none;")
+
+
+def _heading(n, title, hint=None):
+    """A numbered section title (the run's stages) with its one-line hint."""
+    with solara.Column(style="gap:2px;"):
+        with solara.Row(style="align-items:center;gap:8px;"):
+            rv.Html(tag="span", children=[str(n)], class_="primary white--text", style_=_BADGE)
+            solara.Text(title, style="font-weight:600;")
+        if hint:
+            solara.Text(hint, style=MUTED + "font-size:0.75rem;")
+
+
+def _auto_line(icon, text):
+    """What the run does on its own, without a control."""
+    with solara.Row(style="align-items:center;gap:6px;" + MUTED + "font-size:0.75rem;"):
+        rv.Icon(children=[icon], small=True)
+        solara.Text(text)
+
+
 @solara.component
 def IntegrateStep(app_state, map_, gee_interface, layers):
     # Session-wide, like the step: a run outlives the form it was started from.
@@ -133,6 +159,10 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
         has_set=active is not None, has_states=alert_layers.has_states(p, active),
         has_earlier=bool(alert_layers.earlier_of(p, active)),
         growth_note=small_growth_note(p, period),
+        n_earlier=len(earlier_sets(p, period)),
+        # per source, since the carry depends on the sources ticked in the form
+        carry_from={s: [c.id for c, _ in carry_sets(p, period, [s])] for s in ready},
+        n_alerts=active.n_alerts if active is not None else 0,
         active_label=f"{active.period_id} · {' + '.join(active.sources)}" if active is not None else None,
         active_status=status.value if status in (Status.STALE, Status.MISSING) else None,
     ).key(f"integrate-{app_state.project_loaded_signal.value}-{p.name}-{period.id}")
@@ -140,8 +170,8 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
 
 @solara.component
 def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, choices, resolution, last,
-                   has_set=False, has_states=False, has_earlier=False, growth_note=None, active_label=None,
-                   active_status=None):
+                   has_set=False, has_states=False, has_earlier=False, growth_note=None, n_earlier=0,
+                   carry_from=None, n_alerts=0, active_label=None, active_status=None):
     notifications = use_notifications()
     ready = [c["source"] for c in choices if c["enabled"]]
     left_out = {c["source"]: c["note"] for c in choices if not c["enabled"]}
@@ -175,6 +205,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
     with_probable = [s for s in chosen if s in probable_capable]
     mix = probable_mix(with_probable, probable_off) if with_probable else None
     show_per_source = len(with_probable) > 1 and (per_source or mix == "mixed")  # a mix stays unfolded
+    n_carried = len({sid for s in chosen for sid in (carry_from or {}).get(s, ())})
 
     def _set_all_probable(on):
         set_probable_off(lambda cur: (cur - set(with_probable)) if on else (cur | set(with_probable)))
@@ -238,7 +269,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
         set_attr_layers(lambda cur: [old for j, old in enumerate(cur) if j != index])
 
     with solara.Column(style="gap:16px;"):
-        solara.Text(t("steps.integrate.sources"), style="font-weight:600;")
+        _heading(1, t("steps.integrate.sec_combine"), t("steps.integrate.sec_combine_hint"))
         for c in choices:  # a disabled one shows why it is left out
             s = c["source"]
             rv.Checkbox(label=f"{c['label']} · {c['note']}" if c["note"] else c["label"], v_model=s in chosen,
@@ -268,6 +299,13 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
                         elif s in chosen:
                             solara.Text(t("steps.integrate.probable_none", source=c["label"]), style=MUTED,
                                         classes=["ml-9", "mt-1"])
+        if n_earlier or n_carried:
+            with solara.Column(style="gap:4px;"):
+                if n_earlier:
+                    _auto_line("mdi-minus-circle-outline", tn("steps.integrate.auto_footprint", n_earlier))
+                if n_carried:
+                    _auto_line("mdi-history", tn("steps.integrate.auto_carry", n_carried))
+        _heading(2, t("steps.integrate.sec_clusters"), t("steps.integrate.sec_clusters_hint"))
         rv.TextField(label=t("steps.integrate.min_size"), v_model=min_size, on_v_model=set_min_size, type="number",
                      suffix="ha", dense=True, outlined=True, hint=t("steps.integrate.min_size_hint", px=min_px),
                      persistent_hint=True)
@@ -297,6 +335,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
             ProductTable(title=t("steps.integrate.attr_list_title"), columns=attribute_columns(),
                          rows=attribute_rows(attr_layers, edit=_open_attr, delete=_delete_attr),
                          empty_text=t("steps.integrate.attr_empty"))
+        rv.Divider()
         if active_status is not None:
             solara.Text(t(f"steps.integrate.set_{active_status}", set=active_label), classes=["warning--text"])
         if sid:
@@ -312,6 +351,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
             # with the step. A switch is held while its own layer is being
             # built, so a flip can never race the build it started.
             inflight_keys = layers.inflight.value
+            solara.Text(tn("steps.integrate.sec_result", n_alerts), style="font-weight:600;")
             rv.Switch(label=t("steps.integrate.show_alerts"), v_model=app_state.show_alerts.value,
                       on_v_model=app_state.show_alerts.set, dense=True, hide_details=True,
                       disabled=alert_layers.SET_LAYER_KEY in inflight_keys)

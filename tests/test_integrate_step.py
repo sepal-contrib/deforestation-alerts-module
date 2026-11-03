@@ -889,6 +889,33 @@ def test_small_growth_is_kept_until_unticked_and_reopens_as_run(step):
         rc.close()
 
 
+def test_the_form_shows_its_two_stages_and_what_the_run_does_on_its_own(step):
+    footprint, carry = tn("steps.integrate.auto_footprint", 1), tn("steps.integrate.auto_carry", 1)
+    map_, rc = _render(_state(_project("d", "GLAD-L", "RADD")))
+    try:
+        texts = _texts(rc)
+        assert texts.index(t("steps.integrate.sec_combine")) < texts.index(t("steps.integrate.sec_clusters"))
+        assert footprint not in texts and carry not in texts  # no earlier set: nothing to say
+    finally:
+        rc.close()
+    # An earlier GLAD-L set inside a 90-day look-back: its footprint is
+    # subtracted, and its not-analysable pixels come back while GLAD-L is chosen.
+    p = _project("d", "GLAD-L", "RADD")
+    p.periods[JAN.id] = JAN.model_copy(update={"look_back_days": 90})
+    p.periods[DEC.id] = DEC
+    dec = _set(make_set_id(DEC.id, ["GLAD-L"]), 0).model_copy(update={"period_id": DEC.id})
+    p.alert_sets[dec.id] = dec
+    p.artifacts[f"combined:{dec.id}"] = _art(f"combined:{dec.id}", "combined").model_copy(
+        update={"stats": {"states": 1}})
+    map_, rc = _render(_state(p))
+    try:
+        assert footprint in _texts(rc) and carry in _texts(rc)
+        _checkbox(rc, "GLAD-L").v_model = False
+        assert footprint in _texts(rc) and carry not in _texts(rc)
+    finally:
+        rc.close()
+
+
 def test_one_probable_switch_covers_every_chosen_source(step):
     step.ready = ["GLAD-L", "RADD"]
     map_, rc = _render(_state(_project("d", "GLAD-L", "RADD")))

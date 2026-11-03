@@ -561,10 +561,25 @@
       "d_pixels_masked": "{kept} ({before} before masks: {removed} removed)"
     },
     "integrate": {
-      "instruction": "Group alert pixels into clusters.",
+      "instruction": "Combine the sources' alert pixels, then group them into clusters.",
       "info_header": "About Integrate & vectorize",
-      "info_md": "This step turns the harmonized sources of the active period into an **alert set**: the clusters Analysis reviews.\n\n1. The chosen sources are combined pixel by pixel; each alert pixel remembers which sources detected it.\n2. Pixels already reported by the sets of earlier periods (their **footprint**) are removed.\n3. Neighbouring alert pixels are grouped into **clusters**; each cluster keeps the sources of all its pixels. Clusters smaller than the **minimum size** are dropped; you can limit the number of clusters, sorted as you choose.\n4. Each optional **attribute layer** (an Earth Engine image or a GeoTIFF) adds a statistic of its bands to every cluster.\n\nClusters smaller than the minimum size are left out of the set, its exports and the map. **Keep smaller clusters that touch earlier confirmed loss** keeps them as *Growth · under minimum area*, linked to the alert they grow from; unticked, they are dropped like any small cluster.\n\nPixels of clusters too small to keep, or beyond the maximum number of clusters, are kept as **not analysable**, and the next period's run reconsiders them inside its look-back. One **include probable alerts** switch covers every chosen source (**Set per source** to choose each one); off, their probable pixels are dropped. The **Show not-analysable pixels** layer draws them on the map.\n\nAn alert set is identified by its period and sources: running the same combination again **replaces** it, after a confirmation that lists the reviewed clusters it would discard. When the run ends, the new set becomes the active one: set up the questionnaire, then start Analysis.",
-      "sources": "Sources",
+      "info_md": "This step turns the harmonized sources of the active period into an **alert set**: the clusters Analysis reviews.\n\nThe form follows the run: **1 · Combine pixels** covers steps 1 and 2, **2 · Build clusters** steps 3 and 4.\n\n1. The chosen sources are combined pixel by pixel; each alert pixel remembers which sources detected it.\n2. Pixels already reported by the sets of earlier periods (their **footprint**) are removed.\n3. Neighbouring alert pixels are grouped into **clusters**; each cluster keeps the sources of all its pixels. Clusters smaller than the **minimum size** are dropped; you can limit the number of clusters, sorted as you choose.\n4. Each optional **attribute layer** (an Earth Engine image or a GeoTIFF) adds a statistic of its bands to every cluster.\n\nClusters smaller than the minimum size are left out of the set, its exports and the map. **Keep smaller clusters that touch earlier confirmed loss** keeps them as *Growth · under minimum area*, linked to the alert they grow from; unticked, they are dropped like any small cluster.\n\nPixels of clusters too small to keep, or beyond the maximum number of clusters, are kept as **not analysable**, and the next period's run reconsiders them inside its look-back. One **include probable alerts** switch covers every chosen source (**Set per source** to choose each one); off, their probable pixels are dropped. The **Show not-analysable pixels** layer draws them on the map.\n\nAn alert set is identified by its period and sources: running the same combination again **replaces** it, after a confirmation that lists the reviewed clusters it would discard. When the run ends, the new set becomes the active one: set up the questionnaire, then start Analysis.",
+      "sec_combine": "Combine pixels",
+      "sec_combine_hint": "The chosen sources' alert pixels, merged on the grid.",
+      "sec_clusters": "Build clusters",
+      "sec_clusters_hint": "Neighbouring pixels grouped into the clusters Analysis reviews.",
+      "auto_footprint": {
+        "one": "Removes the pixels already in {n} earlier alert set",
+        "other": "Removes the pixels already in {n} earlier alert sets"
+      },
+      "auto_carry": {
+        "one": "Brings back the not-analysable pixels of {n} earlier set inside the look-back",
+        "other": "Brings back the not-analysable pixels of {n} earlier sets inside the look-back"
+      },
+      "sec_result": {
+        "one": "Result · {n} cluster",
+        "other": "Result · {n} clusters"
+      },
       "min_size": "Minimum cluster size",
       "min_size_hint": "= {px} pixels on the grid",
       "small_growth": "Keep smaller clusters that touch earlier confirmed loss",
