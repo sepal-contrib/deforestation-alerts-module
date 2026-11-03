@@ -58,9 +58,9 @@ harmonizes (``mode="harmonize"``), and only on its own click (Harmonize all
 or a row's pill: a download never chains into it); a row whose raw file is
 not current waits for its download in the Alerts step, which also holds Download again and
 Download all again (``refresh_confirm``, ``redownload_items``, kept here for
-it). Delete files asks first (``delete_confirm``): it drops this period's raw
-and harmonized records of the source and deletes their files; the source and
-the alert sets built from them stay.
+it). Delete files asks first (``delete_confirm``): it drops this period's
+harmonized record of the source and deletes its file; the download (the
+Alerts step's to remove), the source and the alert sets built from it stay.
 
 The job state (in-flight keys, Stop events, row errors, progress, stages,
 batch, stopping) and the start and Stop live in ``gui.scripts.prepare_scope``:
@@ -187,7 +187,8 @@ def delete_confirm(p, period, source) -> tuple:
     the note names this period's alert sets built from the source, which
     will read out of date (user decision 2026-10-23: allowed, nothing
     cascades)."""
-    size = size_text(sum(p.artifacts[k].size_bytes for k in cleanup.source_period_keys(p, period.id, source)))
+    harm = p.artifacts.get(harm_key(period.id, source))
+    size = size_text(harm.size_bytes if harm else 0)
     sets = [s for s in sets_using_source(p, source) if p.alert_sets[s].period_id == period.id]
     # a set is named by its sources: the period is this one
     names = ", ".join(" + ".join(p.alert_sets[s].sources) for s in sets)
@@ -270,7 +271,7 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
              "disabled": (not r.ready or r.blocked) and key not in on, "on_click": (lambda s=r.source: toggle(s))},
             {"kind": "info", "is_on": info_open == r.source, "on_click": (lambda s=r.source: on_info(s))},
             # the confirm re-checks: a job can start while it is open
-            {"kind": "delete", "disabled": busy or writing or locked or (raw_art is None and harm_art is None),
+            {"kind": "delete", "disabled": busy or writing or locked or harm_art is None,
              "title": t("steps.prepare.delete_files_busy" if (busy or writing) and not locked
                         else "steps.prepare.action_delete_files"),
              "on_click": (lambda s=r.source: on_delete(s))},
@@ -375,8 +376,8 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs):
     deleting = pending_delete if pending_delete in by_source else None  # the confirm goes with its row
 
     def _delete_files():
-        """This period's raw and harmonized files of the source and their
-        records. The source stays, and the alert sets built from them are not
+        """This period's harmonized file of the source and its record. The
+        download and the source stay, and the alert sets built from it are not
         touched: they read out of date (``set_status``)."""
         name = deleting
         set_pending_delete(None)
@@ -389,7 +390,7 @@ def PrepareStep(app_state, map_, gee_interface, layers, jobs):
         gone = []
 
         def _apply(live):
-            gone.extend(cleanup.drop_artifacts(live, cleanup.source_period_keys(live, period.id, name)))
+            gone.extend(cleanup.drop_artifacts(live, [harm_key(period.id, name)]))
 
         if update_setup(app_state, p.name, _apply, notifications):
             cleanup.delete_files(pdir, gone)

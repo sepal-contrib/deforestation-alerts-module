@@ -501,7 +501,7 @@
       "why_raw": "it was downloaded again since",
       "action_download_again": "Download again",
       "action_nothing_to_fetch": "Nothing to download again: read from a file",
-      "action_delete_files": "Delete files",
+      "action_delete_files": "Delete harmonized file",
       "redownload_title": "Download {source} again?",
       "redownload_message": "The catalogue keeps adding alerts to past dates. This fetches the latest ones for {window}, and replaces the file downloaded on {date}.",
       "redownload_message_new": "This fetches the alerts for {window}.",
@@ -511,11 +511,11 @@
         "other": "Download {n} sources again?"
       },
       "redownload_all_message": "These sources are downloaded again from their catalogues: {names}.",
-      "delete_files_title": "Delete {source}'s files?",
-      "delete_files_message": "Removes the download and the harmonized file of this period ({size}). The source stays in the project; download it again in Alerts, then harmonize it.",
-      "delete_files_message_nosize": "Removes the download and the harmonized file of this period. The source stays in the project; download it again in Alerts, then harmonize it.",
+      "delete_files_title": "Delete {source}'s harmonized file?",
+      "delete_files_message": "Removes the harmonized file of this period ({size}). The download stays; harmonize it again here.",
+      "delete_files_message_nosize": "Removes the harmonized file of this period. The download stays; harmonize it again here.",
       "delete_files_sets": "These alert sets will read out of date: {names}. Their alerts and reviews stay.",
-      "delete_files_busy": "A job is writing into this project; delete the files once it has finished.",
+      "delete_files_busy": "A job is writing into this project; delete the file once it has finished.",
       "sub_pixels": {
         "one": "{n} alert pixel",
         "other": "{n} alert pixels"

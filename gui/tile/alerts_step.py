@@ -336,6 +336,8 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
     if shown is not None:
         lead = next(r for r in table_rows if r["key"] == shown)["cells"][1]["label"]
         details = source_details(p, period, shown, by_source[shown], source_reason(p, period, shown), lead)
+        if by_source[shown].raw is Status.CURRENT:
+            details["why"] = None  # what is left (harmonize) is Prepare's business, not this step's
 
     def _set_new_periods(on_):
         update_setup(app_state, p.name, lambda live: set_new_period_source(live, shown, on_), notifications)

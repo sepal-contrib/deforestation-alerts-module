@@ -36,7 +36,7 @@ from deforestation_alerts.project.models import (
     Project,
     add_predefined_source,
 )
-from gui.i18n import t, tn
+from gui.i18n import size_text, t, tn
 from gui.scripts import aoi_io, prepare_jobs, prepare_scope, raster_map, source_layers
 from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import is_writing, writing
@@ -1403,9 +1403,9 @@ def _delete_title(row):
     return t("steps.prepare.delete_files_title", source=row["cells"][0]["value"])
 
 
-def test_delete_files_hides_the_layer_and_drops_both_records(step, monkeypatch):
-    """Spec "Delete files": this period's raw and harmonized files and records
-    go, the layer first; the other period's stay, and so does the source."""
+def test_delete_files_hides_the_layer_and_drops_only_the_harmonized_record(step, monkeypatch):
+    """This period's harmonized file and record go, the layer first; the
+    download, the other period's files and the source stay."""
     import gui.scripts.map_layers as ml
     from deforestation_alerts.project import cleanup
 
@@ -1422,7 +1422,7 @@ def test_delete_files_hides_the_layer_and_drops_both_records(step, monkeypatch):
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
     p = _with_files()
     pdir = paths.project_dir("d")
-    jan = [p.artifacts[k].rel_path for k in (raw_key(JAN.id, "GLAD-L"), harm_key(JAN.id, "GLAD-L"))]
+    jan = [p.artifacts[harm_key(JAN.id, "GLAD-L")].rel_path]
     state = _state(p)
     layers = MapLayers(_FakeMap())
 
@@ -1432,13 +1432,14 @@ def test_delete_files_hides_the_layer_and_drops_both_records(step, monkeypatch):
         assert layers.is_on("src:GLAD-L")
         _act(step.table[-1][0], "delete")["on_click"]()
         dialog = _confirm(rc, _delete_title(step.table[-1][0]))
-        message = t("steps.prepare.delete_files_message", size="5.4 MB")  # this period's two files
+        size = size_text(p.artifacts[harm_key(JAN.id, "GLAD-L")].size_bytes)
+        message = t("steps.prepare.delete_files_message", size=size)  # the harmonized file only
         assert set(_texts(dialog)) == {_delete_title(step.table[-1][0]), message, t("common.cancel"),
                                        t("common.delete")}  # no set uses them: no warning line
         _click(dialog, t("common.delete"))
 
         live = state.project.value
-        assert raw_key(JAN.id, "GLAD-L") not in live.artifacts and harm_key(JAN.id, "GLAD-L") not in live.artifacts
+        assert raw_key(JAN.id, "GLAD-L") in live.artifacts and harm_key(JAN.id, "GLAD-L") not in live.artifacts
         assert {raw_key(FEB.id, "GLAD-L"), harm_key(FEB.id, "GLAD-L")} <= set(live.artifacts)
         assert all(not (pdir / rel).exists() for rel in jan)
         assert all((pdir / a.rel_path).exists() for a in live.artifacts.values())
@@ -1466,7 +1467,7 @@ def test_delete_files_warns_about_sets_of_this_period(step):
         _click(dialog, t("common.delete"))
         live = state.project.value
         assert set(live.alert_sets) == {"jan-a", "jan-b", "feb-a"}  # the sets are not touched
-        assert raw_key(JAN.id, "GLAD-L") not in live.artifacts
+        assert harm_key(JAN.id, "GLAD-L") not in live.artifacts
     finally:
         rc.close()
 
@@ -1738,7 +1739,7 @@ def test_the_delete_files_message_of_a_record_without_a_size_has_no_empty_parent
         p.artifacts[key] = p.artifacts[key].model_copy(update={"size_bytes": 0})  # a legacy record
     _, message, note = prepare_step.delete_confirm(p, JAN, "GLAD-L")
     assert message == t("steps.prepare.delete_files_message_nosize") and "()" not in message and note is None
-    p.artifacts[raw_key(JAN.id, "GLAD-L")] = p.artifacts[raw_key(JAN.id, "GLAD-L")].model_copy(
+    p.artifacts[harm_key(JAN.id, "GLAD-L")] = p.artifacts[harm_key(JAN.id, "GLAD-L")].model_copy(
         update={"size_bytes": 2_700_000})
     assert prepare_step.delete_confirm(p, JAN, "GLAD-L")[1] == t("steps.prepare.delete_files_message", size="2.7 MB")
 
