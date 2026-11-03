@@ -102,13 +102,13 @@ The map fills the window. The **Workflow** panel on the right side holds the ste
 The header of the **Workflow** panel stays in view while the step under it scrolls:
 
 -   One strip shows both levels side by side, **Prepare alerts** and **Set up review**, each with its name over one bar per step. A filled bar has outputs (an AOI, periods, sources…), a grey bar is still empty and a striped bar is locked: hover over it to read why (e.g. "Build an alert set first."). The two optional steps, **Additional layers** and **Questionnaire**, have a dashed bar. A level's name gets a check mark once its last required step has outputs. Select a bar to open its step.
--   Under the strip, the step's position in its level (e.g. "3 / 5"), its name and what it holds ("3 sources"). An optional step that is still empty reads "optional". Select the name to jump to another step from a list, or use the arrows on each side to go to the step before or after.
+-   Under the strip, the step's position in its level (e.g. "3 / 5"), its name and what it holds ("3 sources"). An optional step that is still empty shows no count: its dashed bar already marks it as optional. Select the name to jump to another step from a list, or use the arrows on each side to go to the step before or after.
 -   Under the name, one line says what to do in the step (e.g. "Set the monitoring period."). The information button at the right side of that line opens the step's help.
 
 To use the left rail:
 
 -   Hover over an icon to view its name.
--   Select the arrow on the edge of the rail to expand it and show the names. Select its pin to keep it expanded. An expanded rail that is not pinned folds back when you click on the map.
+-   Select the arrow on the edge of the rail to expand it and show the names. Select its pin to keep it expanded. An expanded rail that is not pinned folds back when you click on the map, on the main screen as on the Analysis maps.
 
 .. note::
 
@@ -403,6 +403,8 @@ Monitoring period
 -----------------
 
 A *period* is one monitoring round, usually a month. For each period, the app downloads the period's alert sources over its dates plus a *look-back* before them, and builds that period's alert sets. A project usually holds a series of consecutive periods.
+
+Both dates of a period are included: a period from 1 to 31 January keeps the alerts dated on the 1st and on the 31st. The same holds for its search window.
 
 Open the **Period** step of the **Workflow** panel. It unlocks once the project has an `AOI <defo-aoi_>`_.
 
@@ -753,7 +755,7 @@ A blue button runs a row for the first time; an orange one redoes a file that is
 
     A downloaded row has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source ("Nothing to download again: read from a file").
 
-The footer under the table downloads in batch. Select **Download … pending** (e.g. **Download 3 pending**) to download every source that needs it, one row at a time. Rows that read "not covered" or "no data" are skipped; a row that fails shows its error in red under it, and the run goes on with the next row. While it lasts, the footer counts its rows ("1 running · 2 queued", then "1 of 3 done", with a progress bar) and the button turns into **Stop**, which stops after the row in progress ("Stopping…"). The arrow beside the button (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, after you confirm.
+The footer under the table downloads in batch. Select **Download … pending** (e.g. **Download 3 pending**) to download every source that needs it, one row at a time. Rows that read "not covered" or "no data" are skipped; a row that fails shows its error in red under it, and the run goes on with the next row. While it lasts, the footer counts its rows ("1 running · 2 queued", then "1 of 3 done"; the running row shows its own progress bar) and the button turns into **Stop**, which stops after the row in progress ("Stopping…"). The arrow beside the button (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, after you confirm.
 
 The download also shows as a task notification titled **Download**, with the source it is on and its percentage.
 
@@ -795,7 +797,7 @@ Open the **Harmonize** step of the **Workflow** panel. It unlocks once at least 
 
 From top to bottom, the step has three parts: the **Project grid**, the **Masks** and the **Sources for this period**.
 
-.. shot: prepare-step | The Harmonize step of the demo project after a full run: the Project grid card (EPSG of the UTM zone, Resolution 10 m, the "… × … pixels, about … MB per source before compression" line and "The grid is locked because the project has alert sets."), the Masks card with its one mask (Mode Keep, green "Ready", subtitle "Earth Engine · …"), and the "Sources for this period" table with GLAD-L, RADD and GLAD-S2 each green "Ready" in the Status column, each with its "downloaded … · … · N alert pixels" subtitle and its map, Details and Delete files icons; the "Harmonize 0 pending" button of the footer under it. Crop to the Workflow panel.
+.. shot: prepare-step | The Harmonize step of the demo project after a full run: the Project grid card (EPSG of the UTM zone, Resolution 10 m, the "… × … pixels, about … MB per source before compression" line and "The grid is locked because the project has alert sets."), the Masks card with its one mask (Mode Keep, green "Ready", subtitle "Earth Engine · …"), and the "Sources for this period" table with GLAD-L, RADD and GLAD-S2 each green "Ready" in the Status column, each with its "downloaded … · … · N alert pixels" subtitle and its map, Details and Delete harmonized file icons; the "Harmonize 0 pending" button of the footer under it. Crop to the Workflow panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-step.png
     :alt: The Harmonize step after a run
@@ -965,7 +967,7 @@ The icons on the right side of each row:
 
 -   the map icon (**Show on the map**) shows the harmonized alerts on the map;
 -   the information icon opens the row's **Details** (see below); and
--   **Delete files** removes this period's download and harmonized file of the source, after you confirm. The source stays in the period: download it again in `Alerts <defo-alerts-download_>`_ and harmonize it to rebuild them. The alert sets of this period built from the source read out of date; their alerts and reviews stay.
+-   **Delete harmonized file** removes this period's harmonized file of the source, after you confirm. The download stays: harmonize the source again in this step to rebuild the file. The alert sets of this period built from the source read out of date; their alerts and reviews stay.
 
 .. _defo-harmonize-details:
 
@@ -1006,7 +1008,7 @@ The footer under the table runs the rows in batch. Select **Harmonize … pendin
 -   rows that read "not covered" or "no data", and rows still to download, are skipped;
 -   a row that fails shows its error in red under it, and the run goes on with the next row.
 
-While the run lasts, the footer counts its rows ("1 running · 3 queued", then "2 of 4 done", with a progress bar) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads "Stopping…". The rows already done stay done. This **Stop** stops only the harmonizing: a download running in `Alerts <defo-alerts-download_>`_ goes on, and the **Stop** of Alerts does not stop a harmonize run.
+While the run lasts, the footer counts its rows ("1 running · 3 queued", then "2 of 4 done"; the running row shows its own progress bar, which moves without an end while it has no percentage) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads "Stopping…". The rows already done stay done. This **Stop** stops only the harmonizing: a download running in `Alerts <defo-alerts-download_>`_ goes on, and the **Stop** of Alerts does not stop a harmonize run.
 
 The run also shows as a task notification titled **Harmonize**, with the row it is on (e.g. "Harmonizing GLAD-L").
 
@@ -1057,7 +1059,12 @@ This step turns the harmonized sources of the active period into an *alert set*:
 
 Open the **Integrate & vectorize** step of the **Workflow** panel. It unlocks once at least one source of the active period is ready in `Harmonize <defo-harmonize_>`_.
 
-.. shot: integrate-form | The Integrate & vectorize step of the demo project: "Sources" with GLAD-L, RADD and GLAD-S2 checked, each with its "ready · N alert pixels" note; under them the "Include probable (unconfirmed) alerts" switch (on) with the "Set per source" link; Minimum cluster size 0.5 ha with its hint; Order = Bigger clusters first; "Limit the number of clusters" ticked, with Maximum number of clusters 100 and its hint "Keeps the 100 biggest clusters."; the Attribute layers card with one layer; the grey "Creates or replaces the alert set …" line and the Integrate & vectorize button. Crop to the Workflow panel.
+The form follows the run, in three outlined cards: the sources to combine, the cluster settings and the attribute layers. The **Integrate & vectorize** button is under them. Under the sources, grey lines say what the run also does on its own, without a setting:
+
+-   "Removes the pixels already in N earlier alert sets" (see `What earlier periods already reported <defo-integrate-earlier_>`_); and
+-   "Brings back the not-analysable pixels of N earlier sets inside the look-back", counted for the selected sources.
+
+.. shot: integrate-form | The Integrate & vectorize step of the demo project: the first card with GLAD-L, RADD and GLAD-S2 checked, each with its "ready · N alert pixels" note; under them the "Include probable (unconfirmed) alerts" switch (on) with the "Set per source" link; Minimum cluster size 0.5 ha with its hint; Order = Bigger clusters first; "Limit the number of clusters" ticked, with Maximum number of clusters 100 and its hint "Keeps the 100 biggest clusters." in the second card; the attribute layers card with one layer; the grey "Creates or replaces the alert set …" line and the Integrate & vectorize button. Crop to the Workflow panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/integrate-form.png
     :alt: The Integrate & vectorize form
@@ -1124,8 +1131,8 @@ The form opens with the settings of the active alert set (all but the sources), 
     *   -   Option
         -   Description
         -   Default and limits
-    *   -   **Sources**
-        -   The sources whose alerts go into the set. Each ready source is listed with what its harmonized file found. A source that does not cover the AOI, or has no data for the period, is listed as disabled, with the reason.
+    *   -   Sources
+        -   The sources whose alerts go into the set, in the first card. Each ready source is listed with what its harmonized file found. A source that does not cover the AOI, or has no data for the period, is listed as disabled, with the reason.
         -   Every ready source. At least one.
     *   -   **Include probable (unconfirmed) alerts**
         -   Shown only when at least one selected source has a *probable* (low-confidence) class. One switch for all such sources. Off, their probable pixels are dropped before anything else, and only their confirmed pixels count. With two or more such sources, **Set per source** unfolds one switch per source (see below).
@@ -1228,7 +1235,7 @@ If the set's files were deleted from the project folder, the line reads: "The ac
 View the alerts on the map
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Once the project has a set, switches under the button draw it on the map:
+Once the project has a set, a heading under the button counts the active set's alerts ("Result · 48 clusters"), and switches under it draw the set on the map:
 
 .. list-table::
     :header-rows: 1
@@ -1278,7 +1285,7 @@ Visualization layers support the review of the alerts: a land-cover map, a fores
 
 Open the **Additional layers** step of the **Workflow** panel, the first step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_).
 
-The step is optional: skip it and come back at any time. Its bar in the header is dashed, and the step reads "optional" until it has a layer.
+The step is optional: skip it and come back at any time. Its bar in the header is dashed, and the step shows no count until it has a layer.
 
 .. note::
 
@@ -1672,7 +1679,7 @@ A project starts with neither checkbox selected. The note under them reads "Choo
 Review nearby alerts together
 """""""""""""""""""""""""""""
 
-Under the review mode, the **Review nearby alerts together** checkbox lets `Analysis <defo-analysis-nearby_>`_ review neighbouring alerts as one group: "In Analysis, alerts within this distance can be reviewed with one verdict, one set of answers and one polygon." It works in both modes. Once it is selected:
+In its own card, under the review mode (and under the evaluators table with **Multiple evaluators**), the **Review nearby alerts together** checkbox lets `Analysis <defo-analysis-nearby_>`_ review neighbouring alerts as one group: "In Analysis, alerts within this distance can be reviewed with one verdict, one set of answers and one polygon." It works in both modes. Once it is selected:
 
 .. list-table::
     :header-rows: 1
@@ -1917,7 +1924,7 @@ The screen opens with the active alert set, from any of these:
 
 It needs an alert set: until `Integrate & vectorize <defo-integrate_>`_ has made one, the counter reads "No alert set is loaded". A set opens on the alert under review when the screen was last left (the position is saved with the project).
 
-**Workflow**, in the upper-left corner, goes back to the workflow steps. The left rail stays usable on this screen.
+**Workflow**, in the upper-left corner, goes back to the workflow steps. The left rail stays usable on this screen: a click on a map folds it back when it is expanded and not pinned, and a pinned, expanded rail moves the screen to its right instead of covering the maps.
 
 The screen
 ^^^^^^^^^^

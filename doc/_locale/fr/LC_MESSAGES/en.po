@@ -175,8 +175,8 @@ msgstr "L'en-tête du panneau **Flux de travail** reste visible pendant que l'é
 msgid "One strip shows both levels side by side, **Prepare alerts** and **Set up review**, each with its name over one bar per step. A filled bar has outputs (an AOI, periods, sources…), a grey bar is still empty and a striped bar is locked: hover over it to read why (e.g. \"Build an alert set first.\"). The two optional steps, **Additional layers** and **Questionnaire**, have a dashed bar. A level's name gets a check mark once its last required step has outputs. Select a bar to open its step."
 msgstr "Une bande montre les deux niveaux côte à côte, **Préparer les alertes** et **Configurer la revue**, chacun avec son nom au-dessus d'une barre par étape. Une barre pleine a des résultats (une AOI, des périodes, des sources…), une barre grise est encore vide et une barre hachurée est verrouillée : survolez-la pour lire pourquoi (p. ex. « Construisez d'abord un jeu d'alertes. »). Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une barre en pointillés. Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une barre pour ouvrir son étape."
 
-msgid "Under the strip, the step's position in its level (e.g. \"3 / 5\"), its name and what it holds (\"3 sources\"). An optional step that is still empty reads \"optional\". Select the name to jump to another step from a list, or use the arrows on each side to go to the step before or after."
-msgstr "Sous la bande, la position de l'étape dans son niveau (p. ex. « 3 / 5 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide indique « facultatif ». Sélectionnez le nom pour passer à une autre étape depuis une liste, ou utilisez les flèches de chaque côté pour aller à l'étape précédente ou suivante."
+msgid "Under the strip, the step's position in its level (e.g. \"3 / 5\"), its name and what it holds (\"3 sources\"). An optional step that is still empty shows no count: its dashed bar already marks it as optional. Select the name to jump to another step from a list, or use the arrows on each side to go to the step before or after."
+msgstr "Sous la bande, la position de l'étape dans son niveau (p. ex. « 3 / 5 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide n'affiche aucun décompte : sa barre en pointillés la signale déjà comme facultative. Sélectionnez le nom pour passer à une autre étape depuis une liste, ou utilisez les flèches de chaque côté pour aller à l'étape précédente ou suivante."
 
 msgid "Under the name, one line says what to do in the step (e.g. \"Set the monitoring period.\"). The information button at the right side of that line opens the step's help."
 msgstr "Sous le nom, une ligne dit quoi faire dans l'étape (p. ex. « Définissez la période de surveillance. »). Le bouton d'information à droite de cette ligne ouvre l'aide de l'étape."
@@ -187,8 +187,8 @@ msgstr "Pour utiliser la barre latérale gauche :"
 msgid "Hover over an icon to view its name."
 msgstr "Survolez une icône pour voir son nom."
 
-msgid "Select the arrow on the edge of the rail to expand it and show the names. Select its pin to keep it expanded. An expanded rail that is not pinned folds back when you click on the map."
-msgstr "Sélectionnez la flèche au bord de la barre pour la déployer et afficher les noms. Sélectionnez son épingle pour la garder déployée. Une barre déployée sans épingle se replie quand vous cliquez sur la carte."
+msgid "Select the arrow on the edge of the rail to expand it and show the names. Select its pin to keep it expanded. An expanded rail that is not pinned folds back when you click on the map, on the main screen as on the Analysis maps."
+msgstr "Sélectionnez la flèche au bord de la barre pour la déployer et afficher les noms. Sélectionnez son épingle pour la garder déployée. Une barre déployée sans épingle se replie quand vous cliquez sur la carte, sur l'écran principal comme sur les cartes d'Analyse."
 
 msgid "While a dialog is open, the rail does not respond. Close the dialog with its cross first."
 msgstr "Tant qu'une boîte de dialogue est ouverte, la barre ne répond pas. Fermez d'abord la boîte de dialogue avec sa croix."
@@ -618,6 +618,9 @@ msgstr "Période de suivi"
 
 msgid "A *period* is one monitoring round, usually a month. For each period, the app downloads the period's alert sources over its dates plus a *look-back* before them, and builds that period's alert sets. A project usually holds a series of consecutive periods."
 msgstr "Une *période* est un cycle de suivi, en général d'un mois. Pour chaque période, l'application télécharge les sources d'alertes de la période sur ses dates plus une *rétrospection* qui les précède, et construit les jeux d'alertes de cette période. Un projet contient généralement une série de périodes consécutives."
+
+msgid "Both dates of a period are included: a period from 1 to 31 January keeps the alerts dated on the 1st and on the 31st. The same holds for its search window."
+msgstr "Les deux dates d'une période sont incluses : une période du 1er au 31 janvier garde les alertes datées du 1er et du 31. Il en va de même pour sa fenêtre de recherche."
 
 msgid "Open the **Period** step of the **Workflow** panel. It unlocks once the project has an `AOI <defo-aoi_>`_."
 msgstr "Ouvrez l'étape **Période** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `AOI <defo-aoi_>`_."
@@ -1150,8 +1153,8 @@ msgstr "Un bouton bleu exécute une ligne pour la première fois ; un bouton ora
 msgid "A downloaded row has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source (\"Nothing to download again: read from a file\")."
 msgstr "Une ligne téléchargée n'a pas de bouton : une source déjà téléchargée pour la fenêtre de recherche de la période n'est pas retéléchargée d'elle-même. Pour récupérer les dernières alertes d'un catalogue qui continue d'ajouter des alertes à des dates passées, utilisez **Télécharger à nouveau**. L'application demande d'abord, avec la fenêtre et la date du fichier qu'elle remplace. Il n'est pas proposé pour une source GeoTIFF (« Rien à télécharger à nouveau : lue depuis un fichier »)."
 
-msgid "The footer under the table downloads in batch. Select **Download … pending** (e.g. **Download 3 pending**) to download every source that needs it, one row at a time. Rows that read \"not covered\" or \"no data\" are skipped; a row that fails shows its error in red under it, and the run goes on with the next row. While it lasts, the footer counts its rows (\"1 running · 2 queued\", then \"1 of 3 done\", with a progress bar) and the button turns into **Stop**, which stops after the row in progress (\"Stopping…\"). The arrow beside the button (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, after you confirm."
-msgstr "Le pied du tableau télécharge par lot. Sélectionnez **Télécharger … en attente** (par exemple **Télécharger 3 en attente**) pour télécharger chaque source qui en a besoin, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ; une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante. Pendant ce temps, le pied compte ses lignes (« 1 en cours · 2 en attente », puis « 1 sur 3 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui s'arrête après la ligne en cours (« Arrêt… »). La flèche à côté du bouton (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, après confirmation."
+msgid "The footer under the table downloads in batch. Select **Download … pending** (e.g. **Download 3 pending**) to download every source that needs it, one row at a time. Rows that read \"not covered\" or \"no data\" are skipped; a row that fails shows its error in red under it, and the run goes on with the next row. While it lasts, the footer counts its rows (\"1 running · 2 queued\", then \"1 of 3 done\"; the running row shows its own progress bar) and the button turns into **Stop**, which stops after the row in progress (\"Stopping…\"). The arrow beside the button (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, after you confirm."
+msgstr "Le pied du tableau télécharge par lot. Sélectionnez **Télécharger … en attente** (par exemple **Télécharger 3 en attente**) pour télécharger chaque source qui en a besoin, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ; une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante. Pendant ce temps, le pied compte ses lignes (« 1 en cours · 2 en attente », puis « 1 sur 3 terminées » ; la ligne en cours affiche sa propre barre de progression) et le bouton devient **Arrêter**, qui s'arrête après la ligne en cours (« Arrêt… »). La flèche à côté du bouton (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, après confirmation."
 
 msgid "The download also shows as a task notification titled **Download**, with the source it is on and its percentage."
 msgstr "Le téléchargement apparaît aussi comme une notification de tâche intitulée **Téléchargement**, avec la source en cours et son pourcentage."
@@ -1420,8 +1423,8 @@ msgstr "l'icône de carte (**Afficher sur la carte**) affiche les alertes harmon
 msgid "the information icon opens the row's **Details** (see below); and"
 msgstr "l'icône d'information ouvre les **Détails** de la ligne (voir plus bas) ;"
 
-msgid "**Delete files** removes this period's download and harmonized file of the source, after you confirm. The source stays in the period: download it again in `Alerts <defo-alerts-download_>`_ and harmonize it to rebuild them. The alert sets of this period built from the source read out of date; their alerts and reviews stay."
-msgstr "**Supprimer les fichiers** retire le téléchargement et le fichier harmonisé de la source pour cette période, après confirmation. La source reste dans la période : téléchargez-la à nouveau dans `Alertes <defo-alerts-download_>`_ et harmonisez-la pour les reconstruire. Les jeux d'alertes de cette période construits à partir de la source deviennent obsolètes ; leurs alertes et leurs revues sont conservées."
+msgid "**Delete harmonized file** removes this period's harmonized file of the source, after you confirm. The download stays: harmonize the source again in this step to rebuild the file. The alert sets of this period built from the source read out of date; their alerts and reviews stay."
+msgstr "**Supprimer le fichier harmonisé** retire le fichier harmonisé de la source pour cette période, après confirmation. Le téléchargement reste : harmonisez à nouveau la source dans cette étape pour reconstruire le fichier. Les jeux d'alertes de cette période construits à partir de la source deviennent obsolètes ; leurs alertes et leurs revues sont conservées."
 
 msgid "The Details dialog"
 msgstr "La boîte de dialogue Détails"
@@ -1471,8 +1474,8 @@ msgstr "les lignes qui indiquent « non couverte » ou « aucune donnée », et 
 msgid "a row that fails shows its error in red under it, and the run goes on with the next row."
 msgstr "une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante."
 
-msgid "While the run lasts, the footer counts its rows (\"1 running · 3 queued\", then \"2 of 4 done\", with a progress bar) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads \"Stopping…\". The rows already done stay done. This **Stop** stops only the harmonizing: a download running in `Alerts <defo-alerts-download_>`_ goes on, and the **Stop** of Alerts does not stop a harmonize run."
-msgstr "Pendant l'exécution, le pied compte ses lignes (« 1 en cours · 3 en attente », puis « 2 sur 4 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui arrête l'exécution après la ligne en cours. Tant que cette ligne n'est pas finie, le bouton indique « Arrêt… ». Les lignes déjà faites le restent. Ce bouton **Arrêter** n'arrête que l'harmonisation : un téléchargement en cours dans `Alertes <defo-alerts-download_>`_ continue, et le bouton **Arrêter** d'Alertes n'arrête pas une exécution d'harmonisation."
+msgid "While the run lasts, the footer counts its rows (\"1 running · 3 queued\", then \"2 of 4 done\"; the running row shows its own progress bar, which moves without an end while it has no percentage) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads \"Stopping…\". The rows already done stay done. This **Stop** stops only the harmonizing: a download running in `Alerts <defo-alerts-download_>`_ goes on, and the **Stop** of Alerts does not stop a harmonize run."
+msgstr "Pendant l'exécution, le pied compte ses lignes (« 1 en cours · 3 en attente », puis « 2 sur 4 terminées » ; la ligne en cours affiche sa propre barre de progression, qui défile sans fin tant qu'elle n'a pas de pourcentage) et le bouton devient **Arrêter**, qui arrête l'exécution après la ligne en cours. Tant que cette ligne n'est pas finie, le bouton indique « Arrêt… ». Les lignes déjà faites le restent. Ce bouton **Arrêter** n'arrête que l'harmonisation : un téléchargement en cours dans `Alertes <defo-alerts-download_>`_ continue, et le bouton **Arrêter** d'Alertes n'arrête pas une exécution d'harmonisation."
 
 msgid "The run also shows as a task notification titled **Harmonize**, with the row it is on (e.g. \"Harmonizing GLAD-L\")."
 msgstr "L'exécution apparaît aussi comme une notification de tâche intitulée **Harmoniser**, avec la ligne en cours (par exemple « Harmonisation de GLAD-L »)."
@@ -1548,6 +1551,15 @@ msgstr "dessine un polygone par groupe. Chaque groupe conservé est une alerte d
 
 msgid "Open the **Integrate & vectorize** step of the **Workflow** panel. It unlocks once at least one source of the active period is ready in `Harmonize <defo-harmonize_>`_."
 msgstr "Ouvrez l'étape **Intégrer et vectoriser** du panneau **Flux de travail**. Elle se déverrouille dès qu'au moins une source de la période active est prête dans `Harmoniser <defo-harmonize_>`_."
+
+msgid "The form follows the run, in three outlined cards: the sources to combine, the cluster settings and the attribute layers. The **Integrate & vectorize** button is under them. Under the sources, grey lines say what the run also does on its own, without a setting:"
+msgstr "Le formulaire suit l'exécution, en trois cartes encadrées : les sources à combiner, les réglages des groupes et les couches d'attributs. Le bouton **Intégrer et vectoriser** est sous elles. Sous les sources, des lignes grises disent ce que l'exécution fait aussi d'elle-même, sans réglage :"
+
+msgid "\"Removes the pixels already in N earlier alert sets\" (see `What earlier periods already reported <defo-integrate-earlier_>`_); and"
+msgstr "« Retire les pixels déjà présents dans N jeux d'alertes antérieurs » (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_) ; et"
+
+msgid "\"Brings back the not-analysable pixels of N earlier sets inside the look-back\", counted for the selected sources."
+msgstr "« Reprend les pixels non analysables de N jeux antérieurs dans la rétrospection », comptés pour les sources sélectionnées."
 
 msgid "The Integrate & vectorize form"
 msgstr "Le formulaire Intégrer et vectoriser"
@@ -1633,11 +1645,11 @@ msgstr "Le formulaire s'ouvre avec les paramètres du jeu d'alertes actif (tous 
 msgid "Option"
 msgstr "Option"
 
-msgid "**Sources**"
-msgstr "**Sources**"
+msgid "Sources"
+msgstr "Sources"
 
-msgid "The sources whose alerts go into the set. Each ready source is listed with what its harmonized file found. A source that does not cover the AOI, or has no data for the period, is listed as disabled, with the reason."
-msgstr "Les sources dont les alertes entrent dans le jeu. Chaque source prête est listée avec ce que son fichier harmonisé a trouvé. Une source qui ne couvre pas l'AOI, ou qui n'a pas de données pour la période, apparaît désactivée, avec la raison."
+msgid "The sources whose alerts go into the set, in the first card. Each ready source is listed with what its harmonized file found. A source that does not cover the AOI, or has no data for the period, is listed as disabled, with the reason."
+msgstr "Les sources dont les alertes entrent dans le jeu, dans la première carte. Chaque source prête est listée avec ce que son fichier harmonisé a trouvé. Une source qui ne couvre pas l'AOI, ou qui n'a pas de données pour la période, apparaît désactivée, avec la raison."
 
 msgid "Every ready source. At least one."
 msgstr "Toutes les sources prêtes. Au moins une."
@@ -1801,8 +1813,8 @@ msgstr "Si les fichiers du jeu ont été supprimés du dossier du projet, la lig
 msgid "View the alerts on the map"
 msgstr "Voir les alertes sur la carte"
 
-msgid "Once the project has a set, switches under the button draw it on the map:"
-msgstr "Dès que le projet a un jeu, des interrupteurs sous le bouton le dessinent sur la carte :"
+msgid "Once the project has a set, a heading under the button counts the active set's alerts (\"Result · 48 clusters\"), and switches under it draw the set on the map:"
+msgstr "Dès que le projet a un jeu, un titre sous le bouton compte les alertes du jeu actif (« Résultat · 48 groupes »), et des interrupteurs dessous dessinent le jeu sur la carte :"
 
 msgid "Switch"
 msgstr "Interrupteur"
@@ -1879,8 +1891,8 @@ msgstr "Les couches de visualisation appuient l'examen des alertes : une carte d
 msgid "Open the **Additional layers** step of the **Workflow** panel, the first step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_)."
 msgstr "Ouvrez l'étape **Couches supplémentaires** du panneau **Flux de travail**, la première étape de **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_)."
 
-msgid "The step is optional: skip it and come back at any time. Its bar in the header is dashed, and the step reads \"optional\" until it has a layer."
-msgstr "L'étape est facultative : passez-la et revenez-y à tout moment. Dès que le projet a une `période de suivi <defo-period_>`_, le panneau **Flux de travail** compte l'étape comme terminée même sans couche, et son badge indique « aucune » au lieu de « rien pour l'instant »."
+msgid "The step is optional: skip it and come back at any time. Its bar in the header is dashed, and the step shows no count until it has a layer."
+msgstr "L'étape est facultative : passez-la et revenez-y à tout moment. Sa barre dans l'en-tête est en pointillés, et l'étape n'affiche aucun décompte tant qu'elle n'a pas de couche."
 
 msgid "Planet NICFI mosaics are not an additional layer: with NICFI access in your GEE account, they come with the *Planet* images of the `Analysis timeline <defo-analysis-timeline_>`_."
 msgstr "Les mosaïques Planet NICFI ne sont pas une couche supplémentaire : si votre compte GEE a accès à NICFI, elles arrivent avec les images *Planet* de la `frise chronologique d'Analyse <defo-analysis-timeline_>`_."
@@ -2452,8 +2464,8 @@ msgstr "Tant qu'une répartition existe, les deux cases restent désactivées su
 msgid "Review nearby alerts together"
 msgstr "Réviser ensemble les alertes proches"
 
-msgid "Under the review mode, the **Review nearby alerts together** checkbox lets `Analysis <defo-analysis-nearby_>`_ review neighbouring alerts as one group: \"In Analysis, alerts within this distance can be reviewed with one verdict, one set of answers and one polygon.\" It works in both modes. Once it is selected:"
-msgstr "Sous le mode de revue, la case **Réviser ensemble les alertes proches** permet à `Analyse <defo-analysis-nearby_>`_ d'examiner des alertes voisines comme un seul groupe : « Dans Analyse, les alertes à cette distance peuvent être révisées avec un seul verdict, un seul jeu de réponses et un seul polygone. » Elle fonctionne dans les deux modes. Une fois cochée :"
+msgid "In its own card, under the review mode (and under the evaluators table with **Multiple evaluators**), the **Review nearby alerts together** checkbox lets `Analysis <defo-analysis-nearby_>`_ review neighbouring alerts as one group: \"In Analysis, alerts within this distance can be reviewed with one verdict, one set of answers and one polygon.\" It works in both modes. Once it is selected:"
+msgstr "Dans sa propre carte, sous le mode de revue (et sous le tableau des évaluateurs avec **Plusieurs évaluateurs**), la case **Réviser ensemble les alertes proches** permet à `Analyse <defo-analysis-nearby_>`_ d'examiner des alertes voisines comme un seul groupe : « Dans Analyse, les alertes à cette distance peuvent être révisées avec un seul verdict, un seul jeu de réponses et un seul polygone. » Elle fonctionne dans les deux modes. Une fois cochée :"
 
 msgid "**Distance (m)**"
 msgstr "**Distance (m)**"
@@ -2806,8 +2818,8 @@ msgstr "**Réviser les alertes** dans l'`Aperçu <defo-overview_>`_, ou le bouto
 msgid "It needs an alert set: until `Integrate & vectorize <defo-integrate_>`_ has made one, the counter reads \"No alert set is loaded\". A set opens on the alert under review when the screen was last left (the position is saved with the project)."
 msgstr "Il a besoin d'un jeu d'alertes : tant qu'`Intégrer et vectoriser <defo-integrate_>`_ n'en a pas produit un, le compteur indique « Aucun lot d'alertes n'est chargé ». Un jeu s'ouvre sur l'alerte en cours d'examen lorsque l'écran a été quitté pour la dernière fois (la position est enregistrée avec le projet)."
 
-msgid "**Workflow**, in the upper-left corner, goes back to the workflow steps. The left rail stays usable on this screen."
-msgstr "**Flux de travail**, en haut à gauche, ramène aux étapes du flux de travail. La barre latérale gauche reste utilisable sur cet écran."
+msgid "**Workflow**, in the upper-left corner, goes back to the workflow steps. The left rail stays usable on this screen: a click on a map folds it back when it is expanded and not pinned, and a pinned, expanded rail moves the screen to its right instead of covering the maps."
+msgstr "**Flux de travail**, en haut à gauche, ramène aux étapes du flux de travail. La barre latérale gauche reste utilisable sur cet écran : un clic sur une carte la replie quand elle est déployée sans épingle, et une barre épinglée et déployée décale l'écran à sa droite au lieu de couvrir les cartes."
 
 msgid "The screen"
 msgstr "L'écran"

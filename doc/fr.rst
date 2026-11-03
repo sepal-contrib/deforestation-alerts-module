@@ -102,13 +102,13 @@ La carte occupe toute la fenêtre. Le panneau **Flux de travail**, à droite, co
 L'en-tête du panneau **Flux de travail** reste visible pendant que l'étape en dessous défile :
 
 -   Une bande montre les deux niveaux côte à côte, **Préparer les alertes** et **Configurer la revue**, chacun avec son nom au-dessus d'une barre par étape. Une barre pleine a des résultats (une AOI, des périodes, des sources…), une barre grise est encore vide et une barre hachurée est verrouillée : survolez-la pour lire pourquoi (p. ex. « Construisez d'abord un jeu d'alertes. »). Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une barre en pointillés. Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une barre pour ouvrir son étape.
--   Sous la bande, la position de l'étape dans son niveau (p. ex. « 3 / 5 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide indique « facultatif ». Sélectionnez le nom pour passer à une autre étape depuis une liste, ou utilisez les flèches de chaque côté pour aller à l'étape précédente ou suivante.
+-   Sous la bande, la position de l'étape dans son niveau (p. ex. « 3 / 5 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide n'affiche aucun décompte : sa barre en pointillés la signale déjà comme facultative. Sélectionnez le nom pour passer à une autre étape depuis une liste, ou utilisez les flèches de chaque côté pour aller à l'étape précédente ou suivante.
 -   Sous le nom, une ligne dit quoi faire dans l'étape (p. ex. « Définissez la période de surveillance. »). Le bouton d'information à droite de cette ligne ouvre l'aide de l'étape.
 
 Pour utiliser la barre latérale gauche :
 
 -   Survolez une icône pour voir son nom.
--   Sélectionnez la flèche au bord de la barre pour la déployer et afficher les noms. Sélectionnez son épingle pour la garder déployée. Une barre déployée sans épingle se replie quand vous cliquez sur la carte.
+-   Sélectionnez la flèche au bord de la barre pour la déployer et afficher les noms. Sélectionnez son épingle pour la garder déployée. Une barre déployée sans épingle se replie quand vous cliquez sur la carte, sur l'écran principal comme sur les cartes d'Analyse.
 
 .. note::
 
@@ -393,6 +393,8 @@ Période de suivi
 ----------------
 
 Une *période* est un cycle de suivi, en général d'un mois. Pour chaque période, l'application télécharge les sources d'alertes de la période sur ses dates plus une *rétrospection* qui les précède, et construit les jeux d'alertes de cette période. Un projet contient généralement une série de périodes consécutives.
+
+Les deux dates d'une période sont incluses : une période du 1er au 31 janvier garde les alertes datées du 1er et du 31. Il en va de même pour sa fenêtre de recherche.
 
 Ouvrez l'étape **Période** du panneau **Flux de travail**. Elle se déverrouille dès que le projet a une `AOI <defo-aoi_>`_.
 
@@ -733,7 +735,7 @@ Un bouton bleu exécute une ligne pour la première fois ; un bouton orange refa
 
     Une ligne téléchargée n'a pas de bouton : une source déjà téléchargée pour la fenêtre de recherche de la période n'est pas retéléchargée d'elle-même. Pour récupérer les dernières alertes d'un catalogue qui continue d'ajouter des alertes à des dates passées, utilisez **Télécharger à nouveau**. L'application demande d'abord, avec la fenêtre et la date du fichier qu'elle remplace. Il n'est pas proposé pour une source GeoTIFF (« Rien à télécharger à nouveau : lue depuis un fichier »).
 
-Le pied du tableau télécharge par lot. Sélectionnez **Télécharger … en attente** (par exemple **Télécharger 3 en attente**) pour télécharger chaque source qui en a besoin, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ; une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante. Pendant ce temps, le pied compte ses lignes (« 1 en cours · 2 en attente », puis « 1 sur 3 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui s'arrête après la ligne en cours (« Arrêt… »). La flèche à côté du bouton (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, après confirmation.
+Le pied du tableau télécharge par lot. Sélectionnez **Télécharger … en attente** (par exemple **Télécharger 3 en attente**) pour télécharger chaque source qui en a besoin, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ; une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante. Pendant ce temps, le pied compte ses lignes (« 1 en cours · 2 en attente », puis « 1 sur 3 terminées » ; la ligne en cours affiche sa propre barre de progression) et le bouton devient **Arrêter**, qui s'arrête après la ligne en cours (« Arrêt… »). La flèche à côté du bouton (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, après confirmation.
 
 Le téléchargement apparaît aussi comme une notification de tâche intitulée **Téléchargement**, avec la source en cours et son pourcentage.
 
@@ -941,7 +943,7 @@ Les icônes à droite de chaque ligne :
 
 -   l'icône de carte (**Afficher sur la carte**) affiche les alertes harmonisées sur la carte ;
 -   l'icône d'information ouvre les **Détails** de la ligne (voir plus bas) ;
--   **Supprimer les fichiers** retire le téléchargement et le fichier harmonisé de la source pour cette période, après confirmation. La source reste dans la période : téléchargez-la à nouveau dans `Alertes <defo-alerts-download_>`_ et harmonisez-la pour les reconstruire. Les jeux d'alertes de cette période construits à partir de la source deviennent obsolètes ; leurs alertes et leurs revues sont conservées.
+-   **Supprimer le fichier harmonisé** retire le fichier harmonisé de la source pour cette période, après confirmation. Le téléchargement reste : harmonisez à nouveau la source dans cette étape pour reconstruire le fichier. Les jeux d'alertes de cette période construits à partir de la source deviennent obsolètes ; leurs alertes et leurs revues sont conservées.
 
 .. _defo-harmonize-details:
 
@@ -980,7 +982,7 @@ Le pied du tableau exécute les lignes par lot. Sélectionnez **Harmoniser … e
 -   les lignes qui indiquent « non couverte » ou « aucune donnée », et les lignes encore à télécharger, sont ignorées ;
 -   une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante.
 
-Pendant l'exécution, le pied compte ses lignes (« 1 en cours · 3 en attente », puis « 2 sur 4 terminées », avec une barre de progression) et le bouton devient **Arrêter**, qui arrête l'exécution après la ligne en cours. Tant que cette ligne n'est pas finie, le bouton indique « Arrêt… ». Les lignes déjà faites le restent. Ce bouton **Arrêter** n'arrête que l'harmonisation : un téléchargement en cours dans `Alertes <defo-alerts-download_>`_ continue, et le bouton **Arrêter** d'Alertes n'arrête pas une exécution d'harmonisation.
+Pendant l'exécution, le pied compte ses lignes (« 1 en cours · 3 en attente », puis « 2 sur 4 terminées » ; la ligne en cours affiche sa propre barre de progression, qui défile sans fin tant qu'elle n'a pas de pourcentage) et le bouton devient **Arrêter**, qui arrête l'exécution après la ligne en cours. Tant que cette ligne n'est pas finie, le bouton indique « Arrêt… ». Les lignes déjà faites le restent. Ce bouton **Arrêter** n'arrête que l'harmonisation : un téléchargement en cours dans `Alertes <defo-alerts-download_>`_ continue, et le bouton **Arrêter** d'Alertes n'arrête pas une exécution d'harmonisation.
 
 L'exécution apparaît aussi comme une notification de tâche intitulée **Harmoniser**, avec la ligne en cours (par exemple « Harmonisation de GLAD-L »).
 
@@ -1030,6 +1032,11 @@ Cette étape transforme les sources harmonisées de la période active en un *je
 -   dessine un polygone par groupe. Chaque groupe conservé est une alerte du jeu.
 
 Ouvrez l'étape **Intégrer et vectoriser** du panneau **Flux de travail**. Elle se déverrouille dès qu'au moins une source de la période active est prête dans `Harmoniser <defo-harmonize_>`_.
+
+Le formulaire suit l'exécution, en trois cartes encadrées : les sources à combiner, les réglages des groupes et les couches d'attributs. Le bouton **Intégrer et vectoriser** est sous elles. Sous les sources, des lignes grises disent ce que l'exécution fait aussi d'elle-même, sans réglage :
+
+-   « Retire les pixels déjà présents dans N jeux d'alertes antérieurs » (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_) ; et
+-   « Reprend les pixels non analysables de N jeux antérieurs dans la rétrospection », comptés pour les sources sélectionnées.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/integrate-form.png
     :alt: Le formulaire Intégrer et vectoriser
@@ -1096,8 +1103,8 @@ Le formulaire s'ouvre avec les paramètres du jeu d'alertes actif (tous sauf les
     *   -   Option
         -   Description
         -   Valeur par défaut et limites
-    *   -   **Sources**
-        -   Les sources dont les alertes entrent dans le jeu. Chaque source prête est listée avec ce que son fichier harmonisé a trouvé. Une source qui ne couvre pas l'AOI, ou qui n'a pas de données pour la période, apparaît désactivée, avec la raison.
+    *   -   Sources
+        -   Les sources dont les alertes entrent dans le jeu, dans la première carte. Chaque source prête est listée avec ce que son fichier harmonisé a trouvé. Une source qui ne couvre pas l'AOI, ou qui n'a pas de données pour la période, apparaît désactivée, avec la raison.
         -   Toutes les sources prêtes. Au moins une.
     *   -   **Inclure les alertes probables (non confirmées)**
         -   Affiché seulement si au moins une source cochée a une classe *probable* (confiance faible). Un seul interrupteur pour toutes ces sources. Désactivé, leurs pixels probables sont écartés avant tout le reste, et seuls leurs pixels confirmés comptent. Avec deux sources de ce type ou plus, **Régler par source** déplie un interrupteur par source (voir plus bas).
@@ -1196,7 +1203,7 @@ Si les fichiers du jeu ont été supprimés du dossier du projet, la ligne indiq
 Voir les alertes sur la carte
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Dès que le projet a un jeu, des interrupteurs sous le bouton le dessinent sur la carte :
+Dès que le projet a un jeu, un titre sous le bouton compte les alertes du jeu actif (« Résultat · 48 groupes »), et des interrupteurs dessous dessinent le jeu sur la carte :
 
 .. list-table::
     :header-rows: 1
@@ -1246,7 +1253,7 @@ Les couches de visualisation appuient l'examen des alertes : une carte d'occupat
 
 Ouvrez l'étape **Couches supplémentaires** du panneau **Flux de travail**, la première étape de **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_).
 
-L'étape est facultative : passez-la et revenez-y à tout moment. Dès que le projet a une `période de suivi <defo-period_>`_, le panneau **Flux de travail** compte l'étape comme terminée même sans couche, et son badge indique « aucune » au lieu de « rien pour l'instant ».
+L'étape est facultative : passez-la et revenez-y à tout moment. Sa barre dans l'en-tête est en pointillés, et l'étape n'affiche aucun décompte tant qu'elle n'a pas de couche.
 
 .. note::
 
@@ -1628,7 +1635,7 @@ Un projet démarre sans case cochée. La note en dessous indique « Choisissez q
 Réviser ensemble les alertes proches
 """"""""""""""""""""""""""""""""""""
 
-Sous le mode de revue, la case **Réviser ensemble les alertes proches** permet à `Analyse <defo-analysis-nearby_>`_ d'examiner des alertes voisines comme un seul groupe : « Dans Analyse, les alertes à cette distance peuvent être révisées avec un seul verdict, un seul jeu de réponses et un seul polygone. » Elle fonctionne dans les deux modes. Une fois cochée :
+Dans sa propre carte, sous le mode de revue (et sous le tableau des évaluateurs avec **Plusieurs évaluateurs**), la case **Réviser ensemble les alertes proches** permet à `Analyse <defo-analysis-nearby_>`_ d'examiner des alertes voisines comme un seul groupe : « Dans Analyse, les alertes à cette distance peuvent être révisées avec un seul verdict, un seul jeu de réponses et un seul polygone. » Elle fonctionne dans les deux modes. Une fois cochée :
 
 .. list-table::
     :header-rows: 1
@@ -1865,7 +1872,7 @@ L'écran s'ouvre sur le jeu d'alertes actif, depuis l'un de ces points d'accès 
 
 Il a besoin d'un jeu d'alertes : tant qu'`Intégrer et vectoriser <defo-integrate_>`_ n'en a pas produit un, le compteur indique « Aucun lot d'alertes n'est chargé ». Un jeu s'ouvre sur l'alerte en cours d'examen lorsque l'écran a été quitté pour la dernière fois (la position est enregistrée avec le projet).
 
-**Flux de travail**, en haut à gauche, ramène aux étapes du flux de travail. La barre latérale gauche reste utilisable sur cet écran.
+**Flux de travail**, en haut à gauche, ramène aux étapes du flux de travail. La barre latérale gauche reste utilisable sur cet écran : un clic sur une carte la replie quand elle est déployée sans épingle, et une barre épinglée et déployée décale l'écran à sa droite au lieu de couvrir les cartes.
 
 L'écran
 ^^^^^^^

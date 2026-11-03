@@ -102,13 +102,13 @@ O mapa ocupa a janela inteira. O painel **Fluxo de trabalho**, à direita, cont�
 O cabeçalho do painel **Fluxo de trabalho** fica visível enquanto a etapa abaixo dele rola:
 
 -   Uma faixa mostra os dois níveis lado a lado, **Preparar alertas** e **Preparar a revisão**, cada um com seu nome sobre uma barra por etapa. Uma barra preenchida tem resultados (uma AOI, períodos, fontes…), uma barra cinza ainda está vazia e uma barra listrada está bloqueada: passe o mouse sobre ela para ler o motivo (por exemplo, "Crie primeiro um conjunto de alertas."). As duas etapas opcionais, **Camadas adicionais** e **Questionário**, têm uma barra tracejada. O nome de um nível ganha uma marca de verificação assim que sua última etapa obrigatória tem resultados. Selecione uma barra para abrir a etapa dela.
--   Abaixo da faixa, a posição da etapa no nível dela (por exemplo, "3 / 5"), o nome dela e o que ela contém ("3 fontes"). Uma etapa opcional ainda vazia mostra "opcional". Selecione o nome para ir a outra etapa a partir de uma lista, ou use as setas de cada lado para ir à etapa anterior ou à seguinte.
+-   Abaixo da faixa, a posição da etapa no nível dela (por exemplo, "3 / 5"), o nome dela e o que ela contém ("3 fontes"). Uma etapa opcional ainda vazia não mostra nenhuma contagem: a barra tracejada dela já a marca como opcional. Selecione o nome para ir a outra etapa a partir de uma lista, ou use as setas de cada lado para ir à etapa anterior ou à seguinte.
 -   Abaixo do nome, uma linha diz o que fazer na etapa (por exemplo, "Defina o período de monitoramento."). O botão de informação no lado direito dessa linha abre a ajuda da etapa.
 
 Para usar a barra lateral esquerda:
 
 -   Passe o mouse sobre um ícone para ver o nome dele.
--   Selecione a seta na borda da barra para expandi-la e mostrar os nomes. Selecione o alfinete dela para mantê-la expandida. Uma barra expandida e não fixada se recolhe quando você clica no mapa.
+-   Selecione a seta na borda da barra para expandi-la e mostrar os nomes. Selecione o alfinete dela para mantê-la expandida. Uma barra expandida e não fixada se recolhe quando você clica no mapa, tanto na tela principal quanto nos mapas da Análise.
 
 .. note::
 
@@ -395,6 +395,8 @@ Período de monitoramento
 ------------------------
 
 Um *período* é uma rodada de monitoramento, normalmente um mês. Para cada período, o app baixa as fontes de alertas do período nas datas dele mais uma *busca retroativa* anterior a elas, e gera os conjuntos de alertas desse período. Um projeto costuma ter uma série de períodos consecutivos.
+
+As duas datas de um período estão incluídas: um período de 1 a 31 de janeiro mantém os alertas datados do dia 1 e do dia 31. O mesmo vale para a janela de busca dele.
 
 Abra a etapa **Período** do painel **Fluxo de trabalho**. Ela é liberada assim que o projeto tem uma `AOI <defo-aoi_>`_.
 
@@ -735,7 +737,7 @@ Um botão azul executa uma linha pela primeira vez; um laranja refaz um arquivo 
 
     Uma linha baixada não tem botão: uma fonte já baixada para a janela de busca do período não é baixada de novo sozinha. Para buscar os alertas mais recentes de um catálogo que continua adicionando alertas a datas passadas, use **Baixar novamente**. O app pergunta antes, mostrando a janela e a data do arquivo que será substituído. Isso não é oferecido para uma fonte GeoTIFF ("Nada a baixar de novo: lida de um arquivo").
 
-O rodapé abaixo da tabela baixa em lote. Selecione **Baixar … pendentes** (por exemplo, **Baixar 3 pendentes**) para baixar todas as fontes que precisam disso, uma linha por vez. As linhas que mostram "não coberta" ou "sem dados" são puladas; uma linha que falha mostra o erro em vermelho abaixo dela, e a execução segue para a próxima linha. Enquanto isso dura, o rodapé conta as linhas ("1 em execução · 2 na fila" e depois "1 de 3 concluídas", com uma barra de progresso) e o botão vira **Parar**, que para depois da linha em andamento ("Parando…"). A seta ao lado do botão (**Mais ações em lote**) abre **Baixar tudo de novo (…)**: cada fonte que não está bloqueada e não é um GeoTIFF é baixada de novo, depois que você confirma.
+O rodapé abaixo da tabela baixa em lote. Selecione **Baixar … pendentes** (por exemplo, **Baixar 3 pendentes**) para baixar todas as fontes que precisam disso, uma linha por vez. As linhas que mostram "não coberta" ou "sem dados" são puladas; uma linha que falha mostra o erro em vermelho abaixo dela, e a execução segue para a próxima linha. Enquanto isso dura, o rodapé conta as linhas ("1 em execução · 2 na fila" e depois "1 de 3 concluídas"; a linha em execução mostra a própria barra de progresso) e o botão vira **Parar**, que para depois da linha em andamento ("Parando…"). A seta ao lado do botão (**Mais ações em lote**) abre **Baixar tudo de novo (…)**: cada fonte que não está bloqueada e não é um GeoTIFF é baixada de novo, depois que você confirma.
 
 O download também aparece como uma notificação de tarefa com o título **Download**, com a fonte em que está e a porcentagem.
 
@@ -943,7 +945,7 @@ Os ícones à direita de cada linha:
 
 -   o ícone de mapa (**Mostrar no mapa**) mostra os alertas harmonizados no mapa;
 -   o ícone de informação abre os **Detalhes** da linha (veja abaixo); e
--   **Excluir arquivos** remove o download e o arquivo harmonizado da fonte neste período, depois que você confirma. A fonte continua no período: baixe-a novamente em `Alertas <defo-alerts-download_>`_ e harmonize-a para recriá-los. Os conjuntos de alertas deste período feitos com a fonte passam a estar desatualizados; os alertas e as revisões deles são mantidos.
+-   **Excluir arquivo harmonizado** remove o arquivo harmonizado da fonte neste período, depois que você confirma. O download continua: harmonize a fonte de novo nesta etapa para recriar o arquivo. Os conjuntos de alertas deste período feitos com a fonte passam a estar desatualizados; os alertas e as revisões deles são mantidos.
 
 .. _defo-harmonize-details:
 
@@ -982,7 +984,7 @@ O rodapé da tabela executa as linhas em lote. Selecione **Harmonizar … penden
 -   as linhas que mostram "não coberta" ou "sem dados", e as linhas ainda a baixar, são puladas;
 -   uma linha que falha mostra o erro em vermelho logo abaixo, e a execução segue para a próxima linha.
 
-Enquanto a execução dura, o rodapé conta as linhas dela ("1 em execução · 3 na fila", depois "2 de 4 concluídas", com uma barra de progresso) e o botão vira **Parar**, que para a execução depois da linha em andamento. Até essa linha terminar, o botão mostra "Parando…". As linhas já concluídas continuam concluídas. Este **Parar** para só a harmonização: um download em andamento em `Alertas <defo-alerts-download_>`_ continua, e o **Parar** de Alertas não para uma execução de harmonização.
+Enquanto a execução dura, o rodapé conta as linhas dela ("1 em execução · 3 na fila", depois "2 de 4 concluídas"; a linha em execução mostra a própria barra de progresso, que corre sem fim enquanto não tem porcentagem) e o botão vira **Parar**, que para a execução depois da linha em andamento. Até essa linha terminar, o botão mostra "Parando…". As linhas já concluídas continuam concluídas. Este **Parar** para só a harmonização: um download em andamento em `Alertas <defo-alerts-download_>`_ continua, e o **Parar** de Alertas não para uma execução de harmonização.
 
 A execução também aparece como uma notificação de tarefa com o título **Harmonizar**, com a linha em que está (por exemplo, "Harmonizando GLAD-L").
 
@@ -1032,6 +1034,11 @@ Esta etapa transforma as fontes harmonizadas do período ativo num *conjunto de 
 -   desenha um polígono por agrupamento. Cada agrupamento que ela mantém é um alerta do conjunto.
 
 Abra a etapa **Integrar e vetorizar** do painel **Fluxo de trabalho**. Ela é liberada assim que pelo menos uma fonte do período ativo está pronta em `Harmonizar <defo-harmonize_>`_.
+
+O formulário segue a execução, em três cartões com borda: as fontes a combinar, as configurações dos agrupamentos e as camadas de atributos. O botão **Integrar e vetorizar** fica abaixo deles. Abaixo das fontes, linhas cinza dizem o que a execução também faz sozinha, sem nenhuma configuração:
+
+-   "Remove os pixels já presentes em N conjuntos de alertas anteriores" (veja `O que os períodos anteriores já reportaram <defo-integrate-earlier_>`_); e
+-   "Recupera os pixels não analisáveis de N conjuntos anteriores dentro da busca retroativa", contados para as fontes selecionadas.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/integrate-form.png
     :alt: O formulário Integrar e vetorizar
@@ -1098,8 +1105,8 @@ O formulário abre com as configurações do conjunto de alertas ativo (tudo men
     *   -   Opção
         -   Descrição
         -   Padrão e limites
-    *   -   **Fontes**
-        -   As fontes cujos alertas entram no conjunto. Cada fonte pronta aparece com o que o seu arquivo harmonizado encontrou. Uma fonte que não cobre a AOI, ou que não tem dados para o período, aparece desativada, com o motivo.
+    *   -   Fontes
+        -   As fontes cujos alertas entram no conjunto, no primeiro cartão. Cada fonte pronta aparece com o que o seu arquivo harmonizado encontrou. Uma fonte que não cobre a AOI, ou que não tem dados para o período, aparece desativada, com o motivo.
         -   Todas as fontes prontas. Pelo menos uma.
     *   -   **Incluir alertas prováveis (não confirmados)**
         -   Só aparece quando pelo menos uma fonte marcada tem uma classe *provável* (baixa confiança). Um único interruptor para todas essas fontes. Desligado, os pixels prováveis delas são descartados antes de tudo, e só os pixels confirmados contam. Com duas ou mais dessas fontes, **Definir por fonte** abre um interruptor por fonte (veja abaixo).
@@ -1198,7 +1205,7 @@ Se os arquivos do conjunto foram apagados da pasta do projeto, a linha diz: "Os 
 Ver os alertas no mapa
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Assim que o projeto tem um conjunto, os interruptores abaixo do botão o desenham no mapa:
+Assim que o projeto tem um conjunto, um título abaixo do botão conta os alertas do conjunto ativo ("Resultado · 48 agrupamentos"), e os interruptores abaixo dele desenham o conjunto no mapa:
 
 .. list-table::
     :header-rows: 1
@@ -1248,7 +1255,7 @@ As camadas de visualização apoiam a revisão dos alertas: um mapa de cobertura
 
 Abra a etapa **Camadas adicionais** do painel **Fluxo de trabalho**, a primeira etapa de **Preparar a revisão**. Ela é liberada assim que o projeto tem um conjunto de alertas (veja `Integrar e vetorizar <defo-integrate_>`_).
 
-A etapa é opcional: pule-a e volte a qualquer momento. A barra dela no cabeçalho é tracejada, e a etapa mostra "opcional" até ter uma camada.
+A etapa é opcional: pule-a e volte a qualquer momento. A barra dela no cabeçalho é tracejada, e a etapa não mostra nenhuma contagem até ter uma camada.
 
 .. note::
 
@@ -1630,7 +1637,7 @@ Um projeto começa sem nenhuma das caixas marcada. A nota abaixo delas diz "Esco
 Revisar juntos os alertas próximos
 """"""""""""""""""""""""""""""""""
 
-Abaixo do modo de revisão, a caixa de seleção **Revisar juntos os alertas próximos** permite que a `Análise <defo-analysis-nearby_>`_ revise alertas vizinhos como um único grupo: "Na Análise, os alertas dentro desta distância podem ser revisados com um único veredito, um único conjunto de respostas e um único polígono." Ela funciona nos dois modos. Depois que ela é marcada:
+No próprio cartão, abaixo do modo de revisão (e abaixo da tabela de avaliadores com **Vários avaliadores**), a caixa de seleção **Revisar juntos os alertas próximos** permite que a `Análise <defo-analysis-nearby_>`_ revise alertas vizinhos como um único grupo: "Na Análise, os alertas dentro desta distância podem ser revisados com um único veredito, um único conjunto de respostas e um único polígono." Ela funciona nos dois modos. Depois que ela é marcada:
 
 .. list-table::
     :header-rows: 1
@@ -1867,7 +1874,7 @@ A tela abre com o conjunto de alertas ativo, a partir de qualquer um destes pont
 
 Ela precisa de um conjunto de alertas: até que `Integrar e vetorizar <defo-integrate_>`_ tenha gerado um, o contador mostra "Nenhum conjunto de alertas carregado". Um conjunto abre no alerta que estava em revisão quando a tela foi deixada pela última vez (a posição é salva com o projeto).
 
-**Fluxo de trabalho**, no canto superior esquerdo, volta às etapas do fluxo de trabalho. A barra lateral esquerda continua utilizável nesta tela.
+**Fluxo de trabalho**, no canto superior esquerdo, volta às etapas do fluxo de trabalho. A barra lateral esquerda continua utilizável nesta tela: um clique em um mapa a recolhe quando ela está expandida e não fixada, e uma barra fixada e expandida desloca a tela para a direita dela em vez de cobrir os mapas.
 
 A tela
 ^^^^^^
