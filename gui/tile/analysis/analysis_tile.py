@@ -739,7 +739,7 @@ SCREEN_CSS = (
     # 2026-10-09). ``left`` is the rail's collapsed width (MapApp's 60 px),
     # not its live one (--sepal-drawer-width, 320 px expanded): the expanded
     # rail opens over the screen instead of pushing it right (user,
-    # 2026-10-21). ``bottom`` and ``right`` are 0: --sepal-bottom-reserved and
+    # 2026-10-21), unless pinned (the shell's CSS, gui/solara_app.py). ``bottom`` and ``right`` are 0: --sepal-bottom-reserved and
     # --sepal-right-panel-width belong to the right panel, which is hidden here.
     # z-index 4, HEAD's stage level: above MapApp's map (0); below the rail's
     # collapse arrow (5), the rail and the right panel (6), menus (8+),

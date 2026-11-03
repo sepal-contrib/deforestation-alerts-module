@@ -643,6 +643,11 @@ def _AppShell():
         # (480) + the left column's padding (8) + the strip's (4) + the card
         # border (1) + the track row's padding (8); bottom = 8 + 4 + 1 + 8.
         "body:has(.defo-analysis-screen--on) .pill-wrapper { right: 501px !important; bottom: 21px !important; }\n"
+        # A pinned, expanded rail pushes the screen right, so the views shrink
+        # instead of hiding under it (user, 2026-11-03); unpinned, it opens
+        # over them. MapApp keeps the pin in Vue only: its pin button, shown
+        # while expanded, carries mdi-pin (mdi-pin-outline when unpinned).
+        "body:has(.left-drawer .pin-btn .mdi-pin) .defo-analysis-screen { left: var(--sepal-drawer-width, 60px); }\n"
         # The rail collapse/expand arrow sits on the screen's left edge: keep it
         # above the screen (MapApp's own value, restated here so the whole order
         # above is in one place) and below the dialogs.
