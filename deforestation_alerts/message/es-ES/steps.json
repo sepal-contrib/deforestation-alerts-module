@@ -309,7 +309,7 @@
     "period": {
       "instruction": "Define el período de monitoreo.",
       "info_header": "Acerca de los períodos",
-      "info_md": "Un período es una ronda de monitoreo, normalmente un mes. Cada fuente de un período se descarga en su **ventana de búsqueda**: las fechas del período más los días de **retrospección** anteriores, para que las alertas publicadas tarde también se encuentren.\n\n- Los píxeles ya reportados por los conjuntos de alertas de períodos anteriores se eliminan antes de vectorizar, así que un píxel nunca se reporta dos veces.\n- **Nuevo período** empieza el día siguiente al último período y copia las opciones de máscara de ese período; empieza con las fuentes marcadas en **Añadir a los nuevos períodos** (Alertas).\n- Las fechas de un período no se pueden cambiar en cuanto tiene conjuntos de alertas. Un período se puede eliminar cuando no tiene conjuntos, o cuando es el último período; sus descargas y archivos se eliminan con él.\n- Selecciona una fila para convertirla en el período activo de Alertas, Armonizar e Integrar y vectorizar.",
+      "info_md": "Un período es una ronda de monitoreo, normalmente un mes. Cada fuente de un período se descarga en su **ventana de búsqueda**: las fechas del período más los días de **retrospección** anteriores, para que las alertas publicadas tarde también se encuentren.\n\n- Ambas fechas son **inclusivas**: un período del 1 al 31 de enero conserva las alertas fechadas el día 1 y el día 31. Lo mismo vale para la ventana de búsqueda.\n- Los píxeles ya reportados por los conjuntos de alertas de períodos anteriores se eliminan antes de vectorizar, así que un píxel nunca se reporta dos veces.\n- **Nuevo período** empieza el día siguiente al último período y copia las opciones de máscara de ese período; empieza con las fuentes marcadas en **Añadir a los nuevos períodos** (Alertas).\n- Las fechas de un período no se pueden cambiar en cuanto tiene conjuntos de alertas. Un período se puede eliminar cuando no tiene conjuntos, o cuando es el último período; sus descargas y archivos se eliminan con él.\n- Selecciona una fila para convertirla en el período activo de Alertas, Armonizar e Integrar y vectorizar.",
       "list_title": "Períodos",
       "empty": "Todavía no hay períodos.",
       "col_period": "Período",
@@ -520,7 +520,7 @@
       "why_raw": "se descargó de nuevo desde entonces",
       "action_download_again": "Descargar de nuevo",
       "action_nothing_to_fetch": "Nada que descargar de nuevo: se lee de un archivo",
-      "action_delete_files": "Eliminar archivos",
+      "action_delete_files": "Eliminar archivo armonizado",
       "redownload_title": "¿Descargar {source} de nuevo?",
       "redownload_message": "El catálogo sigue añadiendo alertas a fechas pasadas. Esto obtiene las más recientes para {window} y reemplaza el archivo descargado el {date}.",
       "redownload_message_new": "Esto obtiene las alertas para {window}.",
@@ -531,11 +531,11 @@
         "other": "¿Descargar {n} fuentes de nuevo?"
       },
       "redownload_all_message": "Estas fuentes se descargan de nuevo de sus catálogos: {names}.",
-      "delete_files_title": "¿Eliminar los archivos de {source}?",
-      "delete_files_message": "Elimina la descarga y el archivo armonizado de este período ({size}). La fuente sigue en el proyecto; descárgala de nuevo en Alertas y luego armonízala.",
-      "delete_files_message_nosize": "Elimina la descarga y el archivo armonizado de este período. La fuente sigue en el proyecto; descárgala de nuevo en Alertas y luego armonízala.",
+      "delete_files_title": "¿Eliminar el archivo armonizado de {source}?",
+      "delete_files_message": "Elimina el archivo armonizado de este período ({size}). La descarga se conserva; armonízala de nuevo aquí.",
+      "delete_files_message_nosize": "Elimina el archivo armonizado de este período. La descarga se conserva; armonízala de nuevo aquí.",
       "delete_files_sets": "Estos conjuntos de alertas quedarán desactualizados: {names}. Sus alertas y revisiones se conservan.",
-      "delete_files_busy": "Un trabajo está escribiendo en este proyecto; elimine los archivos cuando haya terminado.",
+      "delete_files_busy": "Un trabajo está escribiendo en este proyecto; elimine el archivo cuando haya terminado.",
       "sub_pixels": {
         "one": "{n} píxel de alerta",
         "many": "{n} de píxeles de alerta",
@@ -582,10 +582,24 @@
       "d_pixels_masked": "{kept} ({before} antes de las máscaras: {removed} eliminados)"
     },
     "integrate": {
-      "instruction": "Une los píxeles de alerta contiguos en grupos.",
+      "instruction": "Combina los píxeles de alerta de las fuentes y luego únelos en grupos.",
       "info_header": "Acerca de Integrar y vectorizar",
-      "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: los grupos que revisa Análisis.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada píxel de alerta recuerda qué fuentes lo detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles de alerta vecinos se agrupan en **grupos**; cada grupo conserva las fuentes de todos sus píxeles. Los grupos más pequeños que el **tamaño mínimo** se descartan; puedes limitar el número de grupos, ordenados como elijas.\n4. Cada **capa de atributos** opcional (una imagen de Earth Engine o un GeoTIFF) añade una estadística de sus bandas a cada grupo.\n\nLos grupos más pequeños que el tamaño mínimo quedan fuera del conjunto, de sus exportaciones y del mapa. **Conservar los grupos más pequeños que tocan una pérdida confirmada anterior** los conserva como *Crecimiento · bajo el área mínima*, vinculados a la alerta de la que crecen; sin marcar, se descartan como cualquier grupo pequeño.\n\nLos píxeles de grupos demasiado pequeños para conservarse, o que superan el número máximo de grupos, se conservan como **no analizables**, y la ejecución del período siguiente los reconsidera dentro de su retrospección. Un interruptor **incluir alertas probables** vale para todas las fuentes elegidas (**Definir por fuente** para elegir cada una); desactivado, se descartan sus píxeles probables. La capa **Mostrar píxeles no analizables** los dibuja en el mapa.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera los grupos revisados que descartaría. Cuando la ejecución termina, el nuevo conjunto pasa a ser el activo: prepara el cuestionario y luego inicia Análisis.",
-      "sources": "Fuentes",
+      "info_md": "Este paso convierte las fuentes armonizadas del período activo en un **conjunto de alertas**: los grupos que revisa Análisis.\n\nEl formulario sigue la ejecución: **1 · Combinar píxeles** cubre los pasos 1 y 2, **2 · Formar grupos** los pasos 3 y 4.\n\n1. Las fuentes elegidas se combinan píxel a píxel; cada píxel de alerta recuerda qué fuentes lo detectaron.\n2. Se eliminan los píxeles ya reportados por los conjuntos de períodos anteriores (su **huella**).\n3. Los píxeles de alerta vecinos se agrupan en **grupos**; cada grupo conserva las fuentes de todos sus píxeles. Los grupos más pequeños que el **tamaño mínimo** se descartan; puedes limitar el número de grupos, ordenados como elijas.\n4. Cada **capa de atributos** opcional (una imagen de Earth Engine o un GeoTIFF) añade una estadística de sus bandas a cada grupo.\n\nLos grupos más pequeños que el tamaño mínimo quedan fuera del conjunto, de sus exportaciones y del mapa. **Conservar los grupos más pequeños que tocan una pérdida confirmada anterior** los conserva como *Crecimiento · bajo el área mínima*, vinculados a la alerta de la que crecen; sin marcar, se descartan como cualquier grupo pequeño.\n\nLos píxeles de grupos demasiado pequeños para conservarse, o que superan el número máximo de grupos, se conservan como **no analizables**, y la ejecución del período siguiente los reconsidera dentro de su retrospección. Un interruptor **incluir alertas probables** vale para todas las fuentes elegidas (**Definir por fuente** para elegir cada una); desactivado, se descartan sus píxeles probables. La capa **Mostrar píxeles no analizables** los dibuja en el mapa.\n\nUn conjunto de alertas se identifica por su período y sus fuentes: ejecutar de nuevo la misma combinación lo **reemplaza**, tras una confirmación que enumera los grupos revisados que descartaría. Cuando la ejecución termina, el nuevo conjunto pasa a ser el activo: prepara el cuestionario y luego inicia Análisis.",
+      "auto_footprint": {
+        "one": "Elimina los píxeles ya presentes en {n} conjunto de alertas anterior",
+        "many": "Elimina los píxeles ya presentes en {n} de conjuntos de alertas anteriores",
+        "other": "Elimina los píxeles ya presentes en {n} conjuntos de alertas anteriores"
+      },
+      "auto_carry": {
+        "one": "Recupera los píxeles no analizables de {n} conjunto anterior dentro de la retrospección",
+        "many": "Recupera los píxeles no analizables de {n} de conjuntos anteriores dentro de la retrospección",
+        "other": "Recupera los píxeles no analizables de {n} conjuntos anteriores dentro de la retrospección"
+      },
+      "sec_result": {
+        "one": "Resultado · {n} grupo",
+        "many": "Resultado · {n} de grupos",
+        "other": "Resultado · {n} grupos"
+      },
       "min_size": "Tamaño mínimo de grupo",
       "min_size_hint": "= {px} píxeles en la cuadrícula",
       "small_growth": "Conservar los grupos más pequeños que tocan una pérdida confirmada anterior",

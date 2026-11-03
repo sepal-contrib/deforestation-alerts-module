@@ -25,6 +25,7 @@ import * as basemapSwitcherWidget from "../leaflet-multiview/src/plugins/basemap
 import {pick} from "../leaflet-multiview/src/plugins/pick/index.js";
 import * as pickWidget from "../leaflet-multiview/src/plugins/pick/widget.js";
 import {resizeNudge} from "./resize_nudge.js";
+import {railCollapse} from "./rail_collapse.js";
 
 export default createWidget({
   L,
@@ -41,5 +42,5 @@ export default createWidget({
     },
     pick: {plugin: pick, bind: pickWidget.bind},
   },
-  always: [resizeNudge],
+  always: [resizeNudge, railCollapse],
 });

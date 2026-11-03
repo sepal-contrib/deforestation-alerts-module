@@ -316,16 +316,14 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     " width: 100%; padding: 5px 10px 5px 8px; border-radius: 6px;"
                     " cursor: pointer;",
                 ) as activator:
-                    # An optional step left empty reads "optional", not its
-                    # place, and drops the chip (which would say it again).
+                    # An optional step left empty shows no count chip: its
+                    # dashed bar already marks it optional.
                     empty_optional = active.optional and not active.count(p)
                     rv.Html(
                         tag="span",
                         class_="defo-step-badge",
                         children=[
-                            t("workflow.optional")
-                            if empty_optional
-                            else t(
+                            t(
                                 "workflow.step_badge",
                                 n=level_steps.index(active_step) + 1,
                                 total=len(level_steps),

@@ -84,7 +84,6 @@ SAME_IN = {
         "analysis_tile.verdict.title",
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_col_raster", "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
-        "steps.integrate.sources",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
         # ramp names, the SWIR acronym and "Palette" are the same in French
         "steps.layers.ramp_magma", "steps.layers.ramp_oranges", "steps.layers.ramp_terrain",

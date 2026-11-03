@@ -119,7 +119,7 @@ def test_running_row_shows_stage_and_percent():
     assert _subtitle(row, stage="download", pct=42) == ("downloading 42%", None)  # it never chains
     assert _state(row, stage="download")["label"] == "Downloading"  # no percent yet
     cell = _state(row, stage="harmonize", pct=42)
-    assert cell["label"] == "Harmonizing" and cell.get("progress") is None and cell["title"] == "Harmonizing"
+    assert cell["label"] == "Harmonizing" and "progress" in cell and cell["progress"] is None and cell["title"] == "Harmonizing"
     assert _subtitle(row, stage="harmonize")[0] == "harmonizing"
     # a GeoTIFF is read, not downloaded
     assert _state(row, file_source=True, stage="download", pct=42)["label"] == "Reading"

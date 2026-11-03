@@ -213,9 +213,8 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
 <script>
 // Two levels, as the pipeline header: one strip, per level its label over
 // its bars, the current bar aria-current="step"; the badge counts within the
-// level, and an empty optional step's badge reads a word.
+// level.
 const LEVELS = {prepare: ['aoi', 'integrate'], review: ['questionnaire', 'evaluators']};
-const OPTIONAL = ['questionnaire'];
 let current = 'integrate';
 function level(key) { return Object.keys(LEVELS).find(l => LEVELS[l].includes(key)); }
 function step(key) {
@@ -228,7 +227,7 @@ function step(key) {
   ).join('');
   document.getElementById('showing').textContent = 'workflow on ' + key;
   document.getElementById('badge').textContent =
-    OPTIONAL.includes(key) ? 'optional' : (steps.indexOf(key) + 1) + ' / ' + steps.length;
+    (steps.indexOf(key) + 1) + ' / ' + steps.length;
 }
 function openScreen() {
   const s = document.getElementById('screen');
@@ -303,9 +302,9 @@ def test_step_active_counts_within_the_level(screens):
     assert not walklib.step_active(screens, "integrate")
 
 
-def test_step_active_reads_an_empty_optional_step_by_its_mark(screens):
+def test_step_active_reads_an_optional_step_by_its_place(screens):
     screens.evaluate("() => step('questionnaire')")
-    assert screens.locator("#badge").text_content() == "optional"
+    assert screens.locator("#badge").text_content() == "1 / 2"
     assert walklib.step_active(screens, "questionnaire")
     assert not walklib.step_active(screens, "evaluators")
 

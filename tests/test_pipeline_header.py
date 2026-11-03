@@ -276,11 +276,11 @@ def _badge(rc):
     return badge.children[0]
 
 
-def test_optional_badge():
+def test_step_badge_counts_the_level():
     from gui.i18n import t
 
     box, rc, _ = _render("layers", _project(n_alerts=3))
-    assert _badge(rc) == t("workflow.optional")
+    assert _badge(rc) == t("workflow.step_badge", n=1, total=3)
     rc.close()
     box, rc, _ = _render("evaluators", _project(n_alerts=3))
     assert _badge(rc) == t("workflow.step_badge", n=3, total=3)
@@ -297,15 +297,15 @@ def _title_strings(rc):
     return _strings(wrap.children[0].activator[0])
 
 
-def test_an_empty_optional_step_says_optional_once():
+def test_an_empty_optional_step_shows_no_count_chip():
     from gui.i18n import t
 
     box, rc, _ = _render("layers", _project(n_alerts=3))
-    assert _title_strings(rc).count(t("workflow.optional")) == 1
+    assert _title_strings(rc) == [t("workflow.step_badge", n=1, total=3), t("app.drawer_item.layers"), "mdi-menu-down"]
     rc.close()
 
 
-def test_an_optional_step_with_outputs_shows_its_place_again():
+def test_an_optional_step_with_outputs_shows_its_count():
     from deforestation_alerts.project.models import GeeVisLayer
     from gui.i18n import t
 

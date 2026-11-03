@@ -49,7 +49,9 @@ def test_workflow_panel_is_wired():
     src = _src("gui/solara_app.py")
     assert "WorkflowHeader(app_state=app_state)" in src
     assert '"content": [panel_host]' in src
-    assert "children=[header_widget, *panel_wrappers.values()]" in src
+    # the header outside the steps' body: only the body scrolls
+    assert 'children=[header_widget, v.Html(tag="div", class_="defo-workflow-body",' in src
+    assert "children=[*panel_wrappers.values()])]" in src
     assert "right_panel_open=True" in src
     assert "is_pinned=False" in src
     assert 'WORKFLOW_PANEL_CONFIG = {' in src and 't("app.panel_workflow_title")' in src

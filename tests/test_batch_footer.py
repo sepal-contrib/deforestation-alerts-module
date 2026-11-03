@@ -121,7 +121,7 @@ def test_footer_busy_shows_stop_and_strip():
         stop.click()
         assert calls == ["stop"]
         assert "1 running · 2 queued" in _texts(rc) and "1 of 4 done" in _texts(rc)
-        assert [b.value for b in _all(rc) if isinstance(b, v.ProgressLinear)] == [25]
+        assert not any(isinstance(w, v.ProgressLinear) for w in _all(rc))  # the rows draw the bars
         tips = [w.attributes.get("title") for w in _all(rc) if isinstance(w, v.Html)]
         assert "Stops after the row in progress" in tips
         assert not any(isinstance(w, v.Btn) and "Run 2 pending" in w.children for w in _all(rc))

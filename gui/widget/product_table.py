@@ -248,7 +248,9 @@ def _render_cell(cell: dict, first: bool):
             with rv.Html(tag="div", style_=CELL):
                 rv.Icon(children=[cell["icon"]], color=cell.get("color"), small=True)
                 solara.Text(cell.get("label", ""), classes=["text--secondary"], style=NAME_TEXT + "font-size:0.8rem;")
-            if cell.get("progress") is not None:
+            if "progress" in cell and cell["progress"] is None:  # running, with no percent to show
+                rv.ProgressLinear(indeterminate=True, height=3, color="primary", rounded=True, style_="width:100px;")
+            elif cell.get("progress") is not None:
                 with rv.Html(tag="div", style_=PROGRESS_TRACK):
                     rv.Html(tag="div", style_=f"width:{cell['progress']}%;height:100%;", class_="primary")
         return

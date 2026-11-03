@@ -309,7 +309,7 @@
     "period": {
       "instruction": "Defina o período de monitoramento.",
       "info_header": "Sobre os períodos",
-      "info_md": "Um período é uma rodada de monitoramento, normalmente um mês. Cada fonte de um período é baixada na sua **janela de busca**: as datas do período mais os dias de **busca retroativa** anteriores, para que alertas publicados com atraso ainda sejam encontrados.\n\n- Os pixels já reportados pelos conjuntos de alertas de períodos anteriores são removidos antes da vetorização, então um pixel nunca é reportado duas vezes.\n- **Novo período** começa no dia seguinte ao último período e copia as escolhas de máscara desse período; começa com as fontes marcadas em **Adicionar aos novos períodos** (Alertas).\n- As datas de um período não podem mudar depois que ele tem conjuntos de alertas. Um período pode ser excluído quando não tem conjuntos, ou quando é o último período; seus downloads e arquivos são excluídos com ele.\n- Selecione uma linha para torná-la o período ativo de Alertas, Harmonizar e Integrar e vetorizar.",
+      "info_md": "Um período é uma rodada de monitoramento, normalmente um mês. Cada fonte de um período é baixada na sua **janela de busca**: as datas do período mais os dias de **busca retroativa** anteriores, para que alertas publicados com atraso ainda sejam encontrados.\n\n- As duas datas são **inclusivas**: um período de 1 a 31 de janeiro mantém os alertas datados do dia 1 e do dia 31. O mesmo vale para a janela de busca.\n- Os pixels já reportados pelos conjuntos de alertas de períodos anteriores são removidos antes da vetorização, então um pixel nunca é reportado duas vezes.\n- **Novo período** começa no dia seguinte ao último período e copia as escolhas de máscara desse período; começa com as fontes marcadas em **Adicionar aos novos períodos** (Alertas).\n- As datas de um período não podem mudar depois que ele tem conjuntos de alertas. Um período pode ser excluído quando não tem conjuntos, ou quando é o último período; seus downloads e arquivos são excluídos com ele.\n- Selecione uma linha para torná-la o período ativo de Alertas, Harmonizar e Integrar e vetorizar.",
       "list_title": "Períodos",
       "empty": "Ainda não há períodos.",
       "col_period": "Período",
@@ -520,7 +520,7 @@
       "why_raw": "foi baixada de novo desde então",
       "action_download_again": "Baixar novamente",
       "action_nothing_to_fetch": "Nada a baixar de novo: lida de um arquivo",
-      "action_delete_files": "Excluir arquivos",
+      "action_delete_files": "Excluir arquivo harmonizado",
       "redownload_title": "Baixar {source} de novo?",
       "redownload_message": "O catálogo continua adicionando alertas a datas passadas. Isto busca os mais recentes para {window} e substitui o arquivo baixado em {date}.",
       "redownload_message_new": "Isto busca os alertas para {window}.",
@@ -531,11 +531,11 @@
         "other": "Baixar {n} fontes de novo?"
       },
       "redownload_all_message": "Estas fontes são baixadas de novo de seus catálogos: {names}.",
-      "delete_files_title": "Excluir os arquivos de {source}?",
-      "delete_files_message": "Remove o download e o arquivo harmonizado deste período ({size}). A fonte continua no projeto; baixe-a novamente em Alertas e depois harmonize-a.",
-      "delete_files_message_nosize": "Remove o download e o arquivo harmonizado deste período. A fonte continua no projeto; baixe-a novamente em Alertas e depois harmonize-a.",
+      "delete_files_title": "Excluir o arquivo harmonizado de {source}?",
+      "delete_files_message": "Remove o arquivo harmonizado deste período ({size}). O download continua; harmonize-o novamente aqui.",
+      "delete_files_message_nosize": "Remove o arquivo harmonizado deste período. O download continua; harmonize-o novamente aqui.",
       "delete_files_sets": "Estes conjuntos de alertas ficarão desatualizados: {names}. Seus alertas e revisões são mantidos.",
-      "delete_files_busy": "Um trabalho está gravando neste projeto; exclua os arquivos quando ele terminar.",
+      "delete_files_busy": "Um trabalho está gravando neste projeto; exclua o arquivo quando ele terminar.",
       "sub_pixels": {
         "one": "{n} pixel de alerta",
         "many": "{n} de pixels de alerta",
@@ -582,10 +582,24 @@
       "d_pixels_masked": "{kept} ({before} antes das máscaras: {removed} removidos)"
     },
     "integrate": {
-      "instruction": "Reúna os pixels de alerta em agrupamentos.",
+      "instruction": "Combine os pixels de alerta das fontes e depois reúna-os em agrupamentos.",
       "info_header": "Sobre Integrar e vetorizar",
-      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os agrupamentos que a Análise revisa.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada pixel de alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Os pixels de alerta vizinhos são reunidos em **agrupamentos**; cada agrupamento guarda as fontes de todos os seus pixels. Os agrupamentos menores que o **tamanho mínimo** são descartados; você pode limitar o número de agrupamentos, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada agrupamento.\n\nOs agrupamentos menores que o tamanho mínimo ficam fora do conjunto, das suas exportações e do mapa. **Manter os agrupamentos menores que tocam uma perda confirmada anterior** os mantém como *Crescimento · abaixo da área mínima*, vinculados ao alerta a partir do qual crescem; desmarcado, são descartados como qualquer agrupamento pequeno.\n\nOs pixels de agrupamentos pequenos demais para serem mantidos, ou além do número máximo de agrupamentos, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os agrupamentos revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
-      "sources": "Fontes",
+      "info_md": "Esta etapa transforma as fontes harmonizadas do período ativo em um **conjunto de alertas**: os agrupamentos que a Análise revisa.\n\nO formulário segue a execução: **1 · Combinar pixels** cobre as etapas 1 e 2, **2 · Formar agrupamentos** as etapas 3 e 4.\n\n1. As fontes escolhidas são combinadas pixel a pixel; cada pixel de alerta registra quais fontes o detectaram.\n2. Os pixels já reportados pelos conjuntos de períodos anteriores (sua **pegada**) são removidos.\n3. Os pixels de alerta vizinhos são reunidos em **agrupamentos**; cada agrupamento guarda as fontes de todos os seus pixels. Os agrupamentos menores que o **tamanho mínimo** são descartados; você pode limitar o número de agrupamentos, ordenados como preferir.\n4. Cada **camada de atributos** opcional (uma imagem do Earth Engine ou um GeoTIFF) adiciona uma estatística de suas bandas a cada agrupamento.\n\nOs agrupamentos menores que o tamanho mínimo ficam fora do conjunto, das suas exportações e do mapa. **Manter os agrupamentos menores que tocam uma perda confirmada anterior** os mantém como *Crescimento · abaixo da área mínima*, vinculados ao alerta a partir do qual crescem; desmarcado, são descartados como qualquer agrupamento pequeno.\n\nOs pixels de agrupamentos pequenos demais para serem mantidos, ou além do número máximo de agrupamentos, são mantidos como **não analisáveis**, e a execução do período seguinte os reconsidera dentro da sua busca retroativa. Uma chave **incluir alertas prováveis** vale para todas as fontes escolhidas (**Definir por fonte** para escolher cada uma); desligada, seus pixels prováveis são descartados. A camada **Mostrar pixels não analisáveis** os desenha no mapa.\n\nUm conjunto de alertas é identificado pelo seu período e pelas suas fontes: executar a mesma combinação novamente o **substitui**, após uma confirmação que lista os agrupamentos revisados que seriam descartados. Quando a execução termina, o novo conjunto passa a ser o ativo: prepare o questionário e depois inicie a Análise.",
+      "auto_footprint": {
+        "one": "Remove os pixels já presentes em {n} conjunto de alertas anterior",
+        "many": "Remove os pixels já presentes em {n} de conjuntos de alertas anteriores",
+        "other": "Remove os pixels já presentes em {n} conjuntos de alertas anteriores"
+      },
+      "auto_carry": {
+        "one": "Recupera os pixels não analisáveis de {n} conjunto anterior dentro da busca retroativa",
+        "many": "Recupera os pixels não analisáveis de {n} de conjuntos anteriores dentro da busca retroativa",
+        "other": "Recupera os pixels não analisáveis de {n} conjuntos anteriores dentro da busca retroativa"
+      },
+      "sec_result": {
+        "one": "Resultado · {n} agrupamento",
+        "many": "Resultado · {n} de agrupamentos",
+        "other": "Resultado · {n} agrupamentos"
+      },
       "min_size": "Tamanho mínimo do agrupamento",
       "min_size_hint": "= {px} pixels na grade",
       "small_growth": "Manter os agrupamentos menores que tocam uma perda confirmada anterior",

@@ -389,6 +389,9 @@ def test_only_the_main_map_and_the_right_panel_hide_under_the_screen():
     assert "inset" not in root and "--sepal-bottom-reserved" not in root and "--sepal-right-panel-width" not in root
     # the expanded rail opens over the screen: the screen does not follow its width
     assert "--sepal-drawer-width" not in root and "transition" not in root
+    # ...unless pinned: then it pushes the screen right (user, 2026-11-03)
+    pinned = rules["body:has(.left-drawer .pin-btn .mdi-pin) .defo-analysis-screen"]
+    assert pinned == "left: var(--sepal-drawer-width, 60px);"
 
 
 def test_leaving_the_screen_shows_mapapp_before_hiding_the_views():
