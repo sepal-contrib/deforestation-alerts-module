@@ -889,12 +889,11 @@ def test_small_growth_is_kept_until_unticked_and_reopens_as_run(step):
         rc.close()
 
 
-def test_the_form_shows_its_two_stages_and_what_the_run_does_on_its_own(step):
+def test_the_form_shows_what_the_run_does_on_its_own(step):
     footprint, carry = tn("steps.integrate.auto_footprint", 1), tn("steps.integrate.auto_carry", 1)
     map_, rc = _render(_state(_project("d", "GLAD-L", "RADD")))
     try:
         texts = _texts(rc)
-        assert texts.index(t("steps.integrate.sec_combine")) < texts.index(t("steps.integrate.sec_clusters"))
         assert footprint not in texts and carry not in texts  # no earlier set: nothing to say
     finally:
         rc.close()

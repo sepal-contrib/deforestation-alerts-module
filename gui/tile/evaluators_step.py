@@ -683,8 +683,7 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
     form = {"mode": mode, "count": count_text, "names": name_rows, "include": include, "set_mode": set_mode,
             "set_count": set_count_text, "set_names": set_name_rows, "set_include": set_include}
 
-    with solara.Column(style="gap:8px;margin-top:8px;"):
-        rv.Divider()
+    with solara.Column(style="gap:8px;"):
         if gdf is None:
             solara.Text(t("evaluators.loading"), style=MUTED)
         if orphan:
@@ -942,12 +941,14 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
             with rv.Card(outlined=True, class_="pa-3"):
                 _GroupOption(app_state=app_state)
         elif s is not None:
+            # One card per setting, as on the Questionnaire step: the mode, its evaluators, the grouping.
             with rv.Card(outlined=True, class_="pa-3"):
                 _ReviewMode(app_state=app_state)
-                with rv.Html(tag="div", class_="mt-3"):
-                    _GroupOption(app_state=app_state)
-                if p.multi_evaluator:
+            if p.multi_evaluator:
+                with rv.Card(outlined=True, class_="pa-3"):
                     _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
                                   gee_interface=gee_interface)
+            with rv.Card(outlined=True, class_="pa-3"):
+                _GroupOption(app_state=app_state)
         # Without an active set, Start analysis says why (workflow.lock_review).
         _StartAnalysis(app_state=app_state, ready=s is not None)
