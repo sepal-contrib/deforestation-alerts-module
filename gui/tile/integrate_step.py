@@ -121,8 +121,9 @@ _BADGE = ("border-radius:50%;width:20px;height:20px;display:inline-flex;align-it
 
 
 def _heading(n, title, hint=None):
-    """A numbered section title (the run's stages) with its one-line hint."""
-    with solara.Column(style="gap:2px;"):
+    """A numbered section title (the run's stages) with its one-line hint;
+    a later section stands a little apart from the one above."""
+    with solara.Column(style="gap:2px;" + ("margin-top:8px;" if n > 1 else "")):
         with solara.Row(style="align-items:center;gap:8px;"):
             rv.Html(tag="span", children=[str(n)], class_="primary white--text", style_=_BADGE)
             solara.Text(title, style="font-weight:600;")
@@ -268,47 +269,47 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
     def _delete_attr(index):
         set_attr_layers(lambda cur: [old for j, old in enumerate(cur) if j != index])
 
-    with solara.Column(style="gap:16px;"):
-        _heading(1, t("steps.integrate.sec_combine"), t("steps.integrate.sec_combine_hint"))
-        for c in choices:  # a disabled one shows why it is left out
-            s = c["source"]
-            rv.Checkbox(label=f"{c['label']} · {c['note']}" if c["note"] else c["label"], v_model=s in chosen,
-                        disabled=not c["enabled"], dense=True, hide_details=True,
-                        on_v_model=lambda v, s=s: _toggle_source(s, v))
-        if with_probable:
-            # One switch for every chosen source; per source only when asked
-            # for, or when the sources already differ.
-            with solara.Column(style="gap:0;"):
-                rv.Switch(label=t("steps.integrate.include_probable"), v_model=mix == "on",
-                          on_v_model=_set_all_probable, dense=True, hide_details=True, class_="mt-0")
-                if mix == "mixed":
-                    solara.Text(t("steps.integrate.probable_mixed"), style=MUTED, classes=["ml-11"])
-                elif len(with_probable) > 1:
-                    solara.Button(t("steps.integrate.probable_per_source"), text=True, x_small=True,
-                                  color="primary", classes=["ml-9", "align-self-start"],
-                                  icon_name="mdi-chevron-down" if per_source else "mdi-chevron-right",
-                                  on_click=lambda: set_per_source(not per_source))
-                if show_per_source:
-                    for c in choices:
-                        s = c["source"]
-                        if s in with_probable:
-                            rv.Switch(label=c["label"], v_model=s not in probable_off, dense=True,
-                                      hide_details=True, class_="ml-9 mt-1",
-                                      on_v_model=lambda v, s=s: set_probable_off(
-                                          lambda cur: (cur - {s}) if v else (cur | {s})))
-                        elif s in chosen:
-                            solara.Text(t("steps.integrate.probable_none", source=c["label"]), style=MUTED,
-                                        classes=["ml-9", "mt-1"])
-        if n_earlier or n_carried:
-            with solara.Column(style="gap:4px;"):
-                if n_earlier:
-                    _auto_line("mdi-minus-circle-outline", tn("steps.integrate.auto_footprint", n_earlier))
-                if n_carried:
-                    _auto_line("mdi-history", tn("steps.integrate.auto_carry", n_carried))
+    with solara.Column(style="gap:12px;"):
+        _heading(1,t("steps.integrate.sec_combine"), t("steps.integrate.sec_combine_hint"))
+        # The section's own controls sit close; the gap is between blocks.
+        with solara.Column(style="gap:4px;"):
+            for c in choices:  # a disabled one shows why it is left out
+                s = c["source"]
+                rv.Checkbox(label=f"{c['label']} · {c['note']}" if c["note"] else c["label"], v_model=s in chosen,
+                            disabled=not c["enabled"], dense=True, hide_details=True, class_="mt-0",
+                            on_v_model=lambda v, s=s: _toggle_source(s, v))
+            if with_probable:
+                # One switch for every chosen source; per source only when asked
+                # for, or when the sources already differ.
+                with solara.Column(style="gap:0;"):
+                    rv.Switch(label=t("steps.integrate.include_probable"), v_model=mix == "on",
+                              on_v_model=_set_all_probable, dense=True, hide_details=True, class_="mt-0")
+                    if mix == "mixed":
+                        solara.Text(t("steps.integrate.probable_mixed"), style=MUTED, classes=["ml-11"])
+                    elif len(with_probable) > 1:
+                        solara.Button(t("steps.integrate.probable_per_source"), text=True, x_small=True,
+                                      color="primary", classes=["ml-9", "align-self-start"],
+                                      icon_name="mdi-chevron-down" if per_source else "mdi-chevron-right",
+                                      on_click=lambda: set_per_source(not per_source))
+                    if show_per_source:
+                        for c in choices:
+                            s = c["source"]
+                            if s in with_probable:
+                                rv.Switch(label=c["label"], v_model=s not in probable_off, dense=True,
+                                          hide_details=True, class_="ml-9 mt-1",
+                                          on_v_model=lambda v, s=s: set_probable_off(
+                                              lambda cur: (cur - {s}) if v else (cur | {s})))
+                            elif s in chosen:
+                                solara.Text(t("steps.integrate.probable_none", source=c["label"]), style=MUTED,
+                                            classes=["ml-9", "mt-1"])
+            if n_earlier:
+                _auto_line("mdi-minus-circle-outline", tn("steps.integrate.auto_footprint", n_earlier))
+            if n_carried:
+                _auto_line("mdi-history", tn("steps.integrate.auto_carry", n_carried))
         _heading(2, t("steps.integrate.sec_clusters"), t("steps.integrate.sec_clusters_hint"))
         rv.TextField(label=t("steps.integrate.min_size"), v_model=min_size, on_v_model=set_min_size, type="number",
                      suffix="ha", dense=True, outlined=True, hint=t("steps.integrate.min_size_hint", px=min_px),
-                     persistent_hint=True)
+                     persistent_hint=True, class_="mb-n2")  # its hint's own 8 px bottom margin
         # Growth under the minimum area (on: today's behaviour); the line says
         # when this run has nothing earlier to link to.
         with solara.Column(style="gap:4px;"):
@@ -318,7 +319,7 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
                 solara.Text(t(growth_note), style="display:block;" + MUTED + "font-size:0.75rem;",
                             classes=["ml-8"])
         rv.Select(label=t("steps.integrate.sorting"), v_model=sorting, on_v_model=set_sorting, dense=True,
-                  outlined=True, items=[{"text": t(f"steps.integrate.sorting_{k}"), "value": k} for k in SORTINGS])
+                  outlined=True, hide_details=True, items=[{"text": t(f"steps.integrate.sorting_{k}"), "value": k} for k in SORTINGS])
         with solara.Column(style="gap:0;"):
             rv.Checkbox(label=t("steps.integrate.limit_alerts"), v_model=limit_on, on_v_model=set_limit_on,
                         dense=True, hide_details=True, class_="mt-0")
@@ -351,18 +352,21 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
             # with the step. A switch is held while its own layer is being
             # built, so a flip can never race the build it started.
             inflight_keys = layers.inflight.value
-            solara.Text(tn("steps.integrate.sec_result", n_alerts), style="font-weight:600;")
-            rv.Switch(label=t("steps.integrate.show_alerts"), v_model=app_state.show_alerts.value,
-                      on_v_model=app_state.show_alerts.set, dense=True, hide_details=True,
-                      disabled=alert_layers.SET_LAYER_KEY in inflight_keys)
-            if has_states:
-                rv.Switch(label=t("steps.integrate.show_unanalysable"), v_model=app_state.show_unanalysable.value,
-                          on_v_model=app_state.show_unanalysable.set, dense=True, hide_details=True,
-                          disabled=alert_layers.STATES_LAYER_KEY in inflight_keys)
-            if has_earlier:
-                rv.Switch(label=t("steps.integrate.show_earlier"), v_model=app_state.show_earlier_sets.value,
-                          on_v_model=app_state.show_earlier_sets.set, dense=True, hide_details=True,
-                          disabled=any(k.startswith(alert_layers.EARLIER_PREFIX) for k in inflight_keys))
+            with solara.Column(style="gap:4px;margin-top:8px;"):
+                solara.Text(tn("steps.integrate.sec_result", n_alerts), style="font-weight:600;")
+                rv.Switch(label=t("steps.integrate.show_alerts"), v_model=app_state.show_alerts.value,
+                          on_v_model=app_state.show_alerts.set, dense=True, hide_details=True, class_="mt-0",
+                          disabled=alert_layers.SET_LAYER_KEY in inflight_keys)
+                if has_states:
+                    rv.Switch(label=t("steps.integrate.show_unanalysable"),
+                              v_model=app_state.show_unanalysable.value, on_v_model=app_state.show_unanalysable.set,
+                              dense=True, hide_details=True, class_="mt-0",
+                              disabled=alert_layers.STATES_LAYER_KEY in inflight_keys)
+                if has_earlier:
+                    rv.Switch(label=t("steps.integrate.show_earlier"), v_model=app_state.show_earlier_sets.value,
+                              on_v_model=app_state.show_earlier_sets.set, dense=True, hide_details=True,
+                              class_="mt-0",
+                              disabled=any(k.startswith(alert_layers.EARLIER_PREFIX) for k in inflight_keys))
 
     ConfirmDialog(
         open=confirm is not None,
