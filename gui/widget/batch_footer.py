@@ -5,8 +5,8 @@ pending row (``Run {n} pending``), and its caret shows the other batch actions
 as buttons like it, stacked under it at its width; with no menu item there is
 no caret. While the scope has
 a job, the left side says how many of its rows run and wait
-(``{running} running · {queued} queued``), with a thin bar and
-``{done} of {total} done`` while a batch is counted, and the main part turns
+(``{running} running · {queued} queued``), with ``{done} of {total} done``
+while a batch is counted (the rows draw their own bars), and the main part turns
 into an outlined ``Stop``: it stops after the row in progress. Once
 stopped, until the job ends, it is a disabled outlined ``Stopping…``, and the
 strip drops its queued half (those rows will not run).
@@ -94,8 +94,6 @@ def BatchFooter(pending: int, run_label: str, on_run: Callable[[], None], on_sto
                                 queued=format_number(counts["queued"])))
                 solara.Text(strip, style=_TEXT)
                 if counts["total"]:
-                    rv.ProgressLinear(value=round(100 * counts["done"] / counts["total"]), height=3,
-                                      color="primary")
                     solara.Text(t("steps.prepare.footer_done", done=format_number(counts["done"]),
                                   total=format_number(counts["total"])), style=_TEXT)
         with rv.Html(tag="div", class_=_WRAP, style_="flex: 0 0 auto; margin-left: auto;"):

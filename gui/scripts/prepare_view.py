@@ -55,7 +55,8 @@ def _next(row: PrepareRow, file_source: bool) -> tuple[str, bool]:
 
 def _in_flight(stage: Optional[str], queued: bool, pct: Optional[int]) -> Optional[dict]:
     """The state of a row in a running job: its stage while it is its turn
-    (its whole label in its tooltip: ``Downloading 42%`` can clip), else
+    (its whole label in its tooltip: ``Downloading 42%`` can clip; its bar
+    has no end while it has no percent), else
     Queued while it waits; None when the row is not in flight."""
     if stage == "download":
         label = t("steps.prepare.state_downloading_pct", pct=pct) if pct is not None else t(
@@ -63,7 +64,7 @@ def _in_flight(stage: Optional[str], queued: bool, pct: Optional[int]) -> Option
         return _state(STATUS_ICONS["running"], "primary", label, progress=pct, title=label)
     if stage in _STAGE_STATES:
         label = t(_STAGE_STATES[stage])
-        return _state(STATUS_ICONS["running"], "primary", label, title=label)
+        return _state(STATUS_ICONS["running"], "primary", label, progress=None, title=label)
     if queued:
         return _state("mdi-timer-sand", "grey", t("steps.prepare.state_queued"))
     return None

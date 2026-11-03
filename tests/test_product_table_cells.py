@@ -120,6 +120,7 @@ def test_state_cell_with_progress_draws_a_bar():
     _box, rc = _render(cell={**cell, "progress": None})
     try:
         assert not [w for w in _widgets(rc, v.Html) if re.search(r"width:\d+%;height", w.style_ or "")]
+        assert [w.indeterminate for w in _widgets(rc, v.ProgressLinear)] == [True]  # running, no percent yet
     finally:
         rc.close()
 
