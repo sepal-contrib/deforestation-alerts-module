@@ -312,8 +312,7 @@ def step_active(page, key) -> bool:
     levels' segments, each level's in its own row; the current one is
     ``aria-current="step"``, and the badge reads "<its number> / <its level's
     steps>" (any language), so it is checked too: the header re-renders the
-    mark and the badge together. An optional step left empty reads a word
-    instead of its place."""
+    mark and the badge together."""
     return page.evaluate("""key => {
         const seg = [...document.querySelectorAll('.right-panel [data-step-key]')]
             .find(e => e.dataset.stepKey === key);
@@ -322,7 +321,6 @@ def step_active(page, key) -> bool:
             .find(e => e.getBoundingClientRect().width > 0);
         if (!badge) return false;
         const text = badge.textContent.trim();
-        if (!/^\\d+ \\/ \\d+$/.test(text)) return true;
         const keys = [...seg.parentElement.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey);
         return text === `${keys.indexOf(key) + 1} / ${keys.length}`;
     }""", key)
