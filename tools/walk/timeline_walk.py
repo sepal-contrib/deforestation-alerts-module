@@ -12,6 +12,7 @@ Checks, each an entry in the JSON report with a screenshot:
     go moves the before image (the before map's title changes)
  3. dragging the before handle past the after one stops short of it
  4. the keyboard: ArrowRight then Enter on the after handle moves the after image
+    (ArrowLeft on the before handle when the after one has no other image to reach)
  5. a stripe click left of the before handle moves the before handle
  6. leaving Analysis and coming back: the handles are still there and work
  7. dark theme: the strip and the titles
@@ -144,23 +145,35 @@ def check_3_clamp(page, rec, *, out):
     assert s1["bx"] < s1["ax"], s1
 
 
-def check_4_keyboard(page, rec, *, out):
-    s0 = strip_state(page)
-    page.locator(f"{HOST} .dah-after").first.focus()
-    page.keyboard.press("ArrowRight")
-    page.wait_for_timeout(500)
-    mid = strip_state(page)
-    rec["mid"] = mid
-    w.shot(page, out, "04_key_walk")
-    if mid["a_text"] == s0["a_text"]:  # the after image was the last one: walk back instead
-        page.keyboard.press("ArrowLeft")
+def _key_walk(page, handle, keys, attr, s0):
+    """Focus ``handle`` and press ``keys`` until its value text moves: the
+    state then, or ``None`` when it had no other image to walk to."""
+    page.locator(f"{HOST} .dah-{handle}").first.focus()
+    for key in keys:
+        page.keyboard.press(key)
         page.wait_for_timeout(500)
         mid = strip_state(page)
-        rec["mid_left"] = mid
+        if mid[attr] != s0[attr]:
+            return mid
+    return None
+
+
+def check_4_keyboard(page, rec, *, out):
+    s0 = strip_state(page)
+    idx, mid = 1, _key_walk(page, "after", ("ArrowRight", "ArrowLeft"), "a_text", s0)
+    if mid is None:
+        # A recent alert can have one usable image past the before handle (the
+        # rest over the cloud limit, or not taken yet): the before handle walks
+        # back instead, into the look-back.
+        page.keyboard.press("Escape")
+        idx, mid = 0, _key_walk(page, "before", ("ArrowLeft",), "b_text", s0)
+    assert mid is not None, "neither handle has another image to walk to"
+    rec["walked"], rec["mid"] = ("before", "after")[idx], mid
+    w.shot(page, out, "04_key_walk")
     assert mid["flag"], "no flag while the keyboard walks"
-    assert mid["titles"][1] == s0["titles"][1], "an arrow alone changed the image"
+    assert mid["titles"][idx] == s0["titles"][idx], "an arrow alone changed the image"
     page.keyboard.press("Enter")
-    wait_title_change(page, 1, s0["titles"][1])
+    wait_title_change(page, idx, s0["titles"][idx])
     rec["after"] = strip_state(page)
     w.shot(page, out, "04_key_enter")
 
@@ -178,9 +191,8 @@ def check_6_rebuild(page, rec, *, out):
     s0 = strip_state(page)
     rec["state"] = s0
     w.shot(page, out, "06_back")
-    page.locator(f"{HOST} .dah-before").first.focus()
-    page.keyboard.press("ArrowRight")
-    page.wait_for_timeout(300)
+    # ArrowLeft when the after handle leaves the before one nowhere to go right
+    assert _key_walk(page, "before", ("ArrowRight", "ArrowLeft"), "b_text", s0), "the before handle cannot move"
     page.keyboard.press("Enter")
     wait_title_change(page, 0, s0["titles"][0])
     rec["after"] = strip_state(page)
