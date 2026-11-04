@@ -17,7 +17,8 @@ BOUNDS = (-55.10, -10.10, -55.00, -10.00)
 # A single month (ruling #95: the brief's Jan-Mar window did not match this
 # test's name); GLAD-L Q1 2024 is served by the 2023final archive (cut
 # 2024-07-16, see catalogue.GLAD_L_FINAL), so the window is covered.
-PERIOD = Period(id="2024-01-01_2024-01-31", start=date(2024, 1, 1), end=date(2024, 1, 31))
+PERIOD = Period(id="2024-01-01_2024-01-31", start=date(2024, 1, 1), end=date(2024, 1, 31),
+                sources=["GLAD-L", "RADD"])
 
 # geedim looks every exported image up in its STAC catalogue and warns when a
 # computed image (no asset id) has no entry, and it still multiplies Affines
