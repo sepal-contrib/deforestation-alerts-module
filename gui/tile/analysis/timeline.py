@@ -561,6 +561,10 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     restoring = solara.reactive({})
     #: the sides whose saved pick was not found, so the automatic pick stood in
     fell_back = solara.reactive(frozenset())
+    #: the sides the automatic pick found nothing for while the index had not
+    #: answered for their months yet (it loads the latest months first): picked
+    #: once a candidate arrives, given up once the index answers without one
+    auto_waiting = solara.reactive(frozenset())
 
     lane = v.Html(tag="div", style_=_LANE_STYLE)
     lane_axis = v.Html(tag="div", style_=f"position: relative; height: {AXIS_H}px")
@@ -1120,16 +1124,36 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         extra.set(extra_to_include(widgets.imagery_ctx.value, app_state.project.value,
                                    extra.value, [day for _, day in parsed]))
 
-    def _settled(rid) -> bool:
-        """Whether the index has answered for ``rid``'s date, so a row it does
-        not hold is gone rather than not fetched yet (spec D4)."""
+    def _answered(day) -> bool:
+        """Whether the index has answered for ``day``, so a row it does not
+        hold is gone rather than not fetched yet (spec D4)."""
         if app_state.scene_index_error.value:
             return True
         manifest = app_state.scene_manifest.value
         if manifest is None or app_state.scene_index.value is None or app_state.scene_index_pending.value:
             return False
-        _, day = scene_query.parse_row_id(rid)
         return manifest.covered.start <= day <= manifest.covered.end
+
+    def _settled(rid) -> bool:
+        """Whether the index has answered for ``rid``'s date."""
+        return _answered(scene_query.parse_row_id(rid)[1])
+
+    def _resolve_auto_waits(sel, a0, a1, window):
+        """Give each side in ``auto_waiting`` its automatic pick once the index
+        holds a candidate for it. A side stops waiting then, once the index has
+        answered for its months without one, or once the reviewer has picked it."""
+        if not auto_waiting.value or a0 is None or a1 is None:
+            return
+        auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
+        for lane in sorted(auto_waiting.value):
+            chosen = before_id if lane == "b" else after_id
+            span = (window[0], a0) if lane == "b" else (a1, window[1])
+            if chosen.value is None and auto[lane]:
+                chosen.set(auto[lane])
+                _assign(lane, auto[lane], sel)
+            elif chosen.value is None and not all(_answered(d) for d in span):
+                continue
+            auto_waiting.set(auto_waiting.value - {lane})
 
     def _resolve_restores(sel, a0, a1):
         """Restore each waiting saved pick whose row is here, and fall back to
@@ -1226,6 +1250,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         a0, a1 = alert_window(ctx, app_state.project.value)
         if seen_alert.value != identity:
             seen_alert.set(identity)
+            auto_waiting.set(frozenset())
             if a0 is not None and a1 is not None:
                 collapsed.set(frozenset(scene_query.auto_collapsed(window[0], window[1], a0, a1)))
                 split.set(frozenset())
@@ -1238,7 +1263,10 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                     chosen.set(auto[lane])
                     if auto[lane]:
                         _assign(lane, auto[lane], sel)
+                auto_waiting.set(frozenset(lane for lane in ("b", "a")
+                                           if not auto[lane] and lane not in restoring.value))
         _resolve_restores(sel, a0, a1)
+        _resolve_auto_waits(sel, a0, a1, window)
 
         segs = scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX)
         _render_band(segs, a0, a1)
