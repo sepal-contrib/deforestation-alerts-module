@@ -103,7 +103,8 @@ def test_a_task_dependency_changed_in_a_worker_render_raises_without_the_guard()
     out = _drive(guarded=False)
     gc.collect()  # the coroutine that never started is reported here, under this test's filter
     assert out["mounted"] == [(0, 0)]
-    assert out["errors"] and "no running event loop" in out["errors"][0]
+    # 3.11: "no running event loop"; 3.12+: "There is no current event loop in thread"
+    assert out["errors"] and "event loop" in out["errors"][0]
 
 
 def test_a_change_seen_first_in_a_worker_render_starts_the_task_on_the_loop():

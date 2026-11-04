@@ -3,23 +3,27 @@ channels:
   - conda-forge
 
 dependencies:
-  # Match the tested dev env (python 3.11.10, gdal 3.12.3, numpy 1.26.4;
-  # tensorflow: pip, see below)
-  - python=3.11
+  # Match the tested dev env (python 3.12.16, gdal 3.12.3, numpy 1.26.4;
+  # tensorflow: pip, see below). 3.12 is the ceiling: tensorflow 2.17 and
+  # numpy 1.26 ship no 3.13 wheels.
+  - python=3.12
   - gdal=3.12
   - numpy=1.26
   # Geospatial binaries — conda handles these correctly
   - cartopy>=0.24.0
   - fiona>=1.10
   - geopandas>=1.0
-  - rasterio>=1.4
+  # <1.5 (and rioxarray <0.20): on python 3.12 conda picks rasterio 1.5 /
+  # rioxarray 0.20, whose metadata wants numpy>=2, so the pip pass swaps in a
+  # rasterio wheel that bundles its own GDAL + PROJ (two GDALs, PROJ db errors)
+  - rasterio>=1.4,<1.5
   - shapely>=2.0
   - pyproj
   - tippecanoe
   # Harmonize: native Earth Engine downloads aligned onto the project grid,
   # streamed (engine/align.py, ported from spatial_risk's xr_reproject)
   - odc-geo
-  - rioxarray
+  - rioxarray<0.20  # see rasterio above
   - xarray
   - dask
   # Scientific
