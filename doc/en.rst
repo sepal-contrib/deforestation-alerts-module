@@ -2652,7 +2652,7 @@ The report is built from the project's Word template, chosen in the `Questionnai
 The timelapse
 """""""""""""
 
-The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame stays 2.5 seconds and is labelled with its collection and date. The before and after frames also name their side ("Before · Sentinel-2 2026-07-28").
+The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame stays 2 seconds and is labelled with its collection and date. The before and after frames also name their side ("Before · Sentinel-2 2026-07-28").
 
 It is offered for a true alert only: the tile is active when the alert is saved as **Reviewed: confirmed** and the images on screen are those it was saved with. Otherwise, it reads "Save as a true alert, with the images on screen, to create it".
 

@@ -3934,8 +3934,8 @@ msgstr "O relatório é gerado a partir do modelo Word do projeto, escolhido na 
 msgid "The timelapse"
 msgstr "O timelapse"
 
-msgid "The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame stays 2.5 seconds and is labelled with its collection and date. The before and after frames also name their side (\"Before · Sentinel-2 2026-07-28\")."
-msgstr "O bloco **Timelapse** cria um GIF animado que percorre as imagens da área do alerta, de antes para depois, com o contorno do alerta por cima. Cada quadro dura 2,5 segundos e traz a coleção e a data. Os quadros de antes e de depois também indicam o lado (\"Antes · Sentinel-2 2026-07-28\")."
+msgid "The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame stays 2 seconds and is labelled with its collection and date. The before and after frames also name their side (\"Before · Sentinel-2 2026-07-28\")."
+msgstr "O bloco **Timelapse** cria um GIF animado que percorre as imagens da área do alerta, de antes para depois, com o contorno do alerta por cima. Cada quadro dura 2 segundos e traz a coleção e a data. Os quadros de antes e de depois também indicam o lado (\"Antes · Sentinel-2 2026-07-28\")."
 
 msgid "It is offered for a true alert only: the tile is active when the alert is saved as **Reviewed: confirmed** and the images on screen are those it was saved with. Otherwise, it reads \"Save as a true alert, with the images on screen, to create it\"."
 msgstr "Ele só é oferecido para um alerta verdadeiro: o bloco fica ativo quando o alerta está salvo como **Revisado: confirmado** e as imagens na tela são aquelas com que ele foi salvo. Caso contrário, ele diz \"Salve-o como alerta verdadeiro, com as imagens na tela, para criá-lo\"."

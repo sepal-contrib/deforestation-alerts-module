@@ -2582,7 +2582,7 @@ Le rapport est construit à partir du modèle Word du projet, choisi à l'étape
 Le timelapse
 """"""""""""
 
-La tuile **Timelapse** crée un GIF animé qui fait défiler les images de la zone de l'alerte, d'avant en après, avec le contour de l'alerte par-dessus. Chaque image reste 2,5 secondes et est légendée avec sa collection et sa date. Les images d'avant et d'après indiquent aussi leur côté (« Avant · Sentinel-2 2026-07-28 »).
+La tuile **Timelapse** crée un GIF animé qui fait défiler les images de la zone de l'alerte, d'avant en après, avec le contour de l'alerte par-dessus. Chaque image reste 2 secondes et est légendée avec sa collection et sa date. Les images d'avant et d'après indiquent aussi leur côté (« Avant · Sentinel-2 2026-07-28 »).
 
 Il n'est proposé que pour une alerte réelle : la tuile est active quand l'alerte est enregistrée comme **Examinée : confirmée** et que les images affichées sont celles avec lesquelles elle a été enregistrée. Sinon, elle indique « Enregistrez-la comme alerte réelle, avec les images affichées, pour le créer ».
 

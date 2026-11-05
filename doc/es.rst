@@ -2580,7 +2580,7 @@ El informe se genera a partir de la plantilla de Word del proyecto, elegida en e
 La secuencia temporal
 """""""""""""""""""""
 
-El mosaico **Secuencia temporal** crea un GIF animado que recorre las imágenes del área de la alerta, de antes a después, con el contorno de la alerta encima. Cada fotograma dura 2,5 segundos y lleva su colección y su fecha. Los fotogramas de antes y de después también indican su lado ("Antes · Sentinel-2 2026-07-28").
+El mosaico **Secuencia temporal** crea un GIF animado que recorre las imágenes del área de la alerta, de antes a después, con el contorno de la alerta encima. Cada fotograma dura 2 segundos y lleva su colección y su fecha. Los fotogramas de antes y de después también indican su lado ("Antes · Sentinel-2 2026-07-28").
 
 Solo se ofrece para una alerta verdadera: el mosaico se activa cuando la alerta está guardada como **Revisada: confirmada** y las imágenes en pantalla son aquellas con las que se guardó. Si no, indica "Guárdela como alerta verdadera, con las imágenes que se muestran, para crearlo".
 

@@ -2584,7 +2584,7 @@ O relatório é gerado a partir do modelo Word do projeto, escolhido na etapa `Q
 O timelapse
 """""""""""
 
-O bloco **Timelapse** cria um GIF animado que percorre as imagens da área do alerta, de antes para depois, com o contorno do alerta por cima. Cada quadro dura 2,5 segundos e traz a coleção e a data. Os quadros de antes e de depois também indicam o lado ("Antes · Sentinel-2 2026-07-28").
+O bloco **Timelapse** cria um GIF animado que percorre as imagens da área do alerta, de antes para depois, com o contorno do alerta por cima. Cada quadro dura 2 segundos e traz a coleção e a data. Os quadros de antes e de depois também indicam o lado ("Antes · Sentinel-2 2026-07-28").
 
 Ele só é oferecido para um alerta verdadeiro: o bloco fica ativo quando o alerta está salvo como **Revisado: confirmado** e as imagens na tela são aquelas com que ele foi salvo. Caso contrário, ele diz "Salve-o como alerta verdadeiro, com as imagens na tela, para criá-lo".
 

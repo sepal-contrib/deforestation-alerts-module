@@ -3934,8 +3934,8 @@ msgstr "El informe se genera a partir de la plantilla de Word del proyecto, eleg
 msgid "The timelapse"
 msgstr "La secuencia temporal"
 
-msgid "The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame stays 2.5 seconds and is labelled with its collection and date. The before and after frames also name their side (\"Before · Sentinel-2 2026-07-28\")."
-msgstr "El mosaico **Secuencia temporal** crea un GIF animado que recorre las imágenes del área de la alerta, de antes a después, con el contorno de la alerta encima. Cada fotograma dura 2,5 segundos y lleva su colección y su fecha. Los fotogramas de antes y de después también indican su lado (\"Antes · Sentinel-2 2026-07-28\")."
+msgid "The **Timelapse** tile makes an animated GIF that runs through the images of the alert's area, from before to after, with the alert's outline over them. Each frame stays 2 seconds and is labelled with its collection and date. The before and after frames also name their side (\"Before · Sentinel-2 2026-07-28\")."
+msgstr "El mosaico **Secuencia temporal** crea un GIF animado que recorre las imágenes del área de la alerta, de antes a después, con el contorno de la alerta encima. Cada fotograma dura 2 segundos y lleva su colección y su fecha. Los fotogramas de antes y de después también indican su lado (\"Antes · Sentinel-2 2026-07-28\")."
 
 msgid "It is offered for a true alert only: the tile is active when the alert is saved as **Reviewed: confirmed** and the images on screen are those it was saved with. Otherwise, it reads \"Save as a true alert, with the images on screen, to create it\"."
 msgstr "Solo se ofrece para una alerta verdadera: el mosaico se activa cuando la alerta está guardada como **Revisada: confirmada** y las imágenes en pantalla son aquellas con las que se guardó. Si no, indica \"Guárdela como alerta verdadera, con las imágenes que se muestran, para crearlo\"."
