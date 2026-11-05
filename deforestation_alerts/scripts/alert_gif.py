@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 OUTLINE_COLOR = "bf8f2d"
 OUTLINE_PX = 2
 FRAME_PX = 512
-FRAME_MS = 2500  # 1 s read as a flicker: users could not tell before from after
+FRAME_MS = 2000  # 1 s read as a flicker: users could not tell before from after
 _LABEL_PX = 16
 _PAD = 6
 _MARGIN = 8
