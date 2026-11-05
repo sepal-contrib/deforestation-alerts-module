@@ -1470,6 +1470,51 @@ def test_no_automatic_pick_to_stand_in_says_nothing_was_picked_automatically():
     assert timeline.t("analysis.timeline.saved_missing") not in _text(card)
 
 
+def test_a_side_the_loading_index_has_no_image_for_yet_gets_its_automatic_pick_when_one_arrives():
+    """The index loads the latest months first: an alert opened before its
+    look-back months arrive has no before candidate yet. The automatic pick
+    waits for that side instead of leaving it unset for good (the slice2
+    walk's long alert opened on "Before image not set")."""
+    rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)]
+    state = _fake_state(index=_any_index(rows[1:]))  # only the after side so far
+    analysis = _fake_analysis()
+    timeline.build_timeline(state, analysis, _fake_widgets())
+    assert analysis.before_info.value is None
+    assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
+
+    state.scene_index.set(_any_index(rows))  # the earlier months arrive
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert analysis.dirty.value is False and analysis.edit_rev.value == 0
+
+
+def test_a_side_with_no_image_stops_waiting_once_the_index_has_answered():
+    rows = [(LS, "2026-08-27", 3.0)]
+    state = _fake_state(index=_any_index(rows))
+    analysis = _fake_analysis()
+    timeline.build_timeline(state, analysis, _fake_widgets())
+    state.scene_manifest.set(_covering())  # answered: there is nothing before the alert
+    state.scene_index.set(_any_index([(S2, "2026-04-24", 8.0), *rows]))  # a later refresh
+    assert analysis.before_info.value is None  # no pick appears out of the blue
+
+
+def test_a_hand_pick_on_a_waiting_side_is_not_replaced_by_the_automatic_one():
+    rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (S2, "2026-06-10", 4.0)]
+    state = _fake_state(index=_any_index([rows[1], rows[2]]))
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(state, analysis, _fake_widgets())
+    assert analysis.before_info.value is None
+    # the reviewer unfolds June (inside the alert window) and drops the before handle there
+    june = timeline.format_date(date(2026, 6, 1), "MMM y")
+    [block] = [w for w in _walk(card)
+               if (getattr(w, "attributes", None) or {}).get("aria-label", "").startswith(june)]
+    block.fire_event("click", None)
+    [strip] = [w for w in _walk(card) if isinstance(w, HandleStrip)]
+    strip.vue_pick({"side": "b", "id": scene_index.row_id(S2, date(2026, 6, 10))})
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-06-10 "
+    state.scene_index.set(_any_index(rows))
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-06-10 "
+
+
 def test_a_failed_index_refresh_also_settles_the_wait():
     rows = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)]
     state = _fake_state(index=_any_index(rows))
