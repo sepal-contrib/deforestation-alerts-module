@@ -115,14 +115,18 @@ def test_typed_values_exist_in_every_language():
 
 
 @pytest.mark.parametrize("code", ["en", "es-ES", "fr", "pt-BR"])
-def test_the_run_button_pattern_reads_every_language(code):
-    """``phases.prepare_labels`` matches the Harmonize … pending button in each catalogue."""
-    msgs = REPO / "deforestation_alerts" / "message" / code / "steps.json"
-    forms = json.loads(msgs.read_text(encoding="utf-8"))["steps"]["harmonize"]["run_all"]
-    prepare = json.loads(msgs.read_text(encoding="utf-8"))["steps"]["prepare"]
-    labels = ph.prepare_labels(forms.values(), "Ready", ["Queued"], prepare["footer_stop"])
-    for form in forms.values():
-        assert labels["run"].match(form.replace("{n}", "12"))
-        assert labels["run"].match(form.replace("{n}", "0"))
-    assert not labels["run"].match(prepare["footer_stop"])
-    assert labels["stop"].match(prepare["footer_stop"])
+def test_the_run_pill_pattern_reads_every_language(code):
+    """``phases.prepare_labels`` matches the rows' Run pills in each catalogue."""
+    steps = json.loads((REPO / "deforestation_alerts" / "message" / code / "steps.json").read_text(
+        encoding="utf-8"))["steps"]
+
+    def tr(key):
+        node = {"steps": steps}
+        for part in key.split("."):
+            node = node[part]
+        return node
+
+    pills = ph.PREPARE_PILLS(tr) + ph.DOWNLOAD_PILLS(tr)
+    labels = ph.prepare_labels(pills, "Ready", ["Queued"])
+    assert all(labels["run"].match(pill) for pill in pills)
+    assert not labels["run"].match(steps["prepare"]["state_ready"])

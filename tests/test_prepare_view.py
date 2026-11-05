@@ -45,7 +45,7 @@ def test_ready_row_reads_ready_with_no_verb():
     row = PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT, stats={"alert_pixels": 1200})
     cell = _state(row)
     assert {k: cell[k] for k in ("type", "label", "icon", "color")} == {
-        "type": "state", "label": "Ready", "icon": "mdi-check-circle", "color": "success"}
+        "type": "state", "label": "Ready", "icon": "mdi-check-circle", "color": "primary"}
     text, tone = _subtitle(row, raw_art=_art("raw_alert", 3_000_000), harm_art=_art("harmonized", 2_400_000))
     assert text.startswith("downloaded ")
     assert text == "downloaded 2026-02-03 · 5.4 MB · 1,200 alert pixels" and tone is None

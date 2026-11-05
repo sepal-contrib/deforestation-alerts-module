@@ -150,6 +150,11 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
             " border-bottom: 1px solid rgba(128, 128, 128, 0.25);"
         ):
             with solara.Row(style="gap: 8px; align-items: center; padding: 4px 0;"):
+                solara.Button(
+                    icon_name="mdi-chevron-left", icon=True, small=True, disabled=prev_t is None,
+                    on_click=lambda: prev_t is not None and on_navigate(prev_t),
+                    attributes={"data-step-nav": "back", "title": t(STEPS[prev_t].label_key) if prev_t is not None else ""},
+                )
                 # Unified activator: badge + title + count + caret in ONE clickable
                 # element that opens the jump menu. Borderless at rest; the :hover
                 # tint needs real CSS, injected per-render so it tracks the live
@@ -233,6 +238,11 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                                         active=i == active_step,
                                         on_jump=_jump,
                                     )
+                solara.Button(
+                    icon_name="mdi-chevron-right", icon=True, small=True, disabled=next_t is None,
+                    on_click=lambda: next_t is not None and on_navigate(next_t),
+                    attributes={"data-step-nav": "next", "title": t(STEPS[next_t].label_key) if next_t is not None else ""},
+                )
 
             # The step's instruction, with its longer explanation behind the info
             # button (this replaced each step body's description line).

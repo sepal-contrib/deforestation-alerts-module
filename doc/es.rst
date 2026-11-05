@@ -733,7 +733,7 @@ Un botón azul ejecuta una fila por primera vez; uno naranja rehace un archivo d
 
     Una fila descargada no tiene botón: una fuente ya descargada para la ventana de búsqueda del período no se vuelve a descargar por sí sola. Para obtener las últimas alertas de un catálogo que sigue añadiendo alertas a fechas pasadas, usa **Descargar de nuevo**. La aplicación pregunta antes, indicando la ventana y la fecha del archivo que reemplaza. No se ofrece para una fuente GeoTIFF ("Nada que descargar de nuevo: se lee de un archivo").
 
-El pie bajo la tabla descarga en lote. Selecciona **Descargar … pendientes** (por ejemplo, **Descargar 3 pendientes**) para descargar cada fuente que lo necesite, una fila tras otra. Las filas que indican "no cubierta" o "sin datos" se omiten; una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente. Mientras dura, el pie cuenta sus filas ("1 en curso · 2 en cola", luego "1 de 3 terminadas"; la fila en curso muestra su propia barra de progreso) y el botón se convierte en **Detener**, que se detiene después de la fila en curso ("Deteniendo…"). La flecha junto al botón (**Más acciones por lotes**) abre **Descargar todo de nuevo (…)**: cada fuente que no está bloqueada y no es un GeoTIFF se descarga de nuevo, después de confirmar.
+Cada fila se descarga con su propio botón. Selecciona los botones de varias filas para descargarlas todas: cada uno inicia su propio trabajo, y se ponen en cola, una fila tras otra. Las filas que indican "no cubierta" o "sin datos" no tienen botón; una fila que falla muestra su error en rojo debajo. La fila en curso muestra su propia barra de progreso; una fila iniciada no se puede detener.
 
 La descarga también aparece como una notificación de tarea titulada **Descarga**, con la fuente en la que está y su porcentaje.
 
@@ -827,7 +827,7 @@ Cada período elige un **Modo** para cada máscara:
     *   -   **Excluir**
         -   Se eliminan las alertas *dentro* de la máscara (por ejemplo, para descartar las alertas en plantaciones o en agua).
 
-Cuando hay varias máscaras activas, se aplican todas. Las máscaras actúan sobre las fuentes armonizadas, así que un cambio de **Modo** deja desactualizadas las fuentes del período. **Armonizar … pendientes** las vuelve a armonizar sin descargarlas. Un período nuevo empieza con las opciones de máscara del último período.
+Cuando hay varias máscaras activas, se aplican todas. Las máscaras actúan sobre las fuentes armonizadas, así que un cambio de **Modo** deja desactualizadas las fuentes del período. El botón **Armonizar** de cada fila las vuelve a armonizar sin descargarlas. Un período nuevo empieza con las opciones de máscara del último período.
 
 Añadir una máscara
 """"""""""""""""""
@@ -972,15 +972,16 @@ Cada sección indica la fecha y la hora en que se escribió su archivo, o "Aún 
 
 .. labels-ok: Esc
 
-Ejecutarlo todo
-"""""""""""""""
+Ejecutar varias filas
+"""""""""""""""""""""
 
-El pie de la tabla ejecuta las filas en lote. Selecciona **Armonizar … pendientes** (por ejemplo, **Armonizar 4 pendientes**). Primero alinea las máscaras activas en el período que lo necesitan y luego armoniza cada fuente descargada que lo necesite, una fila tras otra:
+Cada fila se ejecuta con su propio botón. El **Armonizar** de una fuente primero alinea las máscaras activas en el período que lo necesitan y luego armoniza la fuente; el **Alinear** de una máscara alinea solo esa máscara. Selecciona los botones de varias filas para ejecutarlas todas: cada uno inicia su propio trabajo, y se ponen en cola, una fila tras otra:
 
--   las filas que indican "no cubierta" o "sin datos", y las filas que faltan por descargar, se omiten;
--   una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente.
+-   las filas que indican "no cubierta" o "sin datos", y las filas que faltan por descargar, no tienen botón;
+-   una fila que falla muestra su error en rojo debajo, y la fila siguiente continúa;
+-   mientras el trabajo de una fuente alinea una máscara, el **Armonizar** de otra fuente que necesita la misma máscara muestra "En cola" y empieza cuando la máscara esté alineada.
 
-Mientras dura la ejecución, el pie cuenta sus filas ("1 en curso · 3 en cola", luego "2 de 4 terminadas"; la fila en curso muestra su propia barra de progreso, que avanza sin fin mientras no tiene porcentaje) y el botón pasa a ser **Detener**, que detiene la ejecución después de la fila en curso. Hasta que esa fila termina, el botón indica "Deteniendo…". Las filas ya hechas quedan hechas. Este **Detener** solo detiene la armonización: una descarga en curso en `Alertas <defo-alerts-download_>`_ continúa, y el **Detener** de Alertas no detiene una armonización.
+La fila en curso muestra su propia barra de progreso, que avanza sin fin mientras no tiene porcentaje. Una fila iniciada no se puede detener; las filas ya hechas quedan hechas.
 
 La ejecución también aparece como una notificación de tarea titulada **Armonizar**, con la fila en la que está (por ejemplo, "Armonizando GLAD-L").
 
@@ -997,7 +998,7 @@ Mensajes frecuentes
     Libera espacio en tu carpeta de SEPAL o usa una cuadrícula más gruesa.
 
 "Ya se está preparando una fila de esta ejecución …"
-    El trabajo de otro período está alineando una máscara, o la fila todavía está en curso. Vuelve a ejecutarla cuando termine.
+    Otro trabajo está alineando la máscara cuyo **Alinear** seleccionaste (el de otro período, o el **Armonizar** de una fuente), o la fila todavía está en curso. Vuelve a ejecutarla cuando termine.
 
 "La geometría de la AOI todavía se está obteniendo; ejecuta esta fila de nuevo en un momento."
     Las fuentes y las máscaras GeoTIFF necesitan la forma de la AOI. Espera un momento. Si no se pudo obtener, selecciona **Comprobar de nuevo** debajo de la tabla y luego ejecútalas.
@@ -1011,8 +1012,8 @@ Mensajes frecuentes
 "Sin archivo", con "falta: archivo no encontrado: …" bajo la fila, o "Máscara …: archivo no encontrado (…). Vuelve a poner el archivo en esta ruta para usar la máscara."
     Una fuente o máscara GeoTIFF se movió, se renombró o se eliminó de tu carpeta de SEPAL. Vuelve a poner el archivo en la ruta indicada, o edita la fuente o la máscara para que apunte a su nueva ubicación.
 
-"Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Armonizar … pendientes alinea primero las máscaras."
-    Una fuente no se puede armonizar antes de que las máscaras del período estén alineadas. Selecciona **Armonizar … pendientes**, o primero el botón **Alinear** de la máscara.
+"Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Armonizar en una fuente alinea primero las máscaras."
+    Una fuente no se puede armonizar antes de que las máscaras del período estén alineadas. Selecciona el **Armonizar** de la fuente, o primero el botón **Alinear** de la máscara.
 
 "Máscara …: se desconoce su cuadrícula nativa (proyección y escala); edita la máscara."
     La aplicación no sabe cómo descargar esta máscara de GEE. Ábrela con **Editar** en su menú **Más acciones** y vuelve a guardarla, para que su raster se compruebe de nuevo.
@@ -2699,7 +2700,7 @@ La ventana de búsqueda va del 2026-06-03 al 2026-09-30, así que también se en
 Alertas
 """""""
 
-En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos períodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, **Descargar 3 pendientes** en el pie descarga las tres fuentes en la ventana de búsqueda.
+En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos períodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, el botón **Descargar** de cada fila descarga las tres fuentes en la ventana de búsqueda.
 
 Armonizar
 """""""""
@@ -2708,7 +2709,7 @@ En `Armonizar <defo-harmonize_>`_, la coordinadora:
 
 1.  conserva la cuadrícula sugerida, la zona UTM del departamento (``EPSG:32719``) a 10 m, y selecciona **Guardar cuadrícula**. La cuadrícula mide 41425 × 38561 píxeles, unos 12,8 GB por fuente antes de la compresión, así que la aplicación avisa de que las descargas tardarán un rato;
 2.  añade una máscara para que solo cuenten las alertas en bosque: **Añadir máscara**, la imagen Hansen Global Forest Change ``UMD/hansen/global_forest_change_2025_v1_13``, banda ``treecover2000``, llamada ``forest_2000``, modo **Conservar**; y
-3.  selecciona **Armonizar … pendientes** en el pie de la tabla, que alinea la máscara y luego armoniza las tres fuentes.
+3.  selecciona el **Alinear** de la máscara y, cuando la máscara indica "Lista", **Armonizar** en la fila de cada fuente, que armoniza las tres fuentes.
 
 La descarga y la armonización tardaron unos 15 minutos. Después, la máscara y cada fuente indican "Lista": GLAD-L con 2362718 píxeles de alerta, RADD con 1508527 y GLAD-S2 con 1462458.
 
@@ -2827,7 +2828,7 @@ Al empezar la ronda siguiente, la coordinadora selecciona **Nuevo período** en 
 
 Después:
 
--   **Descargar 3 pendientes** en `Alertas <defo-alerts_>`_ descarga las tres fuentes para la nueva ventana, y **Armonizar … pendientes** en `Armonizar <defo-harmonize_>`_ las armoniza; la cuadrícula y la máscara ya están listas.
+-   el **Descargar** de cada fila en `Alertas <defo-alerts_>`_ descarga las tres fuentes para la nueva ventana, y el **Armonizar** de cada fila en `Armonizar <defo-harmonize_>`_ las armoniza; la cuadrícula y la máscara ya están listas.
 -   En `Integrar y vectorizar <defo-integrate_>`_, la coordinadora usa los mismos ajustes que en septiembre (1 ha, las 48 alertas más grandes). Antes de agrupar los píxeles en alertas, la ejecución elimina todos los píxeles que caen dentro de las 48 alertas de septiembre, para que nada se reporte dos veces. El nuevo conjunto vuelve a contener 48 alertas, con 1177 ha. Ninguna toca una alerta confirmada en septiembre, así que la ejecución no vincula ninguna a una pérdida anterior (consulta `Crecimiento de una pérdida anterior <defo-integrate-growth_>`_).
 
 El equipo las revisa como en septiembre; por ahora hay 16 revisadas, 11 de ellas como alertas verdaderas. Con **Mostrar estas alertas en el mapa** y **Mostrar conjuntos anteriores** activados, el mapa muestra las alertas de octubre junto a las de septiembre, que se dibujan con colores más tenues. Las alertas de octubre están en las mismas zonas del departamento que las de septiembre.

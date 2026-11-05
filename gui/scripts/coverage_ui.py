@@ -9,7 +9,7 @@ from deforestation_alerts.engine.coverage import (
 from gui.i18n import t, tn
 
 #: a chip's tone -> its colour
-TONE_COLORS = {"ok": "success", "warning": "warning", "error": "error", None: None}
+TONE_COLORS = {"ok": "primary", "warning": "warning", "error": "error", None: None}
 _DATE_NOTES = ("coverage.partial_starts", "coverage.partial_until", "coverage.partial_gap")
 
 

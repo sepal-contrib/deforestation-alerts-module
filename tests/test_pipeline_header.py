@@ -227,6 +227,23 @@ def test_footer_back_and_next_cross_levels():
     rc.close()
 
 
+def test_title_chevrons_move_like_the_footer_and_disable_at_the_ends():
+    import ipyvuetify as v
+
+    from gui.store.workflow_steps import step_index
+
+    box, rc, seen = _render("integrate", _project(n_alerts=3))
+    chevrons = _attr(rc, v.Btn, "data-step-nav")
+    assert chevrons["next"].color == chevrons["back"].color  # one colour for both (user 2026-11-05)
+    chevrons["next"].fire_event("click", None)
+    chevrons["back"].fire_event("click", None)
+    assert seen == [step_index("layers"), step_index("aoi")]  # the footer's targets
+    rc.close()
+    box, rc, _ = _render("aoi", _project(aoi_name="Acre", n_alerts=3))
+    assert _attr(rc, v.Btn, "data-step-nav")["back"].disabled
+    rc.close()
+
+
 def test_footer_has_no_back_on_the_first_step_and_no_next_on_the_last():
     box, rc, _ = _render("aoi", _project(aoi_name="Acre", n_alerts=3))
     assert list(_footer(rc)) == ["next"]

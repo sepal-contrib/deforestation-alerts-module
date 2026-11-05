@@ -8,7 +8,6 @@ calls the exact callables the step wires up (tests/test_alerts_step.py's
 pattern).
 """
 
-import asyncio
 import threading
 import uuid
 from datetime import date, datetime
@@ -21,7 +20,6 @@ import solara
 from pysepal.solara.notifications import NoopNotifier, NotificationProvider
 from pysepal.solara.notifications.bus import NotificationBus, get_current_bus
 from pysepal.solara.notifications.notifier import Notifier
-from pysepal.solara.notifications.state import TaskStatus
 
 from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine.coverage import Note
@@ -36,7 +34,7 @@ from deforestation_alerts.project.models import (
     Project,
     add_predefined_source,
 )
-from gui.i18n import size_text, t, tn
+from gui.i18n import size_text, t
 from gui.scripts import aoi_io, prepare_jobs, prepare_scope, raster_map, source_layers
 from gui.scripts.map_layers import MapLayers
 from gui.store.project_writers import is_writing, writing
@@ -75,11 +73,10 @@ def _arts(source):
 # ---------------------------------------------------------------------------
 # run_rows (the worker body)
 # ---------------------------------------------------------------------------
-def _ctx(app_state, cancel=None, **overrides):
+def _ctx(app_state, **overrides):
     fields = dict(
         app_state=app_state, layers=SimpleNamespace(refresh=lambda *a, **k: None, is_on=lambda k: False),
         map_=None, notifier=None, name="d", pdir=None, period=JAN, meta={}, aoi="AOI",
-        cancel=cancel or threading.Event(),
     )
     fields.update(overrides)
     return prepare_jobs.PrepareContext(**fields)
@@ -438,29 +435,6 @@ def test_a_row_that_fails_after_the_step_moved_on_leaves_no_row_error(monkeypatc
     assert errors.value == {}
 
 
-def test_run_rows_honours_cancel(monkeypatch):
-    """Stop ends the run before its next row, and the task reads "cancelled",
-    not "completed" (slice-1 Task 18 minor), with no error toast."""
-    s = AppState()
-    s.new_project_state(_project("d", "GLAD-L", "RADD"))
-    cancel = threading.Event()
-    ran = []
-
-    def fake_run(job, on_tiles=None, on_wait=None):
-        ran.append(job.source)
-        cancel.set()
-        return {}
-
-    monkeypatch.setattr(prepare_jobs, "run_source_row", fake_run)
-    bus = NotificationBus()
-    with pytest.raises(asyncio.CancelledError):
-        prepare_jobs.run_rows(_ctx(s, cancel, notifier=Notifier(bus)), ["GLAD-L", "RADD"])
-    assert ran == ["GLAD-L"] and not is_writing("d")
-    [task] = bus.tasks.value
-    assert task.status == TaskStatus.CANCELLED
-    assert [toast for toast in bus.toasts.value if toast.type.value == "error"] == []
-
-
 def test_run_rows_skips_a_source_removed_meanwhile(monkeypatch):
     s = AppState()
     s.new_project_state(_project("d", "GLAD-L", "RADD", "GLAD-S2"))
@@ -605,15 +579,6 @@ def _button(rc, label):
     return next(w for w in rc.find(v.Btn).widgets if label in w.children)
 
 
-def _stop_shown(rc) -> bool:
-    """The footer's Stop replaces Run while this scope has a job."""
-    return any(t("steps.prepare.footer_stop") in w.children for w in rc.find(v.Btn).widgets)
-
-
-def _run_all_shown(rc, n) -> bool:
-    return any(tn("steps.harmonize.run_all", n) in w.children for w in rc.find(v.Btn).widgets)
-
-
 def _toasts(kind):
     return [toast.message for toast in get_current_bus().toasts.value if toast.type.value == kind]
 
@@ -659,7 +624,7 @@ def test_a_grid_change_reharmonizes_without_catalogue_metadata_or_an_ee_aoi(step
 
     box, rc = _render(state)
     try:
-        _button(rc, tn("steps.harmonize.run_all", 1)).fire_event("click", None)
+        _run(step.table[-1][0])
         step.run_jobs()
         [(ctx, sources, force)] = step.started
         assert sources == ["GLAD-L"] and force is False
@@ -706,11 +671,9 @@ def test_another_projects_job_neither_shows_as_running_nor_blocks_this_one(step)
         on_run()
         assert step.jobs == []  # ...so a second click is a no-op
         assert _queued(step.table[-1][0])
-        assert _stop_shown(rc) and not _run_all_shown(rc, 1)
 
         state.new_project_state(_project("b", "GLAD-L", bounds=PARAGUAY, grid=True))
         assert _offers_run(step.table[-1][0])
-        assert not _button(rc, tn("steps.harmonize.run_all", 1)).disabled
         _run(step.table[-1][0])
         step.run_jobs()
         assert [ctx.name for ctx, _, _ in step.started] == ["b"]
@@ -718,89 +681,15 @@ def test_another_projects_job_neither_shows_as_running_nor_blocks_this_one(step)
         rc.close()
 
 
-def test_stop_reaches_a_job_after_another_row_started(step, monkeypatch):
-    """Spec §7.3/§12: Stop cancels a running download between rows. A later
-    start in the same project and period (here the Run of another row) must
-    not take Stop away from the job still in its current row.
-    """
-    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.MISSING),
-              PrepareRow("RADD", Status.CURRENT, Status.STALE))
-    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-    contexts = {}
-
-    box, rc = _render(state)
-
-    def blocked_mid_row(ctx, items, force=False):
-        sources = _named(items)
-        contexts[tuple(sources)] = ctx
-        if sources == ["GLAD-L"]:  # still in its current row
-            _run(step.table[-1][1])  # RADD starts its own job
-            _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
-
-    monkeypatch.setattr(prepare_scope, "run_rows", blocked_mid_row)
-    try:
-        _run(step.table[-1][0])
-        step.run_jobs()
-        assert set(contexts) == {("GLAD-L",), ("RADD",)}
-        assert contexts[("GLAD-L",)].cancel.is_set()  # the first job stops after this row
-        assert contexts[("RADD",)].cancel.is_set()  # and so does every job of this project and period
-        assert not _stop_shown(rc)  # every job ended
-    finally:
-        rc.close()
-
-
-def test_stop_in_one_project_leaves_another_projects_job_running(step, monkeypatch):
-    """Stop acts on the jobs of the open project and period only, the same
-    scope as the in-flight keys that enable it. Each job has its own Event: a
-    job started after a Stop is not born stopped, and an ended job's Event
-    leaves the session-wide registry.
-    """
-    registries = []
-
-    class _Recording(prepare_scope.StopEvents):
-        def __init__(self):
-            super().__init__()
-            registries.append(self)
-
-    monkeypatch.setattr(prepare_scope, "StopEvents", _Recording)
-    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE), PrepareRow("RADD", Status.CURRENT, Status.STALE))
-    state = _state(_project("a", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-
-    box, rc = _render(state)
-    try:
-        _run(step.table[-1][0])  # a's GLAD-L job: queued, so still running
-        state.new_project_state(_project("b", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-        _run(step.table[-1][0])  # b's job, started last
-        state.new_project_state(_project("a", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
-        _run(step.table[-1][1])  # a's RADD job, while GLAD-L's still runs
-        step.run_jobs()
-
-        stopped = {(ctx.name, *sources): ctx.cancel.is_set() for ctx, sources, _ in step.started}
-        assert stopped == {("a", "GLAD-L"): True, ("b", "GLAD-L"): False, ("a", "RADD"): False}
-        [stops] = registries
-        assert stops._events == {}
-    finally:
-        rc.close()
-
-
-def test_stop_events_are_scoped_and_forgotten_when_their_job_ends():
-    """The registry lives as long as the session: an ended job's Event must
-    not stay in it.
-    """
-    stops = prepare_scope.StopEvents()
-    a1, a2, b = stops.add(("a", JAN.id), {"k1"}), stops.add(("a", JAN.id), {"k2"}), stops.add(("b", JAN.id), {"k3"})
-    assert stops.stopped() == set()
-    stops.stop(("a", JAN.id))
-    assert a1.is_set() and a2.is_set() and not b.is_set()
-    assert stops.stopped(("a", JAN.id)) == {"k1", "k2"} and stops.stopped(("b", JAN.id)) == set()
-    assert stops.stopped() == {"k1", "k2"}  # every scope
-
-    for scope, event in ((("a", JAN.id), a1), (("a", JAN.id), a2), (("b", JAN.id), b)):
-        stops.discard(scope, event)
-    assert stops._events == {}
-    stops.stop(("b", JAN.id))  # nothing left to stop
-    assert not b.is_set()
+def test_job_scopes_are_scoped_and_forgotten_when_their_job_ends():
+    """The registry lives as long as the session: an ended job's keys must
+    not stay in it."""
+    scopes = prepare_scope.JobScopes()
+    a1, a2, b = scopes.add(("a", JAN.id), {"k1"}), scopes.add(("a", JAN.id), {"k2"}), scopes.add(("b", JAN.id), {"k3"})
+    assert scopes.keys(("a", JAN.id)) == {"k1", "k2"} and scopes.keys(("b", JAN.id)) == {"k3"}
+    for scope, token in ((("a", JAN.id), a1), (("a", JAN.id), a2), (("b", JAN.id), b)):
+        scopes.discard(scope, token)
+    assert scopes._jobs == {}
 
 
 def test_row_errors_are_cleared_when_the_project_changes(step, monkeypatch):
@@ -1065,28 +954,7 @@ def test_closing_the_project_shows_the_lock_message(step):
 # ---------------------------------------------------------------------------
 # Coverage states, GeoTIFF rows, Stop (spec §7.3)
 # ---------------------------------------------------------------------------
-def test_stop_ends_the_job_quietly_and_gives_its_rows_back(step, monkeypatch):
-    """``run_rows`` raises ``CancelledError`` on Stop (the task reads
-    "cancelled"); the step's job treats it as an ordinary end."""
-    def cancelled(ctx, sources, force=False):
-        raise asyncio.CancelledError()
-
-    monkeypatch.setattr(prepare_scope, "run_rows", cancelled)
-    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
-    state = _state(_project("d", "GLAD-L", bounds=PARAGUAY, grid=True))
-
-    box, rc = _render(state)
-    try:
-        _run(step.table[-1][0])
-        assert _queued(step.table[-1][0])
-        step.run_jobs()  # no CancelledError escapes the worker
-        assert _offers_run(step.table[-1][0])
-        assert not _stop_shown(rc) and _toasts("error") == []
-    finally:
-        rc.close()
-
-
-def test_blocked_rows_cannot_run_and_run_all_skips_them(step, monkeypatch):
+def test_blocked_rows_cannot_run(step, monkeypatch):
     step.plan(PrepareRow("GLAD-S2", Status.MISSING, Status.MISSING, "not_covered",
                          (Note("coverage.not_covered_glad_s2", (("source", "GLAD-S2"),), "error"),)),
               PrepareRow("RADD", Status.CURRENT, Status.MISSING))
@@ -1100,9 +968,6 @@ def test_blocked_rows_cannot_run_and_run_all_skips_them(step, monkeypatch):
         assert blocked["cells"][0]["subtitle"].startswith(t("coverage.not_covered_row", reason=""))
         assert blocked["notes"] == []  # said once, in the subtitle
         assert _offers_run(radd)
-        _button(rc, tn("steps.harmonize.run_all", 1)).fire_event("click", None)
-        step.run_jobs()
-        assert [sources for _, sources, _ in step.started] == [["RADD"]]
     finally:
         rc.close()
 
@@ -1166,7 +1031,7 @@ def _check_again_shown(rc):
 
 
 def test_a_failed_aoi_sidecar_refuses_only_the_geotiff_rows_and_offers_check_again(step, monkeypatch, tmp_path):
-    """Spec §12: the Earth Engine rows of a Run all still run; the GeoTIFF
+    """Spec §12: the Earth Engine rows still run; the GeoTIFF
     rows are refused with a message that says the fetch failed, and Check
     again (which refetches the sidecar) is offered though coverage succeeded."""
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.MISSING), PrepareRow("tif", Status.CURRENT, Status.MISSING))
@@ -1175,7 +1040,8 @@ def test_a_failed_aoi_sidecar_refuses_only_the_geotiff_rows_and_offers_check_aga
     box, rc = _render(state)
     try:
         assert state.coverage_error.value is None and _check_again_shown(rc)
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)
+        _run(step.table[-1][0])
+        _run(step.table[-1][1])
         step.run_jobs()
         [(ctx, sources, _)] = step.started
         assert sources == ["GLAD-L"] and ctx.aoi is None and ctx.mode == "harmonize"
@@ -1313,10 +1179,9 @@ def _recording_inflight(monkeypatch):
     return claims
 
 
-def test_run_all_aligns_the_periods_masks_first_and_stop_covers_their_keys(step, monkeypatch):
-    """Spec §7.3: Run all is one job, the masks on in the period first; the
-    label counts them; the mask's project-wide key is in this period's Stop
-    scope; an Earth Engine mask that downloads needs the Earth Engine AOI."""
+def test_a_source_run_aligns_the_periods_masks_first(step, monkeypatch):
+    """Spec §7.3: a source Run is one job, the masks on in the period first;
+    the mask's project-wide key is in this period's Stop scope; an Earth Engine mask that downloads needs the Earth Engine AOI."""
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     claims = _recording_inflight(monkeypatch)
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
@@ -1324,15 +1189,12 @@ def test_run_all_aligns_the_periods_masks_first_and_stop_covers_their_keys(step,
 
     box, rc = _render(state)
     try:
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)
+        _run(step.table[-1][0])
         assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
                            prepare_step.inflight_key("d", JAN.id, "GLAD-L"))]
-        assert _stop_shown(rc)  # the job's keys are this period's
-        assert not _run_all_shown(rc, 2)
         step.run_jobs()
         [(ctx, items, force)] = step.started
         assert items == [("mask", "forest"), "GLAD-L"] and not force and ctx.aoi == "AOI"
-        assert not _stop_shown(rc)
     finally:
         rc.close()
 
@@ -1499,73 +1361,39 @@ def test_delete_files_refuses_while_writing(step, monkeypatch, busy):
         rc.close()
 
 
-def test_the_footer_counts_this_scopes_rows_and_forgets_the_batch_when_it_ends(step, monkeypatch):
-    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.MISSING))
-    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-    seen = []
-
-    def texts():
-        return [c for w in rc.find(v.Html).widgets for c in (w.children or []) if isinstance(c, str)]
-
-    def a_run(ctx, items, force=False):
-        key = prepare_jobs.progress_key("d", JAN.id, "source", "GLAD-L")
-        ctx.row_stage.set({key: "harmonize"})
-        seen.append(texts())
-        ctx.row_stage.set({})
-        ctx.on_row_end()
-        seen.append(texts())
-
-    monkeypatch.setattr(prepare_scope, "run_rows", a_run)
-    box, rc = _render(state)
-    try:
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)
-        assert _stop_shown(rc) and t("steps.prepare.footer_strip", running="0", queued="2") in texts()
-        step.run_jobs()
-        running, after_one = seen
-        assert t("steps.prepare.footer_strip", running="1", queued="1") in running
-        assert t("steps.prepare.footer_done", done="0", total="2") in running
-        assert t("steps.prepare.footer_done", done="1", total="2") in after_one
-        assert not _stop_shown(rc) and _run_all_shown(rc, 2)
-
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)  # a new batch counts afresh
-        assert t("steps.prepare.footer_done", done="0", total="2") in texts()
-    finally:
-        rc.close()
-
-
-def test_a_mask_another_periods_job_aligns_refuses_the_click_with_a_toast(step, monkeypatch):
+def test_a_source_whose_mask_another_periods_job_aligns_queues_behind_it(step, monkeypatch):
     """The mask key is project-wide: February cannot align the mask January's
-    Run all is aligning. The click is refused with a toast, not dropped
-    silently, and January's job is not in February's Stop scope."""
+    run is aligning. February's Harmonize queues (user decision 2026-11-05):
+    its row reads Queued at once, with no toast, and it takes the mask only
+    once January's job gives it back; January's job is not in February's
+    scope."""
     added = []
 
-    class _Recording(prepare_scope.StopEvents):
+    class _Recording(prepare_scope.JobScopes):
         def add(self, scope, keys=()):
-            added.append(scope)
+            added.append((scope, frozenset(keys)))
             return super().add(scope, keys)
 
-    monkeypatch.setattr(prepare_scope, "StopEvents", _Recording)
+    monkeypatch.setattr(prepare_scope, "JobScopes", _Recording)
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE))
     state = _state(_with_mask(periods=(JAN, FEB)))
+    mask = prepare_step.mask_inflight_key("d", "forest")
 
     box, rc = _render(state)
     try:
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)  # January's job, still queued
+        _run(step.table[-1][0])  # January's job, still queued
         state.update_project("d", lambda q: setattr(q, "active_period", FEB.id))
-        assert not _stop_shown(rc)  # February started nothing
-        run_all = _button(rc, tn("steps.harmonize.run_all", 2))
-        assert not run_all.disabled
-        run_all.fire_event("click", None)
-        assert len(step.jobs) == 1 and _toasts("info") == [t("steps.prepare.claim_busy")]
-        # the refused job never entered February's Stop scope, not even for a moment
-        assert added == [("d", JAN.id, "harmonize")] and not _stop_shown(rc)
+        _run(step.table[-1][0])
+        assert len(step.jobs) == 2 and _toasts("info") == []
+        assert _queued(step.table[-1][0])
+        assert added == [(("d", JAN.id, "harmonize"), {mask, prepare_step.inflight_key("d", JAN.id, "GLAD-L")}),
+                         (("d", FEB.id, "harmonize"), {prepare_step.inflight_key("d", FEB.id, "GLAD-L")})]
 
-        step.run_jobs()  # January's job ends and gives the mask back
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)
-        step.run_jobs()
+        step.run_jobs()  # January's job ends and gives the mask back; February's then takes it
         assert [(ctx.period.id, items) for ctx, items, _ in step.started] == [
             (JAN.id, [("mask", "forest"), "GLAD-L"]), (FEB.id, [("mask", "forest"), "GLAD-L"])]
+        assert step.table[-1][0]["cells"][1]["type"] == "verb"  # every key given back
     finally:
         rc.close()
 
@@ -1584,7 +1412,7 @@ def test_a_geotiff_mask_claims_the_aoi_raster_and_waits_for_the_aoi_geometry(ste
 
     box, rc = _render(state)
     try:
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)
+        _run(step.table[-1][0])
         step.run_jobs()
         assert claims == [(prepare_step.mask_inflight_key("d", "forest"),
                            prepare_step.inflight_key("d", JAN.id, "GLAD-L"), prepare_step.aoi_key("d"))]
@@ -1596,7 +1424,7 @@ def test_a_geotiff_mask_claims_the_aoi_raster_and_waits_for_the_aoi_geometry(ste
     state.sidecar_pending.set(True)
     box, rc = _render(state)
     try:
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)
+        _run(step.table[-1][0])
         step.run_jobs()
         assert step.started[-1][1] == ["GLAD-L"]
         assert _toasts("info") == [t("steps.prepare.aoi_geometry_missing")]
@@ -1793,76 +1621,6 @@ def test_the_details_lead_of_a_queued_row_reads_queued(step, monkeypatch):
         rc.close()
 
 
-def test_stop_says_stopping_until_the_job_ends_and_its_queued_rows_stop_reading_queued(step, monkeypatch):
-    """Stop only sets the cancel Events: the footer says it is stopping, and
-    the rows waiting their turn read their pill again (disabled: still
-    claimed); once the job ends, Run comes back."""
-    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.MISSING))
-    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-    seen = {}
-
-    def texts():
-        return [c for w in rc.find(v.Html).widgets for c in (w.children or []) if isinstance(c, str)]
-
-    def a_run(ctx, items, force=False):
-        key = prepare_jobs.progress_key("d", JAN.id, "source", "GLAD-L")
-        ctx.row_stage.set({key: "harmonize"})
-        assert _queued(step.table[-1][1])
-        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
-        seen["stopping"] = _button(rc, t("steps.prepare.footer_stopping"))
-        seen["texts"] = texts()
-        seen["radd"] = step.table[-1][1]
-        seen["stop_shown"] = _stop_shown(rc)
-        ctx.row_stage.set({})
-        ctx.on_row_end()
-
-    monkeypatch.setattr(prepare_scope, "run_rows", a_run)
-    box, rc = _render(state)
-    try:
-        _button(rc, tn("steps.harmonize.run_all", 2)).fire_event("click", None)
-        step.run_jobs()
-        assert seen["stopping"].disabled and seen["stopping"].outlined and not seen["stop_shown"]
-        assert t("steps.prepare.footer_running", running="1") in seen["texts"]
-        assert not any("queued" in s for s in seen["texts"])
-        radd = seen["radd"]
-        assert not _queued(radd) and radd["cells"][1]["type"] == "verb" and radd["cells"][1]["disabled"]
-        assert radd["cells"][0]["subtitle"] != t("steps.prepare.sub_queued")
-        # the job ended: Run is back, and nothing reads stopping
-        assert _run_all_shown(rc, 2) and not _stop_shown(rc)
-        assert not any(t("steps.prepare.footer_stopping") in w.children for w in rc.find(v.Btn).widgets)
-        assert _offers_run(step.table[-1][1]) and not step.table[-1][1]["cells"][1].get("disabled")
-    finally:
-        rc.close()
-
-
-def test_a_row_started_after_stop_brings_stop_back(step, monkeypatch):
-    """Stopping is shown only while every job of the scope is stopped: a row
-    run since Stop has a job Stop can still stop."""
-    step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.MISSING))
-    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True))
-    seen = []
-
-    def a_run(ctx, items, force=False):
-        if _named(items) == ["GLAD-L"]:
-            _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
-            seen.append(any(t("steps.prepare.footer_stopping") in w.children for w in rc.find(v.Btn).widgets))
-            _run(step.table[-1][1])  # RADD, a job of its own
-            seen.append(_stop_shown(rc))
-            # a second Stop reaches both jobs: stopping again
-            _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
-            seen.append(any(t("steps.prepare.footer_stopping") in w.children for w in rc.find(v.Btn).widgets))
-
-    monkeypatch.setattr(prepare_scope, "run_rows", a_run)
-    box, rc = _render(state)
-    try:
-        _run(step.table[-1][0])
-        step.run_jobs()
-        assert seen == [True, True, True]
-        assert not _stop_shown(rc)
-    finally:
-        rc.close()
-
-
 # ---------------------------------------------------------------------------
 # The Harmonize step (spec §2): one key per row, read by every step on the jobs
 # ---------------------------------------------------------------------------
@@ -1918,66 +1676,10 @@ def test_a_row_claimed_in_one_step_reads_running_in_another_and_refuses_a_harmon
 
 # ---------------------------------------------------------------------------
 # Option C (user decision 2026-10-30): Alerts' downloads and Harmonize's
-# harmonizing are independent jobs, one Stop scope per step.
+# harmonizing are independent jobs, one scope per step.
 # ---------------------------------------------------------------------------
-def _footer_texts(rc):
-    return [c for w in rc.find(v.Html).widgets for c in (w.children or []) if isinstance(c, str)]
-
-
-def test_each_step_stops_only_its_own_jobs(step, monkeypatch):
-    """The Stop scope is (project, period, step): the Alerts step's Stop
-    (``stop_scope(..., "download")``) leaves a harmonize running, and
-    Harmonize's Stop leaves a download running."""
-    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
-    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE))
-    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
-    jobs = prepare_scope.PrepareJobs()
-    glad, radd = (prepare_scope.inflight_key("d", JAN.id, s) for s in ("GLAD-L", "RADD"))
-    download, harmonize = ("d", JAN.id, "download"), ("d", JAN.id, "harmonize")
-
-    box, rc = _render(state, jobs=jobs)
-    try:
-        _download(state, jobs, "GLAD-L")
-        assert not _stop_shown(rc)  # the download is the Alerts step's job: Harmonize's footer stays idle
-        _run(step.table[-1][1])  # RADD harmonizes
-        assert _stop_shown(rc)
-
-        prepare_scope.stop_scope(jobs, "d", JAN.id, "download")  # the Alerts step's Stop
-        assert jobs.stops.stopped(download) == {glad} and jobs.stops.stopped(harmonize) == set()
-        assert _stop_shown(rc)  # Harmonize's job still runs: its Stop is not Stopping…
-        assert jobs.stopping.value == {download: 1}
-
-        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
-        assert jobs.stops.stopped(harmonize) == {radd}
-        step.run_jobs()
-        cancelled = {(ctx.mode, *items): ctx.cancel.is_set() for ctx, items, _ in step.started}
-        assert cancelled == {("download", "GLAD-L"): True, ("harmonize", "RADD"): True}
-        assert jobs.stopping.value == {} and jobs.batch.value == {}
-    finally:
-        rc.close()
-
-
-def test_a_harmonize_stop_leaves_the_download_uncancelled(step, monkeypatch):
-    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
-    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE))
-    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
-    jobs = prepare_scope.PrepareJobs()
-
-    box, rc = _render(state, jobs=jobs)
-    try:
-        _download(state, jobs, "GLAD-L")
-        _run(step.table[-1][1])
-        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
-        step.run_jobs()
-        cancelled = {(ctx.mode, *items): ctx.cancel.is_set() for ctx, items, _ in step.started}
-        assert cancelled == {("download", "GLAD-L"): False, ("harmonize", "RADD"): True}
-    finally:
-        rc.close()
-
-
-def test_harmonize_all_skips_a_row_a_download_holds_and_stays_usable(step, monkeypatch):
-    """A download holding a row neither disables Harmonize all nor makes its
-    all-or-nothing claim refuse the batch: the held row is left out."""
+def test_a_row_a_download_holds_never_blocks_another_rows_harmonize(step, monkeypatch):
+    """A download holding a row never refuses another row's harmonize."""
     monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
     step.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.STALE), PrepareRow("RADD", Status.CURRENT, Status.STALE))
     state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
@@ -1987,9 +1689,7 @@ def test_harmonize_all_skips_a_row_a_download_holds_and_stays_usable(step, monke
     try:
         _download(state, jobs, "GLAD-L", force=True)  # Download again in the Alerts step
         assert _queued(step.table[-1][0])  # held by the download: no pill to click
-        run_all = _button(rc, tn("steps.harmonize.run_all", 1))
-        assert not run_all.disabled
-        run_all.fire_event("click", None)
+        _run(step.table[-1][1])
         assert _toasts("info") == []
         step.run_jobs()
         assert [(ctx.mode, items) for ctx, items, _ in step.started] == [("download", ["GLAD-L"]),
@@ -1998,20 +1698,3 @@ def test_harmonize_all_skips_a_row_a_download_holds_and_stays_usable(step, monke
         rc.close()
 
 
-def test_the_footer_counts_only_its_own_steps_jobs(step, monkeypatch):
-    """Each step's batch (``done of total``) and strip count its own jobs."""
-    monkeypatch.setattr(aoi_io, "ee_aoi", lambda result, pdir: "AOI")
-    step.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE))
-    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
-    jobs = prepare_scope.PrepareJobs()
-
-    box, rc = _render(state, jobs=jobs)
-    try:
-        _download(state, jobs, "GLAD-L")
-        _run(step.table[-1][1])
-        assert jobs.batch.value == {("d", JAN.id, "download"): (1, 0), ("d", JAN.id, "harmonize"): (1, 0)}
-        texts = _footer_texts(rc)
-        assert t("steps.prepare.footer_strip", running="0", queued="1") in texts
-        assert t("steps.prepare.footer_done", done="0", total="1") in texts
-    finally:
-        rc.close()

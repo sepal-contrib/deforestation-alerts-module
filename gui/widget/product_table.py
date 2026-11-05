@@ -50,7 +50,7 @@ VERB = "text-transform:none;letter-spacing:normal;font-size:11.5px;padding:0 10p
 
 #: Vuetify text classes of an under-row note's tone (None: muted)
 NOTE_CLASSES = {"info": "info--text", "warning": "warning--text", "error": "error--text",
-                "success": "success--text", None: "text--secondary"}
+                "success": "primary--text", None: "text--secondary"}
 
 # The table budget (spec D4). A table's fixed columns, its Actions column, the
 # column gaps and the row padding must leave its name column MIN_FLEX_PX at
@@ -94,8 +94,8 @@ def fits(columns, n_actions: int, content_px: int = PANEL_CONTENT_PX) -> bool:
 # scaffold's "trained", a spatial_risk model status, had none and is not used).
 STATUS_COLORS = {
     "running": "info",
-    "ready": "success",
-    "completed": "success",
+    "ready": "primary",
+    "completed": "primary",
     "failed": "error",
     "cancelled": "grey",
     "stale": "warning",
@@ -345,7 +345,9 @@ def _render_button(act: dict):
     is_on = act.get("is_on", False)
     if "color" in act:
         color = act["color"]
-    elif kind in ("map_toggle", "select", "info"):
+    elif kind in ("map_toggle", "info"):
+        color = "primary" if is_on else None  # off: the theme's text colour, like the other icons
+    elif kind == "select":
         color = "primary" if is_on else "grey darken-1"
     elif kind in ("download", "open"):
         color = "primary"

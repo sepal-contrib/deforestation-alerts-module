@@ -1,21 +1,18 @@
-"""The prepare jobs' shared state, and their start and Stop (spec §7.3).
+"""The prepare jobs' shared state, and their start (spec §7.3).
 
 The shell creates one ``PrepareJobs`` per session and hands it to every step
 that runs or shows prepare rows: a row has one in-flight key
 (``inflight_key``) whichever step started it, so two jobs never run one row,
-and one Stop scope per project, period and step (option C, user decision
-2026-10-30): the Alerts step's downloads (``mode="download"``) and the
-Harmonize step's harmonizing (``mode="harmonize"``) are independent jobs,
-each step's Stop, footer counts and ``stopping`` mark its own. Never claimed
+and ``JobScopes`` records which project, period and step started each job
+(option C, user decision 2026-10-30): the Alerts step's downloads
+(``mode="download"``) and the Harmonize step's harmonizing
+(``mode="harmonize"``) are independent jobs (``mine_keys``). Never claimed
 or released from a render or an effect (see gui/scripts/map_layers.py), only
 from clicks and workers.
 """
 
-import asyncio
 import logging
 import threading
-from typing import Optional
-
 import solara
 
 from deforestation_alerts.engine.fingerprint import AOI_KEY, Status, aoi_raster_inputs, is_file_source, status
@@ -50,47 +47,35 @@ def aoi_key(project: str) -> str:
     return f"prep:{project}:@aoi"
 
 
-class StopEvents:
-    """The cancel Events of the running jobs, and each job's in-flight keys,
-    by (project, period id, step).
+class JobScopes:
+    """Each running job's in-flight keys, by (project, period id, step).
 
-    Clicks add and stop, and workers discard, so every access takes the lock.
+    Clicks add and workers discard, so every access takes the lock.
     """
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._events: dict[tuple, dict] = {}  # scope -> {Event: frozenset of its keys}
+        self._jobs: dict[tuple, dict] = {}  # scope -> {job token: frozenset of its keys}
 
-    def add(self, scope: tuple, keys=()) -> threading.Event:
-        event = threading.Event()
+    def add(self, scope: tuple, keys=()) -> object:
+        """Record a job's keys; returns the token ``discard`` takes."""
+        token = object()
         with self._lock:
-            self._events.setdefault(scope, {})[event] = frozenset(keys)
-        return event
+            self._jobs.setdefault(scope, {})[token] = frozenset(keys)
+        return token
 
     def keys(self, scope: tuple) -> set:
         """The in-flight keys of the jobs started in ``scope``."""
         with self._lock:
-            return set().union(*self._events.get(scope, {}).values())
+            return set().union(*self._jobs.get(scope, {}).values())
 
-    def discard(self, scope: tuple, event: threading.Event) -> None:
+    def discard(self, scope: tuple, token: object) -> None:
         with self._lock:
-            events = self._events.get(scope)
-            if events is not None:
-                events.pop(event, None)
-                if not events:
-                    del self._events[scope]
-
-    def stop(self, scope: tuple) -> None:
-        with self._lock:
-            events = list(self._events.get(scope, ()))
-        for event in events:
-            event.set()
-
-    def stopped(self, scope: Optional[tuple] = None) -> set:
-        """The in-flight keys of the jobs Stop reached, in ``scope`` (None: every scope)."""
-        with self._lock:
-            scopes = [self._events.get(scope, {})] if scope is not None else list(self._events.values())
-            return {key for events in scopes for event, keys in events.items() if event.is_set() for key in keys}
+            jobs = self._jobs.get(scope)
+            if jobs is not None:
+                jobs.pop(token, None)
+                if not jobs:
+                    del self._jobs[scope]
 
 
 class _ScopedErrors:
@@ -115,26 +100,13 @@ class PrepareJobs:
 
     def __init__(self):
         self.inflight = InflightKeys()
-        self.stops = StopEvents()
+        self.scopes = JobScopes()
         self.row_errors = solara.reactive({})  # {scope: {row: message}}, written through _ScopedErrors
         # {prepare_jobs.progress_key: percent} of the downloads running; keyed by
         # project and period, so a row of another scope never reads it
         self.row_progress = solara.reactive({})
         self.row_stage = solara.reactive({})  # {progress_key: "download"|"harmonize"|"align"} of the rows running
-        self.batch = solara.reactive({})  # {(project, period id, step): (total, done)} of the scope's jobs, for the footer
-        # {(project, period id, step): Stop clicks} of the scopes Stop reached, until their
-        # last job ends: a count, so a second Stop (after a row started since the
-        # first) is a new value and re-renders
-        self.stopping = solara.reactive({})
         self.errors_lock = threading.Lock()  # the jobs set row errors, percents and stages under it
-
-
-def _count(jobs: PrepareJobs, stop_scope, total=0, done=0):
-    """Add to a scope's batch counts (a start's rows, a row's end); a worker
-    calls it too, so under the jobs' lock."""
-    with jobs.errors_lock:
-        was_total, was_done = jobs.batch.value.get(stop_scope, (0, 0))
-        jobs.batch.set({**jobs.batch.value, stop_scope: (was_total + total, was_done + done)})
 
 
 def start_items(jobs: PrepareJobs, *, app_state, layers, map_, notifications, items: list, force: bool = False,
@@ -178,29 +150,36 @@ def start_items(jobs: PrepareJobs, *, app_state, layers, map_, notifications, it
     keys = [_key(*it) for it in items]
     if needs_aoi_raster:
         keys.append(aoi_key(p.name))  # one AOI-raster build at a time
-    stop_scope = (p.name, period.id, mode)  # one Stop scope per step (option C)
-    stops, batch, stopping = jobs.stops, jobs.batch, jobs.stopping
+    # A source's Harmonize aligns the period's stale masks first. When another
+    # job is aligning one of them, the source queues behind it (user decision
+    # 2026-11-05): it claims its own rows now (they read Queued) and its masks
+    # and AOI raster once that job gives them back. A waiting job then holds
+    # only source keys, which nobody waits for, so two queued jobs never
+    # wait on each other.
+    later = []
+    if any(kind == "source" for kind, _ in items) and any(
+            kind == "mask" and _key(kind, name) in jobs.inflight for kind, name in items):
+        later = [k for k in keys if k == aoi_key(p.name) or k.startswith(mask_inflight_key(p.name, ""))]
+        keys = [k for k in keys if k not in later]
+    step_scope = (p.name, period.id, mode)  # one scope per step (option C)
+    scopes = jobs.scopes
     job = {}
-    # The job joins its step's Stop scope only once its claim succeeds,
-    # and before the claim is published: the claim's re-render already
-    # counts these keys as this step's (``mine_keys``), and a refused
-    # claim never lists another job's keys as ours.
-    if not jobs.inflight.claim(*keys, on_claim=lambda: job.update(cancel=stops.add(stop_scope, keys))):
-        # A key is held by another job: a mask another period's job is
-        # aligning, the AOI raster being built, a row still running.
+    # The job joins its step's scope only once its claim succeeds, and
+    # before the claim is published: the claim's re-render already counts
+    # these keys as this step's (``mine_keys``), and a refused claim never
+    # lists another job's keys as ours.
+    if not jobs.inflight.claim(*keys, on_claim=lambda: job.update(token=scopes.add(step_scope, keys))):
+        # A key is held by another job: the AOI raster being built, a row
+        # still running.
         notifications.info(t("steps.prepare.claim_busy"))
         return
-    cancel = job["cancel"]
+    token = job["token"]
 
     def _give_back():
-        # Under the jobs' lock, so a Stop or a start racing it sees the
-        # scope's last job either before or after it is gone.
+        # Under the jobs' lock, so a start racing it sees the scope's last
+        # job either before or after it is gone.
         with jobs.errors_lock:
-            stops.discard(stop_scope, cancel)  # before the release, so its re-render reads both gone
-            if not stops.keys(stop_scope):  # the scope's last job: its batch and its Stop are over
-                batch.set({k: v for k, v in batch.value.items() if k != stop_scope})
-                if stop_scope in stopping.value:
-                    stopping.set({k: n for k, n in stopping.value.items() if k != stop_scope})
+            scopes.discard(step_scope, token)  # before the release, so its re-render reads both gone
         jobs.inflight.release(*keys)
 
     # Drift note: only rows that download from Earth Engine need it (the
@@ -227,29 +206,18 @@ def start_items(jobs: PrepareJobs, *, app_state, layers, map_, notifications, it
             notifications.error(error_text(exc))
             return
     ctx = PrepareContext(app_state=app_state, layers=layers, map_=map_, notifier=notifications,
-                         name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi, cancel=cancel,
+                         name=p.name, pdir=pdir, period=period, meta=meta, aoi=aoi,
                          row_errors=_ScopedErrors(jobs.row_errors, scope), errors_lock=jobs.errors_lock,
                          row_progress=jobs.row_progress, row_stage=jobs.row_stage, downloads=frozenset(downloads),
-                         on_row_end=lambda: _count(jobs, stop_scope, done=1), mode=mode)
+                         mode=mode)
 
     def _job():
         try:
+            if later:
+                jobs.inflight.claim_when_free(*later)
+                keys.extend(later)  # given back with the others
             run_rows(ctx, items, force=force)
-        except asyncio.CancelledError:
-            pass  # Stop: the task reads "cancelled"; not an error
         finally:
             _give_back()
 
-    _count(jobs, stop_scope, total=len(items))
     spawn_in_context(_job)
-
-
-def stop_scope(jobs: PrepareJobs, project: str, period_id: str, step: str) -> None:
-    """Stop ``step``'s jobs (``"download"``: the Alerts step's, ``"harmonize"``:
-    the Harmonize step's) after the row in progress; the footer says so until
-    the scope's last job ends."""
-    scope = (project, period_id, step)
-    jobs.stops.stop(scope)
-    with jobs.errors_lock:  # ``_give_back`` drops the mark under it: never one left behind
-        if jobs.stops.keys(scope):
-            jobs.stopping.set({**jobs.stopping.value, scope: jobs.stopping.value.get(scope, 0) + 1})

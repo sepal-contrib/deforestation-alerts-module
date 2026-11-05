@@ -103,7 +103,7 @@ def source_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], qu
         status = _BLOCKED_STATUS[row.coverage]
         return _state(STATUS_ICONS[status], "grey", status_text(status))
     if row.ready:
-        return _state(STATUS_ICONS["ready"], "success", t("steps.prepare.state_ready"))
+        return _state(STATUS_ICONS["ready"], "primary", t("steps.prepare.state_ready"))
     cell = _run_cell("harmonize", row.harmonized is Status.STALE, locked=locked, failed=failed, on_run=on_run)
     if row.raw is not Status.CURRENT and cell["type"] == "verb":
         cell["disabled"] = True
@@ -211,7 +211,7 @@ def download_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], 
         status = _BLOCKED_STATUS[row.coverage]
         return _state(STATUS_ICONS[status], "grey", status_text(status))
     if row.raw is Status.CURRENT:
-        return _state(STATUS_ICONS["ready"], "success",
+        return _state(STATUS_ICONS["ready"], "primary",
                       t("steps.prepare.state_ready" if file_source else "steps.alerts.state_downloaded"))
     return _run_cell("download", row.raw is Status.STALE, locked=locked, failed=failed, on_run=on_run,
                      label=t("steps.alerts.read_file") if file_source else None)
@@ -266,7 +266,7 @@ def mask_state(row: MaskRow, *, stage: Optional[str], queued: bool, pct: Optiona
     if row.file_missing:
         return _state(STATUS_ICONS["failed"], "error", t("steps.prepare.state_file_missing"))
     if row.ready:
-        return _state(STATUS_ICONS["ready"], "success", t("steps.prepare.state_ready"))
+        return _state(STATUS_ICONS["ready"], "primary", t("steps.prepare.state_ready"))
     verb, stale = _mask_next(row)
     return _run_cell(verb, stale and row.on, locked=locked, failed=failed, on_run=on_run)
 

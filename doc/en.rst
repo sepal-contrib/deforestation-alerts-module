@@ -575,7 +575,7 @@ The **Alerts** step lists the sources of the active `period <defo-period_>`_, sh
 
 Open the **Alerts** step of the **Workflow** panel. It unlocks once the project has a `period <defo-period_>`_. It works on the active period: to work on another period, make it active in the `Period <defo-period_>`_ step first. The box at the top of the step names the period and its search window, e.g. "Period 2026-09-01 → 2026-09-30 · search window from 2026-06-03 (90 days of look-back)".
 
-.. shot: alerts-list | The Alerts step of the demo project: the period box ("Period 2026-09-01 → 2026-09-30 · search window from 2026-06-03 (90 days of look-back)"), Add source, and the Sources table with GLAD-L, RADD and GLAD-S2, each with its "downloaded … · … MB" line, its green "AOI 100 %" and "✓ data to …" chips, the green "Downloaded" status and the map / Details / Download again / Remove from this period icons; the RADD info note; the "Download 0 pending" footer button with its menu arrow. Crop to the Workflow panel.
+.. shot: alerts-list | The Alerts step of the demo project: the period box ("Period 2026-09-01 → 2026-09-30 · search window from 2026-06-03 (90 days of look-back)"), Add source, and the Sources table with GLAD-L, RADD and GLAD-S2, each with its "downloaded … · … MB" line, its green "AOI 100 %" and "✓ data to …" chips, the green "Downloaded" status and the map / Details / Download again / Remove from this period icons; the RADD info note. Crop to the Workflow panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/alerts-list.png
     :alt: The Alerts step with three downloaded sources
@@ -755,7 +755,7 @@ A blue button runs a row for the first time; an orange one redoes a file that is
 
     A downloaded row has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source ("Nothing to download again: read from a file").
 
-The footer under the table downloads in batch. Select **Download … pending** (e.g. **Download 3 pending**) to download every source that needs it, one row at a time. Rows that read "not covered" or "no data" are skipped; a row that fails shows its error in red under it, and the run goes on with the next row. While it lasts, the footer counts its rows ("1 running · 2 queued", then "1 of 3 done"; the running row shows its own progress bar) and the button turns into **Stop**, which stops after the row in progress ("Stopping…"). The arrow beside the button (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, after you confirm.
+Each row is downloaded with its own button. Select the buttons of several rows to download them all: each starts its own job, and they queue, one row at a time. Rows that read "not covered" or "no data" have no button; a row that fails shows its error in red under it. The running row shows its own progress bar; a started row cannot be stopped.
 
 The download also shows as a task notification titled **Download**, with the source it is on and its percentage.
 
@@ -797,7 +797,7 @@ Open the **Harmonize** step of the **Workflow** panel. It unlocks once at least 
 
 From top to bottom, the step has three parts: the **Project grid**, the **Masks** and the **Sources for this period**.
 
-.. shot: prepare-step | The Harmonize step of the demo project after a full run: the Project grid card (EPSG of the UTM zone, Resolution 10 m, the "… × … pixels, about … MB per source before compression" line and "The grid is locked because the project has alert sets."), the Masks card with its one mask (Mode Keep, green "Ready", subtitle "Earth Engine · …"), and the "Sources for this period" table with GLAD-L, RADD and GLAD-S2 each green "Ready" in the Status column, each with its "downloaded … · … · N alert pixels" subtitle and its map, Details and Delete harmonized file icons; the "Harmonize 0 pending" button of the footer under it. Crop to the Workflow panel.
+.. shot: prepare-step | The Harmonize step of the demo project after a full run: the Project grid card (EPSG of the UTM zone, Resolution 10 m, the "… × … pixels, about … MB per source before compression" line and "The grid is locked because the project has alert sets."), the Masks card with its one mask (Mode Keep, green "Ready", subtitle "Earth Engine · …"), and the "Sources for this period" table with GLAD-L, RADD and GLAD-S2 each green "Ready" in the Status column, each with its "downloaded … · … · N alert pixels" subtitle and its map, Details and Delete harmonized file icons. Crop to the Workflow panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/prepare-step.png
     :alt: The Harmonize step after a run
@@ -851,7 +851,7 @@ Each period chooses a **Mode** for each mask:
     *   -   **Exclude**
         -   Alerts *inside* the mask are removed (e.g. drop alerts in plantations or water).
 
-When several masks are on, all of them apply. Masks act on the harmonized sources, so a change of **Mode** makes the period's sources out of date. **Harmonize … pending** then harmonizes them again without downloading them. A new period starts with the mask choices of the latest period.
+When several masks are on, all of them apply. Masks act on the harmonized sources, so a change of **Mode** makes the period's sources out of date. The **Harmonize** of each row then harmonizes them again without downloading them. A new period starts with the mask choices of the latest period.
 
 Add a mask
 """"""""""
@@ -1000,15 +1000,16 @@ Each section gives the date and time its file was written, or reads "Not run yet
 
 .. labels-ok: Esc
 
-Run everything
-""""""""""""""
+Run several rows
+""""""""""""""""
 
-The footer under the table runs the rows in batch. Select **Harmonize … pending** (e.g. **Harmonize 4 pending**). It first aligns the masks on in the period that need it, then harmonizes every downloaded source that needs it, one row at a time:
+Each row runs with its own button. A source's **Harmonize** first aligns the masks on in the period that need it, then harmonizes the source; a mask's **Align** aligns only that mask. Select the buttons of several rows to run them all: each starts its own job, and they queue, one row at a time:
 
--   rows that read "not covered" or "no data", and rows still to download, are skipped;
--   a row that fails shows its error in red under it, and the run goes on with the next row.
+-   rows that read "not covered" or "no data", and rows still to download, have no button;
+-   a row that fails shows its error in red under it, and the next row goes on;
+-   while one source's run aligns a mask, another source's **Harmonize** that needs the same mask reads "Queued" and starts once the mask is aligned.
 
-While the run lasts, the footer counts its rows ("1 running · 3 queued", then "2 of 4 done"; the running row shows its own progress bar, which moves without an end while it has no percentage) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads "Stopping…". The rows already done stay done. This **Stop** stops only the harmonizing: a download running in `Alerts <defo-alerts-download_>`_ goes on, and the **Stop** of Alerts does not stop a harmonize run.
+The running row shows its own progress bar, which moves without an end while it has no percentage. A started row cannot be stopped; the rows already done stay done.
 
 The run also shows as a task notification titled **Harmonize**, with the row it is on (e.g. "Harmonizing GLAD-L").
 
@@ -1025,7 +1026,7 @@ Common messages
     Free some space in your SEPAL folder, or use a coarser grid.
 
 "A row of this run is already being prepared …"
-    A mask is being aligned by another period's run, or the row is still running. Run it again once that has finished.
+    The mask whose **Align** you selected is being aligned by another run (another period's, or a source's **Harmonize**), or the row is still running. Run it again once that has finished.
 
 "The AOI's geometry is still being fetched; run this row again in a moment."
     GeoTIFF sources and masks need the AOI's shape. Wait a moment. If it could not be fetched, select **Check again** under the table, then run them.
@@ -1039,8 +1040,8 @@ Common messages
 "File missing", with "missing: file not found: …" under the row, or "Mask …: file not found (…). Put the file back at this path to use the mask."
     A GeoTIFF source or mask was moved, renamed or deleted from your SEPAL folder. Put the file back at the path shown, or edit the source or mask to point at its new place.
 
-"A mask on in this period is not aligned on the current grid yet; Harmonize … pending aligns the masks first."
-    A source cannot be harmonized before the period's masks are aligned. Select **Harmonize … pending**, or the mask's **Align** button first.
+"A mask on in this period is not aligned on the current grid yet; a source's Harmonize aligns the masks first."
+    A source cannot be harmonized before the period's masks are aligned. Select the source's **Harmonize**, or the mask's **Align** button first.
 
 "Mask …: its native grid (projection and scale) is unknown; edit the mask."
     The app does not know how to download this GEE mask. Open it with **Edit** in its **More actions** menu and save it again, so that its raster is checked anew.
@@ -2773,7 +2774,7 @@ The search window runs from 2026-06-03 to 2026-09-30, so clusters that started b
 Alerts
 """"""
 
-In `Alert sources <defo-alerts_>`_, the coordinator adds the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**, each with **Add to new periods** left selected, so that the next periods start with them. Each one covers the whole AOI. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts. Then **Download 3 pending** in the footer downloads the three sources over the search window.
+In `Alert sources <defo-alerts_>`_, the coordinator adds the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**, each with **Add to new periods** left selected, so that the next periods start with them. Each one covers the whole AOI. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts. Then the **Download** of each row downloads the three sources over the search window.
 
 Harmonize
 """""""""
@@ -2782,7 +2783,7 @@ In `Harmonize <defo-harmonize_>`_, the coordinator:
 
 1.  keeps the suggested grid, the UTM zone of the department (``EPSG:32719``) at 10 m, and selects **Save grid**. The grid is 41425 × 38561 pixels, about 12.8 GB per source before compression, so the app warns that the downloads will take a while;
 2.  adds a mask so that only alerts in forest count: **Add mask**, the Hansen Global Forest Change image ``UMD/hansen/global_forest_change_2025_v1_13``, band ``treecover2000``, named ``forest_2000``, mode **Keep**; and
-3.  selects **Harmonize … pending** in the footer of the table, which aligns the mask, then harmonizes the three sources.
+3.  selects the mask's **Align** and, once the mask reads "Ready", **Harmonize** on each source's row, which harmonizes the three sources.
 
 Downloading and harmonizing took about 15 minutes. The mask and each source then read "Ready": GLAD-L with 2362718 alert pixels, RADD with 1508527 and GLAD-S2 with 1462458.
 
@@ -2907,7 +2908,7 @@ At the start of the next round, the coordinator selects **New period** in `Monit
 
 Then:
 
--   **Download 3 pending** in `Alerts <defo-alerts_>`_ downloads the three sources for the new window, and **Harmonize … pending** in `Harmonize <defo-harmonize_>`_ harmonizes them; the grid and the mask are already there.
+-   each row's **Download** in `Alerts <defo-alerts_>`_ downloads the three sources for the new window, and each row's **Harmonize** in `Harmonize <defo-harmonize_>`_ harmonizes them; the grid and the mask are already there.
 -   In `Integrate & vectorize <defo-integrate_>`_, the coordinator uses the same settings as in September (1 ha, the 48 biggest alerts). Before grouping the pixels into alerts, the run removes every pixel inside September's 48 alerts, so that nothing is reported twice. The new set holds 48 alerts again, for 1177 ha. None of them touches an alert confirmed in September, so the run links none to earlier loss (see `Growth of earlier loss <defo-integrate-growth_>`_).
 
 The team reviews them as in September; 16 are reviewed so far, 11 of them as true alerts. With **Show these alerts on the map** and **Show earlier sets** both on, the map shows the October alerts next to September's, which are drawn in fainter colours. The October alerts lie in the same parts of the department as September's.

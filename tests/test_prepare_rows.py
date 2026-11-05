@@ -1,6 +1,5 @@
 """Download/harmonize rows (spec §7.3, option B): states, verbs, actions, notes, refusals and Stop."""
 
-import asyncio
 import threading
 from datetime import date, datetime
 from types import SimpleNamespace
@@ -181,20 +180,10 @@ def test_a_refused_row_is_reported_with_its_reason(monkeypatch):
     monkeypatch.setattr(prepare_jobs, "run_source_row", refuse)
     ctx = prepare_jobs.PrepareContext(
         app_state=state, layers=None, map_=None, notifier=None, name="r", pdir="/tmp/x", period=JAN, meta={},
-        aoi=None, cancel=threading.Event(),
+        aoi=None,
         row_errors=SimpleNamespace(value=errors, set=lambda v: errors.update(v)), errors_lock=threading.Lock())
     prepare_jobs.run_rows(ctx, ["GLAD-S2"])
     assert errors["GLAD-S2"].startswith("GLAD-S2 does not cover this AOI")
-
-
-def test_stop_cancels_the_task(monkeypatch):
-    cancel = threading.Event()
-    cancel.set()
-    state = SimpleNamespace(project=SimpleNamespace(value=_p()))
-    ctx = prepare_jobs.PrepareContext(app_state=state, layers=None, map_=None, notifier=None, name="r",
-                                      pdir="/tmp/x", period=JAN, meta={}, aoi=None, cancel=cancel)
-    with pytest.raises(asyncio.CancelledError):
-        prepare_jobs.run_rows(ctx, ["GLAD-L"])
 
 
 def test_the_map_toggle_of_a_blocked_row_is_off_unless_its_layer_is_on():
@@ -237,12 +226,6 @@ def test_harmonize_row_reads_running_while_downloading():
         assert cell["type"] != "verb" or cell["disabled"]
 
 
-def test_run_all_harmonize_skips_rows_without_raw():
-    rows = [PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.STALE),
-            PrepareRow("GLAD-S2", Status.CURRENT, Status.CURRENT)]
-    assert prepare_step.run_all_items(rows, []) == [("source", "RADD")]
-
-
 def test_a_downloading_mask_reads_its_percent():
     """Bug 2026-10-16: the step's own rows say how far a download has got."""
     from gui.scripts.prepare_view import mask_state
@@ -268,7 +251,7 @@ class _Recorder:
 def _stage_ctx(p, **over):
     state = SimpleNamespace(project=SimpleNamespace(value=p), update_project=lambda name, fn: fn(p) or True)
     kw = dict(app_state=state, layers=None, map_=None, notifier=None, name="r", pdir="/tmp/x", period=JAN, meta={},
-              aoi=None, cancel=threading.Event(), errors_lock=threading.Lock(), row_stage=_Recorder())
+              aoi=None, errors_lock=threading.Lock(), row_stage=_Recorder())
     kw.update(over)
     return prepare_jobs.PrepareContext(**kw)
 
@@ -316,13 +299,3 @@ def test_a_download_stays_downloading_at_100_percent(monkeypatch):
     assert not any("Harmoniz" in m.message for m in task.milestones)
 
 
-def test_row_end_is_reported_on_failure(monkeypatch):
-    ends = []
-    ctx = _stage_ctx(_p(), on_row_end=lambda: ends.append(1))
-
-    def fail(job, **kw):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(prepare_jobs, "run_source_row", fail)
-    prepare_jobs.run_rows(ctx, ["GLAD-L", "RADD", "gone"])  # a source removed meanwhile ends too
-    assert len(ends) == 3 and ctx.row_stage.value == {}

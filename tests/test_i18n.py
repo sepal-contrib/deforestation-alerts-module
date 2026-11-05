@@ -389,30 +389,14 @@ def test_a_rows_pixel_count_is_counted_in_the_language(locale, many, one):
 def test_counted_labels_agree_with_their_count():
     from gui.i18n import size_text
 
-    assert i18n.tn("steps.harmonize.run_all", 1) == "Harmonize 1 pending"
     assert i18n.tn("steps.alerts.delete_used", 1).startswith("Used by 1 alert set;")
     assert i18n.tn("steps.integrate.replace_message", 1) == "1 reviewed cluster in this set will be discarded."
     assert i18n.tn("steps.sets.alerts", 1) == "1 alert"
     set_locale("es-ES")
-    assert i18n.tn("steps.harmonize.run_all", 2) == "Armonizar 2 pendientes"
     assert i18n.tn("steps.sets.alerts", 1_000_000) == "1.000.000 de alertas"
     assert size_text(5_400_000) == "5,4 MB"
     set_locale("pt-BR")
-    assert i18n.tn("steps.harmonize.run_all", 2) == "Harmonizar 2 pendentes"
     assert i18n.tn("steps.sets.alerts", 1_000_000) == "1.000.000 de alertas"
-
-
-@pytest.mark.parametrize("locale, old, button", [
-    ("en", "Run … pending", "Harmonize … pending"), ("es-ES", "Ejecutar … pendientes", "Armonizar … pendientes"),
-    ("fr", "Exécuter … en attente", "Harmoniser … en attente"),
-    ("pt-BR", "Executar … pendentes", "Harmonizar … pendentes")])
-def test_the_prepare_help_names_the_run_button_as_it_reads(locale, old, button):
-    set_locale(locale)
-    first, _, last = i18n.tn("steps.harmonize.run_all", 3).partition("3")
-    assert button == f"{first}…{last}"
-    for key in ("steps.prepare.mask_not_ready", "steps.prepare.masks_switched", "steps.harmonize.info_md"):
-        text = i18n.t(key)
-        assert old not in text and button in text, key
 
 
 @pytest.mark.parametrize("key", ["aoi", "period", "alerts", "harmonize", "integrate", "layers",

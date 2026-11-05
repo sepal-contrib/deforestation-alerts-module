@@ -96,7 +96,7 @@
     "alerts": {
       "instruction": "Añade fuentes de alertas y descárgalas para este período.",
       "info_header": "Acerca de las fuentes de alertas",
-      "info_md": "Una fuente de alertas es un conjunto de datos de alertas de pérdida forestal. Cada píxel de alerta es **confirmado** (confianza alta) o **probable** (confianza baja) y lleva el día en que se detectó por primera vez.\n\n- **Predefinidas:** GLAD-L (Landsat, unos 30 m), GLAD-S2 (Sentinel-2, 10 m) y RADD (Sentinel-1, 10 m). RADD solo detecta en bosque húmedo tropical primario; en el resto de su área no reporta alertas.\n- **Personalizadas:** una imagen o colección de imágenes de Earth Engine, o un GeoTIFF en tu carpeta de SEPAL, leído mediante un preajuste de formato: *RADD* (banda de alerta 2 probable, 3 confirmada; fecha `yyddd`), *alertas CCDC de SEPAL* y *alertas PyEO de SEPAL* (1–2 detecciones probable, 3 o más confirmada; fecha de primera detección en años decimales) o *solo fecha* (una banda de fecha en la codificación que elijas; todo píxel con fecha está confirmado).\n\nLa lista muestra las fuentes del **período activo**. **Descargar** obtiene una fuente en la ventana de búsqueda del período, en su propia proyección y recortada a la AOI; una fuente GeoTIFF se lee de su archivo en su lugar, y **Descargar … pendientes** obtiene cada fuente que falte o esté desactualizada. El chip de cada fila es la **cobertura** de la fuente: la parte de la AOI dentro de su huella. Una fuente que no cubra nada de la AOI no se puede añadir; una cobertura parcial es un aviso.\n\n**Añadir a los nuevos períodos** decide con qué fuentes empieza un período nuevo. Un período tiene como máximo 3 fuentes predefinidas y 6 personalizadas. El botón de papelera de una fila quita la fuente solo de este período: se eliminan sus archivos descargados de este período, y la fuente sigue en el proyecto y puede añadirse de nuevo. Una fuente personalizada se puede editar hasta que un conjunto de alertas la use; después, quítala y añade una nueva.",
+      "info_md": "Una fuente de alertas es un conjunto de datos de alertas de pérdida forestal. Cada píxel de alerta es **confirmado** (confianza alta) o **probable** (confianza baja) y lleva el día en que se detectó por primera vez.\n\n- **Predefinidas:** GLAD-L (Landsat, unos 30 m), GLAD-S2 (Sentinel-2, 10 m) y RADD (Sentinel-1, 10 m). RADD solo detecta en bosque húmedo tropical primario; en el resto de su área no reporta alertas.\n- **Personalizadas:** una imagen o colección de imágenes de Earth Engine, o un GeoTIFF en tu carpeta de SEPAL, leído mediante un preajuste de formato: *RADD* (banda de alerta 2 probable, 3 confirmada; fecha `yyddd`), *alertas CCDC de SEPAL* y *alertas PyEO de SEPAL* (1–2 detecciones probable, 3 o más confirmada; fecha de primera detección en años decimales) o *solo fecha* (una banda de fecha en la codificación que elijas; todo píxel con fecha está confirmado).\n\nLa lista muestra las fuentes del **período activo**. **Descargar** obtiene una fuente en la ventana de búsqueda del período, en su propia proyección y recortada a la AOI; una fuente GeoTIFF se lee de su archivo en su lugar. El chip de cada fila es la **cobertura** de la fuente: la parte de la AOI dentro de su huella. Una fuente que no cubra nada de la AOI no se puede añadir; una cobertura parcial es un aviso.\n\n**Añadir a los nuevos períodos** decide con qué fuentes empieza un período nuevo. Un período tiene como máximo 3 fuentes predefinidas y 6 personalizadas. El botón de papelera de una fila quita la fuente solo de este período: se eliminan sus archivos descargados de este período, y la fuente sigue en el proyecto y puede añadirse de nuevo. Una fuente personalizada se puede editar hasta que un conjunto de alertas la use; después, quítala y añade una nueva.",
       "list_title": "Fuentes",
       "col_source": "Fuente",
       "empty": "Todavía no hay ninguna fuente de alertas. Añade al menos una.",
@@ -137,11 +137,6 @@
       "chip_dates_none": "✗ los datos terminan el {last}",
       "remove_from_period_title": "¿Quitar {name} de este período?",
       "remove_from_period_message": "Se eliminan sus archivos descargados y armonizados de este período. La fuente sigue en el proyecto y puede añadirse de nuevo.",
-      "download_all": {
-        "one": "Descargar {n} pendiente",
-        "many": "Descargar {n} pendientes",
-        "other": "Descargar {n} pendientes"
-      },
       "read_file": "Leer archivo",
       "add_to_new_periods": "Añadir a los nuevos períodos",
       "state_downloaded": "Descargada",
@@ -370,13 +365,8 @@
     "harmonize": {
       "instruction": "Alinea las descargas con la cuadrícula del proyecto y aplica las máscaras.",
       "info_header": "Acerca de Armonizar",
-      "info_md": "Este paso alinea todas las entradas del período activo en la **cuadrícula** del proyecto: una proyección en metros y un tamaño de píxel.\n\n1. **Cuadrícula:** un código EPSG (el botón de mira (⌖) sugiere la zona UTM de la AOI) y una resolución. Se bloquea en cuanto el proyecto tiene un conjunto de alertas.\n2. **Máscaras:** rasters definidos una vez por proyecto (una imagen de Earth Engine o un GeoTIFF, una banda; un píxel está activo donde su valor no es cero). Cada período elige qué máscaras están activadas y si cada una **conserva** su área (se eliminan las alertas fuera de ella) o la **excluye** (se eliminan las alertas dentro de ella). Una máscara se descarga una vez y se alinea con la cuadrícula.\n3. **Fuentes:** cada fuente descargada en Alertas (o leída de tu propio archivo) se alinea con la cuadrícula y se enmascara (armoniza).\n\nNada cuyas entradas no hayan cambiado se ejecuta dos veces: una cuadrícula nueva o un cambio de máscara solo vuelve a armonizar, sin descargar. **Armonizar … pendientes** ejecuta primero las máscaras, luego cada fuente descargada que falte o esté desactualizada, y omite las filas que muestran *No cubierta* o *Sin datos para este período*. Cada fila necesita el doble de su tamaño comprimido libre en disco.",
+      "info_md": "Este paso alinea todas las entradas del período activo en la **cuadrícula** del proyecto: una proyección en metros y un tamaño de píxel.\n\n1. **Cuadrícula:** un código EPSG (el botón de mira (⌖) sugiere la zona UTM de la AOI) y una resolución. Se bloquea en cuanto el proyecto tiene un conjunto de alertas.\n2. **Máscaras:** rasters definidos una vez por proyecto (una imagen de Earth Engine o un GeoTIFF, una banda; un píxel está activo donde su valor no es cero). Cada período elige qué máscaras están activadas y si cada una **conserva** su área (se eliminan las alertas fuera de ella) o la **excluye** (se eliminan las alertas dentro de ella). Una máscara se descarga una vez y se alinea con la cuadrícula.\n3. **Fuentes:** cada fuente descargada en Alertas (o leída de tu propio archivo) se alinea con la cuadrícula y se enmascara (armoniza).\n\nNada cuyas entradas no hayan cambiado se ejecuta dos veces: una cuadrícula nueva o un cambio de máscara solo vuelve a armonizar, sin descargar. **Armonizar** en una fuente alinea primero las máscaras activas del período que lo necesiten. Cada fila necesita el doble de su tamaño comprimido libre en disco.",
       "download_first": "Descárgala o léela primero en Alertas",
-      "run_all": {
-        "one": "Armonizar {n} pendiente",
-        "many": "Armonizar {n} pendientes",
-        "other": "Armonizar {n} pendientes"
-      },
       "job_title": "Armonizar"
     },
     "prepare": {
@@ -397,18 +387,6 @@
       "list_title": "Fuentes de este período",
       "col_source": "Fuente",
       "empty": "Añade primero fuentes de alertas.",
-      "footer_strip": "{running} en curso · {queued} en cola",
-      "footer_running": "{running} en curso",
-      "footer_done": "{done} de {total} terminadas",
-      "footer_stop": "Detener",
-      "footer_stop_tip": "Se detiene después de la fila en curso",
-      "footer_stopping": "Deteniendo…",
-      "footer_more": "Más acciones por lotes",
-      "redownload_all": {
-        "one": "Descargar todo de nuevo ({n})",
-        "many": "Descargar todo de nuevo ({n})",
-        "other": "Descargar todo de nuevo ({n})"
-      },
       "job_title": "Descarga",
       "job_row": "Preparando {source}",
       "job_mask_row": "Preparando máscara {mask}",
@@ -422,7 +400,7 @@
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "La geometría de la AOI todavía se está obteniendo; ejecuta esta fila de nuevo en un momento.",
       "aoi_geometry_failed": "No se pudo obtener la geometría de la AOI, así que las filas de GeoTIFF no se pueden ejecutar; usa Comprobar de nuevo y luego ejecútalas.",
-      "mask_not_ready": "Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Armonizar … pendientes alinea primero las máscaras.",
+      "mask_not_ready": "Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Armonizar en una fuente alinea primero las máscaras.",
       "mask_file_missing": "Máscara {name}: archivo no encontrado ({path}). Vuelve a poner el archivo en esta ruta para usar la máscara.",
       "mask_name_empty": "Pon un nombre a la máscara.",
       "mask_name_too_long": "Usa como máximo 24 caracteres.",
@@ -446,7 +424,7 @@
       "masks_title": "Máscaras",
       "masks_empty": "Todavía no hay máscaras.",
       "masks_note": "Una máscara son los píxeles donde su banda no es cero; el cero y el no-data quedan fuera de ella. Conservar elimina las alertas fuera de la máscara; excluir elimina las alertas dentro de ella.",
-      "masks_switched": "Las fuentes de este período están desactualizadas; Armonizar … pendientes las vuelve a armonizar sin descargarlas.",
+      "masks_switched": "Las fuentes de este período están desactualizadas; Armonizar en cada fila las vuelve a armonizar sin descargarlas.",
       "mask_add": "Añadir máscara",
       "mask_add_title": "Añadir una máscara",
       "mask_edit_title": "Editar máscara {name}",
@@ -525,12 +503,6 @@
       "redownload_message": "El catálogo sigue añadiendo alertas a fechas pasadas. Esto obtiene las más recientes para {window} y reemplaza el archivo descargado el {date}.",
       "redownload_message_new": "Esto obtiene las alertas para {window}.",
       "redownload_label": "Descargar de nuevo",
-      "redownload_all_title": {
-        "one": "¿Descargar {n} fuente de nuevo?",
-        "many": "¿Descargar {n} de fuentes de nuevo?",
-        "other": "¿Descargar {n} fuentes de nuevo?"
-      },
-      "redownload_all_message": "Estas fuentes se descargan de nuevo de sus catálogos: {names}.",
       "delete_files_title": "¿Eliminar el archivo armonizado de {source}?",
       "delete_files_message": "Elimina el archivo armonizado de este período ({size}). La descarga se conserva; armonízala de nuevo aquí.",
       "delete_files_message_nosize": "Elimina el archivo armonizado de este período. La descarga se conserva; armonízala de nuevo aquí.",

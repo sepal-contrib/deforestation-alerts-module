@@ -47,7 +47,7 @@ from gui.tile import alerts_step
 from gui.widget import source_modal
 from gui.widget.source_modal import SourceModal
 from tests.test_prepare_step import (
-    JAN, PARAGUAY, _arts, _button, _click, _closed, _confirm, _named, _project, _state, _stop_shown, _texts,
+    JAN, PARAGUAY, _arts, _click, _closed, _confirm, _named, _project, _state, _texts,
     _with_mask, _with_tif,
 )
 
@@ -469,7 +469,7 @@ def _toasts(bus, kind, message):
 
 def _rows(p, **over):
     kw = dict(mine=set(), errors={}, stages={}, progress={}, on=set(), building=set(), locked=False, writing=False,
-              stopped=frozenset(), run=lambda s: None, toggle=lambda s: None, on_info=lambda s: None,
+              run=lambda s: None, toggle=lambda s: None, on_info=lambda s: None,
               on_refresh=lambda s: None, on_remove=lambda s: None)
     kw.update(over)
     return {r["key"]: r for r in alerts_step.alert_rows(p, "/tmp/x", p.periods[p.active_period], **kw)}
@@ -489,7 +489,7 @@ def test_a_row_shows_its_chips_its_status_and_four_actions():
     row = _rows(p, rows=[PrepareRow("RADD", Status.MISSING, Status.MISSING)])["RADD"]
     title, state = row["cells"]
     assert title["chips"] == [{"value": t("steps.alerts.chip_aoi", pct="35"), "color": "warning"},
-                              {"value": t("steps.alerts.chip_dates_ok", last="2100-01-01"), "color": "success"}]
+                              {"value": t("steps.alerts.chip_dates_ok", last="2100-01-01"), "color": "primary"}]
     assert state["type"] == "verb" and state["label"] == t("steps.prepare.verb_download")
     assert [a["kind"] for a in row["actions"]] == ["map_toggle", "info", "refresh", "delete"]
     assert len(row["actions"]) == alerts_step.SOURCE_ACTIONS
@@ -976,15 +976,6 @@ def _refresh(rc, row):
            t("steps.prepare.redownload_label"))
 
 
-def _footer_item(rc):
-    """The footer caret's one item (Download all again), opened."""
-    [caret] = [b for b in rc.find(v.Btn).widgets if "defo-split-caret" in (b.class_ or "")]
-    caret.click()
-    label = tn("steps.prepare.redownload_all", 1)
-    [item] = [b for b in rc.find(v.Btn).widgets if any(str(c).startswith(label.split(" (")[0]) for c in b.children)]
-    return item
-
-
 def test_a_row_downloads_in_download_mode(dl, monkeypatch):
     monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
     dl.plan(PrepareRow("RADD", Status.MISSING, Status.MISSING))
@@ -1055,7 +1046,7 @@ def test_a_download_whose_ee_aoi_fails_releases_its_rows(dl, monkeypatch, error)
         _pill(dl.table[-1][0])
         assert dl.jobs == [] and _info_toasts("error") == [str(error) or error.__class__.__name__]
         assert _offers_run(dl.table[-1][0])  # the claim was released
-        assert not _stop_shown(rc) and jobs.inflight.value == frozenset()
+        assert jobs.inflight.value == frozenset()
     finally:
         rc.close()
 
@@ -1115,9 +1106,9 @@ def test_a_geotiff_row_does_not_wait_for_the_aoi_geometry(dl, tmp_path):
 
 
 def test_a_failed_aoi_sidecar_holds_back_no_download_and_offers_no_check_again(dl, monkeypatch, tmp_path):
-    """The AOI sidecar only matters to Harmonize: a Download all runs the
-    Earth Engine and the GeoTIFF rows alike, and the Alerts step offers no
-    Check again for it."""
+    """The AOI sidecar only matters to Harmonize: the Earth Engine and the
+    GeoTIFF rows download alike, and the Alerts step offers no Check again
+    for it."""
     monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
     dl.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("tif", Status.MISSING, Status.MISSING))
     state = _state(_with_tif(tmp_path, sidecar=False), meta={"GLAD-L": {}})
@@ -1125,16 +1116,18 @@ def test_a_failed_aoi_sidecar_holds_back_no_download_and_offers_no_check_again(d
     box, rc = _dl_render(state)
     try:
         assert not _check_again_shown(rc)
-        _button(rc, tn("steps.alerts.download_all", 2)).fire_event("click", None)
+        _pill(dl.table[-1][0])
+        _pill(dl.table[-1][1])
         dl.run_jobs()
-        [(ctx, sources, _)] = dl.started
-        assert sources == ["GLAD-L", "tif"] and ctx.aoi == "AOI" and ctx.mode == "download"
+        assert [(sources, ctx.mode) for ctx, sources, _ in dl.started] == [(["GLAD-L"], "download"),
+                                                                          (["tif"], "download")]
+        assert dl.started[0][0].aoi == "AOI"
         assert _info_toasts("info") == []
     finally:
         rc.close()
 
 
-def test_download_all_with_a_geotiff_row_is_not_refused_while_a_harmonize_builds_the_aoi_raster(
+def test_a_geotiff_download_is_not_refused_while_a_harmonize_builds_the_aoi_raster(
         dl, monkeypatch, tmp_path):
     monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
     dl.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("tif", Status.MISSING, Status.MISSING))
@@ -1144,37 +1137,22 @@ def test_download_all_with_a_geotiff_row_is_not_refused_while_a_harmonize_builds
 
     box, rc = _dl_render(state, jobs=jobs)
     try:
-        _button(rc, tn("steps.alerts.download_all", 2)).fire_event("click", None)
+        _pill(dl.table[-1][1])
         dl.run_jobs()
         [(ctx, sources, _)] = dl.started
-        assert sources == ["GLAD-L", "tif"] and ctx.mode == "download"
+        assert sources == ["tif"] and ctx.mode == "download"
         assert _info_toasts("info") == []
     finally:
         rc.close()
 
 
-def test_download_all_runs_the_pending_rows_only(dl, monkeypatch):
-    """The footer's Download N pending: raw missing or out of date, not blocked."""
-    monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
-    blocked = PrepareRow("GLAD-S2", Status.MISSING, Status.MISSING, "not_covered",
-                         (Note("coverage.not_covered_glad_s2", (("source", "GLAD-S2"),), "error"),))
-    dl.plan(PrepareRow("GLAD-L", Status.STALE, Status.STALE), PrepareRow("RADD", Status.CURRENT, Status.MISSING),
-            blocked)
-    state = _state(_project("d", "GLAD-L", "RADD", "GLAD-S2", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
-    box, rc = _dl_render(state)
-    try:
-        _button(rc, tn("steps.alerts.download_all", 1)).fire_event("click", None)
-        dl.run_jobs()
-        assert [(items, force) for _, items, force in dl.started] == [(["GLAD-L"], False)]
-    finally:
-        rc.close()
 
 
-def test_download_all_skips_a_row_a_harmonize_job_holds_and_its_stop_is_its_own(dl, monkeypatch):
-    """Option C: a harmonize job holding a row neither disables Download all
-    nor makes its claim refuse the batch; that row reads its download state
-    (never Harmonizing or Queued), and the footer's Stop stops only the
-    downloads."""
+
+def test_a_row_a_harmonize_job_holds_reads_its_download_state(dl, monkeypatch):
+    """Option C: a harmonize job holding a row never refuses another row's
+    download; that row reads its download state (never Harmonizing or
+    Queued)."""
     monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
     dl.plan(PrepareRow("GLAD-L", Status.STALE, Status.STALE), PrepareRow("RADD", Status.STALE, Status.STALE))
     state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}})
@@ -1187,28 +1165,21 @@ def test_download_all_skips_a_row_a_harmonize_job_holds_and_its_stop_is_its_own(
         radd = dl.table[-1][1]
         assert radd["cells"][1]["type"] == "verb" and radd["cells"][1]["disabled"]  # held, not Queued
         assert _act(radd, "refresh")["disabled"]
-        assert not _stop_shown(rc)  # the harmonize is the Harmonize step's job
-        download_all = _button(rc, tn("steps.alerts.download_all", 1))
-        assert not download_all.disabled
-        download_all.fire_event("click", None)
+        _pill(dl.table[-1][0])
         assert _info_toasts("info") == []
-        _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
         dl.run_jobs()
-        cancelled = {(ctx.mode, *items): ctx.cancel.is_set() for ctx, items, _ in dl.started}
-        assert cancelled == {("harmonize", "RADD"): False, ("download", "GLAD-L"): True}
+        assert {(ctx.mode, *items) for ctx, items, _ in dl.started} == {("harmonize", "RADD"), ("download", "GLAD-L")}
     finally:
         rc.close()
 
 
-def test_download_all_again_is_not_held_back_by_pending_masks(dl, monkeypatch):
+def test_download_again_is_not_held_back_by_pending_masks(dl, monkeypatch):
     """A download no longer waits for the period's masks (spec §2)."""
     monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
     dl.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT))
     state = _state(_with_mask(), meta={"GLAD-L": {}})
     box, rc = _dl_render(state)
     try:
-        item = _footer_item(rc)
-        assert tn("steps.prepare.redownload_all", 1) in item.children and not item.disabled
         assert not _act(dl.table[-1][0], "refresh")["disabled"]
         _refresh(rc, dl.table[-1][0])
         dl.run_jobs()
@@ -1217,34 +1188,7 @@ def test_download_all_again_is_not_held_back_by_pending_masks(dl, monkeypatch):
         rc.close()
 
 
-def test_download_all_again_forces_the_sources_that_have_something_to_fetch(dl, monkeypatch, tmp_path):
-    """Every catalogue / Earth Engine source that is not blocked, in one forced job."""
-    monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
-    p = _with_tif(tmp_path, sidecar=True)
-    add_predefined_source(p, "RADD")
-    add_predefined_source(p, "GLAD-S2")
-    dl.plan(PrepareRow("GLAD-L", Status.CURRENT, Status.CURRENT), PrepareRow("tif", Status.CURRENT, Status.CURRENT),
-            PrepareRow("RADD", Status.CURRENT, Status.CURRENT),
-            PrepareRow("GLAD-S2", Status.MISSING, Status.MISSING, "not_covered",
-                       (Note("coverage.not_covered_glad_s2", (("source", "GLAD-S2"),), "error"),)))
-    state = _state(p, meta={"GLAD-L": {}})
 
-    box, rc = _dl_render(state)
-    try:
-        item = _footer_item(rc)
-        assert not item.disabled
-        item.fire_event("click", None)  # asks first
-        assert dl.jobs == []
-        names = ", ".join(source_label(p.sources[s]) for s in ("GLAD-L", "RADD"))
-        dialog = _confirm(rc, tn("steps.prepare.redownload_all_title", 2))
-        assert t("steps.prepare.redownload_all_message", names=names) in _texts(dialog)
-        _click(dialog, t("steps.prepare.redownload_label"))
-        dl.run_jobs()
-        [(ctx, items, force)] = dl.started
-        assert items == ["GLAD-L", "RADD"] and force and ctx.mode == "download"
-        assert ctx.downloads == {("source", "GLAD-L"), ("source", "RADD")}
-    finally:
-        rc.close()
 
 
 def test_download_again_asks_then_forces(dl, monkeypatch):
@@ -1300,35 +1244,6 @@ def test_download_again_waits_for_the_catalogue_metadata(dl, monkeypatch):
         [(ctx, sources, force)] = dl.started
         assert sources == ["GLAD-L"] and force is True
         assert ctx.aoi == "AOI" and ctx.meta == {"GLAD-L": {"end": "2026-06-01"}}
-    finally:
-        rc.close()
-
-
-def test_download_again_during_a_download_all_keeps_stop(dl, monkeypatch):
-    """A Download again started while Download all is in its current row joins
-    the scope: the footer's Stop (``stop_scope``) stops both."""
-    monkeypatch.setattr(aoi_io_mod, "ee_aoi", lambda result, pdir: "AOI")
-    dl.plan(PrepareRow("GLAD-L", Status.MISSING, Status.MISSING), PrepareRow("RADD", Status.CURRENT, Status.CURRENT))
-    state = _state(_project("d", "GLAD-L", "RADD", bounds=PARAGUAY, grid=True), meta={"GLAD-L": {}, "RADD": {}})
-    contexts = {}
-
-    box, rc = _dl_render(state)
-
-    def download_all_blocked_mid_row(ctx, items, force=False):
-        sources = _named(items)
-        contexts[tuple(sources)] = (ctx, force)
-        if sources == ["GLAD-L"]:  # Download all, still in its current row
-            _refresh(rc, dl.table[-1][1])  # Download again the downloaded RADD row
-            _button(rc, t("steps.prepare.footer_stop")).fire_event("click", None)
-
-    monkeypatch.setattr(prepare_scope, "run_rows", download_all_blocked_mid_row)
-    try:
-        _button(rc, tn("steps.alerts.download_all", 1)).fire_event("click", None)
-        dl.run_jobs()
-        assert set(contexts) == {("GLAD-L",), ("RADD",)} and contexts[("RADD",)][1] is True
-        assert contexts[("GLAD-L",)][0].cancel.is_set()  # Download all stops after this row
-        assert contexts[("RADD",)][0].cancel.is_set()  # and so does the Download again
-        assert not _stop_shown(rc)
     finally:
         rc.close()
 

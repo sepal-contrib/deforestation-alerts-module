@@ -155,33 +155,21 @@ def T(dotted: str, **values) -> str:
     return text
 
 
-def T_forms(dotted: str) -> list[str]:
-    """Every plural form of catalogue key ``dotted`` in the run's language."""
-    for path in sorted((MESSAGES / LANGS[RUN.lang]).glob("*.json")):
-        node = json.loads(path.read_text(encoding="utf-8"))
-        for part in dotted.split("."):
-            node = node.get(part) if isinstance(node, dict) else None
-        if isinstance(node, dict) and all(isinstance(v, str) for v in node.values()):
-            return list(node.values())
-    raise KeyError(f"{RUN.lang}: {dotted} (plural)")
-
-
 def prepare_labels():
     """The Harmonize step's labels in the run's language, for ``phases.run_all``."""
     from tools.walk import phases as ph
 
-    return ph.prepare_labels(T_forms("steps.harmonize.run_all"), T("steps.prepare.state_ready"),
-                             [T(k) for k in ph.RUNNING_KEYS], T("steps.prepare.footer_stop"))
+    return ph.prepare_labels(ph.PREPARE_PILLS(T), T("steps.prepare.state_ready"),
+                             [T(k) for k in ph.RUNNING_KEYS])
 
 
 def download_labels():
-    """The Alerts step's labels in the run's language: "Download {n} pending"
-    and "Downloaded", as ``phases.en_download``."""
+    """The Alerts step's labels in the run's language: the Download / Read
+    file pills and "Downloaded", as ``phases.en_download``."""
     from tools.walk import phases as ph
 
-    return ph.prepare_labels(T_forms("steps.alerts.download_all"), T("steps.alerts.state_downloaded"),
-                             [T(k) for k in ph.RUNNING_KEYS] + [T("steps.alerts.state_reading")],
-                             T("steps.prepare.footer_stop"))
+    return ph.prepare_labels(ph.DOWNLOAD_PILLS(T), T("steps.alerts.state_downloaded"),
+                             [T(k) for k in ph.RUNNING_KEYS] + [T("steps.alerts.state_reading")])
 
 
 def set_language(page, lang: str) -> None:
@@ -1638,19 +1626,10 @@ def ensure_later_period(page):
                    shot_name="later_period_downloaded", labels=dl, step="alerts")
     step(page, "harmonize")
     labels = prepare_labels()
-    # The footer's main button is always rendered once the project has a grid
-    # (the demo's is saved): "Harmonize 0 pending" and disabled when nothing is
-    # left, or when the project is read-only; while a run of this period is
-    # going, "Stop" takes its place. So wait out a run already going, then run
-    # only when it has rows to run, and fail at once otherwise.
-    run = ph.run_button(page, labels)
-    w.wait_for(lambda: run.count() or ph.job_running(page, labels), 60, "the Harmonize … pending or Stop button")
-    if ph.job_running(page, labels):  # the footer's Stop replaces Run while a job of this period runs
+    # wait out a run of this period already going (a row reads running),
+    # then run the rows that still have a Run pill
+    if ph.job_running(page, labels):
         w.wait_for(lambda: not ph.job_running(page, labels), 3600, "the running prepare job")
-    w.wait_for(lambda: run.count(), 60, "the Harmonize … pending button")
-    if ph.pending_count(page, labels) and not run.is_enabled():
-        raise AssertionError(f"Harmonize {ph.pending_count(page, labels)} pending is disabled and no prepare job "
-                             f"runs: is the project read-only?")
     if ph.pending_count(page, labels):
         # one Ready cell per row: the three sources and the mask
         ph.run_all(page, {}, out=RUN.data / "_capture", expect_ready=4, timeout=3600,

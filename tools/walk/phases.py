@@ -128,12 +128,21 @@ def download_btn(page):
 
 
 #: The Prepare step's labels in English (``run_all`` takes others, see
-#: ``prepare_labels``): the plural forms of the "Run {n} pending" button, the
-#: Stop button that replaces it while a job runs, and the Status cells' texts.
+#: ``prepare_labels``): the rows' Run pills and the Status cells' texts.
 EN_PREPARE = None
 #: The Status cell texts of a row in a running job (``prepare_view._in_flight``)
 RUNNING_KEYS = ("steps.prepare.state_downloading", "steps.prepare.state_downloading_pct",
                 "steps.prepare.state_harmonizing", "steps.prepare.state_aligning", "steps.prepare.state_queued")
+
+
+def PREPARE_PILLS(tr):
+    """Harmonize's Run pills in ``tr``'s language: a source's, a mask's (Align, or Download for a mask)."""
+    return [tr("steps.prepare.verb_harmonize"), tr("steps.prepare.verb_align"), tr("steps.prepare.verb_download")]
+
+
+def DOWNLOAD_PILLS(tr):
+    """The Alerts step's Run pills: Download, and Read file for a GeoTIFF."""
+    return [tr("steps.prepare.verb_download"), tr("steps.alerts.read_file")]
 
 
 def _alternatives(texts, slot) -> str:
@@ -141,69 +150,50 @@ def _alternatives(texts, slot) -> str:
     return "|".join(re.escape(x).replace(re.escape("{" + slot + "}"), r"\d+") for x in sorted(set(texts)))
 
 
-def prepare_labels(forms, ready, running, stop):
-    """The labels ``run_all`` reads, in one language: ``forms`` the plural
-    forms of ``steps.harmonize.run_all`` (each with ``{n}``), ``ready`` the
-    ``steps.prepare.state_ready`` text, ``running`` the texts of
-    ``RUNNING_KEYS`` (``{pct}`` matches any percent): a pattern, ``stop`` the
-    ``steps.prepare.footer_stop`` text of the button that replaces Run while a
-    job runs: a pattern."""
-    return {"run": re.compile(rf"^\s*(?:{_alternatives(forms, 'n')})\s*$"), "ready": ready,
-            "running": re.compile(rf"^\s*(?:{_alternatives(running, 'pct')})\s*$"),
-            "stop": re.compile(rf"^\s*{re.escape(stop)}\s*$")}
+def prepare_labels(pills, ready, running):
+    """The labels ``run_all`` reads, in one language: ``pills`` the texts of
+    the rows' Run pills (``steps.prepare.verb_*``, Alerts' Read file), ``ready``
+    the ``steps.prepare.state_ready`` text, ``running`` the texts of
+    ``RUNNING_KEYS`` (``{pct}`` matches any percent): a pattern."""
+    return {"run": re.compile(rf"^\s*(?:{_alternatives(pills, 'n')})\s*$"), "ready": ready,
+            "running": re.compile(rf"^\s*(?:{_alternatives(running, 'pct')})\s*$")}
 
 
 def en_prepare():
     global EN_PREPARE
     if EN_PREPARE is None:
-        from tools.walk.walklib import MESSAGES_EN
 
-        node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["harmonize"]["run_all"]
-        EN_PREPARE = prepare_labels(node.values(), en("steps.prepare.state_ready"), [en(k) for k in RUNNING_KEYS],
-                                    en("steps.prepare.footer_stop"))
+        EN_PREPARE = prepare_labels(PREPARE_PILLS(en), en("steps.prepare.state_ready"), [en(k) for k in RUNNING_KEYS])
     return EN_PREPARE
 
 
 def en_download():
-    """The Alerts step's labels, as ``en_prepare``: "Download {n} pending",
-    a downloaded row's "Downloaded" and the running texts (a file reads
+    """The Alerts step's labels, as ``en_prepare``: the Download / Read file
+    pills, a downloaded row's "Downloaded" and the running texts (a file reads
     "Reading")."""
-    from tools.walk.walklib import MESSAGES_EN
+    return prepare_labels(DOWNLOAD_PILLS(en), en("steps.alerts.state_downloaded"),
+                          [en(k) for k in RUNNING_KEYS] + [en("steps.alerts.state_reading")])
 
-    node = json.loads((MESSAGES_EN / "steps.json").read_text(encoding="utf-8"))["steps"]["alerts"]["download_all"]
-    return prepare_labels(node.values(), en("steps.alerts.state_downloaded"),
-                          [en(k) for k in RUNNING_KEYS] + [en("steps.alerts.state_reading")],
-                          en("steps.prepare.footer_stop"))
+
+def _pills(page, labels=None):
+    labels = labels or en_prepare()
+    return page.locator(".right-panel button:visible:enabled").filter(has_text=labels["run"])
 
 
 def run_button(page, labels=None):
-    """The "Run {n} pending" button of the Prepare panel's batch footer, found
-    by its catalogue text (any plural form) in the labels' language. Absent
-    while a job runs: ``stop_button`` takes its place."""
-    labels = labels or en_prepare()
-    return page.locator(".right-panel button:visible").filter(has_text=labels["run"]).first
-
-
-def stop_button(page, labels=None):
-    """The footer's "Stop", which replaces "Run {n} pending" while the step has
-    a job (running or queued rows)."""
-    labels = labels or en_prepare()
-    return page.locator(".right-panel button:visible").filter(has_text=labels["stop"]).first
+    """The first enabled Run pill of a row (Download, Harmonize, Align…),
+    found by its catalogue text in the labels' language."""
+    return _pills(page, labels).first
 
 
 def job_running(page, labels=None) -> bool:
-    """Whether the step has a job: its Stop button is shown."""
-    return stop_button(page, labels).count() > 0
+    """Whether the step has a job: a row reads running or queued."""
+    return prepare_state(page, labels)["running"] > 0
 
 
 def pending_count(page, labels=None) -> int:
-    """The {n} of the "Run {n} pending" button (0 when it is not shown: nothing
-    is pending, or a job runs and Stop replaces it, see ``job_running``)."""
-    btn = run_button(page, labels)
-    if not btn.count():
-        return 0
-    m = re.search(r"\d+", btn.inner_text())
-    return int(m.group()) if m else 0
+    """The rows with an enabled Run pill (a running or queued row has none)."""
+    return _pills(page, labels).count()
 
 
 def prepare_state(page, labels=None):
@@ -228,43 +218,38 @@ def save_grid(page, *, resolution="30"):
 
 def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_done", labels=None,
             step="harmonize"):
-    """Click Harmonize's "Harmonize N pending" and wait for the job: it must
-    start (a row reads running, Stop shows, or nothing is pending any more)
-    and end (no running cell, Stop gone again) with ``expect_ready`` "Ready"
+    """Click every row's Run pill in Harmonize and wait for the jobs: they must
+    start (a row reads running or nothing is pending any more)
+    and end (no running cell) with ``expect_ready`` "Ready"
     status cells (one per source row and one per mask row on the panel,
     whatever its origin) and no error toast. ``labels`` (``prepare_labels``)
     for a language other than English. ``step="alerts"`` with ``en_download``
-    labels runs Alerts' "Download N pending" instead (``download_all``)."""
+    labels clicks Alerts' Download pills instead (``download_all``)."""
     goto_step(page, step, 2000)
-    run = run_button(page, labels)
     t_run = now_ms(page)
-
-    def started():
-        # Stop replaces Run while the job lasts, so "nothing pending" is only
-        # true once Stop is not shown either
-        return (prepare_state(page, labels)["running"] or job_running(page, labels)
-                or pending_count(page, labels) == 0)
-
-    meta_loading = en("steps.alerts.meta_loading")
-    for _ in range(20):  # a GLAD-L download right after opening: its band list may still be loading
+    # a click can be refused for now: a GLAD-L download right after opening (its band
+    # list is still loading), or the AOI raster another row's job is building
+    refusals = {en("steps.alerts.meta_loading"), en("steps.prepare.claim_busy")}
+    t_start = time.time()
+    while pending_count(page, labels) and time.time() - t_start < timeout:
         t_click = now_ms(page)
-        run.click()
-        wait_for(lambda: started() or any(x["msg"] == meta_loading for x in toasts_since(page, t_click)),
-                 30, "the job to start", poll=0.3)
-        if started():
-            break
-        page.wait_for_timeout(3000)
-    t0 = time.time()
-    while time.time() - t0 < timeout:
+        before = pending_count(page, labels)
+        run_button(page, labels).click()
+        wait_for(lambda: pending_count(page, labels) < before
+                 or any(x["msg"] in refusals for x in toasts_since(page, t_click)),
+                 30, "the row to start", poll=0.3)
+        if pending_count(page, labels) >= before:
+            page.wait_for_timeout(3000)
+    while time.time() - t_start < timeout:  # one budget for the clicks and the wait
         st = prepare_state(page, labels)
-        idle = not st["running"] and not job_running(page, labels)
+        idle = not st["running"]
         if st["ready"] >= expect_ready and idle:
             break
         if errors(toasts_since(page, t_run)) and idle:
             break
         page.wait_for_timeout(3000)
     tag = "prepare" if step == "harmonize" else step
-    rec[f"{tag}_seconds"] = round(time.time() - t0)
+    rec[f"{tag}_seconds"] = round(time.time() - t_start)
     rec[f"{tag}_panel"] = panel_text(page)[:1500].replace("\n", " | ")
     rec[f"{tag}_toasts"] = [f"{x['kind']}: {x['msg']}" for x in toasts_since(page, t_run)]
     shot(page, out, shot_name)
@@ -273,7 +258,7 @@ def run_all(page, rec, *, out, expect_ready=2, timeout=900, shot_name="prepare_d
 
 
 def download_all(page, rec, *, out, expect_ready=2, timeout=900):
-    """Alerts' "Download N pending", until ``expect_ready`` rows read Downloaded."""
+    """Alerts' Download pills, until ``expect_ready`` rows read Downloaded."""
     run_all(page, rec, out=out, expect_ready=expect_ready, timeout=timeout, shot_name="download_done",
             labels=en_download(), step="alerts")
     assert pending_count(page, en_download()) == 0, rec["alerts_panel"]

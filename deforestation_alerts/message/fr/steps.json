@@ -96,7 +96,7 @@
     "alerts": {
       "instruction": "Ajoutez des sources d'alertes et téléchargez-les pour cette période.",
       "info_header": "À propos des sources d'alertes",
-      "info_md": "Une source d'alertes est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est **confirmé** (confiance élevée) ou **probable** (confiance faible) et porte le jour de sa première détection.\n\n- **Prédéfinies :** GLAD-L (Landsat, environ 30 m), GLAD-S2 (Sentinel-2, 10 m) et RADD (Sentinel-1, 10 m). RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.\n- **Personnalisées :** une image ou collection d'images Earth Engine, ou un GeoTIFF dans votre dossier SEPAL, lu via un préréglage de format : *RADD* (bande Alert 2 probable, 3 confirmée ; date `yyddd`), *alertes CCDC SEPAL* et *alertes PyEO SEPAL* (1–2 détections probable, 3 ou plus confirmée ; date de première détection en années décimales) ou *date seule* (une bande de date dans l'encodage choisi ; chaque pixel daté est confirmé).\n\nLa liste montre les sources de la **période active**. **Télécharger** récupère une source sur la fenêtre de recherche de la période, dans sa propre projection et découpée selon l'AOI ; une source GeoTIFF est lue depuis son fichier à la place, et **Télécharger … en attente** récupère chaque source manquante ou obsolète. La puce de chaque ligne est la **couverture** de la source : la part de l'AOI à l'intérieur de son empreinte. Une source qui ne couvre aucune partie de l'AOI ne peut pas être ajoutée ; une couverture partielle est un avertissement.\n\n**Ajouter aux nouvelles périodes** choisit les sources avec lesquelles démarre une nouvelle période. Une période contient au plus 3 sources prédéfinies et 6 personnalisées. Le bouton corbeille d'une ligne retire la source de cette période seulement : ses fichiers téléchargés de cette période sont supprimés, et elle reste dans le projet et peut être ajoutée de nouveau. Une source personnalisée peut être modifiée tant qu'aucun jeu d'alertes ne l'utilise ; ensuite, retirez-la et ajoutez-en une nouvelle.",
+      "info_md": "Une source d'alertes est un jeu de données d'alertes de perte forestière. Chaque pixel d'alerte est **confirmé** (confiance élevée) ou **probable** (confiance faible) et porte le jour de sa première détection.\n\n- **Prédéfinies :** GLAD-L (Landsat, environ 30 m), GLAD-S2 (Sentinel-2, 10 m) et RADD (Sentinel-1, 10 m). RADD détecte uniquement en forêt tropicale humide primaire ; ailleurs dans sa zone, il ne signale aucune alerte.\n- **Personnalisées :** une image ou collection d'images Earth Engine, ou un GeoTIFF dans votre dossier SEPAL, lu via un préréglage de format : *RADD* (bande Alert 2 probable, 3 confirmée ; date `yyddd`), *alertes CCDC SEPAL* et *alertes PyEO SEPAL* (1–2 détections probable, 3 ou plus confirmée ; date de première détection en années décimales) ou *date seule* (une bande de date dans l'encodage choisi ; chaque pixel daté est confirmé).\n\nLa liste montre les sources de la **période active**. **Télécharger** récupère une source sur la fenêtre de recherche de la période, dans sa propre projection et découpée selon l'AOI ; une source GeoTIFF est lue depuis son fichier à la place. La puce de chaque ligne est la **couverture** de la source : la part de l'AOI à l'intérieur de son empreinte. Une source qui ne couvre aucune partie de l'AOI ne peut pas être ajoutée ; une couverture partielle est un avertissement.\n\n**Ajouter aux nouvelles périodes** choisit les sources avec lesquelles démarre une nouvelle période. Une période contient au plus 3 sources prédéfinies et 6 personnalisées. Le bouton corbeille d'une ligne retire la source de cette période seulement : ses fichiers téléchargés de cette période sont supprimés, et elle reste dans le projet et peut être ajoutée de nouveau. Une source personnalisée peut être modifiée tant qu'aucun jeu d'alertes ne l'utilise ; ensuite, retirez-la et ajoutez-en une nouvelle.",
       "list_title": "Sources",
       "col_source": "Source",
       "empty": "Aucune source d'alertes pour l'instant. Ajoutez-en au moins une.",
@@ -137,11 +137,6 @@
       "chip_dates_none": "✗ fin des données le {last}",
       "remove_from_period_title": "Retirer {name} de cette période ?",
       "remove_from_period_message": "Ses fichiers téléchargés et harmonisés de cette période sont supprimés. La source reste dans le projet et peut être ajoutée de nouveau.",
-      "download_all": {
-        "one": "Télécharger {n} en attente",
-        "many": "Télécharger {n} en attente",
-        "other": "Télécharger {n} en attente"
-      },
       "read_file": "Lire fichier",
       "add_to_new_periods": "Ajouter aux nouvelles périodes",
       "state_downloaded": "Téléchargée",
@@ -370,13 +365,8 @@
     "harmonize": {
       "instruction": "Alignez les téléchargements sur la grille du projet et appliquez les masques.",
       "info_header": "À propos de Harmoniser",
-      "info_md": "Cette étape aligne chaque entrée de la période active sur la **grille** du projet : une projection en mètres et une taille de pixel.\n\n1. **Grille :** un code EPSG (le bouton cible suggère la zone UTM de l'AOI) et une résolution. Elle est verrouillée dès que le projet a un jeu d'alertes.\n2. **Masques :** des rasters définis une fois par projet (une image Earth Engine ou un GeoTIFF, une bande ; un pixel est actif là où sa valeur n'est pas zéro). Chaque période choisit quels masques sont activés et si chacun **conserve** sa zone (les alertes à l'extérieur sont supprimées) ou l'**exclut** (les alertes à l'intérieur sont supprimées). Un masque est téléchargé une fois et aligné sur la grille.\n3. **Sources :** chaque source téléchargée dans Alertes (ou lue depuis votre propre fichier) est alignée sur la grille et masquée (harmonisée).\n\nRien dont les entrées sont inchangées ne s'exécute deux fois : une nouvelle grille ou un changement de masque ne fait que réharmoniser, sans télécharger. **Harmoniser … en attente** exécute d'abord les masques, puis chaque source téléchargée manquante ou obsolète, et ignore les lignes qui affichent *Non couverte* ou *Aucune donnée pour cette période*. Chaque ligne a besoin du double de sa taille compressée en espace disque libre.",
+      "info_md": "Cette étape aligne chaque entrée de la période active sur la **grille** du projet : une projection en mètres et une taille de pixel.\n\n1. **Grille :** un code EPSG (le bouton cible suggère la zone UTM de l'AOI) et une résolution. Elle est verrouillée dès que le projet a un jeu d'alertes.\n2. **Masques :** des rasters définis une fois par projet (une image Earth Engine ou un GeoTIFF, une bande ; un pixel est actif là où sa valeur n'est pas zéro). Chaque période choisit quels masques sont activés et si chacun **conserve** sa zone (les alertes à l'extérieur sont supprimées) ou l'**exclut** (les alertes à l'intérieur sont supprimées). Un masque est téléchargé une fois et aligné sur la grille.\n3. **Sources :** chaque source téléchargée dans Alertes (ou lue depuis votre propre fichier) est alignée sur la grille et masquée (harmonisée).\n\nRien dont les entrées sont inchangées ne s'exécute deux fois : une nouvelle grille ou un changement de masque ne fait que réharmoniser, sans télécharger. **Harmoniser** sur une source aligne d'abord les masques activés de la période qui en ont besoin. Chaque ligne a besoin du double de sa taille compressée en espace disque libre.",
       "download_first": "Téléchargez-la ou lisez-la d'abord dans Alertes",
-      "run_all": {
-        "one": "Harmoniser {n} en attente",
-        "many": "Harmoniser {n} en attente",
-        "other": "Harmoniser {n} en attente"
-      },
       "job_title": "Harmoniser"
     },
     "prepare": {
@@ -397,18 +387,6 @@
       "list_title": "Sources de cette période",
       "col_source": "Source",
       "empty": "Ajoutez d'abord des sources d'alertes.",
-      "footer_strip": "{running} en cours · {queued} en attente",
-      "footer_running": "{running} en cours",
-      "footer_done": "{done} sur {total} terminées",
-      "footer_stop": "Arrêter",
-      "footer_stop_tip": "S'arrête après la ligne en cours",
-      "footer_stopping": "Arrêt…",
-      "footer_more": "Plus d'actions groupées",
-      "redownload_all": {
-        "one": "Tout télécharger à nouveau ({n})",
-        "many": "Tout télécharger à nouveau ({n})",
-        "other": "Tout télécharger à nouveau ({n})"
-      },
       "job_title": "Téléchargement",
       "job_row": "Préparation de {source}",
       "job_mask_row": "Préparation du masque {mask}",
@@ -422,7 +400,7 @@
       "row_failed": "{source} : {error}",
       "aoi_geometry_missing": "La géométrie de l'AOI est encore en cours de récupération ; relancez cette ligne dans un instant.",
       "aoi_geometry_failed": "La géométrie de l'AOI n'a pas pu être récupérée, donc les lignes GeoTIFF ne peuvent pas s'exécuter ; utilisez Vérifier à nouveau, puis relancez-les.",
-      "mask_not_ready": "Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Harmoniser … en attente aligne d'abord les masques.",
+      "mask_not_ready": "Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Harmoniser sur une source aligne d'abord les masques.",
       "mask_file_missing": "Masque {name} : fichier introuvable ({path}). Remettez le fichier à cet emplacement pour utiliser le masque.",
       "mask_name_empty": "Donnez un nom au masque.",
       "mask_name_too_long": "Utilisez au plus 24 caractères.",
@@ -446,7 +424,7 @@
       "masks_title": "Masques",
       "masks_empty": "Aucun masque pour l'instant.",
       "masks_note": "Un masque, ce sont les pixels où sa bande n'est pas zéro ; le zéro et l'absence de donnée en sont exclus. Conserver supprime les alertes hors du masque ; exclure supprime les alertes à l'intérieur.",
-      "masks_switched": "Les sources de cette période sont obsolètes ; Harmoniser … en attente les réharmonise sans les retélécharger.",
+      "masks_switched": "Les sources de cette période sont obsolètes ; Harmoniser sur chaque ligne les réharmonise sans les retélécharger.",
       "mask_add": "Ajouter un masque",
       "mask_add_title": "Ajouter un masque",
       "mask_edit_title": "Modifier le masque {name}",
@@ -525,12 +503,6 @@
       "redownload_message": "Le catalogue continue d'ajouter des alertes à des dates passées. Ceci récupère les plus récentes pour {window} et remplace le fichier téléchargé le {date}.",
       "redownload_message_new": "Ceci récupère les alertes pour {window}.",
       "redownload_label": "Télécharger à nouveau",
-      "redownload_all_title": {
-        "one": "Télécharger {n} source à nouveau ?",
-        "many": "Télécharger {n} de sources à nouveau ?",
-        "other": "Télécharger {n} sources à nouveau ?"
-      },
-      "redownload_all_message": "Ces sources sont téléchargées à nouveau depuis leurs catalogues : {names}.",
       "delete_files_title": "Supprimer le fichier harmonisé de {source} ?",
       "delete_files_message": "Supprime le fichier harmonisé de cette période ({size}). Le téléchargement reste ; harmonisez-le à nouveau ici.",
       "delete_files_message_nosize": "Supprime le fichier harmonisé de cette période. Le téléchargement reste ; harmonisez-le à nouveau ici.",

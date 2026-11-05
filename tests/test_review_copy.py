@@ -7,7 +7,6 @@ banner sits above every step; Duplicate is hidden. Allowed: the
 
 import ast
 import asyncio
-import threading
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -424,7 +423,7 @@ def test_prepare_rows_are_disabled_and_the_runner_refuses(tmp_path, monkeypatch)
     assert all(a["disabled"] for a in out["actions"] if a["kind"] in ("refresh", "delete"))
     s = _state(tmp_path, monkeypatch)
     ctx = prepare_jobs.PrepareContext(app_state=s, layers=None, map_=None, notifier=None, name="c", pdir=tmp_path,
-                                      period=PER, meta={}, aoi=None, cancel=threading.Event())
+                                      period=PER, meta={}, aoi=None)
     with pytest.raises(ReadOnlyProject):
         prepare_jobs.run_rows(ctx, [("source", "GLAD-L")])
 

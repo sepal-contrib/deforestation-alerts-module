@@ -735,7 +735,7 @@ Un bouton bleu exécute une ligne pour la première fois ; un bouton orange refa
 
     Une ligne téléchargée n'a pas de bouton : une source déjà téléchargée pour la fenêtre de recherche de la période n'est pas retéléchargée d'elle-même. Pour récupérer les dernières alertes d'un catalogue qui continue d'ajouter des alertes à des dates passées, utilisez **Télécharger à nouveau**. L'application demande d'abord, avec la fenêtre et la date du fichier qu'elle remplace. Il n'est pas proposé pour une source GeoTIFF (« Rien à télécharger à nouveau : lue depuis un fichier »).
 
-Le pied du tableau télécharge par lot. Sélectionnez **Télécharger … en attente** (par exemple **Télécharger 3 en attente**) pour télécharger chaque source qui en a besoin, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » sont ignorées ; une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante. Pendant ce temps, le pied compte ses lignes (« 1 en cours · 2 en attente », puis « 1 sur 3 terminées » ; la ligne en cours affiche sa propre barre de progression) et le bouton devient **Arrêter**, qui s'arrête après la ligne en cours (« Arrêt… »). La flèche à côté du bouton (**Plus d'actions groupées**) ouvre **Tout télécharger à nouveau (…)** : chaque source qui n'est pas bloquée et n'est pas un GeoTIFF est téléchargée à nouveau, après confirmation.
+Chaque ligne se télécharge avec son propre bouton. Sélectionnez les boutons de plusieurs lignes pour toutes les télécharger : chacun lance sa propre tâche, et elles se mettent en file, une ligne à la fois. Les lignes qui indiquent « non couverte » ou « aucune donnée » n'ont pas de bouton ; une ligne qui échoue affiche son erreur en rouge en dessous. La ligne en cours affiche sa propre barre de progression ; une ligne lancée ne peut pas être arrêtée.
 
 Le téléchargement apparaît aussi comme une notification de tâche intitulée **Téléchargement**, avec la source en cours et son pourcentage.
 
@@ -829,7 +829,7 @@ Chaque période choisit un **Mode** pour chaque masque :
     *   -   **Exclure**
         -   Les alertes *dans* le masque sont retirées (par exemple : écarter les alertes situées dans des plantations ou dans l'eau).
 
-Quand plusieurs masques sont actifs, ils s'appliquent tous. Les masques agissent sur les sources harmonisées : un changement de **Mode** rend donc obsolètes les sources de la période. **Harmoniser … en attente** les réharmonise alors sans les télécharger. Une nouvelle période démarre avec les choix de masques de la dernière période.
+Quand plusieurs masques sont actifs, ils s'appliquent tous. Les masques agissent sur les sources harmonisées : un changement de **Mode** rend donc obsolètes les sources de la période. Le bouton **Harmoniser** de chaque ligne les réharmonise alors sans les télécharger. Une nouvelle période démarre avec les choix de masques de la dernière période.
 
 Ajouter un masque
 """""""""""""""""
@@ -974,15 +974,16 @@ Chaque section donne la date et l'heure d'écriture de son fichier, ou indique �
 
 .. labels-ok: Échap
 
-Tout exécuter
-"""""""""""""
+Exécuter plusieurs lignes
+"""""""""""""""""""""""""
 
-Le pied du tableau exécute les lignes par lot. Sélectionnez **Harmoniser … en attente** (par exemple **Harmoniser 4 en attente**). Le bouton aligne d'abord les masques activés dans la période qui en ont besoin, puis harmonise chaque source téléchargée qui en a besoin, une ligne à la fois :
+Chaque ligne s'exécute avec son propre bouton. Le bouton **Harmoniser** d'une source aligne d'abord les masques activés dans la période qui en ont besoin, puis harmonise la source ; le bouton **Aligner** d'un masque n'aligne que ce masque. Sélectionnez les boutons de plusieurs lignes pour toutes les exécuter : chacun lance sa propre tâche, et elles se mettent en file, une ligne à la fois :
 
--   les lignes qui indiquent « non couverte » ou « aucune donnée », et les lignes encore à télécharger, sont ignorées ;
--   une ligne qui échoue affiche son erreur en rouge en dessous, et l'exécution passe à la ligne suivante.
+-   les lignes qui indiquent « non couverte » ou « aucune donnée », et les lignes encore à télécharger, n'ont pas de bouton ;
+-   une ligne qui échoue affiche son erreur en rouge en dessous, et la ligne suivante continue ;
+-   pendant que la tâche d'une source aligne un masque, le bouton **Harmoniser** d'une autre source qui a besoin du même masque affiche « En attente » et démarre une fois le masque aligné.
 
-Pendant l'exécution, le pied compte ses lignes (« 1 en cours · 3 en attente », puis « 2 sur 4 terminées » ; la ligne en cours affiche sa propre barre de progression, qui défile sans fin tant qu'elle n'a pas de pourcentage) et le bouton devient **Arrêter**, qui arrête l'exécution après la ligne en cours. Tant que cette ligne n'est pas finie, le bouton indique « Arrêt… ». Les lignes déjà faites le restent. Ce bouton **Arrêter** n'arrête que l'harmonisation : un téléchargement en cours dans `Alertes <defo-alerts-download_>`_ continue, et le bouton **Arrêter** d'Alertes n'arrête pas une exécution d'harmonisation.
+La ligne en cours affiche sa propre barre de progression, qui défile sans fin tant qu'elle n'a pas de pourcentage. Une ligne lancée ne peut pas être arrêtée ; les lignes déjà faites le restent.
 
 L'exécution apparaît aussi comme une notification de tâche intitulée **Harmoniser**, avec la ligne en cours (par exemple « Harmonisation de GLAD-L »).
 
@@ -999,7 +1000,7 @@ Messages fréquents
     Libérez de l'espace dans votre dossier SEPAL, ou utilisez une grille plus grossière.
 
 « Une ligne de cette exécution est déjà en préparation … »
-    Un masque est en cours d'alignement par l'exécution d'une autre période, ou la ligne tourne encore. Relancez-la une fois celle-ci terminée.
+    Le masque dont vous avez sélectionné **Aligner** est en cours d'alignement par une autre exécution (celle d'une autre période, ou le bouton **Harmoniser** d'une source), ou la ligne tourne encore. Relancez-la une fois celle-ci terminée.
 
 « La géométrie de l'AOI est encore en cours de récupération ; relancez cette ligne dans un instant. »
     Les sources et masques GeoTIFF ont besoin de la forme de l'AOI. Patientez un instant. Si elle n'a pas pu être récupérée, sélectionnez **Vérifier à nouveau** sous le tableau, puis exécutez-les.
@@ -1013,8 +1014,8 @@ Messages fréquents
 « Sans fichier », avec « manquante : fichier introuvable : … » sous la ligne, ou « Masque … : fichier introuvable (…). Remettez le fichier à cet emplacement pour utiliser le masque. »
     Une source ou un masque GeoTIFF a été déplacé, renommé ou supprimé de votre dossier SEPAL. Remettez le fichier à l'emplacement indiqué, ou modifiez la source ou le masque pour pointer vers son nouvel emplacement.
 
-« Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Harmoniser … en attente aligne d'abord les masques. »
-    Une source ne peut pas être harmonisée avant que les masques de la période soient alignés. Sélectionnez **Harmoniser … en attente**, ou d'abord le bouton **Aligner** du masque.
+« Un masque activé dans cette période n'est pas encore aligné sur la grille actuelle ; Harmoniser sur une source aligne d'abord les masques. »
+    Une source ne peut pas être harmonisée avant que les masques de la période soient alignés. Sélectionnez le bouton **Harmoniser** de la source, ou d'abord le bouton **Aligner** du masque.
 
 « Masque … : sa grille native (projection et échelle) est inconnue ; modifiez le masque. »
     L'application ne sait pas comment télécharger ce masque GEE. Ouvrez-le avec **Modifier** dans son menu **Plus d'actions** et enregistrez-le à nouveau, pour que son raster soit revérifié.
@@ -2701,7 +2702,7 @@ La fenêtre de recherche va du 2026-06-03 au 2026-09-30 : les groupes qui ont co
 Alertes
 """""""
 
-Dans `Sources d'alertes <defo-alerts_>`_, la coordinatrice ajoute les trois sources prédéfinies : **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** et **GLAD-S2 (Sentinel-2, 10 m)**, chacune avec **Ajouter aux nouvelles périodes** laissé coché, pour que les périodes suivantes démarrent avec elles. Chacune couvre toute l'AOI. Sous RADD, l'application précise qu'elle ne détecte que dans la forêt tropicale humide primaire : ailleurs dans le département, seules GLAD-L et GLAD-S2 peuvent signaler des alertes. Puis **Télécharger 3 en attente**, dans le pied du tableau, télécharge les trois sources sur la fenêtre de recherche.
+Dans `Sources d'alertes <defo-alerts_>`_, la coordinatrice ajoute les trois sources prédéfinies : **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** et **GLAD-S2 (Sentinel-2, 10 m)**, chacune avec **Ajouter aux nouvelles périodes** laissé coché, pour que les périodes suivantes démarrent avec elles. Chacune couvre toute l'AOI. Sous RADD, l'application précise qu'elle ne détecte que dans la forêt tropicale humide primaire : ailleurs dans le département, seules GLAD-L et GLAD-S2 peuvent signaler des alertes. Puis le bouton **Télécharger** de chaque ligne télécharge les trois sources sur la fenêtre de recherche.
 
 Harmoniser
 """"""""""
@@ -2710,7 +2711,7 @@ Dans `Harmoniser <defo-harmonize_>`_, la coordinatrice :
 
 1.  garde la grille proposée, la zone UTM du département (``EPSG:32719``) à 10 m, et sélectionne **Enregistrer la grille**. La grille fait 41425 × 38561 pixels, soit environ 12,8 Go par source avant compression : l'application prévient donc que les téléchargements prendront du temps ;
 2.  ajoute un masque pour que seules les alertes en forêt comptent : **Ajouter un masque**, l'image Hansen Global Forest Change ``UMD/hansen/global_forest_change_2025_v1_13``, bande ``treecover2000``, nommée ``forest_2000``, mode **Conserver** ; et
-3.  sélectionne **Harmoniser … en attente** dans le pied du tableau, qui aligne le masque, puis harmonise les trois sources.
+3.  sélectionne le bouton **Aligner** du masque puis, une fois que le masque indique « Prête », **Harmoniser** sur la ligne de chaque source, qui harmonise les trois sources.
 
 Le téléchargement et l'harmonisation ont pris environ 15 minutes. Le masque et chaque source indiquent alors « Prête » : GLAD-L avec 2362718 pixels d'alerte, RADD avec 1508527 et GLAD-S2 avec 1462458.
 
@@ -2829,7 +2830,7 @@ Au début du cycle suivant, la coordinatrice sélectionne **Nouvelle période** 
 
 Ensuite :
 
--   **Télécharger 3 en attente** dans `Alertes <defo-alerts_>`_ télécharge les trois sources pour la nouvelle fenêtre, et **Harmoniser … en attente** dans `Harmoniser <defo-harmonize_>`_ les harmonise ; la grille et le masque sont déjà là.
+-   le bouton **Télécharger** de chaque ligne dans `Alertes <defo-alerts_>`_ télécharge les trois sources pour la nouvelle fenêtre, et le bouton **Harmoniser** de chaque ligne dans `Harmoniser <defo-harmonize_>`_ les harmonise ; la grille et le masque sont déjà là.
 -   Dans `Intégrer et vectoriser <defo-integrate_>`_, la coordinatrice reprend les réglages de septembre (1 ha, les 48 plus grandes alertes). Avant de regrouper les pixels en alertes, l'exécution retire tous les pixels situés dans les 48 alertes de septembre, si bien que rien n'est signalé deux fois. Le nouveau jeu contient de nouveau 48 alertes, pour 1177 ha. Aucune ne touche une alerte confirmée en septembre : l'exécution n'en lie donc aucune à une perte antérieure (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_).
 
 L'équipe les examine comme en septembre ; 16 sont examinées à ce stade, dont 11 comme alertes réelles. Avec **Afficher ces alertes sur la carte** et **Afficher les jeux antérieurs** tous deux activés, la carte montre les alertes d'octobre à côté de celles de septembre, dessinées en couleurs plus pâles. Les alertes d'octobre se situent dans les mêmes parties du département que celles de septembre.

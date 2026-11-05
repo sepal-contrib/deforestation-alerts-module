@@ -196,7 +196,7 @@ def test_a_ready_mask_reads_ready_and_its_origin_and_size():
     out = _rows([MaskRow("forest", "gee", Status.CURRENT, Status.CURRENT, True, "keep")], p=p)["forest"]
     assert out["cells"][0]["subtitle"] == f"{EE} · 5.0 MB"  # the download and the aligned file
     state = out["cells"][2]
-    assert (state["type"], state["label"], state["color"]) == ("state", t("steps.prepare.state_ready"), "success")
+    assert (state["type"], state["label"], state["color"]) == ("state", t("steps.prepare.state_ready"), "primary")
     tif = _rows([MaskRow("tif", "file", None, Status.CURRENT, True, "keep")])["tif"]
     assert tif["cells"][0]["subtitle"] == TIF  # no file recorded: no size
 
@@ -1252,14 +1252,3 @@ def test_a_refused_switch_puts_the_cell_back(monkeypatch, flip):
             rc.close()
 
     asyncio.run(main())
-
-
-def test_a_mask_a_stopped_job_holds_reads_its_pill_again_disabled():
-    """Stop reached its job: the mask will not run, so it no longer reads Queued."""
-    from gui.tile.prepare_step import mask_inflight_key
-
-    key = mask_inflight_key("mc", "forest")
-    out = _rows([GEE_MISSING], running={key}, stopped={key})["forest"]
-    state = out["cells"][2]
-    assert state["type"] == "verb" and state["disabled"]
-    assert out["cells"][0]["subtitle"] == t("steps.prepare.why_not_downloaded")

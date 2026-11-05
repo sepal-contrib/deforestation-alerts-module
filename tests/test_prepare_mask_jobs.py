@@ -1,6 +1,6 @@
 """Mask rows in the download/harmonize jobs (spec §7.3): Run all aligns the
 period's masks first, a source Run runs its stale masks first, mask keys share
-the period's Stop scope, a keep mask covering none of the AOI warns, and a mask
+the period's job scope, a keep mask covering none of the AOI warns, and a mask
 switched while its period's Run all runs leaves the row in flight out of date
 (review focus 4).
 
@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import solara
 
 from deforestation_alerts.engine import fingerprint as fp
-from deforestation_alerts.engine.plan import plan_masks, plan_prepare
+from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine.runner import MaskNotReady
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
@@ -50,23 +50,17 @@ def _art(pdir, key, kind, inputs, stats=None):
     return fp.make_artifact(key, kind, pdir, f, inputs, stats=stats)
 
 
-def _run_all(p, pdir, period):
-    return prepare_step.run_all_items(plan_prepare(p, pdir, period), plan_masks(p, pdir, period))
-
-
 def _download(p, pdir, source="GLAD-L"):
-    """Record the source's raw file of February: Harmonize's Run all only runs downloaded sources."""
+    """Record the source's raw file of February: a harmonize only runs downloaded sources."""
     raw = _art(pdir, fp.raw_key(FEB.id, source), "raw_alert", fp.raw_alert_inputs(p, source, p.periods[FEB.id]))
     p.artifacts = {**p.artifacts, raw.key: raw}
 
 
-def test_run_all_runs_the_periods_masks_first(tmp_path, cover):
+def test_a_source_run_runs_the_periods_masks_first(tmp_path, cover):
     p = _project(tmp_path, cover)
     _download(p, tmp_path)
-    assert _run_all(p, tmp_path, p.periods[FEB.id]) == [("mask", "forest"), ("source", "GLAD-L")]
     set_period_mask(p, FEB.id, "forest", on=False)
     # an off mask is not run
-    assert _run_all(p, tmp_path, p.periods[FEB.id]) == [("source", "GLAD-L")]
     assert prepare_step.items_for_source(p, tmp_path, p.periods[FEB.id], "GLAD-L") == [("source", "GLAD-L")]
     set_period_mask(p, FEB.id, "forest", on=True)
     assert prepare_step.items_for_source(p, tmp_path, p.periods[FEB.id], "GLAD-L") == [
@@ -80,31 +74,29 @@ def test_a_ready_mask_is_not_run_again(tmp_path, cover):
     aligned = _art(tmp_path, fp.mask_key("forest"), "mask", fp.mask_inputs(p, "forest"), stats={"on_pixels": 5})
     p.artifacts = {**p.artifacts, aligned.key: aligned}
     _download(p, tmp_path)
-    period = p.periods[FEB.id]
-    assert _run_all(p, tmp_path, period) == [("source", "GLAD-L")]
-    assert prepare_step.items_for_source(p, tmp_path, period, "GLAD-L") == [("source", "GLAD-L")]
+    assert prepare_step.items_for_source(p, tmp_path, p.periods[FEB.id], "GLAD-L") == [("source", "GLAD-L")]
 
 
-def test_mask_keys_share_the_stop_scope_of_the_period_that_started_them():
-    stops = prepare_scope.StopEvents()
+def test_mask_keys_share_the_job_scope_of_the_period_that_started_them():
+    stops = prepare_scope.JobScopes()
     feb, mar = ("mj", "2026-02-01_2026-02-28", "harmonize"), ("mj", "2026-03-01_2026-03-31", "harmonize")
-    event = stops.add(feb, {"prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest"})
+    token = stops.add(feb, {"prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest"})
     stops.add(mar, {"prep:mj:2026-03-01_2026-03-31:RADD"})
     running = {"prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest", "prep:other:@mask:x",
                "prep:mj:2026-03-01_2026-03-31:RADD"}
     assert prepare_step.mask_inflight_key("mj", "forest") == "prep:mj:@mask:forest"
     assert prepare_step.mine_keys(running, stops, *feb) == {
         "prep:mj:2026-02-01_2026-02-28:GLAD-L", "prep:mj:@mask:forest"}
-    # March's Run all and Stop do not see February's mask job, which March's Stop could not stop
+    # March's rows do not count February's mask job as theirs
     assert prepare_step.mine_keys(running, stops, *mar) == {"prep:mj:2026-03-01_2026-03-31:RADD"}
-    stops.discard(feb, event)
+    stops.discard(feb, token)
     assert prepare_step.mine_keys(running, stops, *feb) == set()
 
 
 def _ctx(state, tmp_path, warnings, **overrides):
     fields = dict(
         app_state=state, layers=SimpleNamespace(is_on=lambda k: False), map_=None,
-        notifier=None, name="mj", pdir=tmp_path, period=FEB, meta={}, aoi="AOI", cancel=threading.Event(),
+        notifier=None, name="mj", pdir=tmp_path, period=FEB, meta={}, aoi="AOI",
         row_errors=None, errors_lock=threading.Lock(), on_warning=warnings.append)
     fields.update(overrides)
     return prepare_jobs.PrepareContext(**fields)
@@ -212,8 +204,8 @@ def test_a_mask_row_failure_toast_says_it_is_a_mask(tmp_path, cover, monkeypatch
     assert notifier.errors == ["Mask forest: disk on fire"]
 
 
-def test_a_claim_records_its_stop_scope_before_it_is_published_and_a_refused_one_never():
-    """``InflightKeys.claim(on_claim=)``: the step registers a job's Stop
+def test_a_claim_records_its_job_scope_before_it_is_published_and_a_refused_one_never():
+    """``InflightKeys.claim(on_claim=)``: the step registers a job's
     scope inside a successful claim, before the claimed keys are published,
     so no render ever lists another job's keys as this period's."""
     from gui.scripts.inflight import InflightKeys
@@ -223,6 +215,22 @@ def test_a_claim_records_its_stop_scope_before_it_is_published_and_a_refused_one
     assert seen == [set()] and inflight.value == {"a", "b"}
     assert not inflight.claim("b", "c", on_claim=lambda: seen.append("refused"))
     assert seen == [set()] and inflight.value == {"a", "b"}
+
+
+def test_claim_when_free_waits_for_the_keys_and_takes_them_all_at_once():
+    """A queued job's worker blocks until the other job gives its mask back."""
+    from gui.scripts.inflight import InflightKeys
+
+    inflight, took = InflightKeys(), threading.Event()
+    assert inflight.claim("mask", "other")
+    waiter = threading.Thread(target=lambda: (inflight.claim_when_free("mask", "aoi"), took.set()))
+    waiter.start()
+    assert not took.wait(0.2) and inflight.value == {"mask", "other"}
+    inflight.release("other")  # not the key it waits for
+    assert not took.wait(0.2)
+    inflight.release("mask")
+    waiter.join(2)
+    assert took.is_set() and inflight.value == {"mask", "aoi"}
 
 
 def test_a_mask_removed_meanwhile_is_skipped(tmp_path, cover, monkeypatch):
@@ -328,7 +336,7 @@ def test_localtileserver_accepts_the_mask_colormap(tmp_path):
     assert {tuple(c) for c in steps} == {to_rgba(legend_specs.MASK_COLOR)}
 
 
-def test_a_switch_during_run_all_leaves_the_row_in_flight_out_of_date(tmp_path, cover, monkeypatch):
+def test_a_switch_during_a_run_leaves_the_row_in_flight_out_of_date(tmp_path, cover, monkeypatch):
     state = AppState()
     p = _project(tmp_path, cover)
     raw = _art(tmp_path, fp.mask_raw_key("forest"), "raw_mask", fp.mask_raw_inputs(p, "forest"))
@@ -354,9 +362,8 @@ def test_a_switch_during_run_all_leaves_the_row_in_flight_out_of_date(tmp_path, 
     prepare_jobs.run_rows(_ctx(state, tmp_path, []), [("source", "GLAD-L")])
     live = state.project.value
     row = plan_prepare(live, tmp_path, live.periods[FEB.id])[0]
+    # the next run re-harmonizes it without a download (the raw file is current)
     assert row.raw is fp.Status.CURRENT and row.harmonized is fp.Status.STALE and row.needs_run
-    # the next Run all re-harmonizes it without a download (the raw file is current)
-    assert _run_all(live, tmp_path, live.periods[FEB.id]) == [("source", "GLAD-L")]
 
 
 def test_source_rows_run_in_the_context_mode_and_report_its_stage(tmp_path, cover, monkeypatch):

@@ -90,7 +90,7 @@
     "alerts": {
       "instruction": "Add alert sources and download them for this period.",
       "info_header": "About alert sources",
-      "info_md": "An alert source is a dataset of forest-loss alerts. Each alert pixel is **confirmed** (high confidence) or **probable** (low confidence) and carries the day it was first detected.\n\n- **Predefined:** GLAD-L (Landsat, about 30 m), GLAD-S2 (Sentinel-2, 10 m) and RADD (Sentinel-1, 10 m). RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.\n- **Custom:** an Earth Engine image or image collection, or a GeoTIFF in your SEPAL folder, read through a format preset: *RADD* (alert band 2 probable, 3 confirmed; date `yyddd`), *SEPAL CCDC alerts* and *SEPAL PyEO alerts* (1–2 detections probable, 3 or more confirmed; first detection date in decimal years) or *date only* (one date band in the encoding you choose; every dated pixel is confirmed).\n\nThe list shows the **active period's** sources. **Download** fetches a source over the period's search window, in its own projection and cut to the AOI; a GeoTIFF source is read from its file instead, and **Download … pending** fetches every source that is missing or out of date. The chip on each row is the source's **coverage**: the share of the AOI inside its footprint. A source that covers none of the AOI cannot be added; a partial coverage is a warning.\n\n**Add to new periods** decides which sources a new period starts with. A period holds at most 3 predefined and 6 custom sources. The bin button of a row removes the source from this period only: its downloaded files of this period are deleted, and it stays in the project and can be added again. A custom source can be edited until an alert set uses it; after that, remove it and add a new one.",
+      "info_md": "An alert source is a dataset of forest-loss alerts. Each alert pixel is **confirmed** (high confidence) or **probable** (low confidence) and carries the day it was first detected.\n\n- **Predefined:** GLAD-L (Landsat, about 30 m), GLAD-S2 (Sentinel-2, 10 m) and RADD (Sentinel-1, 10 m). RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.\n- **Custom:** an Earth Engine image or image collection, or a GeoTIFF in your SEPAL folder, read through a format preset: *RADD* (alert band 2 probable, 3 confirmed; date `yyddd`), *SEPAL CCDC alerts* and *SEPAL PyEO alerts* (1–2 detections probable, 3 or more confirmed; first detection date in decimal years) or *date only* (one date band in the encoding you choose; every dated pixel is confirmed).\n\nThe list shows the **active period's** sources. **Download** fetches a source over the period's search window, in its own projection and cut to the AOI; a GeoTIFF source is read from its file instead. The chip on each row is the source's **coverage**: the share of the AOI inside its footprint. A source that covers none of the AOI cannot be added; a partial coverage is a warning.\n\n**Add to new periods** decides which sources a new period starts with. A period holds at most 3 predefined and 6 custom sources. The bin button of a row removes the source from this period only: its downloaded files of this period are deleted, and it stays in the project and can be added again. A custom source can be edited until an alert set uses it; after that, remove it and add a new one.",
       "list_title": "Sources",
       "col_source": "Source",
       "empty": "No alert source yet. Add at least one.",
@@ -129,10 +129,6 @@
       "chip_dates_none": "✗ data ends {last}",
       "remove_from_period_title": "Remove {name} from this period?",
       "remove_from_period_message": "Its downloaded and harmonized files of this period are deleted. The source stays in the project and can be added again.",
-      "download_all": {
-        "one": "Download {n} pending",
-        "other": "Download {n} pending"
-      },
       "read_file": "Read file",
       "add_to_new_periods": "Add to new periods",
       "state_downloaded": "Downloaded",
@@ -356,12 +352,8 @@
     "harmonize": {
       "instruction": "Align the downloads on the project grid and apply the masks.",
       "info_header": "About Harmonize",
-      "info_md": "This step aligns every input of the active period on the project **grid**: one projection in metres and one pixel size.\n\n1. **Grid:** an EPSG code (the target button suggests the UTM zone of the AOI) and a resolution. It is locked once the project has an alert set.\n2. **Masks:** rasters defined once per project (an Earth Engine image or a GeoTIFF, one band; a pixel is on where its value is not zero). Each period chooses which masks are on and whether each **keeps** its area (alerts outside it are removed) or **excludes** it (alerts inside it are removed). A mask is downloaded once and aligned to the grid.\n3. **Sources:** each source downloaded in Alerts (or read from your own file) is aligned to the grid and masked (harmonized).\n\nNothing whose inputs are unchanged runs twice: a new grid or a mask switch only harmonizes again, without downloading. **Harmonize … pending** runs the masks first, then every downloaded source that is missing or out of date, and skips the rows that read *Not covered* or *No data for this period*. Each row needs twice its compressed size free on disk.",
+      "info_md": "This step aligns every input of the active period on the project **grid**: one projection in metres and one pixel size.\n\n1. **Grid:** an EPSG code (the target button suggests the UTM zone of the AOI) and a resolution. It is locked once the project has an alert set.\n2. **Masks:** rasters defined once per project (an Earth Engine image or a GeoTIFF, one band; a pixel is on where its value is not zero). Each period chooses which masks are on and whether each **keeps** its area (alerts outside it are removed) or **excludes** it (alerts inside it are removed). A mask is downloaded once and aligned to the grid.\n3. **Sources:** each source downloaded in Alerts (or read from your own file) is aligned to the grid and masked (harmonized).\n\nNothing whose inputs are unchanged runs twice: a new grid or a mask switch only harmonizes again, without downloading. A source's **Harmonize** first aligns the masks on in the period that need it. Each row needs twice its compressed size free on disk.",
       "download_first": "Download or read it in Alerts first",
-      "run_all": {
-        "one": "Harmonize {n} pending",
-        "other": "Harmonize {n} pending"
-      },
       "job_title": "Harmonize"
     },
     "prepare": {
@@ -382,17 +374,6 @@
       "list_title": "Sources for this period",
       "col_source": "Source",
       "empty": "Add alert sources first.",
-      "footer_strip": "{running} running · {queued} queued",
-      "footer_running": "{running} running",
-      "footer_done": "{done} of {total} done",
-      "footer_stop": "Stop",
-      "footer_stop_tip": "Stops after the row in progress",
-      "footer_stopping": "Stopping…",
-      "footer_more": "More batch actions",
-      "redownload_all": {
-        "one": "Download all again ({n})",
-        "other": "Download all again ({n})"
-      },
       "job_title": "Download",
       "job_row": "Preparing {source}",
       "job_mask_row": "Preparing mask {mask}",
@@ -406,7 +387,7 @@
       "row_failed": "{source}: {error}",
       "aoi_geometry_missing": "The AOI's geometry is still being fetched; run this row again in a moment.",
       "aoi_geometry_failed": "The AOI's geometry could not be fetched, so the GeoTIFF rows cannot run; use Check again, then run them.",
-      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; Harmonize … pending aligns the masks first.",
+      "mask_not_ready": "A mask on in this period is not aligned on the current grid yet; a source's Harmonize aligns the masks first.",
       "mask_file_missing": "Mask {name}: file not found ({path}). Put the file back at this path to use the mask.",
       "mask_name_empty": "Give the mask a name.",
       "mask_name_too_long": "Use at most 24 characters.",
@@ -428,7 +409,7 @@
       "masks_title": "Masks",
       "masks_empty": "No masks yet.",
       "masks_note": "A mask is the pixels where its band is non-zero; zero and no-data are outside it. Keep removes alerts outside the mask; exclude removes alerts inside it.",
-      "masks_switched": "This period's sources are out of date; Harmonize … pending harmonizes them again without downloading them.",
+      "masks_switched": "This period's sources are out of date; Harmonize on each row harmonizes them again without downloading them.",
       "mask_add": "Add mask",
       "mask_add_title": "Add a mask",
       "mask_edit_title": "Edit mask {name}",
@@ -506,11 +487,6 @@
       "redownload_message": "The catalogue keeps adding alerts to past dates. This fetches the latest ones for {window}, and replaces the file downloaded on {date}.",
       "redownload_message_new": "This fetches the alerts for {window}.",
       "redownload_label": "Download again",
-      "redownload_all_title": {
-        "one": "Download {n} source again?",
-        "other": "Download {n} sources again?"
-      },
-      "redownload_all_message": "These sources are downloaded again from their catalogues: {names}.",
       "delete_files_title": "Delete {source}'s harmonized file?",
       "delete_files_message": "Removes the harmonized file of this period ({size}). The download stays; harmonize it again here.",
       "delete_files_message_nosize": "Removes the harmonized file of this period. The download stays; harmonize it again here.",

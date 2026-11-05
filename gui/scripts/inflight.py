@@ -34,6 +34,7 @@ class InflightKeys:
         """
         self._keys = solara.Reactive(frozenset(), key=key)
         self._lock = threading.Lock()
+        self._freed = threading.Condition(self._lock)  # notified on every release
 
     @property
     def value(self) -> frozenset:
@@ -50,7 +51,7 @@ class InflightKeys:
         Returns False (and changes nothing) when any key is already owned.
         ``on_claim`` (no arguments) runs only when the claim succeeds, after
         it is decided and before it is published: what a render derives from
-        the claimed keys (a job's Stop scope) is in place by the claim's own
+        the claimed keys (a job's step scope) is in place by the claim's own
         re-render, and nothing is recorded for a refused claim. It must not
         take a lock a render holds while it reads this set.
         """
@@ -64,7 +65,16 @@ class InflightKeys:
             self._keys.set(current | wanted)
             return True
 
+    def claim_when_free(self, *keys) -> None:
+        """Block until no key is owned, then take them all at once (a worker
+        queued behind another job). Never call it from a click or a render."""
+        wanted = frozenset(keys)
+        with self._freed:
+            self._freed.wait_for(lambda: not self._keys.value & wanted)
+            self._keys.set(self._keys.value | wanted)
+
     def release(self, *keys) -> None:
         """Give the keys back; unknown keys are ignored."""
-        with self._lock:
+        with self._freed:
             self._keys.set(self._keys.value - frozenset(keys))
+            self._freed.notify_all()

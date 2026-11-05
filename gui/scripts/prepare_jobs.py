@@ -2,11 +2,11 @@
 
 One job runs its rows one at a time: mask rows (``("mask", name)``: download
 and align a project mask) and source rows (``("source", name)``), in the
-order given, so Run all aligns the period's masks before the sources read
+order given, so a source's Harmonize aligns the period's masks before the source reads
 them. A keep mask on in the period that covers none of the AOI warns when its
 alignment finishes. Before each row it re-reads the live
 project and stops when that row would no longer belong to the run it was
-started as: the user stopped it, closed or switched the project, or changed
+started as: the user closed or switched the project, or changed
 the period, the AOI or the grid (the Earth Engine AOI is fixed when the run
 starts, so a later row would record fingerprints of inputs it did not use).
 Each row works on a deep copy, and its artifacts are applied only while the
@@ -28,10 +28,7 @@ artifacts are recorded in that project's own saved manifest instead, and the
 run stops (the Integrate ruling #75, applied to rows). Nothing touches the
 project open now, the map or the row errors.
 
-Stop ends the run before its next row by raising ``asyncio.CancelledError``
-inside the tracked job, so the task pill reads "cancelled", not "completed"
-(slice-1 Task 18 minor); the caller treats it as an ordinary end. A refused
-or failed row's message is translated (``_failure_text``): a coverage refusal
+A refused or failed row's message is translated (``_failure_text``): a coverage refusal
 reads its coverage note, an engine error that names a message key reads that
 message (``error_text``), any other error its own text.
 
@@ -46,18 +43,14 @@ item of ``downloads`` fetches its tiles, then a mask goes on to ``align``; a
 source row of a download job stays ``download`` to its end (option C: a
 download never chains into harmonizing) and one of a harmonize job reads
 ``harmonize`` throughout; a mask that downloads nothing starts at ``align``. The
-stage goes when the row ends, and ``on_row_end`` is called for every row the
-run reached, whether it succeeded, failed or was skipped: the step's footer
-counts the running, queued and done rows from them.
+stage goes when the row ends, whether it succeeded, failed or was skipped.
 """
 
-import asyncio
 import contextlib
 import logging
-import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import solara
 
@@ -101,14 +94,12 @@ class PrepareContext:
     period: Period
     meta: dict  # catalogue metadata by catalogue key; only a GLAD-L row that downloads needs it
     aoi: Any  # ee.FeatureCollection; None only when it is unavailable and no row downloads
-    cancel: threading.Event
     row_errors: Optional[solara.Reactive] = None  # {source or "@mask:<name>": message}; None in tests
     errors_lock: Any = None  # threading.Lock shared by the step's jobs around ``row_errors``
     on_warning: Any = None  # called with a warning's text; None: ``notifier.warning`` (tests record it)
     row_progress: Optional[solara.Reactive] = None  # {progress_key: percent} of the downloads; None in tests
     row_stage: Optional[solara.Reactive] = None  # {progress_key: "download"|"harmonize"|"align"}; None in tests
     downloads: frozenset = frozenset()  # the items (``("source", name)`` / ``("mask", name)``) that download
-    on_row_end: Optional[Callable[[], None]] = None  # called once each row the run reached is over
     mode: str = "download"  # the source rows' SourceJob.mode: "download" or "harmonize"
 
 
@@ -183,7 +174,7 @@ def _set_error(ctx: PrepareContext, source: str, message: Optional[str]) -> None
     live = ctx.app_state.project.value
     if live is None or live.name != ctx.name or live.active_period != ctx.period.id:
         return  # the step now shows another project's (or period's) rows
-    # Two jobs of the step (a Run all and a single row) may finish rows at
+    # Two jobs of the step (two rows started apart) may finish rows at
     # once: the read-modify-write must not drop the other's error.
     with ctx.errors_lock or contextlib.nullcontext():
         errors = dict(ctx.row_errors.value)
@@ -349,7 +340,7 @@ def _row_reporter(ctx: PrepareContext, task, title: str, key: tuple, done_step: 
 
 def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
     """Run ``rows`` (``("mask", name)`` / ``("source", name)`` items, a bare
-    string being a source) one at a time, in order: Run all puts the
+    string being a source) one at a time, in order: a source's Harmonize puts the
     period's masks first (spec §7.3). Each row starts from a deep copy of the
     live project, so a row sees the masks aligned before it, and a mask
     switched while a row runs leaves that row recorded with the old choice
@@ -362,8 +353,6 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
     title = t("steps.harmonize.job_title" if ctx.mode == "harmonize" else "steps.prepare.job_title")
     with writing(ctx.name), tracked_job(ctx.notifier, title, total_steps=len(items)) as task:
         for kind, name in items:
-            if ctx.cancel.is_set():
-                raise asyncio.CancelledError()  # pysepal marks the task CANCELLED
             live = _live(ctx, scope)
             if live is None:
                 return
@@ -374,8 +363,6 @@ def run_rows(ctx: PrepareContext, rows: list, force: bool = False) -> None:
             finally:
                 # the row is over, whichever way, and only now that it is recorded
                 _set_stage(ctx, key, None)
-                if ctx.on_row_end is not None:
-                    ctx.on_row_end()
 
 
 def _run_item(ctx: PrepareContext, task, title: str, scope: tuple, live, kind: str, name: str, key: tuple,

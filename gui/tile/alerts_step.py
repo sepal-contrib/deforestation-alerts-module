@@ -15,10 +15,9 @@ key per row (``prep:{project}:{period}:{source}``), so a row downloading here
 reads running there and two jobs never run one row. A download runs with
 ``mode="download"`` and only fetches the raw file: it never chains into
 harmonizing, which waits for its own click in Harmonize (option C, user
-decision 2026-10-30). The two steps' jobs are independent: this step's Stop,
-footer counts and Download all are its downloads' own (Stop scope
+decision 2026-10-30). The two steps' jobs are independent (scope
 ``(project, period, "download")``); a row a Harmonize job holds keeps its
-download state with its pill and actions off, and Download all leaves it out.
+download state with its pill and actions off.
 
 🗑 is *Remove from this period*: it drops this period's raw and harmonized
 files of the source and its use in the period; the definition stays in the
@@ -47,15 +46,14 @@ from gui.scripts import aoi_io, raster_map, source_layers
 from gui.scripts.coverage_ui import TONE_COLORS, CheckAgainButton, coverage_chips, note_text
 from gui.scripts.error_text import error_text
 from gui.scripts.prepare_jobs import progress_key
-from gui.scripts.prepare_scope import inflight_key, start_items, stop_scope
+from gui.scripts.prepare_scope import inflight_key, start_items
 from gui.scripts.prepare_view import download_state, download_subtitle, source_details, source_label
 from gui.scripts.setup_guard import refuse_setup, update_setup
 from gui.store import workflow_steps
 from gui.store.project_writers import is_writing
 from gui.tile.prepare_step import (
-    free_items, mine_keys, mine_rows, redownload_items, refresh_confirm, scope_stages, source_columns,
+    mine_keys, refresh_confirm, scope_stages, source_columns,
 )
-from gui.widget.batch_footer import BatchFooter, footer_counts
 from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.details_dialog import DetailsDialog
 from gui.widget.product_table import ProductTable
@@ -79,18 +77,13 @@ def _art(p, key):
     return None if art is None or art.no_data else art
 
 
-def download_items(rows) -> list:
-    """Download N pending's rows: the raw file is missing or out of date, and the row can run."""
-    return [("source", r.source) for r in rows if r.raw is not Status.CURRENT and not r.blocked]
-
-
-def alert_rows(p, pdir, period, *, mine, errors, stages, progress, on, building, locked, writing, stopped,
+def alert_rows(p, pdir, period, *, mine, errors, stages, progress, on, building, locked, writing,
                run, toggle, on_info, on_refresh, on_remove, rows=None, info_open=None, pending_cov=False,
                held=None) -> list:
     """The ``ProductTable`` rows of the Alerts step (spec §2); pure. One per
     source of ``period``; ``rows``: its ``plan_prepare`` (read when None).
 
-    ``mine``/``stages``/``progress``/``stopped``/``errors``: the step's own
+    ``mine``/``stages``/``progress``/``errors``: the step's own
     (download) job state, as ``prepare_step.build_rows`` reads it; ``held``:
     every claimed key (None: ``mine``): a row a Harmonize job holds keeps its
     download state, its pill and actions off; ``on``/``building``: the
@@ -108,7 +101,7 @@ def alert_rows(p, pdir, period, *, mine, errors, stages, progress, on, building,
         pkey = progress_key(p.name, period.id, "source", r.source)
         running = stages.get(pkey) if downloading else None
         pct = progress.get(pkey) if downloading else None
-        queued = downloading and running is None and key_inflight not in stopped
+        queued = downloading and running is None
         file_source = is_file_source(src)
         reason = source_reason(p, period, r.source) if not (r.raw is Status.CURRENT or r.blocked) else None
         subtitle, tone = download_subtitle(r, file_source=file_source, raw_art=_art(p, raw_key(period.id, r.source)),
@@ -120,7 +113,7 @@ def alert_rows(p, pdir, period, *, mine, errors, stages, progress, on, building,
             title["subtitle_tone"] = tone
         state = download_state(r, file_source=file_source, stage=running, queued=queued, pct=pct,
                                failed=r.source in errors, locked=locked, on_run=(lambda s=r.source: run(s)))
-        if busy and state["type"] == "verb":  # a stopped job still holds the row
+        if busy and state["type"] == "verb":  # a Harmonize job holds the row
             state["disabled"] = True
         notes = []
         if r.file_missing:
@@ -160,7 +153,7 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
     new_periods = solara.use_reactive(True)  # the modal's Add to new periods
     editing, set_editing = solara.use_state(None)
     info_source, set_info_source = solara.use_state(None)
-    pending_refresh, set_pending_refresh = solara.use_state(None)  # a source to download again, "*" for all
+    pending_refresh, set_pending_refresh = solara.use_state(None)  # a source to download again
     pending_remove, set_pending_remove = solara.use_state(None)
     meta = app_state.catalogue_meta.value  # GLAD-L's band list, fetched by RemoteFactsLoader
     pending_cov = app_state.coverage_pending.value
@@ -179,8 +172,7 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
     rows = plan_prepare(p, pdir, period)
     by_source = {r.source: r for r in rows}
     step_scope = (p.name, period.id, "download")
-    mine = mine_keys(running, jobs.stops, *step_scope)
-    stopped = jobs.stops.stopped(step_scope)
+    mine = mine_keys(running, jobs.scopes, *step_scope)
     stages = scope_stages(jobs.row_stage.value, p.name, period.id)
 
     def _start(items, force=False):
@@ -327,7 +319,7 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
     shown = info_source if info_source in by_source else None  # the dialog goes with its row
     table_rows = alert_rows(p, pdir, period, rows=rows, mine=mine, errors=errors, stages=stages,
                             progress=jobs.row_progress.value, on=on, building=building, locked=ro,
-                            writing=is_writing(p.name), stopped=stopped, run=lambda s: _start([("source", s)]),
+                            writing=is_writing(p.name), run=lambda s: _start([("source", s)]),
                             toggle=_toggle, on_info=lambda s: set_info_source(None if s == shown else s),
                             on_refresh=set_pending_refresh, on_remove=set_pending_remove, info_open=shown,
                             pending_cov=pending_cov, held=set(running))
@@ -342,20 +334,14 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
     def _set_new_periods(on_):
         update_setup(app_state, p.name, lambda live: set_new_period_source(live, shown, on_), notifications)
 
-    redownload = redownload_items(p, rows)
-    # a confirm goes with its row, Download all again's with its menu item
-    refreshing = pending_refresh if pending_refresh in by_source or (pending_refresh == "*" and redownload) else None
+    refreshing = pending_refresh if pending_refresh in by_source else None  # a confirm goes with its row
 
     def _confirm_refresh():
         set_pending_refresh(None)
-        _start(redownload if refreshing == "*" else [("source", refreshing)], force=True)
+        _start([("source", refreshing)], force=True)
 
-    refresh_title, refresh_message = refresh_confirm(p, period, refreshing, redownload) if refreshing else ("", "")
+    refresh_title, refresh_message = refresh_confirm(p, period, refreshing) if refreshing else ("", "")
     used = [s for s in sets_using_source(p, removing) if p.alert_sets[s].period_id == period.id] if removing else []
-    pending = free_items(download_items(rows), running, p.name, period.id)
-    counts = footer_counts(mine_rows(p, period, mine), stages, jobs.batch.value.get(step_scope))
-    menu = [{"label": tn("steps.prepare.redownload_all", len(redownload)), "icon": "mdi-download",
-             "on_click": lambda: set_pending_refresh("*"), "disabled": ro}] if redownload else []
     start, end = period.search_window()[0], period.end
 
     with solara.Column(style="gap:16px;"):
@@ -368,12 +354,6 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
                       disabled=ro, on_click=_open_add)
         ProductTable(title=t("steps.alerts.list_title"), columns=source_columns(), rows=table_rows,
                      empty_text=t("steps.alerts.empty"))
-        BatchFooter(pending=len(pending), run_label=tn("steps.alerts.download_all", len(pending)),
-                    on_run=lambda: _start(pending), on_stop=lambda: stop_scope(jobs, *step_scope),
-                    # Run stays off while this step's downloads run (a Harmonize job never turns it off)
-                    menu=menu, counts=counts, disabled=ro or bool(mine),
-                    # every job of the scope is stopped (a row started since Stop brings Stop back)
-                    stopping=step_scope in jobs.stopping.value and bool(mine) and mine <= stopped)
         # spec §6.2 "Failure": the sources left without a record can be checked again
         # (a GeoTIFF's download never waits for the AOI sidecar: only Harmonize offers its Check again)
         CheckAgainButton(app_state=app_state, show=(

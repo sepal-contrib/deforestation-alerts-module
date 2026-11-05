@@ -339,9 +339,9 @@ def test_prepare_state_counts_the_status_cells_by_their_text(_walk_browser):
         page.close()
 
 
-def test_prepare_footer_and_row_helpers_find_the_pills_actions_and_stop(_walk_browser):
+def test_prepare_row_helpers_find_the_pills_actions_and_a_running_row(_walk_browser):
     """The verb pill by its label, an icon action by the tooltip on its span,
-    and the footer's Run / Stop swap (``pending_count`` is 0 while Stop shows)."""
+    the enabled pills ``pending_count`` counts and a running row."""
     page = _walk_browser.new_page()
     try:
         page.set_content("""<div class="right-panel">
@@ -349,13 +349,13 @@ def test_prepare_footer_and_row_helpers_find_the_pills_actions_and_stop(_walk_br
             <div><button>Harmonize</button></div>
             <span title="Download again"><button disabled><i class="mdi-refresh"></i></button></span></div>
           <div style="display:grid;grid-template-columns:1fr 1fr"><div>RADD</div><div><i></i><div>Ready</div></div></div>
-          <button>Harmonize 2 pending</button></div>""")
+          <div><button disabled>Harmonize</button></div><div id="queued">Queued</div></div>""")
         assert phases.row_pill(page, "GLAD-L", "harmonize").count() == 1
         assert phases.row_pill(page, "GLAD-L", "download").count() == 0
         assert phases.row_pill(page, "RADD", "harmonize").count() == 0
         assert phases.row_action(page, "GLAD-L", "steps.prepare.action_download_again").is_disabled()
-        assert phases.pending_count(page) == 2 and not phases.job_running(page)
-        page.evaluate("document.querySelector('.right-panel > button').textContent = 'Stop'")
-        assert phases.job_running(page) and phases.pending_count(page) == 0
+        assert phases.pending_count(page) == 1 and phases.job_running(page)  # a disabled pill is not counted
+        page.evaluate("document.getElementById('queued').remove()")
+        assert not phases.job_running(page)
     finally:
         page.close()
