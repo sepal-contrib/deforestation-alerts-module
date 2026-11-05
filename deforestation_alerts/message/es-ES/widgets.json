@@ -86,6 +86,8 @@
       "other": "{count} grupos"
     },
     "step_badge": "{n} / {total}",
+    "back": "Atrás",
+    "next": "Siguiente",
     "count_empty": "nada todavía",
     "count_optional": "opcional",
     "level_prepare": "Preparar alertas",

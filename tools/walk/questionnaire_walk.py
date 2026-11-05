@@ -155,19 +155,14 @@ def click_input_control(page, scope, label):
     page.wait_for_timeout(400)
 
 
-def step_keys(page):
-    keys = page.evaluate("() => [...document.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey)")
-    return list(dict.fromkeys(keys))
-
-
 # ------------------------------------------------------------------- checks
 def check_1_rail(page, rec, *, out):
-    # two levels in one strip: both levels' steps
-    levels = page.evaluate("() => [...document.querySelectorAll('[data-level-key]')].map(e => e.dataset.levelKey)")
+    # two levels in the jump menu: both levels' steps
+    levels = w.level_keys(page)
     rec["levels"] = levels
     assert levels == ["prepare", "review"], levels
     w.goto_step(page, "questionnaire", 2000)
-    keys = step_keys(page)
+    keys = w.step_keys(page)
     rec["steps"] = keys
     assert keys[-3:] == ["layers", "questionnaire", "evaluators"] and len(keys) == 8, keys
     assert "Questionnaire" in w.panel_text(page), w.panel_text(page)[:300]

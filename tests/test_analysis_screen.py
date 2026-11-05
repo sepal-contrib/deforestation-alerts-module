@@ -304,9 +304,8 @@ def test_the_header_has_no_start_analysis_and_no_next_on_the_last_step():
     )
     try:
         assert not _by_class(box, "defo-start-analysis")
-        (nxt,) = [w for w in _widgets(box) if isinstance(w, v.Btn)
-                  and any(isinstance(c, v.Icon) and c.children == ["mdi-chevron-right"] for c in w.children)]
-        assert nxt.disabled, "the last step has no Next"
+        navs = [(w.attributes or {}).get("data-nav") for w in _widgets(box) if isinstance(w, v.Btn)]
+        assert "back" in navs and "next" not in navs, "the last step has no Next"
     finally:
         rc.close()
 

@@ -4,8 +4,9 @@ A walk script (``tools/walk/slice<N>_walk.py``) starts the app with
 ``start_server``, drives it with these helpers, writes a JSON report and
 screenshots under its ``--out`` folder, and always calls ``stop_server``.
 Selectors are the ones the slice-1 walks proved: ``[data-step-id=N]`` for
-rail items, ``[data-step-key=KEY]`` for the pipeline header's bars (both
-levels'; ``[data-level-key=LEVEL]`` for the level labels), ``.right-panel``
+rail items, ``[data-active-step]`` for the header's title (the current step),
+``[data-step-key=KEY]`` / ``[data-level-key=LEVEL]`` for the rows / level
+headings of its jump menu (open it with ``open_steps_menu``), ``.right-panel``
 for the workflow panel (``PANEL``: that panel, or the analysis screen's
 console ``.defo-analysis-right`` while that screen shows), ``.dialog-card`` for
 rail dialogs and
@@ -308,34 +309,54 @@ def back_to_workflow(page, wait=1000):
 
 
 def step_active(page, key) -> bool:
-    """Whether the Workflow panel shows step ``key``. The strip holds both
-    levels' segments, each level's in its own row; the current one is
-    ``aria-current="step"``, and the badge reads "<its number> / <its level's
-    steps>" (any language), so it is checked too: the header re-renders the
-    mark and the badge together."""
-    return page.evaluate("""key => {
-        const seg = [...document.querySelectorAll('.right-panel [data-step-key]')]
-            .find(e => e.dataset.stepKey === key);
-        if (!seg || seg.getAttribute('aria-current') !== 'step') return false;
-        const badge = [...document.querySelectorAll('.right-panel .defo-step-badge')]
-            .find(e => e.getBoundingClientRect().width > 0);
-        if (!badge) return false;
-        const text = badge.textContent.trim();
-        const keys = [...seg.parentElement.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey);
-        return text === `${keys.indexOf(key) + 1} / ${keys.length}`;
-    }""", key)
+    """Whether the Workflow panel shows step ``key``: the header's title
+    (``[data-active-step]``) names it."""
+    return page.evaluate("""key => [...document.querySelectorAll('.right-panel [data-active-step]')]
+        .some(e => e.getBoundingClientRect().width > 0 && e.dataset.activeStep === key)""", key)
 
 
-def _segment(page, key):
-    return page.locator(f'.right-panel [data-step-key="{key}"]')
+#: The open jump menu (Vuetify moves a menu's content to the app's root).
+STEPS_MENU = ".menuable__content__active"
+
+
+def open_steps_menu(page):
+    """Open the header's jump menu (its rows: ``[data-step-key]``)."""
+    if not page.locator(f"{STEPS_MENU} [data-step-key]").count():
+        page.locator(".right-panel .sr-step-jump:visible").first.click()
+    page.locator(f"{STEPS_MENU} [data-step-key]").first.wait_for(timeout=30000)
+
+
+def close_steps_menu(page):
+    """Close the jump menu: its title toggles it (Escape needs the focus in the menu)."""
+    if page.locator(f"{STEPS_MENU} [data-step-key]").count():
+        page.locator(".right-panel .sr-step-jump:visible").first.click()
+        wait_for(lambda: not page.locator(f"{STEPS_MENU} [data-step-key]").count(), 10, "the steps menu closed")
+
+
+def _menu_attr(page, attr):
+    open_steps_menu(page)
+    values = page.evaluate(f"""() => [...document.querySelectorAll('{STEPS_MENU} [{attr}]')]
+        .map(e => e.getAttribute('{attr}'))""")
+    close_steps_menu(page)
+    return values
+
+
+def step_keys(page):
+    """The workflow's steps, in order, as the jump menu lists them."""
+    return _menu_attr(page, "data-step-key")
+
+
+def level_keys(page):
+    """The jump menu's level headings, in order."""
+    return _menu_attr(page, "data-level-key")
 
 
 def goto_step(page, key, wait=1500):
     """A workflow step by key, from the workflow or from the analysis screen.
 
-    The strip shows both levels' steps, so any step is one click on its bar.
-    ``"analysis"`` is not a step: it is the analysis screen, which
-    Evaluation's *Start analysis* opens (enabled once an alert set exists).
+    Any step is its row in the header's jump menu. ``"analysis"`` is not a
+    step: it is the analysis screen, which Evaluation's *Start analysis*
+    opens (enabled once an alert set exists).
     """
     back_to_workflow(page)
     if key == "analysis":
@@ -350,11 +371,17 @@ def goto_step(page, key, wait=1500):
         wait_for(lambda: page.locator(SCREEN_ON).count(), 30, "the analysis screen")
         page.wait_for_timeout(wait)
         return
-    # A locked bar is aria-disabled, which Playwright will not click, and a
-    # walk clicks one to see that the step stays locked: force only that one,
-    # as force also skips the wait for a bar the header is re-rendering
-    bar = _segment(page, key).first
-    bar.click(force=bar.get_attribute("aria-disabled") == "true")
+    # A locked row is aria-disabled, which Playwright will not click, and a
+    # walk clicks one to see that the step stays locked: force only that one.
+    # It leaves the menu open (close it); any other row closes it itself.
+    open_steps_menu(page)
+    row = page.locator(f'{STEPS_MENU} [data-step-key="{key}"]').first
+    locked = row.get_attribute("aria-disabled") == "true"
+    row.click(force=locked)
+    if locked:
+        close_steps_menu(page)
+    else:
+        wait_for(lambda: not page.locator(f"{STEPS_MENU} [data-step-key]").count(), 30, "the steps menu closed")
     page.wait_for_timeout(wait)
 
 

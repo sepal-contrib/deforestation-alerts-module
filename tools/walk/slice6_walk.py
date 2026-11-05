@@ -193,11 +193,13 @@ def english_left(text, code) -> list:
 
 def _switch(page, code):
     """Pick ``code`` in the language selector and wait until the pipeline
-    header reads that language (the harmonize segment's tooltip is its label)."""
+    header reads that language (its title's tooltip starts with the current
+    step's label)."""
     page.locator("button:has(.mdi-translate)").first.click()
     page.locator(f'{ph.MODAL} .v-list-item:has-text("({code})")').first.click()
-    label = catalogue(code, "app")["app"]["drawer_item"]["harmonize"]
-    page.locator(f'[data-step-key="harmonize"][title^="{label}"]').first.wait_for(state="attached", timeout=60000)
+    labels = set(catalogue(code, "app")["app"]["drawer_item"].values())
+    title = page.locator(".right-panel [data-active-step]").first
+    w.wait_for(lambda: (title.get_attribute("title") or "").split(" · ")[0] in labels, 60, f"the header in {code}")
 
 
 def languages(page, rec, *, out):
@@ -257,7 +259,7 @@ def languages(page, rec, *, out):
         assert all(v in legend for v in statuses), f"{code}: the legend lacks {statuses}"
         w.shot(page, out, f"lang_{code}")
         assert w.close_dialog(page), f"{code}: the Overview dialog did not close"
-        page.locator('[data-step-key="harmonize"]:visible').first.wait_for(timeout=30000)
+        page.locator('.right-panel [data-active-step]:visible').first.wait_for(timeout=30000)
     _switch(page, "en")
     w.goto_step(page, "harmonize", 2000)
     w.wait_for(lambda: english_title in w.panel_text(page), 60, "the app back in English")

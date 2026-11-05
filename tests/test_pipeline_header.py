@@ -107,12 +107,6 @@ def _render(active_key, p):
     return box, rc, seen
 
 
-def _htmls(rc, attr):
-    import ipyvuetify as v
-
-    return [w for w in rc.find(v.Html).widgets if attr in (w.attributes or {})]
-
-
 def _strings(widget):
     if isinstance(widget, str):
         return [widget]
@@ -123,111 +117,133 @@ def _strings(widget):
     return out + ([value] if isinstance(value, str) else [])
 
 
-def _labels(rc):
-    return {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}
+def _attr(rc, cls, attr):
+    return {w.attributes[attr]: w for w in rc.find(cls).widgets if attr in (w.attributes or {})}
 
 
-def _bars(rc):
-    return {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}
+def _rows(rc):
+    import ipyvuetify as v
+
+    return _attr(rc, v.ListItem, "data-step-key")
 
 
-def test_strip_shows_both_levels_side_by_side():
+def _levels(rc):
+    import ipyvuetify as v
+
+    return _attr(rc, v.Subheader, "data-level-key")
+
+
+def _footer(rc):
+    import ipyvuetify as v
+
+    return _attr(rc, v.Btn, "data-nav")
+
+
+def test_menu_lists_every_step_under_its_level():
     from gui.store.workflow_steps import STEPS
 
     for key in ("integrate", "evaluators"):
         box, rc, _ = _render(key, _project(n_alerts=3))
-        assert list(_bars(rc)) == [s.key for s in STEPS]
+        assert list(_rows(rc)) == [s.key for s in STEPS]
+        assert list(_levels(rc)) == ["prepare", "review"]
         rc.close()
 
 
-def test_labels_and_bars_are_buttons():
-    from gui.i18n import t
-    from gui.store.workflow_steps import STEPS
-
-    box, rc, _ = _render("aoi", _project(aoi_name="Acre"))
-    labels, bars = _labels(rc), _bars(rc)
-    assert {w.tag for w in [*labels.values(), *bars.values()]} == {"button"}
-    assert labels["prepare"].attributes["aria-label"] == t("workflow.level_prepare")
-    assert bars["integrate"].attributes["aria-label"] == t(STEPS[4].label_key)
-    assert bars["aoi"].attributes["aria-current"] == "step"
-    assert bars["period"].attributes["aria-current"] == "false"
-    # Review is locked without a set: its label and bars say so
-    assert labels["review"].attributes["aria-disabled"] == "true"
-    assert labels["prepare"].attributes["aria-disabled"] == "false"
-    assert bars["evaluators"].attributes["aria-disabled"] == "true"
-    rc.close()
-
-
-def test_level_labels_with_lock_reason_and_tick():
+def test_menu_rows_mark_the_current_and_the_locked_step():
     from gui.i18n import t
 
-    box, rc, _ = _render("aoi", _project(aoi_name="Acre"))
-    labels = _labels(rc)
-    assert list(labels) == ["prepare", "review"]
-    text = "".join(_strings(box))
-    assert t("workflow.level_prepare") in text and t("workflow.level_review") in text
-    assert t("workflow.lock_review") in labels["review"].attributes["title"]
-    assert "mdi-lock-outline" in _strings(labels["review"])
-    # The active level's label is marked
-    assert "defo-level-label--on" in labels["prepare"].class_
-    assert "defo-level-label--on" not in labels["review"].class_
-    rc.close()
-    # A solo review gives Evaluation, Review's last required step, its
-    # output: the Review label is ticked. Integrate is locked in this fixture
-    # (no ready sources), so Prepare has no tick.
-    p = _project(n_alerts=3)
-    p.multi_evaluator = False
-    box, rc, _ = _render("layers", p)
-    labels = _labels(rc)
-    assert "".join(_strings(labels["review"])).startswith("✓")
-    assert "✓" not in "".join(_strings(labels["prepare"]))
+    box, rc, seen = _render("aoi", _project(aoi_name="Acre"))
+    rows = _rows(rc)
+    assert rows["aoi"].attributes["aria-current"] == "step"
+    assert rows["period"].attributes["aria-current"] == "false"
+    # Review is locked without a set: its rows say so, with the reason
+    assert rows["evaluators"].attributes["aria-disabled"] == "true" and rows["evaluators"].disabled
+    assert "mdi-lock-outline" in _strings(rows["evaluators"])
+    assert t("workflow.lock_review") in rows["evaluators"].attributes["title"]
+    rows["evaluators"].fire_event("click", None)
+    assert seen == []
+    rows["period"].fire_event("click", None)
+    assert seen == [1]
     rc.close()
 
 
-def test_long_labels_are_cut_with_the_full_text_as_tooltip():
-    from gui.i18n import t
-
-    box, rc, _ = _render("aoi", _project(aoi_name="Acre"))
-    prepare = _labels(rc)["prepare"]
-    assert "text-overflow: ellipsis" in prepare.style_ and "white-space: nowrap" in prepare.style_
-    assert prepare.attributes["title"] == t("workflow.level_prepare")
-    rc.close()
-
-
-def test_a_bar_of_the_other_level_navigates_there():
+def test_a_row_of_the_other_level_navigates_there():
     from gui.store.workflow_steps import step_index
 
     box, rc, seen = _render("aoi", _project(aoi_name="Acre", n_alerts=3))
-    _bars(rc)["evaluators"].fire_event("click", None)
+    _rows(rc)["evaluators"].fire_event("click", None)
     assert seen == [step_index("evaluators")]
     rc.close()
 
 
-def test_a_locked_bar_does_not_navigate():
-    box, rc, seen = _render("aoi", _project(aoi_name="Acre"))
-    _bars(rc)["evaluators"].fire_event("click", None)
-    assert seen == []
+def test_level_heading_ticked_once_its_last_required_step_has_outputs(monkeypatch):
+    from gui.store import workflow_steps
+
+    # A solo review gives Evaluation, Review's last required step, its
+    # output. Integrate is locked in this fixture (no ready sources).
+    p = _project(n_alerts=3)
+    p.multi_evaluator = False
+    box, rc, _ = _render("layers", p)
+    levels = _levels(rc)
+    assert "".join(_strings(levels["review"])).startswith("✓")
+    assert "✓" not in "".join(_strings(levels["prepare"]))
+    rc.close()
+    monkeypatch.setattr(workflow_steps, "_ready", lambda p: ["GLAD-L"])  # Integrate unlocked
+    box, rc, _ = _render("layers", _project(n_alerts=3))
+    assert "".join(_strings(_levels(rc)["prepare"])).startswith("✓")
     rc.close()
 
 
-def test_review_tab_locked_without_set():
+def test_dots_tell_the_step_state():
+    from gui.store.workflow_steps import STEPS, StepStatus, step_index
+    from gui.widget.pipeline_header import dot_style
+
+    p = _project(n_alerts=3)
+    integrate, layers = STEPS[step_index("integrate")], STEPS[step_index("layers")]
+    assert "background: #123456" in dot_style(integrate, StepStatus.HAS_OUTPUTS, p, "#123456")
+    empty = dot_style(integrate, StepStatus.EMPTY, p, "#123456")
+    assert "background" not in empty and "solid rgba(128" in empty
+    # an optional step is dashed, hollow while it made nothing of its own
+    # (passed-but-empty is HAS_OUTPUTS)
+    opt = dot_style(layers, StepStatus.HAS_OUTPUTS, p, "#123456")
+    assert "dashed #123456" in opt and "background" not in opt
+
+
+def test_footer_back_and_next_cross_levels():
+    from gui.store.workflow_steps import STEPS, step_index
     from gui.i18n import t
 
-    box, rc, seen = _render("aoi", _project(aoi_name="Acre"))
-    _labels(rc)["review"].fire_event("click", None)
-    assert seen == []
-    assert t("workflow.lock_review") in "".join(_strings(box))
-    rc.close()
-
-
-def test_review_tab_opens_its_first_unlocked_step():
-    from gui.store.workflow_steps import step_index
-
     box, rc, seen = _render("integrate", _project(n_alerts=3))
-    review = {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}["review"]
-    review.fire_event("click", None)
+    nxt = _footer(rc)["next"]
+    assert nxt.attributes["title"] == t(STEPS[step_index("layers")].label_key)
+    nxt.fire_event("click", None)
     assert seen == [step_index("layers")]
     rc.close()
+    # Back crosses to Prepare: its nearest unlocked step (the fixture has no
+    # ready sources, so Integrate itself is locked and Back lands on AOI).
+    box, rc, seen = _render("layers", _project(n_alerts=3))
+    _footer(rc)["back"].fire_event("click", None)
+    assert seen == [step_index("aoi")]
+    rc.close()
+
+
+def test_footer_has_no_back_on_the_first_step_and_no_next_on_the_last():
+    box, rc, _ = _render("aoi", _project(aoi_name="Acre", n_alerts=3))
+    assert list(_footer(rc)) == ["next"]
+    rc.close()
+    box, rc, _ = _render("evaluators", _project(n_alerts=3))
+    assert list(_footer(rc)) == ["back"]
+    rc.close()
+
+
+def test_footer_labels_stay_fixed_whatever_the_step():
+    from gui.i18n import t
+
+    for key in ("period", "integrate", "layers"):
+        box, rc, _ = _render(key, _project(aoi_name="Acre", n_alerts=3))
+        f = _footer(rc)
+        assert t("workflow.back") in _strings(f["back"]) and t("workflow.next") in _strings(f["next"])
+        rc.close()
 
 
 def _nav_button(rc, icon):
@@ -236,21 +252,6 @@ def _nav_button(rc, icon):
     (btn,) = [w for w in rc.find(v.Btn).widgets
               if any(isinstance(c, v.Icon) and c.children == [icon] for c in w.children)]
     return btn
-
-
-def test_next_from_integrate_opens_review():
-    from gui.store.workflow_steps import step_index
-
-    box, rc, seen = _render("integrate", _project(n_alerts=3))
-    _nav_button(rc, "mdi-chevron-right").fire_event("click", None)
-    assert seen == [step_index("layers")]
-    rc.close()
-    # Back crosses to Prepare: its nearest unlocked step (the fixture has no
-    # ready sources, so Integrate itself is locked and Back lands on AOI).
-    box, rc, seen = _render("layers", _project(n_alerts=3))
-    _nav_button(rc, "mdi-chevron-left").fire_event("click", None)
-    assert seen == [step_index("aoi")]
-    rc.close()
 
 
 def test_instruction_line_and_info_follow_the_step():
@@ -276,17 +277,22 @@ def _badge(rc):
     return badge.children[0]
 
 
-def test_step_badge_counts_the_level():
+def test_step_badge_counts_all_steps():
     from gui.i18n import t
+    from gui.store.workflow_steps import STEPS
+
+    for n, key in ((1, "aoi"), (5, "integrate"), (6, "layers"), (8, "evaluators")):
+        box, rc, _ = _render(key, _project(n_alerts=3))
+        assert _badge(rc) == t("workflow.step_badge", n=n, total=len(STEPS))
+        rc.close()
+
+
+def test_activator_names_the_current_step():
+    import ipyvuetify as v
 
     box, rc, _ = _render("layers", _project(n_alerts=3))
-    assert _badge(rc) == t("workflow.step_badge", n=1, total=3)
-    rc.close()
-    box, rc, _ = _render("evaluators", _project(n_alerts=3))
-    assert _badge(rc) == t("workflow.step_badge", n=3, total=3)
-    rc.close()
-    box, rc, _ = _render("integrate", _project(n_alerts=3))
-    assert _badge(rc) == t("workflow.step_badge", n=5, total=5)
+    (wrap,) = [w for w in rc.find(v.Html).widgets if w.class_ == "sr-step-jump-wrap"]
+    assert wrap.children[0].activator[0].attributes["data-active-step"] == "layers"
     rc.close()
 
 
@@ -301,7 +307,7 @@ def test_an_empty_optional_step_shows_no_count_chip():
     from gui.i18n import t
 
     box, rc, _ = _render("layers", _project(n_alerts=3))
-    assert _title_strings(rc) == [t("workflow.step_badge", n=1, total=3), t("app.drawer_item.layers"), "mdi-menu-down"]
+    assert _title_strings(rc) == [t("workflow.step_badge", n=6, total=8), t("app.drawer_item.layers"), "mdi-menu-down"]
     rc.close()
 
 
@@ -312,17 +318,8 @@ def test_an_optional_step_with_outputs_shows_its_count():
     p = _project(n_alerts=3)
     p.vis_layers = {"gee": GeeVisLayer(name="gee", asset="users/x/img")}
     box, rc, _ = _render("layers", p)
-    assert _badge(rc) == t("workflow.step_badge", n=1, total=3)
+    assert _badge(rc) == t("workflow.step_badge", n=6, total=8)
     assert t("workflow.count_layers", count=1) in _title_strings(rc)
-    rc.close()
-
-
-def test_prepare_tab_ticked_once_integrate_has_outputs(monkeypatch):
-    from gui.store import workflow_steps
-
-    monkeypatch.setattr(workflow_steps, "_ready", lambda p: ["GLAD-L"])  # Integrate unlocked
-    box, rc, _ = _render("layers", _project(n_alerts=3))
-    assert "".join(_strings(_labels(rc)["prepare"])).startswith("✓")
     rc.close()
 
 
@@ -357,46 +354,6 @@ def test_one_header_render_plans_the_active_period_once(monkeypatch):
     rc.close()
 
 
-def test_lock_note_clears_on_navigation():
-    from gui.i18n import t
-    from gui.widget.pipeline_header import PipelineHeader
-
-    project = _reactive(_project(aoi_name="Acre"))
-
-    @solara.component
-    def Host():
-        active, set_active = solara.use_state(0)
-        PipelineHeader(active_step=active, on_navigate=set_active, project=project)
-
-    box, rc = reacton.render(Host(), handle_error=False)
-    review = {w.attributes["data-level-key"]: w for w in _htmls(rc, "data-level-key")}["review"]
-    review.fire_event("click", None)
-    assert t("workflow.lock_review") in "".join(_strings(box))
-    seg = {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}["period"]
-    seg.fire_event("click", None)  # Period is unlocked once an AOI exists
-    assert t("workflow.lock_review") not in "".join(_strings(box))
-    seg = {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}["aoi"]
-    seg.fire_event("click", None)  # back to the step the note was shown on
-    assert t("workflow.lock_review") not in "".join(_strings(box))
-    rc.close()
-
-
-def test_optional_segments_are_dashed():
-    import ipyvuetify as v
-
-    box, rc, _ = _render("evaluators", _project(n_alerts=3))
-    cells = {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}
-    bar = {k: c.children[0].style_ for k, c in cells.items() if isinstance(c.children[0], v.Html)}
-    assert "dashed" in bar["layers"] and "transparent" in bar["layers"]
-    assert "dashed" not in bar["evaluators"]
-    rc.close()
-    # a locked level's optional bars are grey, not the accent
-    box, rc, _ = _render("aoi", _project(aoi_name="Acre"))
-    cells = {w.attributes["data-step-key"]: w for w in _htmls(rc, "data-step-key")}
-    assert "dashed rgba(128, 128, 128" in cells["layers"].children[0].style_
-    rc.close()
-
-
 def test_unified_activator_and_testable_segments():
     from gui.widget import pipeline_header
 
@@ -405,4 +362,5 @@ def test_unified_activator_and_testable_segments():
     assert "mdi-menu-down" in src
     assert "sr-step-jump:hover" in src
     assert 'class_="sr-step-jump"' in src
-    assert '"data-step-key"' in src  # the driver clicks segments by key
+    assert '"data-step-key"' in src  # the driver clicks menu rows by key
+    assert '"data-active-step"' in src  # and reads the current step off the title

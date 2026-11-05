@@ -200,35 +200,38 @@ body:has(.defo-analysis-screen--on) .right-panel { display: none; }
   <nav class="left-drawer"><div data-step-id="1">About</div></nav>
   <div id="map-container"></div>
   <div class="right-panel">
-    <div id="strip"></div>
-    <span class="defo-step-badge" id="badge"></span>
+    <div class="sr-step-jump" id="title" onclick="document.getElementById('menu').innerHTML ? closeMenu() : openMenu()"><span class="defo-step-badge" id="badge"></span></div>
     <p id="showing"></p>
     <button class="defo-start-analysis" onclick="openScreen()">Start analysis</button>
   </div>
 </div></div>
+<div id="menu"></div>
 <div class="defo-analysis-screen" id="screen" style="display: none;">
   <button class="defo-back-to-workflow" onclick="closeScreen()">Workflow</button>
   <div class="defo-analysis-right"><p>the review console</p></div>
 </div>
 <script>
-// Two levels, as the pipeline header: one strip, per level its label over
-// its bars, the current bar aria-current="step"; the badge counts within the
-// level.
+// As the pipeline header: the title names the current step and opens the jump
+// menu (moved to the app's root, as Vuetify does), which lists both levels'
+// steps under their headings; the title toggles it.
 const LEVELS = {prepare: ['aoi', 'integrate'], review: ['questionnaire', 'evaluators']};
+const ALL = Object.values(LEVELS).flat();
 let current = 'integrate';
-function level(key) { return Object.keys(LEVELS).find(l => LEVELS[l].includes(key)); }
 function step(key) {
   current = key;
-  const steps = LEVELS[level(key)];
-  document.getElementById('strip').innerHTML = Object.keys(LEVELS).map(l =>
-    `<div><button data-level-key="${l}">${l}</button><div>` + LEVELS[l].map(k =>
-      `<button data-step-key="${k}" onclick="step('${k}')" aria-current="${k === key ? 'step' : 'false'}" style="display: block; width: 40px; padding: 7px 0;"><div style="height: 7px;"></div></button>`
-    ).join('') + '</div></div>'
-  ).join('');
+  document.getElementById('title').dataset.activeStep = key;
   document.getElementById('showing').textContent = 'workflow on ' + key;
-  document.getElementById('badge').textContent =
-    (steps.indexOf(key) + 1) + ' / ' + steps.length;
+  document.getElementById('badge').textContent = (ALL.indexOf(key) + 1) + ' / ' + ALL.length;
+  closeMenu();
 }
+function openMenu() {
+  const m = document.getElementById('menu');
+  m.className = 'menuable__content__active';
+  m.innerHTML = Object.keys(LEVELS).map(l => `<div data-level-key="${l}">${l}</div>` + LEVELS[l].map(k =>
+    `<div data-step-key="${k}" onclick="step('${k}')" aria-current="${k === current ? 'step' : 'false'}">${k}</div>`
+  ).join('')).join('');
+}
+function closeMenu() { const m = document.getElementById('menu'); m.className = ''; m.innerHTML = ''; }
 function openScreen() {
   const s = document.getElementById('screen');
   s.style.display = ''; s.classList.add('defo-analysis-screen--on');
@@ -290,32 +293,26 @@ def test_goto_step_reaches_analysis_through_start_analysis(screens):
     assert "workflow on integrate" in walklib.panel_text(screens)
 
 
-def test_step_active_counts_within_the_level(screens):
-    """The badge counts the active level's steps: Integrate is "2 / 2" in
-    Prepare, and Evaluators' "2 / 2" in Review does not read as Integrate
-    (both levels' bars are in the strip; only the current one is marked)."""
+def test_step_active_reads_the_title(screens):
     assert walklib.step_active(screens, "integrate")
     assert not walklib.step_active(screens, "aoi")
-    assert not walklib.step_active(screens, "evaluators")
     screens.evaluate("() => step('evaluators')")
     assert walklib.step_active(screens, "evaluators")
     assert not walklib.step_active(screens, "integrate")
 
 
-def test_step_active_reads_an_optional_step_by_its_place(screens):
-    screens.evaluate("() => step('questionnaire')")
-    assert screens.locator("#badge").text_content() == "1 / 2"
-    assert walklib.step_active(screens, "questionnaire")
-    assert not walklib.step_active(screens, "evaluators")
-
-
-def test_goto_step_crosses_levels_through_the_bar(screens):
+def test_goto_step_crosses_levels_through_the_menu(screens):
     walklib.goto_step(screens, "evaluators", 100)
     assert walklib.step_active(screens, "evaluators")
-    walklib.goto_step(screens, "aoi", 100)  # back across, straight to the bar
+    walklib.goto_step(screens, "aoi", 100)  # back across, straight to its row
     assert walklib.step_active(screens, "aoi")
-    walklib.goto_step(screens, "integrate", 100)
-    assert walklib.step_active(screens, "integrate")
+    assert not screens.locator(walklib.STEPS_MENU).count()  # the menu is closed after
+
+
+def test_step_and_level_keys_read_the_menu_and_close_it(screens):
+    assert walklib.step_keys(screens) == ["aoi", "integrate", "questionnaire", "evaluators"]
+    assert walklib.level_keys(screens) == ["prepare", "review"]
+    assert not screens.locator(walklib.STEPS_MENU).count()
 
 
 def test_back_to_workflow_leaves_the_screen_and_is_a_no_op_elsewhere(screens):

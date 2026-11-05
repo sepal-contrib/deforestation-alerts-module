@@ -79,6 +79,8 @@
       "other": "{count} clusters"
     },
     "step_badge": "{n} / {total}",
+    "back": "Back",
+    "next": "Next",
     "count_empty": "nothing yet",
     "count_optional": "optional",
     "level_prepare": "Prepare alerts",

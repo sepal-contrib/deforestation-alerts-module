@@ -49,11 +49,11 @@ def test_render_smoke():
 
     state = AppState()
     box, rc = reacton.render(WorkflowHeader(app_state=state), handle_error=False)
-    segments = [
-        w for w in rc.find(v.Html).widgets if "data-step-key" in (w.attributes or {})
+    rows = [
+        w for w in rc.find(v.ListItem).widgets if "data-step-key" in (w.attributes or {})
     ]
-    # The strip shows both levels' steps, one group per level.
-    assert [w.attributes["data-step-key"] for w in segments] == [s.key for s in STEPS]
+    # The jump menu lists both levels' steps.
+    assert [w.attributes["data-step-key"] for w in rows] == [s.key for s in STEPS]
     rc.close()
 
 

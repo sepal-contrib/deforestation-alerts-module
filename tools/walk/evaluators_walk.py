@@ -82,8 +82,7 @@ def open_project_dialog(page):
 # ------------------------------------------------------------------- phases
 def p1_split(page, rec, *, out, data):
     w.goto_step(page, "evaluators", 2000)
-    keys = list(dict.fromkeys(page.evaluate(
-        "() => [...document.querySelectorAll('[data-step-key]')].map(e => e.dataset.stepKey)")))
+    keys = w.step_keys(page)
     rec["steps"] = keys
     assert keys[-2:] == ["questionnaire", "evaluators"], keys
     # a project without a split may have no review mode yet: check multiple evaluators

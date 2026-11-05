@@ -86,6 +86,8 @@
       "other": "{count} agrupamentos"
     },
     "step_badge": "{n} / {total}",
+    "back": "Voltar",
+    "next": "Próximo",
     "count_empty": "nada ainda",
     "count_optional": "opcional",
     "level_prepare": "Preparar alertas",

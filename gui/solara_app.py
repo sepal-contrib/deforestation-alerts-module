@@ -229,10 +229,18 @@ def _PanelBridge(app_state, panel_wrappers, mapapp_ref, workflow_config):
     # A language switch re-renders Page, and MapApp then copies the translated
     # Workflow config onto the panel: re-apply so the panel keeps its title.
     locale = current_locale()
+    shown = solara.use_ref(active)
 
     def _apply():
         spec = STEPS[active]
+        # The step shown slides in from the side it lies on (the stylesheet's
+        # .defo-step-in--*); a re-apply on the same step (a language switch)
+        # leaves its class alone, as a new animation name would replay it.
+        turn = None if shown.current == active else ("fwd" if active > shown.current else "back")
+        shown.current = active
         for key, wrap in panel_wrappers.items():
+            if key == spec.key and turn:
+                wrap.class_ = f"defo-step-in--{turn}"  # before the style: it plays as display returns
             wrap.style_ = "" if key == spec.key else "display: none;"
         # Panel title/icon (pysepal RightPanel.config is a synced trait; keep
         # the width so the config observer is a no-op).
@@ -671,10 +679,26 @@ def _AppShell():
         ".right-panel .drawer-top :is(.pa-4, .mb-4, .mb-3):has(.defo-workflow-panel) {"
         " flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;"
         " margin-bottom: 0 !important; padding: 0 !important; }\n"
-        ".defo-workflow-panel { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }\n"
+        ".defo-workflow-panel { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;"
+        " position: relative; }\n"
         ".defo-workflow-header { flex: none; padding: 0 16px; }\n"
         ".defo-workflow-body { flex: 1 1 0; min-height: 0; overflow-y: auto; overflow-x: hidden;"
-        " padding: 0 16px 16px; }\n"
+        " padding: 0 16px 16px; margin-bottom: 52px; }\n"
+        # Back / Next: rendered with the header (one render plans the gates
+        # once), pinned under the body, which keeps its height clear.
+        ".defo-workflow-footer { position: absolute; left: 0; right: 0; bottom: 0; height: 52px;"
+        " display: flex; align-items: center; justify-content: space-between; padding: 0 16px;"
+        " border-top: 1px solid rgba(128, 128, 128, 0.25); z-index: 2;"
+        " background-color: var(--v-background-base, #ffffff); }\n"
+        ".theme--dark .defo-workflow-footer { background-color: #1a1a1a !important; }\n"
+        # A step change slides the new step in (spatial_risk's window slide,
+        # incoming half only: the step left is hidden at once).
+        "@keyframes defo-step-in-fwd { from { transform: translateX(100%); } to { transform: none; } }\n"
+        "@keyframes defo-step-in-back { from { transform: translateX(-100%); } to { transform: none; } }\n"
+        ".defo-step-in--fwd { animation: defo-step-in-fwd .3s cubic-bezier(.25, .8, .5, 1); }\n"
+        ".defo-step-in--back { animation: defo-step-in-back .3s cubic-bezier(.25, .8, .5, 1); }\n"
+        "@media (prefers-reduced-motion: reduce) {"
+        " .defo-step-in--fwd, .defo-step-in--back { animation: none; } }\n"
         # A file tile (gui/tile/analysis/file_tile.py) is a v-btn, whose
         # content is Vuetify's `flex: 1 0 auto` and never shrinks: a long
         # detail line (an out-of-date CSV) pushed the download icon out of

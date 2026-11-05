@@ -210,13 +210,14 @@ def _leaves(code: str) -> set:
 
 
 def assert_language(page, lang: str) -> None:
-    """Fail unless the app shows ``lang``. Read off the pipeline header: each
-    segment's title is its step's label (``"AOI · 1 area"``) or the reason it
-    is locked, a text of the app's catalogue. Every one must be a text of
+    """Fail unless the app shows ``lang``. Read off the pipeline header: its
+    title's and Back / Next's tooltips start with a step's label
+    (``"AOI · 1 area"``), a text of the app's catalogue. Every one must be a text of
     ``lang``'s catalogue and, out of English, one at least not an English
     text."""
     heads = [t.split(" · ")[0].strip() for t in page.evaluate(
-        "() => [...document.querySelectorAll('[data-step-key]')].map(e => e.title || '')")]
+        "() => [...document.querySelectorAll('.right-panel :is([data-active-step], [data-nav])')]"
+        ".map(e => e.title || '')")]
     own = _leaves(LANGS[lang])
     english = _leaves("en")
     wrong = [h for h in heads if h not in own]
