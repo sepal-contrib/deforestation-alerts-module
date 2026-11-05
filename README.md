@@ -21,3 +21,12 @@ Work happens in a **project**: a folder under `~/module_results/deforestation_al
 9. **Analysis**: a screen that steps through the alerts. For each alert the reviewer records a verdict and answers the questions, can refine the polygon with drawing tools and two CNN models, and can export the files.
 
 **Overview** maps the active set and earlier sets, with their status and a breakdown per question. The app is available in English, Spanish, French and Portuguese.
+
+## Documentation
+
+The user guide covers every step and option, with a worked example (reviewing alerts in Madre de Dios, Peru):
+
+- [English](doc/en.rst)
+- [Español](doc/es.rst)
+- [Français](doc/fr.rst)
+- [Português](doc/pt.rst)
