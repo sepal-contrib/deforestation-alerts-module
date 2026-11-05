@@ -17,7 +17,7 @@ from deforestation_alerts.project import paths, review_groups
 from deforestation_alerts.project.growth import parse_link
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_status import FALSE_POSITIVE, VERDICTS
-from deforestation_alerts.project.store_schema import GROWS_FROM
+from deforestation_alerts.project.store_schema import GROWS_FROM, IMAGE_AREA
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from gui.scripts import growth_index, questions
 from gui.scripts import set_store
@@ -261,6 +261,7 @@ def save_review(alert, app_tile_model):
     updates["before_img_info"] = None if before_info is None else before_info[1]
     updates["after_img"] = None if after_info is None else after_info[3]
     updates["after_img_info"] = None if after_info is None else after_info[1]
+    updates[IMAGE_AREA] = getattr(alert, "image_area", "normal")
 
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
     # A group save looks over the union bounds of its main and members, still

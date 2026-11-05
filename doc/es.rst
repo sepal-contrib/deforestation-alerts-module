@@ -2048,7 +2048,7 @@ La barra de herramientas sobre la pista:
         -   El límite de nubes, de 0 a 100 % en pasos de 5. Las imágenes que lo superan aparecen atenuadas y nunca se eligen automáticamente. Los mosaicos de Planet no tienen cifra de nubes, así que el límite nunca los oculta.
         -   40 %.
     *   -   **Área de imagen**
-        -   Hasta dónde llegan las imágenes alrededor de la alerta: **Estándar**, **Grande** o **Muy grande** (100 m, 1 km o 2,5 km a su alrededor). Las áreas más grandes tardan más en cargarse y exportarse. Vuelve a **Estándar** en la siguiente alerta.
+        -   Hasta dónde llegan las imágenes alrededor de la alerta: **Estándar**, **Grande** o **Muy grande** (100 m, 1 km o 2,5 km a su alrededor). Las áreas más grandes tardan más en cargarse y exportarse. Guardar la revisión guarda el área: la alerta vuelve a abrirse con ella, y sus archivos y su GIF se hacen con ella. Una alerta nunca guardada se abre en **Estándar**.
         -   **Estándar**.
     *   -   **+1 mes** (a la izquierda y a la derecha de la pista)
         -   Añade un mes antes o después de la vista. El de la derecha se detiene en el mes actual.

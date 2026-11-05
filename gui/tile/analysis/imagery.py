@@ -54,7 +54,7 @@ from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import current_notifier
 from gui.scripts.solara_threads import spawn_in_context
 from gui.tile.analysis.pane_layers import ALL_ALERTS_KEY
-from gui.tile.analysis.state import IMAGE_AREAS
+from gui.tile.analysis.state import IMAGE_AREAS, saved_area
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -204,15 +204,16 @@ def set_image_area(widgets, analysis) -> None:
     and a redraw of both panes (``area_rev``).
 
     A CNN prediction ran on the previous area's composite, so it is dropped,
-    as an imagery change drops it -- without marking the review unsaved: the
-    area is not part of what a save stores. Ignored while the published
+    as an imagery change drops it. A save stores the area, but the review is
+    marked unsaved by the reviewer's pick only (``timeline``), never by the
+    restore of the saved one on load. Ignored while the published
     context is not the current alert's (``reset_alert`` puts the area back to
     normal before the next alert's context exists)."""
     ctx = widgets.imagery_ctx.value
     geo = getattr(widgets, "actual_bb_geojson", None)
     if ctx is None or geo is None or ctx.get("token") != analysis.alert_token.value:
         return
-    key = analysis.image_area.value if analysis.image_area.value in IMAGE_AREAS else "normal"
+    key = saved_area(analysis.image_area.value)
     margin = IMAGE_AREAS[key]
     widgets.actual_bb, widgets.actual_alert_grid = alert_extent(geo, margin)
     widgets.imagery_ctx.value = {**ctx, "area_bbox": None if key == "normal" else area_box(ctx["bbox"], margin)}

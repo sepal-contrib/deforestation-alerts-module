@@ -1402,13 +1402,21 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         **help_badge.attributes, "aria-expanded": "true" if change["new"] else "false"}), "v_model")
 
     # The image area around the alert (``imagery.IMAGE_AREAS``): per alert,
-    # back to Normal on the next one (``AnalysisState.reset_alert``).
+    # opened on the one its row was saved with (``image_area``), else Normal.
+    # A save stores it, so the reviewer's change is unsaved imagery; the echo
+    # of a restore (already the value) is not.
+    def _on_area_pick(change):
+        key = change["new"] or "normal"
+        if key != analysis.image_area.value:
+            analysis.image_area.set(key)
+            imagery_changed(analysis)
+
     area = v.Select(items=[{"text": t(f"analysis.timeline.area_{k}"), "value": k} for k in IMAGE_AREAS],
                     v_model=analysis.image_area.value, dense=True, outlined=True, hide_details=True,
                     label=t("analysis.timeline.image_area"), class_="defo-area-select",
                     attributes={"title": t("analysis.timeline.area_hint")},
                     style_="flex: 1 1 120px; min-width: 120px; max-width: 150px;")
-    area.observe(lambda change: analysis.image_area.set(change["new"] or "normal"), "v_model")
+    area.observe(_on_area_pick, "v_model")
     analysis.image_area.subscribe(lambda value: setattr(area, "v_model", value))
 
     def _label_toolbar():

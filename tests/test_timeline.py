@@ -675,6 +675,18 @@ def test_the_legend_button_is_named_by_something_short():
     assert region in {(getattr(w, "attributes", None) or {}).get("id") for w in _walk(card)}
 
 
+def test_picking_an_image_area_is_unsaved_imagery_but_its_restore_is_not():
+    """A save stores the area: the reviewer's pick marks the alert unsaved,
+    the select's echo of the saved area set on load does not."""
+    analysis = _fake_analysis()
+    card = timeline.build_timeline(_fake_state(), analysis, _fake_widgets())
+    area = next(w for w in _walk(card) if "defo-area-select" in (getattr(w, "class_", None) or ""))
+    analysis.image_area.set("large")  # the restore: the select follows, nothing else
+    assert area.v_model == "large" and analysis.dirty.value is False
+    area.v_model = "xlarge"  # the reviewer
+    assert analysis.image_area.value == "xlarge" and analysis.dirty.value is True
+
+
 # ---- fakes: the builder reads reactives and a context dict, nothing else
 def _manifest(hours_ago=0, planet=None):
     return scene_index.SceneManifest(

@@ -38,6 +38,12 @@ def _plain(value=None):
 IMAGE_AREAS = {"normal": 100, "large": 1000, "xlarge": 2500}
 
 
+def saved_area(value) -> str:
+    """A stored ``image_area`` as a key of ``IMAGE_AREAS``: ``"normal"`` for
+    a missing column, an unreviewed row or an unknown value."""
+    return value if isinstance(value, str) and value in IMAGE_AREAS else "normal"
+
+
 @dataclass
 class AnalysisState:
     #: the reviewed deforestation polygon(s) drawn for the current alert (GeoDataFrame)
@@ -96,8 +102,10 @@ class AnalysisState:
     #: ``reset_alert``.
     drawing_unapplied: solara.Reactive = field(default_factory=lambda: solara.reactive(False))
     #: how far around the alert its images reach: a key of ``IMAGE_AREAS``.
-    #: Per alert -- back to ``"normal"`` on every alert change -- so a large
-    #: area chosen for one alert never makes every later load and export slow.
+    #: Per alert -- back to ``"normal"`` on every alert change, then to the
+    #: one the row was saved with -- so a large area chosen for one alert
+    #: never makes every later load and export slow. A save stores it
+    #: (``image_area``) and the GIF is made on it.
     image_area: solara.Reactive = field(default_factory=lambda: solara.reactive("normal"))
     #: bumped once the views' area and both picks' keys follow a new
     #: ``image_area`` (``imagery.set_image_area``): the panes redraw on it.
@@ -318,6 +326,7 @@ def capture_alert(analysis: AnalysisState, widgets, app_state, *, remove=False) 
             "answers": {k: list(v) for k, v in (analysis.answers.value or {}).items()},
             "questions": list(p.questions) if p is not None else [],
             "links": tuple(analysis.links.value),
+            "image_area": saved_area(analysis.image_area.value),
             "drawing_unapplied": analysis.drawing_unapplied.value,
             # What a save compares against when it lands: see ``touch``.
             "edit_rev": analysis.edit_rev.value,

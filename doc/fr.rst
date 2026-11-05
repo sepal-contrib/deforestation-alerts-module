@@ -2050,7 +2050,7 @@ La barre d'outils au-dessus de la piste :
         -   La limite de nuages, de 0 à 100 % par pas de 5. Les images au-dessus sont estompées et jamais choisies automatiquement. Les mosaïques Planet n'ont pas de couverture nuageuse : la limite ne les masque donc jamais.
         -   40 %.
     *   -   **Zone d'image**
-        -   Jusqu'où les images s'étendent autour de l'alerte : **Normale**, **Grande** ou **Très grande** (100 m, 1 km ou 2,5 km autour d'elle). Les zones plus grandes sont plus longues à charger et à exporter. Elle revient à **Normale** à l'alerte suivante.
+        -   Jusqu'où les images s'étendent autour de l'alerte : **Normale**, **Grande** ou **Très grande** (100 m, 1 km ou 2,5 km autour d'elle). Les zones plus grandes sont plus longues à charger et à exporter. Enregistrer la revue enregistre la zone : l'alerte s'ouvre de nouveau sur elle, et ses fichiers et son GIF sont faits avec elle. Une alerte jamais enregistrée s'ouvre sur **Normale**.
         -   **Normale**.
     *   -   **+1 mois** (à gauche et à droite de la piste)
         -   Ajoute un mois avant ou après la vue. Celui de droite s'arrête au mois en cours.

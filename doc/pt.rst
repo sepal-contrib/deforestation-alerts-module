@@ -2052,7 +2052,7 @@ A barra de ferramentas acima da trilha:
         -   O limite de nuvens, de 0 a 100 %, em passos de 5. As imagens acima dele ficam esmaecidas e nunca são escolhidas automaticamente. Os mosaicos Planet não têm valor de nebulosidade, então o limite nunca os esconde.
         -   40 %.
     *   -   **Área da imagem**
-        -   Até onde as imagens se estendem ao redor do alerta: **Normal**, **Grande** ou **Muito grande** (100 m, 1 km ou 2,5 km ao redor). Áreas maiores demoram mais para carregar e exportar. Volta para **Normal** no próximo alerta.
+        -   Até onde as imagens se estendem ao redor do alerta: **Normal**, **Grande** ou **Muito grande** (100 m, 1 km ou 2,5 km ao redor). Áreas maiores demoram mais para carregar e exportar. Salvar a revisão salva a área: o alerta volta a abrir com ela, e os arquivos e o GIF dele são feitos com ela. Um alerta nunca salvo abre em **Normal**.
         -   **Normal**.
     *   -   **+1 mês** (à esquerda e à direita da trilha)
         -   Acrescenta um mês antes ou depois da vista. O da direita para no mês atual.

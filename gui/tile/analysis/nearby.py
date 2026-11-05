@@ -44,7 +44,7 @@ from gui.tile.analysis.imagery import area_box
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.pane_layers import geojson_spec
 from gui.tile.analysis.section import TYPE_BODY, TYPE_CAPTION, TYPE_LABEL, build_section
-from gui.tile.analysis.state import IMAGE_AREAS, area_crs, toggle_selection, touch
+from gui.tile.analysis.state import IMAGE_AREAS, area_crs, saved_area, toggle_selection, touch
 from gui.tile.analysis.widgets import replace_children
 from gui.widget.buttons import btn, set_label
 
@@ -439,7 +439,7 @@ def build_nearby_section(widgets, app_state, analysis, *, run_remove=None, label
         selection = _selection()
         out = False
         if bbox is not None and gdf is not None and selection:
-            key = analysis.image_area.value if analysis.image_area.value in IMAGE_AREAS else "normal"
+            key = saved_area(analysis.image_area.value)
             frame = area_box(bbox, IMAGE_AREAS[key])
             out = any(0 <= p < len(gdf) and gdf.geometry.iloc[p] is not None
                       and not frame.contains(gdf.geometry.iloc[p]) for p in selection)

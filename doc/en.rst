@@ -2108,7 +2108,7 @@ The toolbar above the track:
         -   The cloud limit, from 0 to 100 % in steps of 5. Images over it are faded and never chosen automatically. Planet mosaics have no cloud figure, so the limit never hides them.
         -   40 %.
     *   -   **Image area**
-        -   How far around the alert the images reach: **Normal**, **Large** or **Extra large** (100 m, 1 km or 2.5 km around it). Larger areas take longer to load and export. It goes back to **Normal** on the next alert.
+        -   How far around the alert the images reach: **Normal**, **Large** or **Extra large** (100 m, 1 km or 2.5 km around it). Larger areas take longer to load and export. Saving the review saves the area: the alert opens on it again, and its files and GIF are made on it. An alert never saved opens on **Normal**.
         -   **Normal**.
     *   -   **+1 month** (left and right of the track)
         -   Adds a month before or after the view. The right one stops at the current month.

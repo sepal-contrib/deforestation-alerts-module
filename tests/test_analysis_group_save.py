@@ -120,6 +120,7 @@ def test_grouping_off_saves_exactly_as_before(tmp_path, monkeypatch):
     assert row["status"] == "Confirmed" and row["description"] == "Agriculture"
     assert (row["admin1"], row["admin2"], row["admin3"]) == ("Brasil", "Acre", "Rio Branco")
     assert (row["before_img"], row["after_img"]) == ("before", "after")
+    assert row["image_area"] == "normal"  # the default image area is stored too
     assert row["alert_polygon"] is None
     assert list(row["grows_from"]) == []
     assert row["area_ha"] == pytest.approx(review_groups.polygon_area_ha(box(0, 0, 1, 1)))
@@ -366,3 +367,11 @@ def test_toggle_selection_flips_and_touches():
     analysis.selection.set(frozenset({1}))
     analysis.reset_alert()
     assert analysis.selection.value == frozenset()
+
+
+def test_a_save_stores_the_image_area_and_a_group_copies_it(tmp_path, monkeypatch):
+    h = _setup(tmp_path, monkeypatch, grouping=True)
+    analysis = _analysis(selection=(1,))
+    analysis.image_area.set("large")
+    _save(h, analysis=analysis)
+    assert _stored(h)["image_area"].tolist()[:2] == ["large", "large"]

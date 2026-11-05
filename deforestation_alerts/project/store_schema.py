@@ -29,7 +29,10 @@ REVIEW_GROUP = "review_group"
 #: The columns a review Save writes (``gui/scripts/review_save.py``) before
 #: and after the answer columns of the questions.
 REVIEW_BEFORE = ("status",)
-REVIEW_AFTER = ("before_img", "before_img_info", "after_img", "after_img_info",
+#: The image area the reviewer saw the alert in (a key of the timeline's
+#: ``IMAGE_AREAS``); missing in older stores, which read as ``"normal"``.
+IMAGE_AREA = "image_area"
+REVIEW_AFTER = ("before_img", "before_img_info", "after_img", "after_img_info", IMAGE_AREA,
                 "admin1", "admin2", "admin3", "alert_polygon", "area_ha", GROWS_FROM, REVIEW_GROUP)
 
 #: The column an evaluator split writes (``project.split``, spec §3).
@@ -42,4 +45,4 @@ STORE_COLUMNS = (*VECTOR_COLUMNS, "bounding_box", "point", "status", "alert_sour
                  "alert_polygon", "description", "admin1", "admin2", "admin3", *ID_COLUMNS)
 
 #: The names no attribute column and no question key may take.
-RESERVED_COLUMNS = frozenset({*STORE_COLUMNS, EVALUATOR, *GROWTH_COLUMNS, REVIEW_GROUP})
+RESERVED_COLUMNS = frozenset({*STORE_COLUMNS, IMAGE_AREA, EVALUATOR, *GROWTH_COLUMNS, REVIEW_GROUP})

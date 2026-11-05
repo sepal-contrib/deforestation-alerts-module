@@ -53,6 +53,19 @@ def test_the_frames_follow_the_timelines_filter():
     assert [f.day.isoformat() for f in off][:2] == ["2026-02-05", "2026-04-05"]
 
 
+def test_a_larger_image_area_keys_every_frame_from_the_tiles_it_meets():
+    east = gpd.GeoDataFrame({"tile": ["W", "E"]}, geometry=gpd.GeoSeries(
+        [box(0, 0, 2, 2), box(2, 0, 4, 2)], crs=scene_index.WGS84), crs=scene_index.WGS84)
+    tables = _tables(ROWS)
+    extra = tables.scenes[tables.scenes["source"] == S2].assign(tile="E", key=lambda df: df["key"] + "E")
+    tables = scene_index.SceneTables(scenes=pd.concat([tables.scenes, extra], ignore_index=True), tiles=east)
+    pick = (_info(S2, "2026-04-05"), _info(S2, "2026-09-05"), frozenset({S2}), 40.0)
+    normal = gif_mod.plan_frames(tables, BBOX, *pick)
+    large = gif_mod.plan_frames(tables, BBOX, *pick, area_bbox=box(0.5, 0.5, 2.5, 1.5))
+    assert [f.day for f in large] == [f.day for f in normal]  # the same frames...
+    assert all(len(f.keys) == 1 for f in normal) and all(len(f.keys) == 2 for f in large)  # ...filling the area
+
+
 def test_a_pick_from_a_switched_off_collection_is_still_a_frame():
     frames = gif_mod.plan_frames(_tables(ROWS), BBOX, _info(LS, "2026-03-10"), _info(S2, "2026-09-05"),
                                  frozenset({S2}), 40.0)

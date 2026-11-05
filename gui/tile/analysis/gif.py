@@ -56,10 +56,12 @@ def _pick_id(info) -> Optional[str]:
     return scene_query.saved_pick_id(info[3]) if info else None
 
 
-def plan_frames(tables, bbox, before_info, after_info, sources, max_cloud) -> list:
+def plan_frames(tables, bbox, before_info, after_info, sources, max_cloud, area_bbox=None) -> list:
     """The frames, oldest first: the picks, every image between them and up to
     two neighbours either side, under the timeline's filter (spec D6). Empty
-    when a pick is not in the index."""
+    when a pick is not in the index. Each frame mosaics the granules that fill
+    ``area_bbox`` (a larger image area, as the timeline keys it), else
+    ``bbox``."""
     before_id, after_id = _pick_id(before_info), _pick_id(after_info)
     if tables is None or bbox is None or not before_id or not after_id:
         return []
@@ -69,7 +71,8 @@ def plan_frames(tables, bbox, before_info, after_info, sources, max_cloud) -> li
     rows = rows[rows["source"].isin(sources) | rows["id"].isin([before_id, after_id])]
     chosen = scene_query.gif_frames(rows, before_id, after_id)
     return [Frame(row["source"], row["date"].date(),
-                  tuple(scene_query.granule_keys(tables, bbox, row["source"], row["date"])), row["role"])
+                  tuple(scene_query.granule_keys(tables, area_bbox or bbox, row["source"], row["date"])),
+                  row["role"])
             for _, row in chosen.iterrows()]
 
 
@@ -82,8 +85,11 @@ def _outline_of(alerts, alert_id) -> BaseGeometry:
 def capture_gif(app_state, widgets, analysis, alert) -> GifJob:
     """Everything the GIF of ``alert`` needs, read at the click (UI thread).
 
-    ``alert`` is ``state.capture_alert``'s namespace. Raises ``GifRefused``
-    when there is nothing to animate.
+    ``alert`` is ``state.capture_alert``'s namespace. Its grid and the
+    context's ``area_bbox`` are the image area on screen, which is the saved
+    one: a GIF is built only with nothing unsaved (an area change is unsaved
+    imagery, ``state.imagery_changed``). Raises ``GifRefused`` when there is
+    nothing to animate.
     """
     ctx = widgets.imagery_ctx.value or {}
     no_images = GifRefused(key="analysis_tile.export_labels.gif_no_images")
@@ -97,7 +103,7 @@ def capture_gif(app_state, widgets, analysis, alert) -> GifJob:
     filt = getattr(getattr(widgets, "timeline_filter", None), "value", None)
     sources, max_cloud = filt if filt is not None else (frozenset(SOURCE_CODE), None)
     frames = plan_frames(app_state.scene_index.value, ctx.get("bbox"), alert.before_info, alert.after_info,
-                         sources, max_cloud)
+                         sources, max_cloud, area_bbox=ctx.get("area_bbox"))
     if len(frames) < 2:
         raise no_images
     detect = ctx.get("date_min") or scene_query.parse_row_id(after_id)[1]

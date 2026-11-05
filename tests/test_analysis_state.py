@@ -622,11 +622,39 @@ def test_a_larger_image_area_reclips_rekeys_and_redraws(monkeypatch):
     assert area.contains(widgets.imagery_ctx.value["bbox"]) and area.area > widgets.imagery_ctx.value["bbox"].area
     assert rekeyed == [True] and analysis.area_rev.value == rev + 1
     assert analysis.prediction_files.value == {}, "a prediction of the previous area is dropped"
-    assert analysis.dirty.value is False, "the area is not part of the review"
+    assert analysis.dirty.value is False, "following the area (a restore on load) is not an edit"
 
     analysis.image_area.set("normal")
     imagery.set_image_area(widgets, analysis)
     assert widgets.imagery_ctx.value["area_bbox"] is None
+
+
+def test_an_alert_opens_on_the_image_area_it_was_saved_with(monkeypatch):
+    """The row's ``image_area`` is set after the alert's context is published:
+    before it, ``set_image_area`` would take it for the previous alert's."""
+    from gui.store.state_manager import AppState
+    from gui.tile.analysis import analysis_tile, imagery
+    from tests.test_analysis_vis_layers import _alerts, _p, _view_widgets
+
+    monkeypatch.setattr(analysis_tile.logger, "exception", lambda *a, **k: None)  # no Earth Engine here
+    for module in (analysis_tile, imagery):
+        monkeypatch.setattr(module, "alert_extent", lambda geo, m: ("bb", f"grid{m}"))
+    widgets, state, analysis = _view_widgets(), AppState(), AnalysisState()
+    analysis.image_area.subscribe(lambda _: imagery.set_image_area(widgets, analysis))  # as the layout wires it
+    state.load_project_state(_p())
+    table = _alerts(2).assign(image_area=["large", None])
+    state.alerts_gdf.set(gpd.GeoDataFrame(table, geometry=list(table["bounding_box"]), crs="EPSG:4326"))
+
+    def _open(position):
+        state.actual_alert_id.set(position)
+        analysis_tile.view_actual_alert(widgets, state, analysis, SimpleNamespace(), SimpleNamespace(v_model=None))
+
+    _open(0)
+    assert analysis.image_area.value == "large" and analysis.dirty.value is False
+    assert widgets.imagery_ctx.value["area_bbox"] is not None and widgets.actual_alert_grid == "grid1000"
+    _open(1)  # never saved: Normal
+    assert analysis.image_area.value == "normal" and widgets.imagery_ctx.value.get("area_bbox") is None
+    assert widgets.actual_alert_grid == "grid100"
 
 
 def test_the_image_area_is_per_alert_and_ignores_a_stale_context(monkeypatch):

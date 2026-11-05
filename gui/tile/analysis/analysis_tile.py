@@ -74,7 +74,7 @@ from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_groups import REMOVE
 from deforestation_alerts.project.review_status import LOSS_VERDICTS, is_reviewed
-from deforestation_alerts.project.store_schema import GROWS_FROM, GROWS_FROM_AUTO
+from deforestation_alerts.project.store_schema import GROWS_FROM, GROWS_FROM_AUTO, IMAGE_AREA
 from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
@@ -97,7 +97,7 @@ from gui.tile.analysis.review_save import REQUIRED_MISSING
 from gui.tile.analysis.footer import affected_line, build_footer
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.imagery import alert_extent, set_image_area, wire_panes
-from gui.tile.analysis.state import IMAGE_AREAS, capture_alert
+from gui.tile.analysis.state import IMAGE_AREAS, capture_alert, saved_area
 from gui.tile.analysis.pane_layers import ALERT_TOP_Z, geojson_spec
 from gui.tile.analysis.section import build_section
 from gui.tile.analysis.timeline import THEME_CSS as timeline_theme_css
@@ -337,7 +337,8 @@ def view_actual_alert(
 
         # ee bbox (buffer + bounds) + covering grid for downloads
         # (the normal image area: ``reset_alert`` put ``image_area`` back to
-        # it, and ``set_image_area`` recomputes both for a larger one)
+        # it, and ``set_image_area`` recomputes both for a larger one, the
+        # saved one included, below)
         widgets.actual_bb_geojson = alerta_bb_geojson
         widgets.actual_bb, widgets.actual_alert_grid = alert_extent(
             alerta_bb_geojson, IMAGE_AREAS["normal"])
@@ -367,6 +368,9 @@ def view_actual_alert(
             "saved_before": _saved_pick(alerta.get("before_img")),
             "saved_after": _saved_pick(alerta.get("after_img")),
         }
+        # ...and the image area it was saved with: ``set_image_area`` follows
+        # it now that the context above is this alert's
+        analysis.image_area.set(saved_area(alerta.get(IMAGE_AREA)))
     except Exception:
         logger.exception("Analysis: view_actual_alert map update failed")
         return
