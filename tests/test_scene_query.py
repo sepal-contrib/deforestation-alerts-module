@@ -608,8 +608,9 @@ def test_the_gif_takes_two_images_either_side_of_the_picks():
                   (S2, "2026-10-05", False), (S2, "2026-11-05", False), (S2, "2026-12-05", False)])
     got = scene_query.gif_frames(rows, _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05"))
     assert list(got["id"]) == [_rid(S2, "2026-02-05"), _rid(S2, "2026-03-05"), _rid(S2, "2026-04-05"),
-                               _rid(S2, "2026-09-05"), _rid(S2, "2026-10-05"), _rid(S2, "2026-11-05")]
-    assert list(got["role"]) == ["", "", "before", "after", "", ""]
+                               _rid(LS, "2026-06-01"), _rid(S2, "2026-09-05"), _rid(S2, "2026-10-05"),
+                               _rid(S2, "2026-11-05")]
+    assert list(got["role"]) == ["", "", "before", "", "after", "", ""]
 
 
 def test_a_side_with_fewer_neighbours_gives_what_it_has():
@@ -618,13 +619,14 @@ def test_a_side_with_fewer_neighbours_gives_what_it_has():
     assert list(got["id"]) == [_rid(S2, "2026-03-05"), _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05")]
 
 
-def test_neighbours_skip_planet_hidden_rows_and_anything_between_the_picks():
+def test_frames_besides_the_picks_skip_planet_and_hidden_rows():
     rows = _rows([(S2, "2026-02-05", False), (S2, "2026-03-05", True), (PL, "2026-03-01", False),
-                  (S2, "2026-04-05", False), (S2, "2026-06-05", False), (S2, "2026-09-05", False),
+                  (S2, "2026-04-05", False), (S2, "2026-06-05", False), (S2, "2026-07-05", True),
+                  (PL, "2026-08-01", False), (S2, "2026-09-05", False),
                   (PL, "2026-10-01", False), (S2, "2026-11-05", True), (S2, "2026-12-05", False)])
     got = scene_query.gif_frames(rows, _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05"))
-    assert list(got["id"]) == [_rid(S2, "2026-02-05"), _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05"),
-                               _rid(S2, "2026-12-05")]
+    assert list(got["id"]) == [_rid(S2, "2026-02-05"), _rid(S2, "2026-04-05"), _rid(S2, "2026-06-05"),
+                               _rid(S2, "2026-09-05"), _rid(S2, "2026-12-05")]
 
 
 def test_a_picked_planet_or_hidden_image_is_still_a_frame():

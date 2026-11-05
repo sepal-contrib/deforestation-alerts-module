@@ -57,8 +57,9 @@ def _pick_id(info) -> Optional[str]:
 
 
 def plan_frames(tables, bbox, before_info, after_info, sources, max_cloud) -> list:
-    """The frames, oldest first: the picks and up to two neighbours either side
-    under the timeline's filter (spec D6). Empty when a pick is not in the index."""
+    """The frames, oldest first: the picks, every image between them and up to
+    two neighbours either side, under the timeline's filter (spec D6). Empty
+    when a pick is not in the index."""
     before_id, after_id = _pick_id(before_info), _pick_id(after_info)
     if tables is None or bbox is None or not before_id or not after_id:
         return []

@@ -459,11 +459,11 @@ def granule_keys(tables, bbox, source: str, day) -> list[str]:
 def gif_frames(rows: pd.DataFrame, before_id, after_id, n: int = 2) -> pd.DataFrame:
     """The GIF's rows, oldest first, with a ``role`` column (spec D6).
 
-    The two picks (``role`` "before" / "after"), plus up to ``n`` rows before
-    the earlier pick and ``n`` after the later one. A neighbour is never
-    hidden by the cloud limit, never a Planet basemap (a monthly mosaic is not
-    a dated look, the rule ``default_pick`` follows) and never between the
-    picks. The picks themselves are frames whatever they are. On one date
+    The two picks (``role`` "before" / "after"), every row between them, plus
+    up to ``n`` rows before the earlier pick and ``n`` after the later one.
+    Any frame but a pick is never hidden by the cloud limit and never a Planet
+    basemap (a monthly mosaic is not a dated look, the rule ``default_pick``
+    follows). The picks themselves are frames whatever they are. On one date
     Sentinel-2 comes before Landsat. Empty when either pick is not in ``rows``.
     """
     empty = rows.iloc[0:0].assign(role=pd.Series(dtype=object))
@@ -477,7 +477,8 @@ def gif_frames(rows: pd.DataFrame, before_id, after_id, n: int = 2) -> pd.DataFr
     pool = (~ordered["hidden"].astype(bool)) & (ordered["source"] != SOURCE_PLANET)
     earlier = [i for i in range(lo) if pool[i]][-n:] if n else []
     later = [i for i in range(hi + 1, len(ordered)) if pool[i]][:n]
-    chosen = earlier + sorted({lo, hi}) + later
+    between = [i for i in range(lo + 1, hi) if pool[i]]
+    chosen = earlier + [lo] + between + ([hi] if hi != lo else []) + later
     out = ordered.loc[chosen].drop(columns="_rank").reset_index(drop=True)
     out["role"] = ""
     out.loc[out["id"] == before_id, "role"] = "before"
