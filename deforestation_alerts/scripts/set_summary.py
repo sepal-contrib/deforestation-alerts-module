@@ -80,7 +80,7 @@ class SetSummary:
     n_reviewed: int
     by_status: tuple
     size_bins: tuple          # (lo, hi, n, area_ha)
-    by_week: tuple            # (Monday, area_ha, n, in_period)
+    by_week: tuple            # (Monday, area_ha, n, in_period, ((code, area_ha, n), ...) by status code)
     by_question: tuple        # ((key, ((code, area_ha, n), ...)), ...), in question order;
     #                           each breakdown area-descending
     by_source: tuple          # (combination, area_ha, n), area-descending
@@ -153,7 +153,7 @@ def summarize_alerts(frame, *, set_id: str = "", period_start: Optional[date] = 
         n_reviewed=int(sum(reviewed)),
         by_status=_by_status(area, code),
         size_bins=_size_bins(area),
-        by_week=_by_week(_column(frame, "alert_date_min", n), area, period_start),
+        by_week=_by_week(_column(frame, "alert_date_min", n), area, period_start, code),
         by_question=tuple((key, _by_answer(_column(frame, col, n), area, reviewed,
                                            lambda v, k=key: split(k, v)))
                           for key, col in (answer_columns or {}).items()),
@@ -165,6 +165,18 @@ def summarize_alerts(frame, *, set_id: str = "", period_start: Optional[date] = 
     )
 
 
+def read_frame(store_path, answer_columns: Optional[dict] = None):
+    """The columns ``summarize_alerts`` reads of a set's store, read
+    column-projected. Blocking (parquet); raises when the store cannot be read."""
+    import pandas as pd
+    import pyarrow.parquet as pq
+
+    names = set(pq.read_schema(store_path).names)
+    wanted = SUMMARY_COLUMNS + list((answer_columns or {}).values())
+    columns = [c for c in dict.fromkeys(wanted) if c in names]
+    return pd.read_parquet(store_path, columns=columns) if columns else pd.DataFrame()
+
+
 def read_summary(store_path, set_id: str, *, period_start: Optional[date] = None,
                  answer_columns: Optional[dict] = None,
                  split_of: Optional[Callable] = None) -> SetSummary:
@@ -174,13 +186,7 @@ def read_summary(store_path, set_id: str, *, period_start: Optional[date] = None
     cannot be read -- the dashboard then shows its "files are missing" text and
     no charts, rather than a broken axis.
     """
-    import pandas as pd
-    import pyarrow.parquet as pq
-
-    names = set(pq.read_schema(store_path).names)
-    wanted = SUMMARY_COLUMNS + list((answer_columns or {}).values())
-    columns = [c for c in dict.fromkeys(wanted) if c in names]
-    frame = pd.read_parquet(store_path, columns=columns) if columns else pd.DataFrame()
+    frame = read_frame(store_path, answer_columns)
     return summarize_alerts(frame, set_id=set_id, period_start=period_start,
                             answer_columns=answer_columns, split_of=split_of)
 
@@ -258,17 +264,20 @@ def _size_bins(area: list) -> tuple:
     return tuple(out)
 
 
-def _by_week(dates: list, area: list, period_start: Optional[date]) -> tuple:
+def _by_week(dates: list, area: list, period_start: Optional[date], code: Optional[list] = None) -> tuple:
     weeks = {}
-    for value, a in zip(dates, area):
+    for value, a, c in zip(dates, area, code or [_NOT_REVIEWED] * len(area)):
         d = decimal_year_to_date(value)
         if d is None:
             continue  # a source harmonized without a date band: skipped, not fatal
         monday = d - timedelta(days=d.weekday())
-        ha, n = weeks.get(monday, (0.0, 0))
-        weeks[monday] = (ha + a, n + 1)
+        week = weeks.setdefault(monday, {})
+        ha, n = week.get(c, (0.0, 0))
+        week[c] = (ha + a, n + 1)
     first = period_start - timedelta(days=period_start.weekday()) if period_start is not None else None
-    return tuple((w, ha, n, first is None or w >= first) for w, (ha, n) in sorted(weeks.items()))
+    return tuple((w, sum(ha for ha, _ in by.values()), sum(n for _, n in by.values()),
+                  first is None or w >= first, tuple((c, ha, n) for c, (ha, n) in sorted(by.items())))
+                 for w, by in sorted(weeks.items()))
 
 
 def _ranked(table: dict) -> tuple:

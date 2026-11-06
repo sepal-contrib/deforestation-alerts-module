@@ -193,14 +193,14 @@ def test_the_trend_of_no_periods_is_an_empty_state(theme):
 def test_the_timing_chart_de_emphasises_weeks_before_the_period(summary, theme):
     svg = charts.chart_timing(summary, measure=charts.MEASURE_AREA, theme=theme)
     assert any(not w[3] for w in summary.by_week), "fixture should straddle the period start"
-    assert theme["lookback"] in svg
+    assert "<pattern" in svg  # the look-back weeks are hatched
 
 
 def test_without_a_period_start_no_week_is_de_emphasised(theme):
     whole = ss.summarize_alerts(_frame())  # no period_start: every week counts
     svg = charts.chart_timing(whole, measure=charts.MEASURE_AREA, theme=theme)
     assert all(w[3] for w in whole.by_week)
-    assert theme["lookback"] not in svg
+    assert "<pattern" not in svg
 
 
 # --- question answers and sources -----------------------------------------
@@ -233,6 +233,13 @@ def test_a_question_chart_draws_its_own_breakdown_only(theme):
     aria = _aria(charts.chart_question(summary, "road", measure=charts.MEASURE_ALERTS, theme=theme,
                                        label_of=lambda code: f"R-{code}"))
     assert "R-yes" in aria and "R-no" in aria and "R-logging" not in aria
+
+
+def test_no_answer_is_a_soft_bar_not_the_series_hue(theme):
+    frame = _frame(q_road=["yes", "no", "", "yes", "", "", "no", ""])
+    summary = ss.summarize_alerts(frame, answer_columns={"road": "q_road"})
+    svg = charts.chart_question(summary, "road", measure=charts.MEASURE_ALERTS, theme=theme, label_of=str)
+    assert theme["soft"].lower() in svg and theme["accent"].lower() in svg
 
 
 def test_a_question_that_was_not_summarised_draws_the_empty_chart(summary, theme):

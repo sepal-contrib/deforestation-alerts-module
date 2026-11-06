@@ -18,15 +18,20 @@ project and the exact bytes of the store, so a stale hit would need two
 projects of the same name whose stores share an inode, size and mtime.
 """
 
+import csv
+import io
 import logging
 from collections import OrderedDict
+from dataclasses import dataclass, replace
 from typing import Optional
 
+from deforestation_alerts.engine.fingerprint import combined_key, harm_key
 from deforestation_alerts.project import grouping, review_groups
 from deforestation_alerts.project.review_groups import area_crs
 from deforestation_alerts.project.review_status import CONFIRMED, STATUS_CODES
 from deforestation_alerts.project.questions import column
-from deforestation_alerts.scripts.set_summary import read_summary
+from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM
+from deforestation_alerts.scripts.set_summary import read_frame, read_summary, summarize_alerts
 from gui.i18n import t
 from gui.scripts import charts, set_store
 from gui.scripts.legend_specs import STACK_ORDER, STATUS_CLASSES, status_colors
@@ -87,6 +92,18 @@ def history_keys(project) -> tuple:
     return tuple(summary_key(project, s) for _, s in period_sets(project))
 
 
+def _memo(key, compute):
+    hit = _MEMO.get(key)
+    if hit is not None:
+        _MEMO.move_to_end(key)
+        return hit
+    value = compute()
+    _MEMO[key] = value
+    while len(_MEMO) > MEMO_LIMIT:
+        _MEMO.popitem(last=False)
+    return value
+
+
 def summary_of(project, alert_set, *, split_of=None) -> object:
     """``alert_set``'s summary, memoized on :func:`summary_key`: one breakdown
     per project question, split by ``split_of(key, stored)`` (see
@@ -96,21 +113,40 @@ def summary_of(project, alert_set, *, split_of=None) -> object:
     cannot be read -- the dashboard then says the set's files are missing
     rather than drawing an empty axis over a set that has alerts.
     """
-    key = summary_key(project, alert_set)
-    hit = _MEMO.get(key)
-    if hit is not None:
-        _MEMO.move_to_end(key)
-        return hit
     period = project.periods.get(alert_set.period_id)
-    summary = read_summary(
+    return _memo(summary_key(project, alert_set), lambda: read_summary(
         set_store.store_path(project, alert_set), alert_set.id,
         period_start=period.start if period is not None else None,
         answer_columns=answer_columns(project), split_of=split_of,
-    )
-    _MEMO[key] = summary
-    while len(_MEMO) > MEMO_LIMIT:
-        _MEMO.popitem(last=False)
-    return summary
+    ))
+
+
+#: The set selector's "All periods" entry, and the ``set_id`` of its summary.
+ALL_PERIODS = "__all__"
+
+
+def all_summary_of(project, *, split_of=None) -> object:
+    """One summary of every period's set (``period_sets``) as if they were one
+    set, memoized on ``history_keys``. A store that cannot be read is left out
+    and logged, as in ``history_of``. Blocking (parquet): a worker's call."""
+    import pandas as pd
+
+    def _read():
+        frames, starts = [], []
+        for period, alert_set in period_sets(project):
+            try:
+                frames.append(read_frame(set_store.store_path(project, alert_set), answer_columns(project)))
+            except Exception:  # noqa: BLE001 - one unreadable store, not every period
+                logger.exception("All periods skips set %s: its store could not be read", alert_set.id)
+                continue
+            starts.append(period.start)
+        frame = pd.concat(frames, ignore_index=True) if frames else None
+        # shortcut: look-back is only what falls before the first period; an
+        # alert in a later period's look-back weeks counts as in period
+        return summarize_alerts(frame, set_id=ALL_PERIODS, period_start=min(starts) if starts else None,
+                                answer_columns=answer_columns(project), split_of=split_of)
+
+    return _memo((ALL_PERIODS, *history_keys(project)), _read)
 
 
 def history_of(project, *, split_of=None) -> tuple:
@@ -144,10 +180,166 @@ def nearby_of(project, alert_set, alerts):
     return review_groups.neighbourhood_counts(alerts, nearby_radius(project, alert_set), area_crs(project))
 
 
+def sum_nearby(counts):
+    """Several sets' *Nearby alerts* counts added up (All periods); the
+    largest group is the largest of any set. None without any."""
+    counts = [c for c in counts if c is not None]
+    if not counts:
+        return None
+    return replace(counts[-1], **{f: sum(getattr(c, f) for c in counts)
+                                  for f in ("n_alerts", "n_units", "n_alone", "n_clustered", "n_groups", "n_grouped")},
+                   largest=max(c.largest for c in counts))
+
+
 def forget_summaries() -> None:
     """Empty the memo. For tests; nothing in the app needs it, because every
     change that matters changes a key."""
     _MEMO.clear()
+
+
+# --- pixels and clusters -------------------------------------------------
+
+@dataclass(frozen=True)
+class PixelCounts:
+    """The Pixels and Clusters tabs' numbers for one set (or the sum of
+    several), off the project's artifact records: no file is read. A count
+    the set's run did not record (a set integrated before it was) is None."""
+
+    pixel_ha: float  # one grid pixel, in ha
+    sources: tuple  # (source, before masks, kept by them), None where not counted
+    masks: tuple  # (name, mode)
+    analysable_px: Optional[int]
+    too_small_px: Optional[int]
+    over_cap_px: Optional[int]
+    clusters: Optional[int]  # connected clusters, before the size filter
+    clusters_kept: Optional[int]  # at least the minimum size (or kept by a growth link)
+
+    @property
+    def combined_px(self) -> Optional[int]:
+        """The sources' pixels once combined: an overlap counts once."""
+        parts = (self.analysable_px, self.too_small_px, self.over_cap_px)
+        return None if None in parts else sum(parts)
+
+    def total(self, index: int) -> Optional[int]:
+        """The sources' column ``index`` (1 before masks, 2 kept) summed; None if any is."""
+        values = [row[index] for row in self.sources]
+        return None if not values or None in values else sum(values)
+
+
+def pixels_of(project, alert_set) -> PixelCounts:
+    """``alert_set``'s ``PixelCounts``: each source's pixels before and after
+    the masks (its harmonized file's stats), the masks it was built with, and
+    what Integrate counted in its combined raster."""
+    sources = []
+    for name in alert_set.sources:
+        art = project.artifacts.get(harm_key(alert_set.period_id, name))
+        st = (art.stats or {}) if art is not None else {}
+        sources.append((name, st.get("alert_pixels_unmasked"), st.get("alert_pixels")))
+    art = project.artifacts.get(combined_key(alert_set.id))
+    st = (art.stats or {}) if art is not None else {}
+    res = float(project.grid.resolution) if project.grid is not None else 0.0
+    return PixelCounts(
+        pixel_ha=res * res / 10_000.0, sources=tuple(sources),
+        masks=tuple((m.get("name", ""), m.get("mode", "")) for m in alert_set.masks_used),
+        analysable_px=st.get("analysable_px"), too_small_px=st.get("too_small_px"),
+        over_cap_px=st.get("over_cap_px"), clusters=st.get("clusters"), clusters_kept=st.get("clusters_kept"))
+
+
+def _add(values):
+    values = list(values)
+    return None if not values or None in values else sum(values)
+
+
+def sum_pixels(counts) -> Optional[PixelCounts]:
+    """Several sets' ``PixelCounts`` added up (All periods): a source's rows
+    by name, the masks by name; a count any set lacks is None."""
+    counts = list(counts)
+    if not counts:
+        return None
+    by_source, masks = {}, {}
+    for c in counts:
+        for name, before, kept in c.sources:
+            by_source.setdefault(name, []).append((before, kept))
+        masks.update(dict(c.masks))
+    return PixelCounts(
+        pixel_ha=counts[0].pixel_ha,
+        sources=tuple((name, _add(b for b, _ in rows), _add(k for _, k in rows))
+                      for name, rows in sorted(by_source.items(), key=lambda kv: kv[0].casefold())),
+        masks=tuple(sorted(masks.items())),
+        **{f: _add(getattr(c, f) for c in counts)
+           for f in ("analysable_px", "too_small_px", "over_cap_px", "clusters", "clusters_kept")})
+
+
+def linked_of(project, alert_set) -> int:
+    """How many of ``alert_set``'s alerts are linked to earlier loss, off a
+    two-column read of its store, memoized on its summary key. Blocking."""
+    import pyarrow.parquet as pq
+
+    from gui.scripts.growth_index import growth_counts
+
+    def _read():
+        path = set_store.store_path(project, alert_set)
+        columns = [c for c in (GROWS_FROM, BELOW_MIN) if c in pq.read_schema(path).names]
+        if GROWS_FROM not in columns:
+            return 0
+        g = growth_counts(pq.read_table(path, columns=columns).to_pandas())
+        return g.n_growth + g.n_growth_small
+
+    return _memo(("linked", *summary_key(project, alert_set)), _read)
+
+
+@dataclass(frozen=True)
+class PeriodRow:
+    """One row of the Files tab's *Summary of all periods*."""
+
+    period_id: str
+    n_alerts: int
+    confirmed_ha: float
+    n_reviewed: int
+    source_px: Optional[int]
+    clusters: Optional[int]
+    groups: int
+    linked: Optional[int]
+
+
+def period_rows(project, history) -> tuple:
+    """A ``PeriodRow`` per ``history`` entry (``history_of``'s), oldest first.
+    Reads each store's growth links (``linked_of``): a worker's call. A store
+    whose links cannot be read gives None, not a failed table."""
+    out = []
+    for period, alert_set, summary in history:
+        try:
+            linked = linked_of(project, alert_set)
+        except Exception:  # noqa: BLE001 - one cell, not the table
+            logger.exception("could not count the linked alerts of set %s", alert_set.id)
+            linked = None
+        px = pixels_of(project, alert_set)
+        out.append(PeriodRow(period_id=period.id, n_alerts=summary.n_alerts,
+                             confirmed_ha=status_value(summary, CONFIRMED_CODE, charts.MEASURE_AREA),
+                             n_reviewed=summary.n_reviewed, source_px=px.total(1), clusters=px.clusters,
+                             groups=alert_set.n_groups, linked=linked))
+    return tuple(out)
+
+
+#: The summary CSV's columns, in order (English, like every other column name).
+SUMMARY_CSV_COLUMNS = ("period_start", "period_end", "alerts", "confirmed_ha", "reviewed", "source_px",
+                       "clusters", "review_groups", "linked_to_earlier_loss")
+
+
+def summary_csv(project, rows) -> str:
+    """The Summary CSV's text: a header and one line per ``PeriodRow``; an
+    unrecorded count is an empty cell."""
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(SUMMARY_CSV_COLUMNS)
+    for row in rows:
+        period = project.periods.get(row.period_id)
+        start, end = ((period.start.isoformat(), period.end.isoformat()) if period is not None
+                      else row.period_id.partition("_")[::2])
+        writer.writerow([start, end, row.n_alerts, f"{row.confirmed_ha:.2f}", row.n_reviewed,
+                         *("" if v is None else v for v in (row.source_px, row.clusters)), row.groups,
+                         "" if row.linked is None else row.linked])
+    return out.getvalue()
 
 
 # --- the numbers the cards quote -----------------------------------------

@@ -476,6 +476,35 @@ class GrowthSummary:
     rows: tuple[HistoryRow, ...]
 
 
+def _growing(gdf):
+    """The positions of ``gdf``'s growth alerts, and ``GrowthSummary``'s counts of them."""
+    links, small = _links_and_small(gdf)
+    kinds = [kind_of(lk, flag) for lk, flag in zip(links, small)]
+    growing = [i for i, k in enumerate(kinds) if k in (KIND_GROWTH, KIND_GROWTH_SMALL)]
+    status = list(gdf["status"]) if "status" in gdf.columns else [None] * len(gdf)
+    area = list(gdf["area_ha"]) if "area_ha" in gdf.columns else [0.0] * len(gdf)
+    return growing, dict(
+        n_growth=sum(1 for k in kinds if k == KIND_GROWTH),
+        n_growth_small=sum(1 for k in kinds if k == KIND_GROWTH_SMALL),
+        area_ha=float(sum(area[i] for i in growing)),
+        n_reviewed=sum(1 for i in growing if isinstance(status[i], str) and status[i] not in ("", NOT_REVIEWED)))
+
+
+def growth_counts(gdf) -> GrowthSummary:
+    """``set_histories``'s counts alone, without the histories: reads only
+    ``gdf``'s columns (no polygon, no other set), so any frame of a store will do."""
+    return GrowthSummary(rows=(), **_growing(gdf)[1])
+
+
+def sum_growth(summaries) -> GrowthSummary:
+    """The counts of several sets' summaries added up (All periods), without their histories."""
+    summaries = [g for g in summaries if g is not None]
+    return GrowthSummary(n_growth=sum(g.n_growth for g in summaries),
+                         n_growth_small=sum(g.n_growth_small for g in summaries),
+                         area_ha=sum(g.area_ha for g in summaries),
+                         n_reviewed=sum(g.n_reviewed for g in summaries), rows=())
+
+
 def set_histories(p, set_id: str, gdf, *, load=set_store.load_set_alerts, limit: int = 20) -> GrowthSummary:
     """The Overview's History card (spec §7) for ``set_id`` (``gdf`` its rows):
     its growth alerts, and the histories of two or more alerts that include a
@@ -483,16 +512,7 @@ def set_histories(p, set_id: str, gdf, *, load=set_store.load_set_alerts, limit:
     ``added_ha`` is the union of this set's own members that are not false
     positives; its ``alert_id`` the largest of those members. Reads the other
     sets' stores: call it from a worker thread."""
-    links, small = _links_and_small(gdf)
-    kinds = [kind_of(lk, flag) for lk, flag in zip(links, small)]
-    growing = [i for i, k in enumerate(kinds) if k in (KIND_GROWTH, KIND_GROWTH_SMALL)]
-    status = list(gdf["status"]) if "status" in gdf.columns else [None] * len(gdf)
-    area = list(gdf["area_ha"]) if "area_ha" in gdf.columns else [0.0] * len(gdf)
-    summary = dict(
-        n_growth=sum(1 for k in kinds if k == KIND_GROWTH),
-        n_growth_small=sum(1 for k in kinds if k == KIND_GROWTH_SMALL),
-        area_ha=float(sum(area[i] for i in growing)),
-        n_reviewed=sum(1 for i in growing if isinstance(status[i], str) and status[i] not in ("", NOT_REVIEWED)))
+    growing, summary = _growing(gdf)
     if not growing:
         return GrowthSummary(rows=(), **summary)
 

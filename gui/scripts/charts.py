@@ -62,8 +62,8 @@ THEMES = {
         "ink": "#202124",
         "ink2": "#5f6368",
         "grid": "#e8eaed",
-        "accent": "#1565c0",
-        "lookback": "#c4c7c5",
+        "accent": "#2199C4",  # SEPAL secondary
+        "soft": "#d5d8dc",  # a bar that is not an answer ("No answer")
         "rule": "#9aa0a6",
         "ink_dark": "#1a1a1a",
         "ink_light": "#ffffff",
@@ -73,8 +73,8 @@ THEMES = {
         "ink": "#e8eaed",
         "ink2": "#a2a9b0",
         "grid": "#3c4043",
-        "accent": "#6aa9e9",
-        "lookback": "#55595e",
+        "accent": "#2199C4",  # SEPAL secondary: dark's own #5d76ab reads grey on the card
+        "soft": "#4a4f55",
         "rule": "#8a9096",
         "ink_dark": "#1a1a1a",
         "ink_light": "#ffffff",
@@ -338,18 +338,30 @@ def chart_sizes(summary, *, measure: str, theme: dict) -> str:
 # --- when the alerts were detected ---------------------------------------
 
 def chart_timing(summary, *, measure: str, theme: dict) -> str:
-    """Weekly columns. Weeks before the period's own start are drawn in the
-    lookback grey and separated by a rule, because those alerts were detected
-    earlier and carried in -- counting them as this period's would mislead.
+    """Weekly columns, stacked by review status like the trend. Weeks before
+    the period's own start are hatched and separated by a rule, because those
+    alerts were detected earlier and carried in -- counting them as this
+    period's would mislead. Hatching, not a grey: grey is Not reviewed.
     """
     weeks = tuple(summary.by_week)
-    values = [float(n) if measure == MEASURE_ALERTS else area for _, area, n, _ in weeks]
+    index = 2 if measure == MEASURE_ALERTS else 1
+    values = [float(week[index]) for week in weeks]
     if not weeks or sum(values) <= 0:
         return _empty(420, 162, theme)
     fig, ax = _figure(420, 162, theme, rect=(0.115, 0.20, 0.865, 0.68))
     spots = range(len(weeks))
-    colours = [theme["accent"] if in_period else theme["lookback"] for *_, in_period in weeks]
-    ax.bar(spots, values, width=0.78, color=colours, zorder=2)
+    bottoms = [0.0] * len(weeks)
+    colours = status_colors()
+    for code in STACK_ORDER:
+        part = [next((float(row[index]) for row in (week[4] if len(week) > 4 else ()) if row[0] == code), 0.0)
+                for week in weeks]
+        ax.bar(spots, part, bottom=bottoms, width=0.78, color=colours[code],
+               edgecolor=theme["surface"], linewidth=1.0, zorder=2)
+        bottoms = [carried + value for carried, value in zip(bottoms, part)]
+    look_back = [spot for spot, week in enumerate(weeks) if not week[3]]
+    if look_back:
+        ax.bar(look_back, [values[spot] for spot in look_back], width=0.78, color="none",
+               edgecolor=theme["surface"], hatch="///", linewidth=0.0, zorder=3)
     top = max(values) or 1.0
     starts = [spot for spot, week in enumerate(weeks) if week[3]]
     if starts and starts[0] > 0:
@@ -415,7 +427,7 @@ def _merge_by_label(pairs) -> tuple:
     return tuple(merged)
 
 
-def _ranking(rows, *, measure, theme, label_of, width, height, left) -> str:
+def _ranking(rows, *, measure, theme, label_of, width, height, left, soft_unknown=False) -> str:
     """Horizontal bars, largest on top, one hue, each labelled with its value."""
     ranked = _fold_tail(_ranked_for(rows, measure), RANK_LIMIT)
     index = 2 if measure == MEASURE_ALERTS else 1
@@ -429,7 +441,9 @@ def _ranking(rows, *, measure, theme, label_of, width, height, left) -> str:
         return _empty(width, height, theme)
     fig, ax = _figure(width, height, theme, rect=(left, 0.10, 0.97 - left, 0.86))
     spots = range(len(merged))
-    ax.barh(spots, values, height=0.62, color=theme["accent"], zorder=2)
+    unknown = _clip(label_of(UNKNOWN_DRIVER)) if soft_unknown else None
+    ax.barh(spots, values, height=0.62, zorder=2,
+            color=[theme["soft"] if label == unknown else theme["accent"] for label in labels])
     span = max(values) or 1.0
     for spot, value in enumerate(values):
         ax.text(value + span * 0.02, spot, format_value(value, measure), ha="left", va="center",
@@ -470,7 +484,7 @@ def chart_question(summary, key: str, *, measure: str, theme: dict, label_of) ->
     unanswered sentinel, which is not an answer and has no option there.
     """
     return _ranking(summary.breakdown(key), measure=measure, theme=theme, label_of=_answer_label(label_of),
-                    width=420, height=160, left=0.40)
+                    width=420, height=160, left=0.40, soft_unknown=True)
 
 
 def chart_sources(summary, *, measure: str, theme: dict) -> str:

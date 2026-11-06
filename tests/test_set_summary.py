@@ -283,19 +283,25 @@ def test_decimal_year_to_date_returns_none_for_anything_unusable(value):
 def test_weeks_are_mondays_with_the_area_of_their_alerts():
     s = ss.summarize_alerts(_frame())
     assert [w for w, *_ in s.by_week] == [date(2026, 1, 5), date(2026, 2, 9), date(2026, 2, 16)]
-    assert dict((w, n) for w, _, n, _ in s.by_week)[date(2026, 2, 9)] == 2  # the two Feb-14 alerts
+    assert dict((w, n) for w, _, n, *_ in s.by_week)[date(2026, 2, 9)] == 2  # the two Feb-14 alerts
+
+
+def test_each_week_splits_by_status():
+    week = dict((w, by) for w, _, _, _, by in ss.summarize_alerts(_frame()).by_week)[date(2026, 2, 9)]
+    confirmed, false_positive = (ss.STATUS_CODES[k] for k in ("Confirmed", "False Positive"))
+    assert week == ((confirmed, 2.0, 1), (false_positive, 0.25, 1))  # in code order
 
 
 def test_period_start_marks_the_look_back_weeks():
     s = ss.summarize_alerts(_frame(), period_start=date(2026, 2, 10))
-    flags = dict((w, inside) for w, _, _, inside in s.by_week)
+    flags = dict((w, inside) for w, _, _, inside, _ in s.by_week)
     assert flags[date(2026, 1, 5)] is False     # before the period
     assert flags[date(2026, 2, 9)] is True      # the week the period starts in
     assert flags[date(2026, 2, 16)] is True
 
 
 def test_without_a_period_start_every_week_is_in_period():
-    assert all(inside for *_, inside in ss.summarize_alerts(_frame()).by_week)
+    assert all(inside for _, _, _, inside, _ in ss.summarize_alerts(_frame()).by_week)
 
 
 def test_an_unusable_date_is_skipped_rather_than_raising():
