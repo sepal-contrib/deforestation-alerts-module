@@ -1677,7 +1677,7 @@ Dividir os alertas
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/evaluation-split.png
     :alt: Divisão dos alertas entre dois avaliadores
 
-Com **Vários avaliadores** marcado, selecione **Dividir alertas…** acima da tabela de avaliadores para abrir a janela **Dividir os alertas**:
+Com **Vários avaliadores** marcado, selecione **Dividir alertas…** abaixo do modo de revisão para abrir a janela **Dividir os alertas**:
 
 .. list-table::
     :header-rows: 1
@@ -1686,7 +1686,7 @@ Com **Vários avaliadores** marcado, selecione **Dividir alertas…** acima da t
     *   -   Campo
         -   Descrição
         -   Padrão e limites
-    *   -   **Avaliadores por**
+    *   -   **Dividir por**
         -   **Quantidade**: os avaliadores recebem os nomes "Avaliador 1", "Avaliador 2"… **Nomes**: digite os nomes deles.
         -   **Quantidade**.
     *   -   **Número de avaliadores**

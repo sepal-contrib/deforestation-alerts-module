@@ -35,6 +35,8 @@ from gui.widget.enter_key import ENTER_DEFAULT
 FIELD_CSS = (
     ".da-field-group{border:1px solid rgba(0,0,0,0.38);border-radius:4px;padding:4px 12px 8px;margin:0;} "
     ".da-field-group>legend{padding:0 4px;font-size:0.75rem;color:rgba(0,0,0,0.6);} "
+    # Vuetify's radio group adds margin-top:16px + padding-top:4px, a blank band under the legend.
+    ".da-field-group>.v-input--selection-controls{margin-top:0;padding-top:0;} "
     ".theme--dark .da-field-group{border-color:rgba(255,255,255,0.24);} "
     ".theme--dark .da-field-group>legend{color:rgba(255,255,255,0.7);}"
 )

@@ -12,7 +12,7 @@ inference_output_list.py.
 """
 
 import re
-from typing import Callable, Optional
+from typing import Optional
 
 import reacton.ipyvuetify as rv
 import solara
@@ -383,7 +383,6 @@ def ProductTable(
     collapsible: bool = True,
     show_actions: bool = True,
     banner: Optional[str] = None,
-    header_action: Optional[Callable] = None,
 ):
     """Uniform product table: collapsible count header + CSS-grid rows.
 
@@ -408,8 +407,6 @@ def ProductTable(
         collapsible: show the collapse chevron (expanded by default).
         show_actions: False = read-only mode (Summary popup).
         banner: optional stats line under the header (Summary popup).
-        header_action: optional render function for the title row's right
-            end (the Evaluation step's Split alerts… / Edit split).
     """
     collapsed, set_collapsed = solara.use_state(False)
 
@@ -438,9 +435,6 @@ def ProductTable(
                     text=True,
                     x_small=True,
                 )
-            if header_action is not None:
-                with rv.Html(tag="div", style_="margin-left:auto;display:flex;align-items:center;"):
-                    header_action()
         if not collapsed:
             if banner:
                 solara.Text(

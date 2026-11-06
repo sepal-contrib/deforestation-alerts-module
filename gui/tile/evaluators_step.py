@@ -380,7 +380,7 @@ def _SplitFields(form, form_error, split, orphan, packaged, busy, on_cancel, on_
         if mode == "count":
             rv.TextField(label=t("evaluators.count_label"), v_model=form["count"],
                          on_v_model=lambda value: form["set_count"](value or ""), type="number", dense=True,
-                         outlined=True, class_="mt-3", error_messages=shown, disabled=busy)
+                         outlined=True, class_="mt-3", error_messages=shown, hide_details="auto", disabled=busy)
         else:
             # One field per evaluator, in a card as the questionnaire's options. A
             # duplicate is flagged on its own row; the other refusals under the rows.
@@ -673,37 +673,43 @@ def _CreatorPanel(app_state, app_tile_model, analysis, gee_interface):
         merge_open.set(False)
         set_pending(None)
 
-    def _header_action():
+    def _split_action():
         solara.Button(t("evaluators.edit_split") if editing else t("evaluators.open_split"),
                       icon_name="mdi-pencil-outline" if editing else "mdi-account-multiple-plus-outline",
-                      color="primary", text=True, x_small=True, disabled=busy or gdf is None,
+                      color="primary", outlined=True, small=True, disabled=busy or gdf is None,
                       loading=split_task.pending or remove_task.pending,
                       classes=["defo-split-open"], on_click=lambda: split_open.set(True))
 
     form = {"mode": mode, "count": count_text, "names": name_rows, "include": include, "set_mode": set_mode,
             "set_count": set_count_text, "set_names": set_name_rows, "set_include": set_include}
 
-    with solara.Column(style="gap:8px;"):
+    # The split button sits with the mode it locks ("Remove the split to
+    # switch to solo"), so this panel renders the Review mode card too.
+    with rv.Card(outlined=True, class_="pa-3"):
+        _ReviewMode(app_state=app_state, action=_split_action)
+    with rv.Card(outlined=True, class_="pa-3"), solara.Column(style="gap:8px;"):
         if gdf is None:
             solara.Text(t("evaluators.loading"), style=MUTED)
         if orphan:
             solara.Text(t("evaluators.orphan"), classes=["warning--text"])
         ProductTable(title=t("evaluators.table_title"), columns=table_columns(),
                      rows=_table_rows(stats, unassigned, found=found, building_name=building_name),
-                     empty_text=t("evaluators.empty"), header_action=_header_action)
+                     empty_text=t("evaluators.empty"))
         if split is not None and not ready:
             solara.Text(t("evaluators.aoi_waiting"), style=MUTED + "font-size:0.75rem;")
         if newest is not None:
             solara.Text(t("evaluators.built_at", when=newest.strftime("%Y-%m-%d %H:%M")),
                         style="display:block;" + MUTED + "font-size:0.75rem;")
         if split is not None:
+            # Basis auto: a label too long to share the row (es, fr, pt) wraps
+            # its button onto its own line instead of overflowing it.
             with solara.Row(style="gap:8px;flex-wrap:wrap;"):
                 solara.Button(generate_label, icon_name="mdi-package-variant-closed", color="primary", outlined=True,
                               small=True, loading=preparing, disabled=busy or not ready or gdf is None,
                               classes=["defo-generate"],
-                              style="flex:1 1 150px;", on_click=lambda: _launch(generate_task))
+                              style="flex:1 1 auto;", on_click=lambda: _launch(generate_task))
                 solara.Button(t("evaluators.merge_open"), icon_name="mdi-call-merge", color="primary", outlined=True,
-                              small=True, disabled=busy, style="flex:1 1 150px;",
+                              small=True, disabled=busy, style="flex:1 1 auto;",
                               on_click=lambda: merge_open.set(True))
 
     _SplitDialog(open_=split_open, form=form, form_error=form_error, split=split, orphan=orphan,
@@ -797,12 +803,13 @@ def _ModeOption(key, icon, text, checked, disabled, on_change, prefix="defo-mode
 
 
 @solara.component
-def _ReviewMode(app_state):
+def _ReviewMode(app_state, action=None):
     """Solo or multiple evaluators, as two checkboxes (at most one checked)
     whose note says what the chosen mode means. Until one is checked the
     project has no review mode and the step stays empty; Solo completes it.
     A split holds it on Multiple: switching to solo would leave alerts
-    assigned to evaluators the step no longer shows."""
+    assigned to evaluators the step no longer shows. ``action`` renders
+    under the note: the creator panel's Split alerts… / Edit split."""
     p = app_state.project.value
     s = active_set(p)  # None for one render when a set-less project opens (the child renders before the step)
     split = s.split if s is not None else None
@@ -832,6 +839,9 @@ def _ReviewMode(app_state):
                         on_change=lambda checked, m=multi: _set(m, checked))
     rv.Html(tag="div", class_="defo-mode-note", style_="margin-top:4px;" + MUTED + "font-size:0.75rem;",
             children=[note])
+    if action is not None:
+        with solara.Div(style="margin-top:8px;"):
+            action()
 
 
 def _radius_text(radius_m: float) -> str:
@@ -942,12 +952,12 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
                 _GroupOption(app_state=app_state)
         elif s is not None:
             # One card per setting, as on the Questionnaire step: the mode, its evaluators, the grouping.
-            with rv.Card(outlined=True, class_="pa-3"):
-                _ReviewMode(app_state=app_state)
-            if p.multi_evaluator:
+            if p.multi_evaluator:  # the panel renders the Review mode card with its split button
+                _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
+                              gee_interface=gee_interface)
+            else:
                 with rv.Card(outlined=True, class_="pa-3"):
-                    _CreatorPanel(app_state=app_state, app_tile_model=app_tile_model, analysis=analysis,
-                                  gee_interface=gee_interface)
+                    _ReviewMode(app_state=app_state)
             with rv.Card(outlined=True, class_="pa-3"):
                 _GroupOption(app_state=app_state)
         # Without an active set, Start analysis says why (workflow.lock_review).

@@ -813,7 +813,7 @@
     "group_locked_split_off": "Las alertas se repartieron sin agrupación: quita el reparto para cambiarla.",
     "group_copy_note": "Definido por el creador del proyecto.",
     "split_title": "Repartir las alertas",
-    "mode_label": "Evaluadores por",
+    "mode_label": "Repartir por",
     "mode_count": "Número",
     "mode_names": "Nombres",
     "count_label": "Número de evaluadores",

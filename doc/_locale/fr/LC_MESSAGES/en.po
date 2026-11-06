@@ -2503,11 +2503,11 @@ msgstr "Répartir les alertes"
 msgid "Splitting the alerts between two evaluators"
 msgstr "Répartition des alertes entre deux évaluateurs"
 
-msgid "With **Multiple evaluators** selected, select **Split alerts…** above the evaluators table to open the **Split the alerts** dialog:"
-msgstr "Avec **Plusieurs évaluateurs** coché, sélectionnez **Répartir les alertes…** au-dessus du tableau des évaluateurs pour ouvrir la boîte de dialogue **Répartir les alertes** :"
+msgid "With **Multiple evaluators** selected, select **Split alerts…** under the review mode to open the **Split the alerts** dialog:"
+msgstr "Avec **Plusieurs évaluateurs** coché, sélectionnez **Répartir les alertes…** sous le mode de revue pour ouvrir la boîte de dialogue **Répartir les alertes** :"
 
-msgid "**Evaluators by**"
-msgstr "**Évaluateurs par**"
+msgid "**Split by**"
+msgstr "**Répartir par**"
 
 msgid "**Count**: the evaluators are named \"Evaluator 1\", \"Evaluator 2\"… **Names**: enter their names."
 msgstr "**Nombre** : les évaluateurs sont nommés « Évaluateur 1 », « Évaluateur 2 »… **Noms** : saisissez leurs noms."

@@ -84,22 +84,6 @@ def test_an_action_without_href_is_still_a_button():
         rc.close()
 
 
-def test_a_header_action_sits_in_the_title_row():
-    clicked = []
-
-    def _action():
-        solara.Button("Edit split", on_click=lambda: clicked.append(1))
-
-    _box, rc = reacton.render(ProductTable(title="T", columns=[{"label": "C"}], rows=[], empty_text="-",
-                                           header_action=_action), handle_error=False)
-    try:
-        (btn,) = [b for b in rc.find(v.Btn).widgets if "Edit split" in _strings(b)]
-        btn.fire_event("click", None)
-        assert clicked == [1]
-    finally:
-        rc.close()
-
-
 def test_a_forms_leading_action_sits_left_of_cancel():
     @solara.component
     def _Card():

@@ -1716,12 +1716,12 @@ Some changes are locked:
 Split the alerts
 ^^^^^^^^^^^^^^^^
 
-.. shot: evaluation-split | The "Split the alerts" dialog of the demo project: Evaluators by = Names, two name rows filled ("Ana", "Luis") with their close icons, Add evaluator, "Empty rows are skipped.", Include already reviewed alerts unchecked with its hint, and the Split button. Crop to the dialog.
+.. shot: evaluation-split | The "Split the alerts" dialog of the demo project: Split by = Names, two name rows filled ("Ana", "Luis") with their close icons, Add evaluator, "Empty rows are skipped.", Include already reviewed alerts unchecked with its hint, and the Split button. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/evaluation-split.png
     :alt: Splitting the alerts between two evaluators
 
-With **Multiple evaluators** selected, select **Split alerts…** above the evaluators table to open the **Split the alerts** dialog:
+With **Multiple evaluators** selected, select **Split alerts…** under the review mode to open the **Split the alerts** dialog:
 
 .. list-table::
     :header-rows: 1
@@ -1730,7 +1730,7 @@ With **Multiple evaluators** selected, select **Split alerts…** above the eval
     *   -   Field
         -   Description
         -   Default and limits
-    *   -   **Evaluators by**
+    *   -   **Split by**
         -   **Count**: the evaluators are named "Evaluator 1", "Evaluator 2"… **Names**: enter their names.
         -   **Count**.
     *   -   **Number of evaluators**

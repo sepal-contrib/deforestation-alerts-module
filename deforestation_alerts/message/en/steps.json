@@ -777,7 +777,7 @@
     "group_locked_split_off": "The alerts were split without grouping: remove the split to change it.",
     "group_copy_note": "Set by the project's creator.",
     "split_title": "Split the alerts",
-    "mode_label": "Evaluators by",
+    "mode_label": "Split by",
     "mode_count": "Count",
     "mode_names": "Names",
     "count_label": "Number of evaluators",

@@ -1675,7 +1675,7 @@ Répartir les alertes
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/evaluation-split.png
     :alt: Répartition des alertes entre deux évaluateurs
 
-Avec **Plusieurs évaluateurs** coché, sélectionnez **Répartir les alertes…** au-dessus du tableau des évaluateurs pour ouvrir la boîte de dialogue **Répartir les alertes** :
+Avec **Plusieurs évaluateurs** coché, sélectionnez **Répartir les alertes…** sous le mode de revue pour ouvrir la boîte de dialogue **Répartir les alertes** :
 
 .. list-table::
     :header-rows: 1
@@ -1684,7 +1684,7 @@ Avec **Plusieurs évaluateurs** coché, sélectionnez **Répartir les alertes…
     *   -   Champ
         -   Description
         -   Valeur par défaut et limites
-    *   -   **Évaluateurs par**
+    *   -   **Répartir par**
         -   **Nombre** : les évaluateurs sont nommés « Évaluateur 1 », « Évaluateur 2 »… **Noms** : saisissez leurs noms.
         -   **Nombre**.
     *   -   **Nombre d'évaluateurs**
