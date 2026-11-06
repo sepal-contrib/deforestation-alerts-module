@@ -242,7 +242,12 @@
       "unsaved_title": "Cette alerte a des modifications non enregistrées",
       "unsaved_hint": "Abandonner les supprime et passe à une autre alerte. Rester vous garde sur celle-ci.",
       "discard": "Abandonner",
-      "stay": "Rester"
+      "stay": "Rester",
+      "leave_title": "Modifications non enregistrées dans Analyse",
+      "leave_body": "L'alerte {n} a des modifications non enregistrées. Continuer les supprime.",
+      "continue_anyway": "Continuer quand même",
+      "open_analysis": "Ouvrir Analyse",
+      "leave_close": "Fermer"
     },
     "questions": {
       "required_missing": "Répondez à « {question} » avant d'enregistrer.",

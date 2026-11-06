@@ -23,7 +23,13 @@ does; it wears *Next*'s emphasis.
 an inline prompt, *Discard* (move on; the alert opens again from its store)
 or *Stay*. Every alert change started on the screen goes through the same
 ``guard``: this *Next* and its next-unreviewed icon, and the top bar's
-Previous, Next, Go and next unreviewed (``context.build_context``).
+Previous, Next, Go and next unreviewed (``context.build_context``), the
+set selector and the filter.
+
+**A change started elsewhere** (Overview, the map popup, the Project window)
+asks in a dialog over that screen instead (``leave``): *Continue anyway*
+discards and goes on, *Open Analysis* cancels it and shows the alert; closing
+the dialog cancels it too.
 
 Flat on the panel's surface, like the blocks above it: the same 16 px edges
 and the same hairline, no card of its own. The background is opaque; the
@@ -48,6 +54,7 @@ from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL, TYPE_TITLE
 from gui.tile.analysis.state import save_size
 from gui.widget.buttons import btn, icon_btn, set_label, set_tip
+from gui.widget.enter_key import ENTER_DEFAULT
 
 FOOTER_STYLE = ("flex: 0 0 auto; padding: 0 16px 12px; "
                 "background-color: var(--v-background-base, #ffffff); "
@@ -154,16 +161,81 @@ def _build_confirm(labels):
     return SimpleNamespace(dialog=dialog, ask=ask, ok=ok, cancel=cancel, body=body)
 
 
+def _build_leave(labels):
+    """The unsaved-work dialog for a change started outside the Analysis
+    screen (user, 2026-11-06, option A). ``ask(n, on_continue, on_open)``
+    names alert ``n`` (1-based) and opens it; *Continue anyway* closes it
+    and runs ``on_continue``, *Open Analysis* (the filled, safe one) closes it
+    and runs ``on_open``; the close icon, Esc or a click outside only close
+    it. A raw ``v.Dialog`` like ``_build_confirm``: Vuetify stacks it over a
+    rail dialog already open (Project, Overview)."""
+    keep = btn("primary", "")
+    drop = btn("secondary", "", color="warning")
+    close = icon_btn("tertiary", "mdi-close")
+    heading = v.Html(tag="span", children=[""])
+    title = v.CardTitle(class_="d-flex align-center flex-nowrap",
+                        style_="word-break: normal; font-size: 16px; font-weight: 600; gap: 8px;", children=[
+                            v.Icon(color="warning", children=["mdi-alert-outline"]), heading,
+                            v.Spacer(), close])
+    body = v.CardText(class_=TYPE_BODY, children=[""])
+    dialog = v.Dialog(v_model=False, max_width="420px", children=[
+        v.Card(children=[title, body,
+                         v.CardActions(class_="pa-4 pt-0", style_="gap: 8px;", children=[
+                             v.Html(tag="div", class_="d-flex flex-grow-1", style_="gap: 8px;", children=[drop, keep])])]),
+    ])
+    for b in (drop, keep):
+        b.class_ = "flex-grow-1"
+        b.style_ = "flex-basis: 0;"
+    keep.class_ += f" {ENTER_DEFAULT}"  # Enter picks the safe answer
+    pending = {"continue": None, "open": None, "n": None}
+
+    def ask(n, on_continue, on_open):
+        pending.update({"continue": on_continue, "open": on_open, "n": n})
+        _label()
+        dialog.v_model = True
+
+    def _answer(key):
+        def run(*_):
+            action = pending[key]
+            _close()
+            if action is not None:
+                action()
+        return run
+
+    def _close(*_):
+        dialog.v_model = False
+        pending.update({"continue": None, "open": None})
+
+    drop.on_event("click", _answer("continue"))
+    keep.on_event("click", _answer("open"))
+    close.on_event("click", _close)
+    # Esc or a click outside: Vuetify closes it; the question is dropped
+    dialog.observe(lambda change: None if change["new"] else _close(), "v_model")
+
+    def _label():
+        heading.children = [t("analysis_tile.verdict.leave_title")]
+        body.children = [t("analysis_tile.verdict.leave_body", n=pending["n"] or "")]
+        set_label(drop, t("analysis_tile.verdict.continue_anyway"))
+        set_label(keep, t("analysis_tile.verdict.open_analysis"))
+        set_tip(close, t("analysis_tile.verdict.leave_close"))
+
+    labels.add(_label)
+    return SimpleNamespace(dialog=dialog, ask=ask, keep=keep, drop=drop, close=close, body=body)
+
+
 def build_footer(run_save, export_root, app_state, analysis, *, labels=None, capture=None):
     """Build and return ``SimpleNamespace(root, save, next, state_line,
-    prompt, guard, confirm)``.
+    prompt, guard, drop_and_move, leave, confirm)``.
 
     ``run_save`` is the export section's runner (``export.make_save_runner``),
     ``export_root`` the Export section, placed first in the dock.
     ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
     given): the buttons' words and the state line follow a language switch.
     ``guard(move)`` runs ``move`` (an alert change) at once, or after the
-    reviewer's *Discard* when the alert has unsaved work.
+    reviewer's *Discard* when the alert has unsaved work. ``drop_and_move(move)``
+    is that *Discard*: ``move`` and, when it left the alert on screen, the
+    alert seeded again from its store. ``leave`` is the dialog a change
+    started elsewhere asks in (``_build_leave``).
 
     ``capture()`` (group review, spec 2026-10-26 §6.4) returns the alert as
     a Save writes it (``state.capture_alert``): with one, *Save* captures at
@@ -219,13 +291,9 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         pending["move"] = move
         _show_prompt(True)
 
-    def _discard(*_):
-        move = pending["move"]
-        _show_prompt(False)
+    def drop_and_move(move):
         # Nothing to undo by hand: the alert change re-seeds the review from
         # the store (``reset_alert`` and the per-alert load).
-        if move is None:
-            return
         token = analysis.alert_token.value
         move()
         if analysis.alert_token.value == token:
@@ -233,7 +301,14 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
             # screen): the same re-seed, asked for.
             analysis.reload_alert.set(analysis.reload_alert.value + 1)
 
+    def _discard(*_):
+        move = pending["move"]
+        _show_prompt(False)
+        if move is not None:
+            drop_and_move(move)
+
     confirm = _build_confirm(labels)
+    leave = _build_leave(labels)
 
     def _on_save(*_):
         if capture is None:
@@ -361,8 +436,9 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         state_line,
         # a dialog draws nothing in place
         confirm.dialog,
+        leave.dialog,
     ])
     setattr(root, _SLOTS, {"save": save, "next": nxt, "skip": skip, "state_line": state_line,
                            "prompt": prompt, "discard": discard, "stay": stay})
     return SimpleNamespace(root=root, save=save, next=nxt, state_line=state_line, prompt=prompt, guard=guard,
-                           confirm=confirm)
+                           drop_and_move=drop_and_move, leave=leave, confirm=confirm)

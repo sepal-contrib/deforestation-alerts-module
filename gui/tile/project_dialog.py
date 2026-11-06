@@ -446,17 +446,24 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
 
     def _ask_first(move):
         """Run ``move`` (it replaces or closes the open project) now, or, over
-        unsaved Analysis work, after the dock's Discard/Stay prompt
-        (``app_state.guard``), with the dialog closed so the prompt shows.
-        Returns ``move()``'s result when it ran now, True otherwise (a form
-        closes)."""
+        unsaved Analysis work, once the unsaved-changes dialog
+        (``app_state.guard``, opened over this window) says Continue anyway.
+        Returns ``move()``'s result when it ran now; False while it asks, so
+        a name form stays open (and closes once ``move`` succeeds)."""
         if analysis is None or not analysis.dirty.value:
             return move()
-        for flag in (new_open, dup_open, rename_open, manage_open, import_open):
-            flag.set(False)
-        dismiss()
-        app_state.guard(move)
-        return True
+
+        def _continue():
+            if move():  # a name form's install succeeded: its form closes as it would have
+                for flag in (new_open, dup_open, rename_open):
+                    flag.set(False)
+
+        def _close_forms():  # Open Analysis leaves this window: nothing stays open in it
+            for flag in (new_open, dup_open, rename_open, manage_open, import_open):
+                flag.set(False)
+
+        app_state.guard(_continue, on_open=_close_forms)
+        return False
 
     def _show_workflow():
         # From any step: the navigation alone closes the dialog only when it

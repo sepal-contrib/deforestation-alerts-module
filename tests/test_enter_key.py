@@ -98,3 +98,37 @@ def test_enter_in_a_select_is_still_the_selects():
 def test_enter_in_a_field_that_owns_it_presses_nothing():
     assert enter_key.ENTER_OWN == "da-enter-own"
     assert _enter_in("own") == 0
+
+
+_TWO = """<!doctype html><html><body>
+<div id="overlay" vuetify-overlay class="v-application">
+  <div id="under" class="v-dialog__content v-dialog__content--active" style="z-index:202" tabindex="0">
+    <input id="search" type="text">
+  </div>
+  <div id="top" class="v-dialog__content v-dialog__content--active" style="z-index:204" tabindex="-1"></div>
+</div></body></html>"""
+
+
+def test_esc_left_under_the_topmost_dialog_goes_to_it():
+    """A form's retain-focus keeps the focus in Manage projects under the
+    unsaved-changes prompt: ESC must close the prompt, not Manage."""
+    sync_api = pytest.importorskip("playwright.sync_api")
+    script = enter_key._TEMPLATE.split("<script>")[1].split("</script>")[0]
+    try:
+        with sync_api.sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_content(_TWO)
+            page.evaluate(_MOUNT, script)
+            page.evaluate("""() => { window.heard = [];
+                for (const id of ['under', 'top'])  // VDialog's own ESC listener, on its content
+                    document.getElementById(id).addEventListener('keydown',
+                        e => e.keyCode === 27 && window.heard.push(id)); }""")
+            page.focus("#search")
+            page.keyboard.press("Escape")
+            heard = page.evaluate("() => window.heard")
+            focused = page.evaluate("() => document.activeElement.id")
+            browser.close()
+    except sync_api.Error as exc:  # no browser installed here
+        pytest.skip(f"no headless Chromium: {exc}")
+    assert heard == ["top"] and focused == "top"

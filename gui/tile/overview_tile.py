@@ -568,10 +568,14 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
         position = set_store.position_of(gdf, alert_id)
         if position is None:
             return
-        if dismiss is not None:
-            dismiss()
-        # an alert change: it asks first over unsaved work in Analysis
-        app_state.guard(lambda: set_store.go_to_alert(app_state, p.name, s.id, alert_id, position))
+        def _go():
+            if dismiss is not None:
+                dismiss()
+            set_store.go_to_alert(app_state, p.name, s.id, alert_id, position)
+
+        # an alert change: over unsaved work in Analysis it asks first, in a
+        # dialog over this one
+        app_state.guard(_go)
 
     def _switch(reactive):
         """Flip a map-layer switch. Turning one ON closes this dialog, because
@@ -590,7 +594,7 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
         with solara.Row(style="gap: 12px; align-items: center; flex-wrap: wrap;"):
             if s is not None:
                 with solara.Div(style="flex: 1 1 300px; min-width: 240px;"):
-                    SetSelector(app_state=app_state, dismiss=dismiss)
+                    SetSelector(app_state=app_state)
                 _measure_picker(measure, set_measure)
             rv.Spacer()
             solara.Button(t("overview_tile.review_button"), color="primary", small=True,

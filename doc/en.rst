@@ -2338,6 +2338,8 @@ The filled button shows the next step: **Save** while the alert has unsaved chan
 
 With unsaved changes, **Next**, the icon and the top bar's **Previous**, **Next**, **Go** and icon ask first. The buttons give way to "This alert has unsaved changes": **Discard** drops the changes and moves on, **Stay** keeps you on the alert.
 
+A change started somewhere else (a **Go** in **Overview** or in a map popup, the alert set picked in **Overview**, or opening, creating, renaming or deleting the open project in **Project**) asks in the **Unsaved changes in Analysis** dialog, over the window you are in. **Continue anyway** drops the changes and does what you selected; **Open Analysis** cancels it and shows the alert, so you can save it. Closing the dialog does nothing.
+
 The state line reads "Unsaved changes on this alert", "Save your drawing before saving this review" or "Saved 14:32".
 
 A save writes into the alert set:

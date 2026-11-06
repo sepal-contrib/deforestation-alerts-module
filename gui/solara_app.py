@@ -843,6 +843,7 @@ def _AppShell():
             app_state=app_state,
             gee_interface=gee_interface,
             theme_state=theme_state,
+            dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model),
         ),
         dependencies=[],
     )

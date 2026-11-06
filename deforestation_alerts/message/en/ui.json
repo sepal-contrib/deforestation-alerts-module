@@ -235,7 +235,12 @@
       "unsaved_title": "This alert has unsaved changes",
       "unsaved_hint": "Discard drops them and moves on. Stay keeps you on this alert.",
       "discard": "Discard",
-      "stay": "Stay"
+      "stay": "Stay",
+      "leave_title": "Unsaved changes in Analysis",
+      "leave_body": "Alert {n} has changes you have not saved. Continuing drops them.",
+      "continue_anyway": "Continue anyway",
+      "open_analysis": "Open Analysis",
+      "leave_close": "Close"
     },
     "questions": {
       "required_missing": "Answer “{question}” before saving.",

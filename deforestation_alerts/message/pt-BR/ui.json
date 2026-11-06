@@ -242,7 +242,12 @@
       "unsaved_title": "Este alerta tem alterações não salvas",
       "unsaved_hint": "Descartar as apaga e passa para outro alerta. Ficar mantém você neste.",
       "discard": "Descartar",
-      "stay": "Ficar"
+      "stay": "Ficar",
+      "leave_title": "Alterações não salvas na Análise",
+      "leave_body": "O alerta {n} tem alterações que você não salvou. Continuar as descarta.",
+      "continue_anyway": "Continuar mesmo assim",
+      "open_analysis": "Abrir Análise",
+      "leave_close": "Fechar"
     },
     "questions": {
       "required_missing": "Responda “{question}” antes de salvar.",

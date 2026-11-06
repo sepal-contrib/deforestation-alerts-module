@@ -115,10 +115,11 @@ class AppState:
         # Overview's Go into another set (spec §9.3): (set id, alert id) to
         # select once that set's alerts are published; None otherwise
         self.goto_alert = solara.reactive(None)
-        # ``guard(move)`` runs an alert change: at once, or after the Analysis
-        # dock's "discard unsaved work?" once that layout set it (its
-        # ``footer.guard``). Every caller that changes the alert goes through it.
-        self.guard = lambda move: move()
+        # ``guard(move, on_open=None)`` runs an alert change: at once, or,
+        # once the Analysis layout set it, after its unsaved-changes dialog's
+        # Continue anyway (``on_open`` runs on its Open Analysis). Every caller
+        # that changes the alert goes through it.
+        self.guard = lambda move, on_open=None: move()
         # legends: published by MapLayers exactly while each layer is on the
         # map (spec §9.4)
         self.layer_legends = solara.reactive(())

@@ -610,7 +610,8 @@ def _open_questions_for(questions):
     return _on_refused
 
 
-def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field, *, labels=None) -> v.Html:
+def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_field, *, labels=None,
+                   dismiss=None) -> v.Html:
     """The right panel: the head, the two blocks, two sections and the dock.
 
     In order (spec §3-§6, D4): the set-status banner, **block A** (the facts
@@ -677,15 +678,30 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
     # Next does: one prompt, in the dock.
     context = build_context(app_state, id_field, labels=labels, analysis=analysis, guard=footer.guard)
 
-    def _guard(move):
-        # The set selector, the filter, Overview's and the map popup's Go ask
-        # too. The prompt is in the dock: a Go from another screen shows it.
-        if analysis.dirty.value:
-            app_state.current_page_view.value = "analysis_tile"
-        footer.guard(move)
+    def _open_analysis():
+        # ``dismiss`` (the shell's) closes a rail dialog the change came from
+        # (Project, Overview); the page view brings the analysis screen.
+        if dismiss is not None:
+            dismiss()
+        app_state.current_page_view.value = "analysis_tile"
+
+    def _guard(move, on_open=None):
+        # A change started off this screen (Overview's and the map popup's
+        # Go, Overview's set selector, the Project window) asks in a dialog
+        # over the screen it came from (user, 2026-11-06, option A). The top
+        # bar's set selector and filter ask in the dock, with Next.
+        if not analysis.dirty.value:
+            move()
+            return
+        def _open():
+            if on_open is not None:  # the caller's own tidy-up (the Project window's forms)
+                on_open()
+            _open_analysis()
+
+        footer.leave.ask(app_state.actual_alert_id.value + 1, lambda: footer.drop_and_move(move), _open)
 
     app_state.guard = _guard
-    topnav = build_topnav(context, build_set_selector(app_state, labels=labels), labels=labels)
+    topnav = build_topnav(context, build_set_selector(app_state, labels=labels, guard=footer.guard), labels=labels)
     earlier = build_earlier_controls(widgets, app_state, analysis, labels=labels, ask=footer.confirm.ask)
     near = nearby.build_nearby_section(widgets, app_state, analysis, labels=labels)
     run_save = export_parts.run_save
@@ -1061,6 +1077,7 @@ def build_analysis_layout(
     app_state,
     gee_interface,
     theme_state=None,
+    dismiss=None,
 ):
     """Build the analysis screen once per session (the shell memoizes it).
 
@@ -1096,6 +1113,9 @@ def build_analysis_layout(
     theme_state : ThemeState, optional
         Shared app theme state: the views and the screen track the app's
         light/dark theme exactly as the shared main map does.
+    dismiss : callable, optional
+        Closes the open rail dialog (the shell's ``dismiss_dialog``): the
+        unsaved-work dialog's *Open Analysis* leaves Project or Overview.
     """
     # Every builder registers its label hooks here; ``relabel`` runs them.
     labels = Labels()
@@ -1165,5 +1185,6 @@ def build_analysis_layout(
         app_tile_model=app_tile_model,
         id_field=id_field,
         labels=labels,
+        dismiss=dismiss,
     )
     return build_screen(widgets, controls, app_state, theme_state, labels=labels)

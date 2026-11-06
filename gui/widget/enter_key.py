@@ -82,6 +82,12 @@ So after any click on a ``.v-overlay`` the listener focuses the topmost open
 dialog, once Vuetify has handled the click (a dropdown closed, a
 non-persistent prompt dismissed — then the dialog under it is the one on top).
 
+ESC left behind the topmost dialog (the retain-focus pull above) goes to the
+topmost dialog too: the listener stops it and sends it again on that
+dialog's content, where VDialog hears it. Otherwise ESC over Manage projects'
+unsaved-changes prompt closed Manage and left the prompt up (seen in the
+browser, 2026-11-06).
+
 Destructive confirmations are deliberately included: Enter mirrors ESC, the
 dialog is itself the confirmation step behind a deliberate click, and the one
 irreversible multi-GB delete (a whole project) keeps its button disabled until
@@ -137,6 +143,7 @@ module.exports = {
       // ESC dismisses what a waiting press was meant for.
       if (e.key === "Escape") {
         this.srWaiting.clear();
+        this.escToTopmost(e);
         return;
       }
       if (!this.isPlainEnter(e)) return;
@@ -157,6 +164,20 @@ module.exports = {
       e.preventDefault();
       e.stopPropagation();
       this.press(button);
+    },
+    escToTopmost(e) {
+      // ESC left in a dialog under the topmost one (its retain-focus pulled
+      // the focus back) is for the topmost one too: VDialog hears ESC on its
+      // own content, so it would close the dialog underneath instead.
+      const top = this.topmostDialog();
+      const around = e.target instanceof Element && e.target.closest(".v-dialog__content");
+      if (!top || !around || around === top || e.repeat) return;
+      e.preventDefault();
+      e.stopPropagation();
+      top.focus({ preventScroll: true });
+      const esc = new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true });
+      Object.defineProperty(esc, "keyCode", { get: () => 27 }); // what VDialog reads
+      top.dispatchEvent(esc);
     },
     hearOnLeaving(dialog, e) {
       // Bubble phase on the dialog: after the focused control's own handlers,

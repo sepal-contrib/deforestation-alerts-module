@@ -242,7 +242,12 @@
       "unsaved_title": "Esta alerta tiene cambios sin guardar",
       "unsaved_hint": "Descartar los elimina y pasa a otra alerta. Quedarse te mantiene en esta.",
       "discard": "Descartar",
-      "stay": "Quedarse"
+      "stay": "Quedarse",
+      "leave_title": "Cambios sin guardar en Análisis",
+      "leave_body": "La alerta {n} tiene cambios que no guardaste. Si continúas, se pierden.",
+      "continue_anyway": "Continuar igualmente",
+      "open_analysis": "Abrir Análisis",
+      "leave_close": "Cerrar"
     },
     "questions": {
       "required_missing": "Responda «{question}» antes de guardar.",

@@ -48,11 +48,14 @@ def panel(tmp_path, monkeypatch):
     model = SimpleNamespace(recipe_folder_path=str(tmp_path), custom_report_template=None,
                             alert_set=None, remember_position=lambda *_: None)
     id_field = v.TextField(v_model=None)
+    dismissed = []
     controls = analysis_tile.build_controls(
         widgets=SimpleNamespace(panes=make_panes()),
         app_state=app_state, analysis=analysis,
-        aux_model=model, app_tile_model=model, id_field=id_field)
-    return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis, id_field=id_field)
+        aux_model=model, app_tile_model=model, id_field=id_field,
+        dismiss=lambda: dismissed.append(app_state.current_page_view.value))
+    return SimpleNamespace(controls=controls, app_state=app_state, analysis=analysis, id_field=id_field,
+                           dismissed=dismissed)
 
 
 def _texts(root, out=None):
@@ -107,10 +110,10 @@ def test_the_dock_is_export_then_save_and_next_then_the_state_line(panel):
     # same key, which passes on the ``⟦key⟧`` placeholder too.
     assert label_of(save) == "Save" and label_of(nxt) == "Next"
     # The order inside the dock: Export, the buttons, the (hidden)
-    # prompt, the state line; then the group save's confirmation, a dialog
-    # that draws nothing in place.
+    # prompt, the state line; then the group save's confirmation and the
+    # leave dialog, dialogs that draw nothing in place.
     assert footer.children == [sections.export.root, footer.children[1], prompt, state_line,
-                               sections.footer.confirm.dialog]
+                               sections.footer.confirm.dialog, sections.footer.leave.dialog]
     assert footer.children[1].children == [save, nxt, next_unreviewed_widget(footer)]
     assert "display: none" in prompt.style_
     # The background is an opaque surface: the panel content scrolls above it.
@@ -603,19 +606,67 @@ def test_the_filter_apply_asks_first_over_unsaved_work(panel):
     assert panel.analysis.alert_filter.value == wanted
 
 
-def test_a_go_from_elsewhere_asks_on_the_analysis_screen(panel):
-    """``app_state.guard`` is the dock's once the panel is built: Overview's
-    and the map popup's Go ask too, and the prompt's screen is shown."""
+def _go_from_elsewhere(panel):
+    """A Go from Overview over unsaved work on alert 1: the leave dialog."""
     _three_alerts(panel.app_state)
-    footer = analysis_tile.panel_sections(panel.controls).footer.root
-    _prompt, discard, _stay = prompt_widgets(footer)
+    footer = analysis_tile.panel_sections(panel.controls).footer
     panel.app_state.current_page_view.value = "overview_tile"
     panel.analysis.dirty.set(True)
     panel.app_state.guard(lambda: panel.app_state.go_to(2))
-    assert _prompt_shown(footer) and panel.app_state.actual_alert_id.value == 0
+    return footer
+
+
+def test_a_go_from_elsewhere_asks_in_a_dialog_over_its_screen(panel):
+    """``app_state.guard`` (Overview's and the map popup's Go, the Project
+    window) asks in the leave dialog where the user is (user, 2026-11-06,
+    option A): not the dock's prompt, no screen change. Continue anyway
+    drops the changes and moves."""
+    footer = _go_from_elsewhere(panel)
+    leave = footer.leave
+    assert leave.dialog.v_model and not _prompt_shown(footer.root)
+    assert "da-enter-default" in leave.keep.class_  # Enter is Open Analysis, the safe one
+    assert t("analysis_tile.verdict.leave_body", n=1) in _texts(leave.body)
+    assert panel.app_state.current_page_view.value == "overview_tile"
+    assert panel.app_state.actual_alert_id.value == 0 and panel.dismissed == []
+    leave.drop.fire_event("click", None)  # Continue anyway
+    assert not leave.dialog.v_model and panel.app_state.actual_alert_id.value == 2
+    assert panel.app_state.current_page_view.value == "overview_tile"
+
+
+def test_open_analysis_runs_the_callers_tidy_up_first(panel):
+    """``guard(move, on_open)``: the Project window closes its forms."""
+    _three_alerts(panel.app_state)
+    footer = analysis_tile.panel_sections(panel.controls).footer
+    panel.analysis.dirty.set(True)
+    seen = []
+    panel.app_state.guard(lambda: seen.append("move"), on_open=lambda: seen.append("tidy"))
+    footer.leave.keep.fire_event("click", None)
+    assert seen == ["tidy"] and len(panel.dismissed) == 1
+
+
+def test_open_analysis_cancels_the_move_and_shows_the_alert(panel):
+    """Open Analysis closes the rail dialog the Go came from, then shows the
+    unsaved alert on Analysis, its changes kept."""
+    footer = _go_from_elsewhere(panel)
+    footer.leave.keep.fire_event("click", None)
+    assert not footer.leave.dialog.v_model and panel.dismissed == ["overview_tile"]
     assert panel.app_state.current_page_view.value == "analysis_tile"
-    discard.fire_event("click", None)
-    assert panel.app_state.actual_alert_id.value == 2
+    assert panel.app_state.actual_alert_id.value == 0 and panel.analysis.dirty.value
+
+
+@pytest.mark.parametrize("how", ["icon", "outside"])
+def test_closing_the_leave_dialog_does_nothing(panel, how):
+    """The close icon, Esc or a click outside: the user stays where they are."""
+    footer = _go_from_elsewhere(panel)
+    if how == "icon":
+        footer.leave.close.fire_event("click", None)
+    else:
+        footer.leave.dialog.v_model = False  # what Vuetify writes on Esc / outside
+    assert not footer.leave.dialog.v_model and panel.dismissed == []
+    assert panel.app_state.current_page_view.value == "overview_tile"
+    assert panel.app_state.actual_alert_id.value == 0 and panel.analysis.dirty.value
+    footer.leave.drop.fire_event("click", None)  # a stale click runs nothing
+    assert panel.app_state.actual_alert_id.value == 0
 
 
 def test_a_guard_without_analysis_moves_at_once():

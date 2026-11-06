@@ -48,7 +48,7 @@ def select_set(app_state, project_name: str, set_id: str) -> bool:
 
 
 @solara.component
-def SetSelector(app_state, dismiss=None):
+def SetSelector(app_state):
     p = app_state.project.value
     redraw, set_redraw = solara.use_state(0)
     items = set_items(p)
@@ -62,17 +62,15 @@ def SetSelector(app_state, dismiss=None):
         # A set switch changes the alert: it asks first over unsaved work.
         app_state.guard(lambda: moved.append(select_set(app_state, p.name, set_id)))
         if not moved:
-            # the prompt is in the Analysis dock, behind this dialog; the
-            # select goes back to the active set until the user answers
-            if dismiss is not None:
-                dismiss()
+            # asked first (a dialog over this one): the select goes back to
+            # the active set until the user answers
             set_redraw(lambda n: n + 1)
 
     rv.Select(label=t("steps.sets.label"), items=items, v_model=p.active_set, on_v_model=_picked, dense=True,
               outlined=True, hide_details=True).key(f"sets-{redraw}")
 
 
-def build_set_selector(app_state, *, labels=None) -> v.Select:
+def build_set_selector(app_state, *, labels=None, guard=None) -> v.Select:
     """The selector as a raw widget for the Analysis controls.
 
     It follows every project publish, whichever thread publishes (a worker's
@@ -83,8 +81,11 @@ def build_set_selector(app_state, *, labels=None) -> v.Select:
     the set the sync just showed, undoing a newer change made meanwhile).
 
     ``labels`` is the screen's ``labels.Labels`` (a fresh one when none is
-    given): its hook words the label and re-words the items."""
+    given): its hook words the label and re-words the items. ``guard(move)``
+    runs a set switch, asking first over unsaved work (the dock's prompt;
+    ``app_state.guard`` without one)."""
     labels = labels if labels is not None else Labels()
+    guard = guard if guard is not None else (lambda move: app_state.guard(move))
     select = v.Select(label="", items=[], v_model=None, dense=True, outlined=True,
                       hide_details=True, class_="px-2 pt-2", style_="display: none;")
     local = threading.local()
@@ -106,7 +107,7 @@ def build_set_selector(app_state, *, labels=None) -> v.Select:
             return
         set_id = change["new"]
         # A set switch changes the alert: it asks first over unsaved work.
-        app_state.guard(lambda: select_set(app_state, p.name, set_id))
+        guard(lambda: select_set(app_state, p.name, set_id))
         _sync()  # back on the active set while the prompt asks (or after *Stay*)
 
     select.observe(_picked, "v_model")

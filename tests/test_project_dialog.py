@@ -988,12 +988,13 @@ def test_opening_a_review_copy_from_manage_lands_on_analysis(dialog):
 
 
 def test_opening_another_project_over_unsaved_analysis_work_asks_first(dialog):
-    """The switch would drop the unsaved review: it waits for the dock's
-    Discard (``app_state.guard``), with the dialog closed so the prompt shows."""
+    """The switch would drop the unsaved review: it waits for the
+    unsaved-changes dialog's Continue anyway (``app_state.guard``), which
+    opens over this window: Manage stays open behind it."""
     io.save_project(pd.create_project("b"))
     dialog.state.new_project_state(pd.create_project("a"))
     asked = []
-    dialog.state.guard = asked.append
+    dialog.state.guard = lambda move, on_open=None: asked.append((move, on_open))
     dialog.analysis.dirty.set(True)
 
     async def main(rc):
@@ -1002,9 +1003,56 @@ def test_opening_another_project_over_unsaved_analysis_work_asks_first(dialog):
         await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
         _open_from_manage(dialog, "b")
         await _settle(lambda: len(asked) == 1, "the switch held for the prompt")
-        assert dialog.state.project.value.name == "a" and dialog.dismissed == 1
-        asked[0]()  # Discard
+        assert dialog.state.project.value.name == "a" and dialog.dismissed == 0
+        assert dialog.manage[-1]["open"]
+        asked[0][0]()  # Continue anyway
         await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "b", "b opened")
+
+    run_rendered(lambda: dialog.render(), main)
+
+
+def test_creating_over_unsaved_analysis_work_keeps_the_form_until_continue(dialog):
+    """The name form stays open behind the unsaved-changes dialog (its × keeps
+    the typed name); Continue anyway creates the project and closes it."""
+    dialog.state.new_project_state(pd.create_project("a"))
+    asked = []
+    dialog.state.guard = lambda move, on_open=None: asked.append((move, on_open))
+    dialog.analysis.dirty.set(True)
+
+    async def main():
+        _box, rc = dialog.render()
+        try:
+            _button(rc, t("steps.project.new")).fire_event("click", None)
+            await _submit_name(rc, "n")
+            await _settle(lambda: len(asked) == 1, "the create held for the prompt")
+            assert dialog.state.project.value.name == "a" and _open_form(rc).widgets
+            asked[0][0]()  # Continue anyway
+            await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "n", "n created")
+            await _settle(lambda: not _open_form(rc).widgets, "the form closed")
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_open_analysis_from_manage_closes_it(dialog):
+    """Open Analysis leaves the Project window: Manage does not wait in it
+    for the next time the window opens."""
+    io.save_project(pd.create_project("b"))
+    dialog.state.new_project_state(pd.create_project("a"))
+    asked = []
+    dialog.state.guard = lambda move, on_open=None: asked.append((move, on_open))
+    dialog.analysis.dirty.set(True)
+
+    async def main(rc):
+        await _settle(lambda: "b" in (_listed(dialog) or {}), "b listed", rc=rc)
+        _button(rc, t("steps.project.manage_count", count=2)).fire_event("click", None)
+        await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+        _open_from_manage(dialog, "b")
+        await _settle(lambda: len(asked) == 1, "the switch held for the prompt")
+        asked[0][1]()  # Open Analysis
+        await _settle(lambda: not dialog.manage[-1]["open"], "Manage closed")
+        assert dialog.state.project.value.name == "a"
 
     run_rendered(lambda: dialog.render(), main)
 

@@ -88,19 +88,19 @@ def test_the_components_pick_asks_first_and_shows_the_active_set_meanwhile():
     p, jan, feb_a, _ = _project()
     state = AppState()
     state.new_project_state(p)
-    held, dismissed = [], []
-    state.guard = held.append  # the Analysis prompt is up: the move waits
+    held = []
+    state.guard = held.append  # the unsaved-changes dialog is up: the move waits
 
     @solara.component
     def Page():
-        set_selector.SetSelector(app_state=state, dismiss=lambda: dismissed.append(True))
+        set_selector.SetSelector(app_state=state)
 
     _, rc = reacton.render(Page(), handle_error=False)
     try:
         rc.find(v.Select).widget.v_model = feb_a.id
-        assert state.project.value.active_set == jan.id and dismissed == [True]
+        assert state.project.value.active_set == jan.id
         assert rc.find(v.Select).widget.v_model == jan.id  # back on the active set
-        held.pop()()  # *Discard*
+        held.pop()()  # *Continue anyway*
         assert state.project.value.active_set == feb_a.id
         assert rc.find(v.Select).widget.v_model == feb_a.id
     finally:

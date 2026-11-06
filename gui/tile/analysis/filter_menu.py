@@ -63,14 +63,16 @@ def filter_label(app_state, f, limit=CHIP_VALUES) -> str:
     return t("analysis_tile.filter.chip", attribute=choice.label if choice is not None else f.column, values=shown)
 
 
-def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
+def build_filter_menu(app_state, *, labels=None, guard=None) -> SimpleNamespace:
     """The funnel button, its menu and the chip. Returns
     ``SimpleNamespace(root, button, menu, attribute, values, empty, apply,
     clear, chip, outside)``; ``root`` goes into the top bar, left of the set
     selector. ``labels`` is the screen's ``labels.Labels`` (a fresh one when
     none is given): the texts are written by a hook it runs on every language
-    switch."""
+    switch. ``guard(move)`` runs a filter change, asking first over unsaved
+    work (the dock's prompt; ``app_state.guard`` without one)."""
     labels = labels if labels is not None else Labels()
+    guard = guard if guard is not None else (lambda move: app_state.guard(move))
     # One icon for the session: a filter change rewrites its glyph (a new
     # ``v.Icon`` each time would leave the old one open).
     icon = v.Icon(children=["mdi-filter-outline"])
@@ -146,7 +148,7 @@ def build_filter_menu(app_state, *, labels=None) -> SimpleNamespace:
         f = AlertFilter(column, chosen) if column and chosen else None
         # A new filter moves to its start (``follow_filter``): it asks first
         # over unsaved work. *Stay* leaves the filter as it was.
-        app_state.guard(lambda: app_state.set_alert_filter(f))
+        guard(lambda: app_state.set_alert_filter(f))
         menu.v_model = False
 
     def _on_clear(*_):

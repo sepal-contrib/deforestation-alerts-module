@@ -517,7 +517,7 @@ def build_context(app_state, id_field, *, labels=None, analysis=None, guard=None
     setattr(card, _SLOTS,
             {"counter": counter, "tally": tally, "bar": bar, **facts_slots, **nav_slots,
              # for ``build_topnav``'s filter control
-             "app_state": app_state, "labels": labels})
+             "app_state": app_state, "labels": labels, "guard": guard})
     return card
 
 
@@ -545,7 +545,7 @@ def build_topnav(card, set_selector, *, labels=None):
     labels = labels if labels is not None else slots.get("labels") or Labels()
     control = None
     if app_state is not None and app_state.alert_filter_reactive is not None:
-        control = build_filter_menu(app_state, labels=labels)
+        control = build_filter_menu(app_state, labels=labels, guard=slots.get("guard"))
     slots["filter"] = control
     progress = v.Html(tag="div", class_="defo-topnav-progress", children=[slots["tally"], slots["bar"]])
     middle = v.Html(tag="div", class_="defo-topnav-pos", children=[slots["menu"]])
