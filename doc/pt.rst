@@ -2367,7 +2367,7 @@ Mensagens comuns
 Visão geral
 -----------
 
-A Visão geral resume um conjunto de alertas: quantos alertas ele tem, quantos estão revisados e quanta perda foi confirmada, onde e quando. Ela também grava os alertas do conjunto num GeoPackage ou numa tabela CSV. Os números acompanham as revisões à medida que são salvas.
+A Visão geral resume um conjunto de alertas, ou todos os períodos de uma vez: quantos alertas ele tem, quantos estão revisados e quanta perda foi confirmada, onde e quando; como os pixels das fontes viraram alertas; e os arquivos para baixar. Os números acompanham as revisões à medida que são salvas.
 
 Abrir a Visão geral
 ^^^^^^^^^^^^^^^^^^^
@@ -2388,22 +2388,14 @@ O cabeçalho
         -   Descrição
         -   Padrão
     *   -   **Conjunto de alertas**
-        -   O conjunto resumido. Escolher outro o torna o conjunto ativo do projeto, como na `Análise <defo-analysis-topbar_>`_.
+        -   O conjunto resumido. Escolher outro o torna o conjunto ativo do projeto, como na `Análise <defo-analysis-topbar_>`_. O primeiro item, "Todos os períodos · 3 conjuntos · 133 alertas", soma em vez disso o conjunto mais recente de cada período, e deixa o conjunto ativo como está.
         -   O conjunto ativo.
     *   -   **Área (ha)** / **Número de alertas**
         -   Se todos os números da página contam hectares ou alertas.
         -   **Área (ha)**.
     *   -   **Revisar alertas**
-        -   Fecha a Visão geral e abre a `Análise <defo-analysis_>`_ neste conjunto. Fica desativado quando o conjunto não tem alertas.
+        -   Fecha a Visão geral e abre a `Análise <defo-analysis_>`_ neste conjunto. Fica desativado quando o conjunto não tem alertas, e para **Todos os períodos** ("Escolha um período para revisar seus alertas").
         -
-    *   -   **Mostrar estes alertas no mapa**
-        -   Desenha os alertas do conjunto no mapa principal, coloridos pelo status, como em `Integrar e vetorizar <defo-integrate-map_>`_.
-        -   Desligado.
-    *   -   **Mostrar conjuntos anteriores**
-        -   Desenha no mapa principal os alertas dos conjuntos de períodos anteriores. Só aparece quando há conjuntos anteriores.
-        -   Desligado.
-
-Os dois interruptores de mapa só aparecem quando o conjunto tem alertas. Ligar um deles fecha a Visão geral, para mostrar o mapa.
 
 Se o conjunto estiver desatualizado ou com arquivos faltando, uma linha laranja avisa ("Este conjunto foi gerado a partir de entradas que mudaram desde então…" ou "Os arquivos deste conjunto estão faltando na pasta do projeto…"). Os números continuam mostrando o que o conjunto contém. Execute `Integrar e vetorizar <defo-integrate-outdated_>`_ de novo para reconstruí-lo, o que descarta as revisões dele.
 
@@ -2414,10 +2406,10 @@ Os números principais
     :header-rows: 1
     :widths: 25 75
 
-    *   -   Bloco
+    *   -   Número
         -   Conteúdo
     *   -   **Perda confirmada**
-        -   A área (ou o número) dos alertas revisados como **Revisado: confirmado**. Quando há um período anterior, compara com ele, na medida da página ("▼ 780 a menos que 2026-09-01 → 2026-09-30" ou "▲ … a mais que …"), e desenha uma pequena linha ao longo dos períodos.
+        -   A área (ou o número) dos alertas revisados como **Revisado: confirmado**. Quando há um período anterior, compara com ele, na medida da página ("▼ 780 a menos que 2026-09-01 → 2026-09-30" ou "▲ … a mais que …"). **Todos os períodos** não tem comparação.
     *   -   **Detectado no total**
         -   A área (ou o número) de todos os alertas do conjunto, qualquer que seja o status.
     *   -   **Revisados**
@@ -2425,60 +2417,78 @@ Os números principais
     *   -   **Maior alerta**
         -   A área do maior alerta, o número dele, o país (depois de revisado) e a data. Conta sempre hectares. O número é a linha do alerta no conjunto, que corresponde ao número do contador da Análise menos um.
 
+No mapa
+^^^^^^^
+
+Os botões ao lado de **No mapa** desenham uma camada no mapa principal, como fazem os olhos de `Integrar e vetorizar <defo-integrate-map_>`_; selecionar um deles fecha a Visão geral, para mostrar o mapa. Eles só aparecem para um único conjunto com alertas, não para **Todos os períodos**.
+
+-   **Alertas**: os alertas do conjunto, coloridos pelo status.
+-   **Pixels não analisáveis**: os pixels deixados fora dos alertas, pequenos demais ou acima do limite de alertas. Só aparece quando a execução do conjunto os registrou.
+-   **Conjuntos anteriores**: os alertas dos conjuntos de períodos anteriores. Só aparece quando há conjuntos anteriores.
+
 .. _defo-overview-figures:
 
-Os gráficos
-^^^^^^^^^^^
+As abas
+^^^^^^^
+
+Os números são agrupados em abas, cada uma com dois cartões lado a lado.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/overview-figures.png
     :alt: Os gráficos da Visão geral
 
-Coluna da esquerda:
-
 .. list-table::
     :header-rows: 1
-    :widths: 25 75
+    :widths: 20 80
 
-    *   -   Cartão
-        -   Conteúdo
-    *   -   **Por status de revisão**
-        -   Uma barra dividida por status e o valor de cada status.
-    *   -   **Ao longo dos períodos de monitoramento**
-        -   Uma coluna por período de monitoramento do projeto, dividida por status, a partir do conjunto de alertas mais recente de cada um. Um período ainda em revisão mostra a parte não revisada hachurada. Com um único período, diz "Este projeto tem um único período de monitoramento. Adicione um segundo e a tendência aparecerá aqui."
-    *   -   **Tamanho das alertas**
-        -   Os alertas por tamanho: menos de 0,5 ha, 0,5–1 ha, 1–2 ha, 2–5 ha, 5–10 ha, 10–25 ha e 25 ha ou mais.
-    *   -   **Por área administrativa**
-        -   Os alertas revisados por área administrativa, até oito áreas, começando pela maior perda confirmada: a **Área (ha)** deles, os hectares **Revisado: confirmado** e o número de **Alertas**. Dois botões acima da tabela definem o nível: **País**, ou **Estado / província**, o primeiro nível abaixo do país, mostrado com o seu país ("Peru › Madre de Dios"). Só alertas revisados, já que as áreas são registradas (a partir dos limites FAO GAUL) quando um alerta é salvo; um alerta sem área registrada é contado como **Não registrado**. Um alerta que cruza uma fronteira aparece com todas as áreas em que se encontra, separadas por vírgulas.
-
-Coluna da direita:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   Cartão
-        -   Conteúdo
-    *   -   **Os números**
-        -   Uma tabela: por status, o número de alertas, a área deles, a proporção na medida da página e o tamanho mediano dos alertas, com uma linha **Total**.
-    *   -   **Histórico de desmatamentos que crescem**
-        -   Só quando o conjunto tem `alertas de crescimento <defo-integrate-growth_>`_ (veja abaixo).
-    *   -   **Alertas próximos**
-        -   Como os alertas do conjunto se reúnem em grupos de alertas próximos (veja abaixo).
-    *   -   **Quando a perda foi detectada**
-        -   Os alertas pela semana em que foram detectados pela primeira vez. As semanas em cinza são semanas da busca retroativa: ficam antes do início do período (veja `O que os períodos anteriores já reportaram <defo-integrate-earlier_>`_).
-    *   -   Um cartão por pergunta
-        -   As respostas dadas a cada `pergunta <defo-questionnaire_>`_, só para alertas revisados: as cinco mais frequentes e depois **Outros** e **Sem resposta**. Um alerta com duas respostas conta em cada uma.
-    *   -   **Por fonte de alertas**
-        -   Os alertas pela combinação de fontes que os detectou.
+    *   -   Aba
+        -   Cartões
+    *   -   **Status**
+        -   **Por status de revisão**: uma barra dividida por status e, em seguida, uma tabela com, por status, o número de alertas, a área deles, a proporção na medida da página e o tamanho mediano dos alertas, e uma linha **Total**. **Tamanho das alertas**: os alertas por tamanho, de menos de 0,5 ha a 25 ha ou mais.
+    *   -   **Ao longo do tempo**
+        -   **Ao longo dos períodos de monitoramento**: uma coluna por período de monitoramento do projeto, dividida por status, a partir do conjunto de alertas mais recente de cada um; um período ainda em revisão mostra a parte não revisada hachurada. Com um único período, diz "Este projeto tem um único período de monitoramento. Adicione um segundo e a tendência aparecerá aqui." **Quando a perda foi detectada**: os alertas pela semana em que foram detectados pela primeira vez, divididos por status. As semanas hachuradas são semanas da busca retroativa: ficam antes do início do período (veja `O que os períodos anteriores já reportaram <defo-integrate-earlier_>`_).
+    *   -   **Local e fonte**
+        -   **Por área administrativa**: os alertas revisados por área, até oito, começando pela maior perda confirmada: a **Área (ha)** deles, os hectares **Revisado: confirmado** e o número de **Alertas**. **País** ou **Estado / província** define o nível; uma província é mostrada com o seu país ("Peru › Madre de Dios"). As áreas vêm dos limites FAO GAUL, registradas quando um alerta é salvo, então só os alertas revisados são contados; um alerta sem área registrada é contado como **Não registrado**, e um alerta que cruza uma fronteira aparece em todas as áreas em que se encontra. **Por fonte de alertas**: os alertas pela combinação de fontes que os detectou.
+    *   -   **Respostas**
+        -   Um cartão por `pergunta <defo-questionnaire_>`_, com as respostas dadas aos alertas revisados: as cinco mais frequentes e depois **Outros** e **Sem resposta**. Um alerta com duas respostas conta em cada uma. Só aparece quando o projeto tem perguntas; a aba mostra o número delas.
+    *   -   **Pixels**
+        -   Como os pixels das fontes viraram os pixels dos alertas (veja abaixo).
+    *   -   **Agrupamentos**
+        -   Como esses pixels viraram alertas, os alertas próximos e os alertas vinculados a perdas anteriores (veja abaixo). A aba mostra o número de alertas.
+    *   -   **Arquivos**
+        -   O cartão **Exportar alertas** (veja `O conjunto inteiro, a partir da Visão geral <defo-export-set_>`_) e o **Resumo de todos os períodos** (veja abaixo).
 
 Quando um gráfico não pode ser desenhado, o cartão dele diz "Não foi possível desenhar esta figura; os números estão abaixo." e os lista.
 
+Pixels
+""""""
+
+O cartão **Dos pixels das fontes aos pixels de alerta** acompanha os pixels etapa por etapa, cada uma com uma barra, um número e os hectares correspondentes:
+
+-   **Pixels de alerta das fontes**: os pixels que as fontes marcaram no período, todas as fontes juntas;
+-   **Removidos pelas máscaras** e **Mantidos pelas máscaras**: o que as máscaras de `Harmonizar <defo-harmonize_>`_ retiraram e deixaram;
+-   **Combinados, sobreposições uma vez**: os pixels depois de combinar as fontes, um pixel marcado por duas fontes contado uma única vez;
+-   **Pequenos demais para analisar** e **Acima do limite de alertas**: os pixels dos agrupamentos abaixo da área mínima e dos agrupamentos deixados de fora pelo limite de alertas de `Integrar e vetorizar <defo-integrate_>`_; e
+-   **Em alertas**: os pixels dos alertas do conjunto.
+
+O cartão **Por fonte** dá as mesmas contagens por fonte (**Px de alerta**, **Mascarados**, **Mantidos**), cada uma com um olho que desenha o raster da fonte no mapa, e as **Máscaras usadas** com o seu **Modo**.
+
+Uma contagem mostra "—" quando o conjunto foi gerado antes de o app registrá-la: "—: não registrado para este conjunto. Execute Integrar e vetorizar de novo para contá-lo."
+
 .. _defo-overview-growth:
 
-Desmatamentos que crescem
-"""""""""""""""""""""""""
+Agrupamentos
+""""""""""""
 
-O cartão **Histórico de desmatamentos que crescem** acompanha os desmatamentos que os alertas de crescimento deste conjunto estendem. O título dele dá os alertas de crescimento do conjunto e a área deles ("3 alertas de crescimento · 4,2 ha", ou só o número com **Número de alertas**). A linha abaixo os divide ("Crescimento: 2 · Abaixo da área mínima: 1") e diz quantos estão revisados.
+O cartão **Dos agrupamentos aos alertas** conta os **Agrupamentos formados** por pixels de alerta conectados, os que ficam **Abaixo do tamanho mínimo** e **Acima do limite de alertas**, os **Alertas** gerados a partir do resto e quantos estão **Revisados**.
+
+Abaixo dele, **Alertas próximos** mostra como os alertas do conjunto se encadeiam em grupos: os alertas dentro da distância de **Revisar juntos os alertas próximos** (veja `Avaliação <defo-evaluation-group_>`_), de borda a borda, formam um único grupo. A tabela dele tem duas linhas:
+
+-   **Encontrados pela distância**: os grupos que a distância forma e os alertas deles ("20 de 48 · o maior 5"); e
+-   **Salvos como grupo de revisão**: os grupos salvos na Análise e os alertas deles.
+
+Quando o agrupamento está desativado, o cartão usa a distância do projeto e acrescenta "A revisão em conjunto está desligada · ligue-a em Avaliação."
+
+O cartão **Vinculados a perdas anteriores** acompanha os `alertas de crescimento <defo-integrate-growth_>`_: novos alertas que tocam um desmatamento confirmado em um período anterior. O olho dele, **Conjuntos anteriores no mapa**, desenha os conjuntos anteriores. O título dele dá os alertas de crescimento e a área deles ("3 alertas de crescimento · 4,2 ha", ou só o número com **Número de alertas**); a linha abaixo os divide ("Crescimento: 2 · Abaixo da área mínima: 1") e diz quantos estão revisados. Sem nenhum, diz "Nenhum alerta está vinculado a perdas anteriores."
 
 A tabela dele lista os históricos que incluem um alerta deste conjunto, da maior área confirmada para a menor:
 
@@ -2499,21 +2509,15 @@ A tabela dele lista os históricos que incluem um alerta deste conjunto, da maio
     *   -   **Revisar**
         -   Fecha a Visão geral e abre na `Análise <defo-analysis_>`_ o alerta deste conjunto que faz parte do histórico.
 
-Alertas próximos
-""""""""""""""""
+Resumo de todos os períodos
+"""""""""""""""""""""""""""
 
-O cartão **Alertas próximos** mostra como os alertas do conjunto se encadeiam em grupos: os alertas dentro da distância de **Revisar juntos os alertas próximos** (veja `Avaliação <defo-evaluation-group_>`_), de borda a borda, formam um único grupo. Ao dividir, cada grupo vai para um único avaliador.
+A aba **Arquivos** termina com uma tabela de todos os períodos, uma linha por período: os **Alertas**, os **ha confirmados**, a proporção de **Revisados**, os **Px das fontes**, os **Agrupamentos**, os **Grupos** de revisão e os alertas **Vinculados** a perdas anteriores. O bloco **CSV de resumo** abaixo dela grava a mesma tabela em ``periods_summary.csv`` na pasta do projeto; selecione-o de novo para baixar o arquivo. Quando os números mudaram desde então (revisões salvas, um conjunto reconstruído), o bloco diz "Os números mudaram desde então" e um botão **Atualizar** o grava de novo.
 
--   O título conta os grupos ("6 grupos de alertas próximos") ou diz "Nenhum alerta a menos de 300 m de outro".
--   A linha abaixo dele diz, por exemplo, "Em um grupo: 20 de 48 alertas · Sozinhos: 28 · O maior: 5 alertas".
--   A última linha conta os grupos salvos na Análise ("2 grupos salvos na Análise (7 alertas)") ou diz "Nenhum grupo salvo na Análise ainda".
+Todos os períodos
+^^^^^^^^^^^^^^^^^
 
-Quando o agrupamento está desativado, o cartão usa a distância do projeto e acrescenta "Revisar juntos os alertas próximos está desativado: ative na etapa Avaliação."
-
-Exportar o conjunto
-^^^^^^^^^^^^^^^^^^^
-
-O cartão **Exportar alertas**, no fim da página, grava os alertas do conjunto num arquivo para um sistema de informação geográfica (SIG) ou uma planilha. Veja `O conjunto inteiro, a partir da Visão geral <defo-export-set_>`_.
+Escolha **Todos os períodos** no seletor **Conjunto de alertas** para somar o conjunto mais recente de cada período: os números principais, as abas e a exportação passam então a cobrir todos eles. Os hectares e os alertas são somados; uma contagem de pixels que um conjunto não registrou mostra "—". Os botões de mapa e **Revisar alertas** precisam de um único conjunto, então ficam ocultos ou desativados. Na aba **Arquivos**, o cartão **Exportar alertas** grava os alertas de todos os períodos num único arquivo, com uma coluna ``period`` (veja `O conjunto inteiro, a partir da Visão geral <defo-export-set_>`_).
 
 Mensagens comuns
 ^^^^^^^^^^^^^^^^
@@ -2538,9 +2542,9 @@ Exportação
 O app exporta alertas de duas formas:
 
 -   os arquivos de um alerta revisado, a partir da tela de Análise; e
--   os alertas de um conjunto inteiro, a partir da Visão geral.
+-   os alertas de um conjunto inteiro, ou de todos os períodos, a partir da Visão geral.
 
-Todo arquivo é gravado na pasta do conjunto de alertas dentro do projeto (``periods/<start>_<end>/sets/<set>/``, veja `Projeto <defo-project_>`_), então também pode ser encontrado lá depois, no navegador de arquivos do SEPAL.
+Todo arquivo é gravado na pasta do conjunto de alertas dentro do projeto (``periods/<start>_<end>/sets/<set>/``, veja `Projeto <defo-project_>`_), então também pode ser encontrado lá depois, no navegador de arquivos do SEPAL. Os arquivos de **Todos os períodos** vão para a pasta do projeto.
 
 .. _defo-export-alert:
 
@@ -2616,7 +2620,7 @@ O GIF é salvo junto dos outros arquivos e, quando os arquivos do alerta são ge
 O conjunto inteiro, a partir da Visão geral
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-O cartão **Exportar alertas**, no fim da `Visão geral <defo-overview_>`_, grava os alertas do conjunto exibido num único arquivo. A linha de cima resume os alertas que a etiqueta de **Alertas** escolhida grava, com as fontes e as datas do conjunto (por exemplo "11 alertas · 304,9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20" para **Confirmados**). A etiqueta de pasta ao lado copia o caminho da pasta quando selecionada.
+O cartão **Exportar alertas**, na aba **Arquivos** da `Visão geral <defo-overview_>`_, grava os alertas do conjunto exibido num único arquivo. A linha de cima resume os alertas que a etiqueta de **Alertas** escolhida grava, com as fontes e as datas do conjunto (por exemplo "11 alertas · 304,9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20" para **Confirmados**). A etiqueta de pasta ao lado copia o caminho da pasta quando selecionada.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/export-overview-card.png
     :alt: O cartão Exportar alertas da Visão geral
@@ -2645,6 +2649,8 @@ Os dois arquivos acrescentam três colunas sobre o `crescimento <defo-integrate-
 -   ``history_area_ha``: a área confirmada do histórico do alerta, 0 para um alerta sem histórico.
 
 O nome do arquivo é formado pelas fontes do conjunto, pelo período e pelos alertas escolhidos (por exemplo ``alerts_glad-l-glad-s2-radd_2026-08-01_2026-09-30_confirmed.gpkg``): ``_reviewed`` para **Todos os revisados**, ``_unreviewed`` para **Não revisados** e nenhum sufixo para **Todos**. A última linha do cartão mostra o nome. As respostas são gravadas no idioma atual do app.
+
+Com **Todos os períodos** escolhido no seletor **Conjunto de alertas**, o cartão grava os alertas de todos os períodos num único arquivo na pasta do projeto, com uma coluna ``period`` que dá o período de cada alerta. O nome dele junta as fontes de todos os conjuntos e vai do início do primeiro período ao fim do último (por exemplo ``alerts_glad-l_2026-08-01_2026-10-23.gpkg``).
 
 Quando revisões são salvas depois que um arquivo foi gravado, o bloco dele diz **Revisões alteradas desde então**, com um botão **Atualizar**. Selecione-o para gravar o arquivo de novo.
 
@@ -2872,14 +2878,14 @@ A `Visão geral <defo-overview_>`_ resume o conjunto de outubro. Em **Área (ha)
 
     A comparação exige cuidado. **Perda confirmada** conta só os alertas revisados como alertas verdadeiros, e só um terço dos alertas de outubro está revisado; o número de setembro também cobre só os alertas de setembro revisados até agora. A seta indica que, por enquanto, há menos perda *confirmada*, não que se perdeu menos floresta: o número cresce à medida que a equipe continua revisando.
 
-**Ao longo dos períodos de monitoramento** mostra os dois períodos lado a lado, com a parte ainda em revisão hachurada (2870 ha detectados em setembro, 1177 ha em outubro).
+Na aba **Ao longo do tempo**, **Ao longo dos períodos de monitoramento** mostra os dois períodos lado a lado, com a parte ainda em revisão hachurada (2870 ha detectados em setembro, 1177 ha em outubro).
 
-Mais abaixo:
+Na aba **Respostas**:
 
 -   o cartão da pergunta sobre o vetor da perda divide a área revisada por resposta (em outubro: Mineração em primeiro lugar, depois Expansão agrícola); e
 -   o cartão da nova pergunta a divide pelas suas respostas (em outubro: tudo "Não", 358 ha, com 81,2 ha em "Sem resposta").
 
-Veja todos os cartões em `Os gráficos <defo-overview-figures_>`_.
+Veja todos os cartões em `As abas <defo-overview-figures_>`_.
 
 Compartilhar os resultados
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2887,7 +2893,7 @@ Compartilhar os resultados
 O conjunto inteiro
 """"""""""""""""""
 
-No fim da Visão geral, o cartão **Exportar alertas** grava o conjunto de outubro num arquivo. A coordenadora escolhe **Confirmados** (11 alertas, 304,9 ha) e seleciona o bloco **GeoPackage**. O arquivo ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` contém um polígono por alerta confirmado, com os atributos e as duas respostas, pronto para um SIG. O bloco **Tabela CSV** grava os mesmos alertas como uma tabela para planilha. Veja `O conjunto inteiro, a partir da Visão geral <defo-export-set_>`_.
+Na aba **Arquivos** da Visão geral, o cartão **Exportar alertas** grava o conjunto de outubro num arquivo. A coordenadora escolhe **Confirmados** (11 alertas, 304,9 ha) e seleciona o bloco **GeoPackage**. O arquivo ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` contém um polígono por alerta confirmado, com os atributos e as duas respostas, pronto para um SIG. O bloco **Tabela CSV** grava os mesmos alertas como uma tabela para planilha. Veja `O conjunto inteiro, a partir da Visão geral <defo-export-set_>`_.
 
 Um alerta
 """""""""

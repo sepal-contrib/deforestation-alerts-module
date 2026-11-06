@@ -2365,7 +2365,7 @@ Messages fréquents
 Aperçu
 ------
 
-L'Aperçu résume un jeu d'alertes : combien d'alertes il contient, combien sont examinées, et quelle perte a été confirmée, où et quand. Il écrit aussi les alertes du jeu dans un GeoPackage ou un tableau CSV. Ses chiffres suivent les révisions à mesure qu'elles sont enregistrées.
+L'Aperçu résume un jeu d'alertes, ou toutes les périodes à la fois : combien d'alertes il contient, combien sont examinées, et quelle perte a été confirmée, où et quand ; comment les pixels des sources sont devenus des alertes ; et les fichiers à télécharger. Ses chiffres suivent les révisions à mesure qu'elles sont enregistrées.
 
 Ouvrir l'Aperçu
 ^^^^^^^^^^^^^^^
@@ -2386,22 +2386,14 @@ L'en-tête
         -   Description
         -   Par défaut
     *   -   **Jeu d'alertes**
-        -   Le jeu résumé. En choisir un autre en fait le jeu actif du projet, comme dans `Analyse <defo-analysis-topbar_>`_.
+        -   Le jeu résumé. En choisir un autre en fait le jeu actif du projet, comme dans `Analyse <defo-analysis-topbar_>`_. Son premier élément, « Toutes les périodes · 3 ensembles · 133 alertes », additionne plutôt le jeu le plus récent de chaque période, et laisse le jeu actif tel quel.
         -   Le jeu actif.
     *   -   **Superficie (ha)** / **Nombre d'alertes**
         -   Exprime tous les chiffres de la page en hectares ou en nombre d'alertes.
         -   **Superficie (ha)**.
     *   -   **Réviser les alertes**
-        -   Ferme l'Aperçu et ouvre `Analyse <defo-analysis_>`_ sur ce jeu. Désactivé quand le jeu n'a pas d'alertes.
+        -   Ferme l'Aperçu et ouvre `Analyse <defo-analysis_>`_ sur ce jeu. Désactivé quand le jeu n'a pas d'alertes, et pour **Toutes les périodes** (« Choisissez une période pour en examiner les alertes »).
         -
-    *   -   **Afficher ces alertes sur la carte**
-        -   Dessine les alertes du jeu sur la carte principale, colorées selon leur statut, comme dans `Intégrer et vectoriser <defo-integrate-map_>`_.
-        -   Désactivé.
-    *   -   **Afficher les jeux antérieurs**
-        -   Dessine sur la carte principale les alertes des jeux des périodes antérieures. Affiché seulement s'il existe des jeux antérieurs.
-        -   Désactivé.
-
-Les deux interrupteurs de carte ne s'affichent que si le jeu a des alertes. En activer un ferme l'Aperçu, pour montrer la carte.
 
 Si le jeu est obsolète ou si ses fichiers sont manquants, une ligne orange le signale (« Ce jeu a été construit à partir d'entrées qui ont changé depuis… » ou « Les fichiers de ce jeu sont manquants dans le dossier du projet… »). Les chiffres montrent toujours ce que contient le jeu. Relancez `Intégrer et vectoriser <defo-integrate-outdated_>`_ pour le reconstruire, ce qui écarte ses révisions.
 
@@ -2412,10 +2404,10 @@ Les chiffres clés
     :header-rows: 1
     :widths: 25 75
 
-    *   -   Tuile
+    *   -   Chiffre
         -   Contenu
     *   -   **Perte confirmée**
-        -   La superficie (ou le nombre) des alertes examinées comme **Examinée : confirmée**. S'il existe une période antérieure, elle se compare à celle-ci, dans la mesure de la page (« ▼ 780 de moins que 2026-09-01 → 2026-09-30 », ou « ▲ … de plus que … »), et trace une petite courbe sur l'ensemble des périodes.
+        -   La superficie (ou le nombre) des alertes examinées comme **Examinée : confirmée**. S'il existe une période antérieure, elle se compare à celle-ci, dans la mesure de la page (« ▼ 780 de moins que 2026-09-01 → 2026-09-30 », ou « ▲ … de plus que … »). **Toutes les périodes** n'a pas de comparaison.
     *   -   **Détecté au total**
         -   La superficie (ou le nombre) de toutes les alertes du jeu, quel que soit leur statut.
     *   -   **Examinées**
@@ -2423,60 +2415,78 @@ Les chiffres clés
     *   -   **Alerte la plus grande**
         -   La superficie de la plus grande alerte, son numéro, son pays (une fois examinée) et sa date. Elle compte toujours des hectares. Le numéro est la ligne de l'alerte dans le jeu, c'est-à-dire le numéro du compteur d'Analyse moins un.
 
+Sur la carte
+^^^^^^^^^^^^
+
+Les boutons à côté de **Sur la carte** dessinent une couche sur la carte principale, comme les yeux d'`Intégrer et vectoriser <defo-integrate-map_>`_ ; en sélectionner un ferme l'Aperçu, pour montrer la carte. Ils ne s'affichent que pour un seul jeu qui a des alertes, pas pour **Toutes les périodes**.
+
+-   **Alertes** : les alertes du jeu, colorées selon leur statut.
+-   **Pixels non analysables** : les pixels laissés hors des alertes, trop petits ou au-delà de la limite d'alertes. Affiché seulement si l'exécution du jeu les a enregistrés.
+-   **Ensembles antérieurs** : les alertes des jeux des périodes antérieures. Affiché seulement s'il existe des jeux antérieurs.
+
 .. _defo-overview-figures:
 
-Les graphiques
-^^^^^^^^^^^^^^
+Les onglets
+^^^^^^^^^^^
+
+Les chiffres sont regroupés en onglets, chacun avec deux cartes côte à côte.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/overview-figures.png
     :alt: Les graphiques de l'Aperçu
 
-Colonne de gauche :
-
 .. list-table::
     :header-rows: 1
-    :widths: 25 75
+    :widths: 20 80
 
-    *   -   Carte
-        -   Contenu
-    *   -   **Par état d'examen**
-        -   Une barre découpée par statut, et la valeur de chaque statut.
-    *   -   **Au fil des périodes de suivi**
-        -   Une colonne par période de suivi du projet, découpée par statut, d'après son jeu d'alertes le plus récent. Une période encore en cours d'examen montre sa part non examinée hachurée. Avec une seule période, la carte indique « Ce projet n'a qu'une seule période de suivi. Ajoutez-en une seconde et sa tendance sera tracée ici. »
-    *   -   **Taille des alertes**
-        -   Les alertes par taille : moins de 0,5 ha, 0,5–1 ha, 1–2 ha, 2–5 ha, 5–10 ha, 10–25 ha, et 25 ha ou plus.
-    *   -   **Par zone administrative**
-        -   Les alertes examinées par zone administrative, jusqu'à huit zones, en commençant par la plus forte perte confirmée : leur **Superficie (ha)**, les hectares **Examinée : confirmée** et le nombre d'**Alertes**. Deux boutons au-dessus du tableau choisissent le niveau : **Pays**, ou **Province / région**, le premier niveau sous le pays, affiché avec son pays (« Peru › Madre de Dios »). Seules les alertes examinées comptent, puisque les zones sont renseignées (d'après les limites FAO GAUL) au moment où l'alerte est enregistrée ; une alerte sans zone enregistrée est comptée comme **Non renseigné**. Une alerte à cheval sur une frontière est listée avec toutes les zones où elle se trouve, séparées par des virgules.
-
-Colonne de droite :
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   Carte
-        -   Contenu
-    *   -   **Les chiffres**
-        -   Un tableau : par statut, le nombre d'alertes, leur superficie, leur part de la mesure et la taille médiane des alertes, avec une ligne **Total**.
-    *   -   **Historique des coupes qui s'étendent**
-        -   Seulement quand le jeu a des `alertes d'extension <defo-integrate-growth_>`_ (voir plus bas).
-    *   -   **Alertes proches**
-        -   La façon dont les alertes du jeu se rassemblent en groupes d'alertes proches (voir plus bas).
-    *   -   **Quand la perte a été détectée**
-        -   Les alertes par semaine de première détection. Les semaines grisées relèvent de la rétrospection : elles précèdent le début de la période (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_).
-    *   -   Une carte par question
-        -   Les réponses données à chaque `question <defo-questionnaire_>`_, pour les alertes examinées seulement : les cinq plus fréquentes, puis **Autres** et **Sans réponse**. Une alerte avec deux réponses compte pour chacune.
-    *   -   **Par source d'alertes**
-        -   Les alertes selon la combinaison de sources qui les a détectées.
+    *   -   Onglet
+        -   Cartes
+    *   -   **Statut**
+        -   **Par état d'examen** : une barre découpée par statut, puis un tableau donnant, par statut, le nombre d'alertes, leur superficie, leur part de la mesure et la taille médiane des alertes, avec une ligne **Total**. **Taille des alertes** : les alertes par taille, de moins de 0,5 ha à 25 ha ou plus.
+    *   -   **Dans le temps**
+        -   **Au fil des périodes de suivi** : une colonne par période de suivi du projet, découpée par statut, d'après son jeu d'alertes le plus récent ; une période encore en cours d'examen montre sa part non examinée hachurée. Avec une seule période, la carte indique « Ce projet n'a qu'une seule période de suivi. Ajoutez-en une seconde et sa tendance sera tracée ici. » **Quand la perte a été détectée** : les alertes par semaine de première détection, découpées par statut. Les semaines hachurées relèvent de la rétrospection : elles précèdent le début de la période (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_).
+    *   -   **Lieu et source**
+        -   **Par zone administrative** : les alertes examinées par zone, jusqu'à huit, en commençant par la plus forte perte confirmée : leur **Superficie (ha)**, les hectares **Examinée : confirmée** et le nombre d'**Alertes**. **Pays** ou **Province / région** choisit le niveau ; une province est affichée avec son pays (« Peru › Madre de Dios »). Les zones viennent des limites FAO GAUL, enregistrées au moment où l'alerte est enregistrée, donc seules les alertes examinées comptent ; une alerte sans zone enregistrée est comptée comme **Non renseigné**, et une alerte à cheval sur une frontière est listée sous chaque zone où elle se trouve. **Par source d'alertes** : les alertes selon la combinaison de sources qui les a détectées.
+    *   -   **Réponses**
+        -   Une carte par `question <defo-questionnaire_>`_, avec les réponses données aux alertes examinées : les cinq plus fréquentes, puis **Autres** et **Sans réponse**. Une alerte avec deux réponses compte pour chacune. Affiché seulement si le projet a des questions ; l'onglet indique leur nombre.
+    *   -   **Pixels**
+        -   Comment les pixels des sources sont devenus les pixels des alertes (voir plus bas).
+    *   -   **Amas**
+        -   Comment ces pixels sont devenus des alertes, les alertes proches et les alertes liées à des pertes antérieures (voir plus bas). L'onglet indique le nombre d'alertes.
+    *   -   **Fichiers**
+        -   La carte **Exporter les alertes** (voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_) et le **Résumé de toutes les périodes** (voir plus bas).
 
 Quand un graphique ne peut pas être tracé, sa carte indique « Cette figure n'a pas pu être tracée ; ses chiffres sont ci-dessous. » et les liste.
 
+Pixels
+""""""
+
+La carte **Des pixels des sources aux pixels d’alerte** suit les pixels étape par étape, chacun avec une barre, un nombre et ses hectares :
+
+-   **Pixels d’alerte des sources** : les pixels signalés par les sources dans la période, toutes sources confondues ;
+-   **Retirés par les masques** et **Gardés par les masques** : ce que les masques d'`Harmoniser <defo-harmonize_>`_ ont retiré et laissé ;
+-   **Combinés, recouvrements une fois** : les pixels une fois les sources combinées, un pixel signalé par deux sources n'étant compté qu'une fois ;
+-   **Trop petits pour être analysés** et **Au-delà de la limite d’alertes** : les pixels des amas sous la surface minimale, et des amas écartés par la limite d'alertes d'`Intégrer et vectoriser <defo-integrate_>`_ ; et
+-   **Dans les alertes** : les pixels des alertes du jeu.
+
+La carte **Par source** donne les mêmes comptes par source (**Px d’alerte**, **Masqués**, **Gardés**), chacun avec un œil qui dessine le raster de la source sur la carte, ainsi que les **Masques utilisés** avec leur **Mode**.
+
+Un compte affiche « — » quand le jeu a été produit avant que l'application ne l'enregistre : « — : non enregistré pour cet ensemble. Relancez Intégrer et vectoriser pour le compter. »
+
 .. _defo-overview-growth:
 
-Coupes qui s'étendent
-"""""""""""""""""""""
+Amas
+""""
 
-La carte **Historique des coupes qui s'étendent** suit les coupes que les alertes d'extension de ce jeu prolongent. Son titre donne les alertes d'extension du jeu et leur superficie (« 3 alertes d’extension · 4,2 ha », ou seulement leur nombre avec **Nombre d'alertes**). La ligne en dessous les répartit (« Extension : 2 · Sous la surface minimale : 1 ») et indique combien sont examinées.
+La carte **Des amas aux alertes** compte les **Amas formés** par des pixels d'alerte connectés, ceux **Sous la taille minimale** et **Au-delà de la limite d’alertes**, les **Alertes** produites à partir du reste, et combien sont **Examinées**.
+
+En dessous, **Alertes proches** montre comment les alertes du jeu s'enchaînent en groupes : les alertes situées à la distance de **Réviser ensemble les alertes proches** (voir `Évaluation <defo-evaluation-group_>`_), de bord à bord, forment un groupe. Son tableau a deux lignes :
+
+-   **Trouvées par distance** : les groupes que forme la distance, et leurs alertes (« 20 sur 48 · le plus grand 5 ») ; et
+-   **Enregistrées en groupe d'examen** : les groupes enregistrés dans Analyse, et leurs alertes.
+
+Quand le regroupement est désactivé, la carte utilise la distance du projet et ajoute « La vérification groupée est désactivée · activez-la dans Évaluation. »
+
+La carte **Liées à des pertes antérieures** suit les `alertes d'extension <defo-integrate-growth_>`_ : les nouvelles alertes qui touchent un défrichement confirmé lors d'une période antérieure. Son œil, **Ensembles antérieurs sur la carte**, dessine les jeux antérieurs. Son titre donne les alertes d'extension et leur superficie (« 3 alertes d’extension · 4,2 ha », ou seulement leur nombre avec **Nombre d'alertes**) ; la ligne en dessous les répartit (« Extension : 2 · Sous la surface minimale : 1 ») et indique combien sont examinées. Sans aucune, elle indique « Aucune alerte n’est liée à une perte antérieure. »
 
 Son tableau liste les historiques qui comprennent une alerte de ce jeu, la plus grande superficie confirmée en premier :
 
@@ -2497,21 +2507,15 @@ Son tableau liste les historiques qui comprennent une alerte de ce jeu, la plus 
     *   -   **Examiner**
         -   Ferme l'Aperçu et ouvre l'alerte de ce jeu appartenant à l'historique dans `Analyse <defo-analysis_>`_.
 
-Alertes proches
-"""""""""""""""
+Résumé de toutes les périodes
+"""""""""""""""""""""""""""""
 
-La carte **Alertes proches** montre comment les alertes du jeu s'enchaînent en groupes : les alertes situées à la distance de **Réviser ensemble les alertes proches** (voir `Évaluation <defo-evaluation-group_>`_), de bord à bord, forment un groupe. Une répartition confie chaque groupe à un seul évaluateur.
+L'onglet **Fichiers** se termine par un tableau de toutes les périodes, une ligne chacune : ses **Alertes**, ses **ha confirmés**, sa part **Examinées**, ses **Px des sources**, ses **Amas**, ses **Groupes** d'examen et ses alertes **Liées** à des pertes antérieures. La tuile **CSV de résumé** en dessous écrit le même tableau dans ``periods_summary.csv``, dans le dossier du projet ; sélectionnez-la à nouveau pour télécharger le fichier. Quand les chiffres ont changé depuis (examens enregistrés, jeu reconstruit), la tuile indique « Les chiffres ont changé depuis » et un bouton **Mettre à jour** l'écrit à nouveau.
 
--   Le titre compte les groupes (« 6 groupes d'alertes proches »), ou indique « Aucune alerte à moins de 300 m d'une autre ».
--   La ligne en dessous indique, par exemple, « Dans un groupe : 20 alertes sur 48 · Seules : 28 · Le plus grand : 5 alertes ».
--   La dernière ligne compte les groupes enregistrés dans Analyse (« 2 groupes enregistrés dans Analyse (7 alertes) »), ou indique « Aucun groupe enregistré dans Analyse pour l'instant ».
+Toutes les périodes
+^^^^^^^^^^^^^^^^^^^
 
-Quand le regroupement est désactivé, la carte utilise la distance du projet et ajoute « La révision groupée des alertes proches est désactivée : activez-la à l'étape Évaluation. »
-
-Exporter le jeu
-^^^^^^^^^^^^^^^
-
-La carte **Exporter les alertes**, en bas, écrit les alertes du jeu dans un fichier destiné à un système d'information géographique (SIG) ou à un tableur. Voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_.
+Choisissez **Toutes les périodes** dans le sélecteur **Jeu d'alertes** pour additionner le jeu le plus récent de chaque période : les chiffres clés, les onglets et l'export les couvrent alors toutes. Les hectares et les alertes s'additionnent ; un compte de pixels qu'un jeu n'a pas enregistré affiche « — ». Les boutons de carte et **Réviser les alertes** ont besoin d'un seul jeu : ils sont donc masqués ou désactivés. Dans l'onglet **Fichiers**, la carte **Exporter les alertes** écrit les alertes de toutes les périodes dans un seul fichier, avec une colonne ``period`` (voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_).
 
 Messages fréquents
 ^^^^^^^^^^^^^^^^^^
@@ -2536,9 +2540,9 @@ Export
 L'application exporte les alertes de deux façons :
 
 -   les fichiers d'une alerte examinée, depuis l'écran Analyse ; et
--   les alertes de tout un jeu, depuis l'Aperçu.
+-   les alertes de tout un jeu, ou de toutes les périodes, depuis l'Aperçu.
 
-Chaque fichier est écrit dans le dossier du jeu d'alertes, dans le projet (``periods/<start>_<end>/sets/<set>/``, voir `Projet <defo-project_>`_) : il se retrouve donc aussi plus tard à cet endroit, dans le navigateur de fichiers de SEPAL.
+Chaque fichier est écrit dans le dossier du jeu d'alertes, dans le projet (``periods/<start>_<end>/sets/<set>/``, voir `Projet <defo-project_>`_) : il se retrouve donc aussi plus tard à cet endroit, dans le navigateur de fichiers de SEPAL. Les fichiers de **Toutes les périodes** vont dans le dossier du projet.
 
 .. _defo-export-alert:
 
@@ -2614,7 +2618,7 @@ Le GIF est enregistré à côté des autres fichiers et, quand les fichiers de l
 Tout le jeu, depuis l'Aperçu
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-La carte **Exporter les alertes**, en bas de l'`Aperçu <defo-overview_>`_, écrit les alertes du jeu affiché dans un seul fichier. Sa première ligne résume les alertes qu'écrit la pastille **Alertes** choisie, avec les sources et les dates du jeu (par exemple « 11 alertes · 304,9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20 » pour **Confirmées**). La pastille de dossier à côté copie le chemin du dossier quand elle est sélectionnée.
+La carte **Exporter les alertes**, dans l'onglet **Fichiers** de l'`Aperçu <defo-overview_>`_, écrit les alertes du jeu affiché dans un seul fichier. Sa première ligne résume les alertes qu'écrit la pastille **Alertes** choisie, avec les sources et les dates du jeu (par exemple « 11 alertes · 304,9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20 » pour **Confirmées**). La pastille de dossier à côté copie le chemin du dossier quand elle est sélectionnée.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/export-overview-card.png
     :alt: La carte Exporter les alertes de l'Aperçu
@@ -2643,6 +2647,8 @@ Les deux fichiers ajoutent trois colonnes sur l'`extension <defo-integrate-growt
 -   ``history_area_ha`` : la superficie confirmée de l'historique de l'alerte, 0 pour une alerte qui n'en a pas.
 
 Le fichier est nommé d'après les sources du jeu, sa période et les alertes choisies (par exemple ``alerts_glad-l-glad-s2-radd_2026-08-01_2026-09-30_confirmed.gpkg``) : ``_reviewed`` pour **Toutes revues**, ``_unreviewed`` pour **Non revues**, et sans suffixe pour **Toutes**. La dernière ligne de la carte affiche ce nom. Les réponses sont écrites dans la langue actuelle de l'application.
+
+Avec **Toutes les périodes** choisi dans le sélecteur **Jeu d'alertes**, la carte écrit les alertes de toutes les périodes dans un seul fichier, dans le dossier du projet, avec une colonne ``period`` donnant la période de chaque alerte. Son nom réunit les sources de tous les jeux et va du début de la première période à la fin de la dernière (par exemple ``alerts_glad-l_2026-08-01_2026-10-23.gpkg``).
 
 Quand des révisions sont enregistrées après l'écriture d'un fichier, sa tuile indique **Revues modifiées depuis**, avec un bouton **Mettre à jour**. Sélectionnez-le pour écrire à nouveau le fichier.
 
@@ -2870,14 +2876,14 @@ L'`Aperçu <defo-overview_>`_ résume le jeu d'octobre. En **Superficie (ha)** :
 
     La comparaison demande de la prudence. **Perte confirmée** ne compte que les alertes examinées comme alertes réelles, et seul un tiers des alertes d'octobre est examiné ; le chiffre de septembre, lui aussi, ne porte que sur les alertes de septembre examinées jusqu'ici. La flèche indique que moins de perte est *confirmée* à ce stade, non que moins de forêt a été perdue : le chiffre augmente à mesure que l'équipe poursuit l'examen.
 
-**Au fil des périodes de suivi** présente les deux périodes côte à côte, avec la part encore en cours d'examen hachurée (2870 ha détectés en septembre, 1177 ha en octobre).
+Dans l'onglet **Dans le temps**, **Au fil des périodes de suivi** présente les deux périodes côte à côte, avec la part encore en cours d'examen hachurée (2870 ha détectés en septembre, 1177 ha en octobre).
 
-Plus bas :
+Dans l'onglet **Réponses** :
 
 -   la carte de la question sur le facteur de perte répartit la superficie examinée par réponse (en octobre : l'exploitation minière d'abord, puis l'expansion agricole) ; et
 -   la carte de la nouvelle question la répartit selon ses réponses (en octobre : uniquement « Non », 358 ha, avec 81,2 ha sous « Sans réponse »).
 
-Voir `Les graphiques <defo-overview-figures_>`_ pour le détail de chaque carte.
+Voir `Les onglets <defo-overview-figures_>`_ pour le détail de chaque carte.
 
 Partager les résultats
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -2885,7 +2891,7 @@ Partager les résultats
 Tout le jeu
 """""""""""
 
-En bas de l'Aperçu, la carte **Exporter les alertes** écrit le jeu d'octobre dans un fichier. La coordinatrice choisit **Confirmées** (11 alertes, 304,9 ha) et sélectionne la tuile **GeoPackage**. Le fichier ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` contient un polygone par alerte confirmée, avec ses attributs et ses deux réponses, prêt pour un SIG. La tuile **Tableau CSV** écrit les mêmes alertes sous forme de tableau pour un tableur. Voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_.
+Dans l'onglet **Fichiers** de l'Aperçu, la carte **Exporter les alertes** écrit le jeu d'octobre dans un fichier. La coordinatrice choisit **Confirmées** (11 alertes, 304,9 ha) et sélectionne la tuile **GeoPackage**. Le fichier ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` contient un polygone par alerte confirmée, avec ses attributs et ses deux réponses, prêt pour un SIG. La tuile **Tableau CSV** écrit les mêmes alertes sous forme de tableau pour un tableur. Voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_.
 
 Une alerte
 """"""""""

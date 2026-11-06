@@ -113,7 +113,7 @@
     "history_note": "Lo detectado por período, por estado de revisión. Rayado: un período aún en revisión.",
     "sources_note": "Por las fuentes que encontraron cada alerta.",
     "card_pixels": "De los píxeles de las fuentes a los píxeles de alerta",
-    "pixels_note": "Lo que Preparar e Integrar conservaron o quitaron.",
+    "pixels_note": "Lo que Armonizar e Integrar y vectorizar conservaron o quitaron.",
     "pixels_res": "Píxeles de {res} m, 1 px ≈ {ha} ha.",
     "px_ha": "· {ha} ha",
     "px_source": "Píxeles de alerta de las fuentes",

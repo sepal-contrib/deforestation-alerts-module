@@ -113,7 +113,7 @@
     "history_note": "Detectado por período, por status de revisão. Hachurado: um período ainda em revisão.",
     "sources_note": "Pelas fontes que encontraram cada alerta.",
     "card_pixels": "Dos pixels das fontes aos pixels de alerta",
-    "pixels_note": "O que Preparar e Integrar mantiveram ou removeram.",
+    "pixels_note": "O que Harmonizar e Integrar e vetorizar mantiveram ou removeram.",
     "pixels_res": "Pixels de {res} m, 1 px ≈ {ha} ha.",
     "px_ha": "· {ha} ha",
     "px_source": "Pixels de alerta das fontes",

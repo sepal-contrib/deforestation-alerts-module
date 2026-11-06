@@ -109,7 +109,7 @@
     "history_note": "Detected per period, by review status. Hatched: a period still being reviewed.",
     "sources_note": "By the sources that found each alert.",
     "card_pixels": "From source pixels to alert pixels",
-    "pixels_note": "What Prepare and Integrate kept or removed.",
+    "pixels_note": "What Harmonize and Integrate & vectorize kept or removed.",
     "pixels_res": "{res} m pixels, 1 px ≈ {ha} ha.",
     "px_ha": "· {ha} ha",
     "px_source": "Source alert pixels",

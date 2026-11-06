@@ -2431,14 +2431,14 @@ Common messages
 Overview
 --------
 
-The Overview sums up an alert set: how many alerts it holds, how many are reviewed, and how much loss was confirmed, where and when. It also writes the set's alerts to a GeoPackage or a CSV table. Its figures follow the reviews as they are saved.
+The Overview sums up an alert set, or every period at once: how many alerts it holds, how many are reviewed, and how much loss was confirmed, where and when; how the source pixels became alerts; and the files to download. Its figures follow the reviews as they are saved.
 
 Open the Overview
 ^^^^^^^^^^^^^^^^^
 
 Select **Overview** in the left rail. It opens as a large dialog over the map; close it with its cross. It shows the active alert set, or "No alert set yet. Run Integrate & vectorize to produce one." when the project has none.
 
-.. shot: overview-dashboard | The Overview dialog of the demo project, on the newest set with about a third of its 48 alerts reviewed, measure Area (ha): the header with the Alert set selector, Area (ha) filled and Alert count outlined, Review alerts; the two switches; the four KPI tiles (Confirmed loss 305 ha with "▼ 780 less than 2026-09-01 → 2026-09-30" and its sparkline, Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 0 · Peru · …"); below them the left column with By review status and Across monitoring periods (two periods, the newest set 2026-10-01 → 2026-10-20). Crop to the dialog, down to the top of the second row of cards.
+.. shot: overview-dashboard | The Overview dialog of the demo project, on the newest set with about a third of its 48 alerts reviewed, measure Area (ha), Status tab open: the header with the Alert set selector, Area (ha) filled and Alert count outlined, Review alerts; the four key figures (Confirmed loss 305 ha with "▼ 780 less than 2026-09-01 → 2026-09-30", Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 0 · Peru · …"); the On the map buttons; the tab row; the By review status card with its table and How big the alerts are. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/overview-dashboard.png
     :alt: The Overview dashboard
@@ -2454,22 +2454,14 @@ The header
         -   Description
         -   Default
     *   -   **Alert set**
-        -   The set summed up. Choosing another one makes it the project's active set, as in `Analysis <defo-analysis-topbar_>`_.
+        -   The set summed up. Choosing another one makes it the project's active set, as in `Analysis <defo-analysis-topbar_>`_. Its first item, "All periods · 3 sets · 133 alerts", sums the newest set of every period instead, and leaves the active set as it is.
         -   The active set.
     *   -   **Area (ha)** / **Alert count**
         -   Whether every figure of the page counts hectares or alerts.
         -   **Area (ha)**.
     *   -   **Review alerts**
-        -   Closes the Overview and opens `Analysis <defo-analysis_>`_ on this set. Disabled when the set has no alerts.
+        -   Closes the Overview and opens `Analysis <defo-analysis_>`_ on this set. Disabled when the set has no alerts, and for **All periods** ("Pick one period to review its alerts").
         -
-    *   -   **Show these alerts on the map**
-        -   Draws the set's alerts on the main map, coloured by status, as in `Integrate & vectorize <defo-integrate-map_>`_.
-        -   Off.
-    *   -   **Show earlier sets**
-        -   Draws the alerts of the earlier periods' sets on the main map. Only shown when there are earlier sets.
-        -   Off.
-
-The two map switches are shown only when the set has alerts. Turning one on closes the Overview, to show the map.
 
 If the set is out of date or its files are missing, an orange line says so ("This set was built from inputs that have changed since…" or "This set's files are missing from the project folder…"). The figures still show what the set holds. Run `Integrate & vectorize <defo-integrate-outdated_>`_ again to rebuild it, which discards its reviews.
 
@@ -2480,10 +2472,10 @@ The key figures
     :header-rows: 1
     :widths: 25 75
 
-    *   -   Tile
+    *   -   Figure
         -   Content
     *   -   **Confirmed loss**
-        -   The area (or number) of alerts reviewed as **Reviewed: confirmed**. With an earlier period, it compares with that period, in the page's measure ("▼ 780 less than 2026-09-01 → 2026-09-30", or "▲ … more than …"), and draws a small line across the periods.
+        -   The area (or number) of alerts reviewed as **Reviewed: confirmed**. With an earlier period, it compares with that period, in the page's measure ("▼ 780 less than 2026-09-01 → 2026-09-30", or "▲ … more than …"). **All periods** has no comparison.
     *   -   **Detected in total**
         -   The area (or number) of all the set's alerts, whatever their status.
     *   -   **Reviewed**
@@ -2491,62 +2483,80 @@ The key figures
     *   -   **Largest alert**
         -   The largest alert's area, its number, its country (once reviewed) and its date. It always counts hectares. The number is the alert's row in the set, which is the Analysis counter's number minus one.
 
+On the map
+^^^^^^^^^^
+
+The buttons next to **On the map** draw a layer on the main map, as the eyes of `Integrate & vectorize <defo-integrate-map_>`_ do; selecting one closes the Overview, to show the map. They are shown only for one set with alerts, not for **All periods**.
+
+-   **Alerts**: the set's alerts, coloured by status.
+-   **Not-analysable pixels**: the pixels left out of the alerts, too small or over the alert limit. Only shown when the set's run recorded them.
+-   **Earlier sets**: the alerts of the earlier periods' sets. Only shown when there are earlier sets.
+
 .. _defo-overview-figures:
 
-The figures
-^^^^^^^^^^^
+The tabs
+^^^^^^^^
 
-.. shot: overview-figures | The Overview dialog scrolled down, measure Area (ha): in the left column How big the alerts are and By administrative area with Province / state selected (a one-row table: Peru › Madre de Dios); in the right column The numbers (Status / Alerts / Area (ha) / Share / Median (ha) with the Total row), the Nearby alerts card ("1 group of nearby alerts", "In a group: 3 of 48 alerts · Alone: 45 · Largest: 3 alerts", "No group saved in Analysis yet" and the grouping-off line), When the loss was detected (weekly bars with greyed look-back weeks), the card of the loss-driver question (Mining, Agriculture expansion, No answer, Logging), the Access road nearby? card (No, No answer) and By alert source. Crop to the dialog body, above the Export alerts card.
+The figures are grouped in tabs, each with two cards side by side.
+
+.. shot: overview-figures | The Overview dialog of the demo project, Pixels tab open, measure Area (ha): the From source pixels to alert pixels card (Source alert pixels, Removed by masks, Kept by the masks, Combined, overlaps once, Too small to analyse, Over the alert limit, In alerts, each with its bar, value and hectares) and the By source card with its table and Masks used. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/overview-figures.png
     :alt: The Overview figures
 
-Left column:
-
 .. list-table::
     :header-rows: 1
-    :widths: 25 75
+    :widths: 20 80
 
-    *   -   Card
-        -   Content
-    *   -   **By review status**
-        -   One bar split by status, and the value of each status.
-    *   -   **Across monitoring periods**
-        -   One column per monitoring period of the project, split by status, from its newest alert set. A period still under review shows its unreviewed share hatched. With one period only, it reads "This project has one monitoring period. Add a second one and its trend is charted here."
-    *   -   **How big the alerts are**
-        -   The alerts by size: under 0.5 ha, 0.5–1 ha, 1–2 ha, 2–5 ha, 5–10 ha, 10–25 ha, and 25 ha or more.
-    *   -   **By administrative area**
-        -   The reviewed alerts by administrative area, up to eight areas, the most confirmed loss first: their **Area (ha)**, the hectares **Reviewed: confirmed** and the number of **Alerts**. Two buttons above the table set the level: **Country**, or **Province / state**, the first level below the country, shown with its country ("Peru › Madre de Dios"). Reviewed alerts only, since the areas are recorded (from the FAO GAUL boundaries) when an alert is saved; an alert with none recorded is counted as **Not recorded**. An alert across a border is listed under all the areas it falls in, joined by commas.
-
-Right column:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 25 75
-
-    *   -   Card
-        -   Content
-    *   -   **The numbers**
-        -   A table: per status, the number of alerts, their area, their share of the measure and the median alert size, with a **Total** row.
-    *   -   **History of growing clearings**
-        -   Only when the set has `growth alerts <defo-integrate-growth_>`_ (see below).
-    *   -   **Nearby alerts**
-        -   How the set's alerts gather into groups of nearby alerts (see below).
-    *   -   **When the loss was detected**
-        -   The alerts by the week they were first detected. Greyed weeks are look-back weeks: they fall before the period started (see `What earlier periods already reported <defo-integrate-earlier_>`_).
-    *   -   One card per question
-        -   The answers given to each `question <defo-questionnaire_>`_, for reviewed alerts only: the five most frequent, then **Other** and **No answer**. An alert with two answers counts under each.
-    *   -   **By alert source**
-        -   The alerts by the combination of sources that detected them.
+    *   -   Tab
+        -   Cards
+    *   -   **Status**
+        -   **By review status**: one bar split by status, then a table with, per status, the number of alerts, their area, their share of the measure and the median alert size, and a **Total** row. **How big the alerts are**: the alerts by size, from under 0.5 ha to 25 ha or more.
+    *   -   **Over time**
+        -   **Across monitoring periods**: one column per monitoring period of the project, split by status, from its newest alert set; a period still under review shows its unreviewed share hatched. With one period only, it reads "This project has one monitoring period. Add a second one and its trend is charted here." **When the loss was detected**: the alerts by the week they were first detected, split by status. Hatched weeks are look-back weeks: they fall before the period started (see `What earlier periods already reported <defo-integrate-earlier_>`_).
+    *   -   **Place & source**
+        -   **By administrative area**: the reviewed alerts by area, up to eight, the most confirmed loss first: their **Area (ha)**, the hectares **Reviewed: confirmed** and the number of **Alerts**. **Country** or **Province / state** sets the level; a province is shown with its country ("Peru › Madre de Dios"). The areas come from the FAO GAUL boundaries, recorded when an alert is saved, so only reviewed alerts are counted; an alert with none recorded is counted as **Not recorded**, and an alert across a border is listed under every area it falls in. **By alert source**: the alerts by the combination of sources that detected them.
+    *   -   **Answers**
+        -   One card per `question <defo-questionnaire_>`_, with the answers given to reviewed alerts: the five most frequent, then **Other** and **No answer**. An alert with two answers counts under each. Only shown when the project has questions; the tab shows their number.
+    *   -   **Pixels**
+        -   How the pixels of the sources became the pixels of the alerts (see below).
+    *   -   **Clusters**
+        -   How those pixels became alerts, the nearby alerts and the alerts linked to earlier loss (see below). The tab shows the number of alerts.
+    *   -   **Files**
+        -   The **Export alerts** card (see `The whole set, from the Overview <defo-export-set_>`_) and the **Summary of all periods** (see below).
 
 When a figure cannot be drawn, its card reads "This figure could not be drawn; its numbers are below." and lists them.
 
+Pixels
+""""""
+
+The **From source pixels to alert pixels** card follows the pixels step by step, each with a bar, a number and its hectares:
+
+-   **Source alert pixels**: the pixels the sources flagged in the period, all sources together;
+-   **Removed by masks** and **Kept by the masks**: what the masks of `Harmonize <defo-harmonize_>`_ took out and left;
+-   **Combined, overlaps once**: the pixels once the sources are combined, a pixel flagged by two sources counted once;
+-   **Too small to analyse** and **Over the alert limit**: the pixels of clusters below the minimum area, and of clusters left out by the alert limit of `Integrate & vectorize <defo-integrate_>`_; and
+-   **In alerts**: the pixels of the set's alerts.
+
+The **By source** card gives the same counts per source (**Alert px**, **Masked**, **Kept**), each with an eye that draws the source's raster on the map, and the **Masks used** with their **Mode**.
+
+A count shows "—" when the set was made before the app recorded it: "—: not recorded for this set. Run Integrate & vectorize again to count it."
+
 .. _defo-overview-growth:
 
-Growing clearings
-"""""""""""""""""
+Clusters
+""""""""
 
-The **History of growing clearings** card follows the clearings that this set's growth alerts extend. Its headline gives the set's growth alerts and their area ("3 growth alerts · 4.2 ha", or only the number with **Alert count**). The line under it splits them ("Growth: 2 · Under minimum area: 1") and says how many are reviewed.
+The **From clusters to alerts** card counts the **Clusters formed** by connected alert pixels, those **Under the minimum size** and **Over the alert limit**, the **Alerts** made from the rest, and how many are **Reviewed**.
+
+Under it, **Nearby alerts** shows how the set's alerts chain into groups: alerts within the distance of **Review nearby alerts together** (see `Evaluation <defo-evaluation-group_>`_), edge to edge, form one group. Its table has two rows:
+
+-   **Found by distance**: the groups the distance makes, and their alerts ("20 of 48 · largest 5"); and
+-   **Saved as a review group**: the groups saved in Analysis, and their alerts.
+
+When grouping is off, the card uses the project's distance and adds "Reviewing together is off · turn it on in Evaluation."
+
+The **Linked to earlier loss** card follows the `growth alerts <defo-integrate-growth_>`_: new alerts that touch a clearing confirmed in an earlier period. Its eye, **Earlier sets on the map**, draws the earlier sets. Its headline gives the growth alerts and their area ("3 growth alerts · 4.2 ha", or only the number with **Alert count**); the line under it splits them ("Growth: 2 · Under minimum area: 1") and says how many are reviewed. Without any, it reads "No alert is linked to earlier loss."
 
 Its table lists the histories that include an alert of this set, the largest confirmed area first:
 
@@ -2567,21 +2577,15 @@ Its table lists the histories that include an alert of this set, the largest con
     *   -   **Review**
         -   Closes the Overview and opens this set's alert of the history in `Analysis <defo-analysis_>`_.
 
-Nearby alerts
-"""""""""""""
+Summary of all periods
+""""""""""""""""""""""
 
-The **Nearby alerts** card shows how the set's alerts chain into groups: alerts within the distance of **Review nearby alerts together** (see `Evaluation <defo-evaluation-group_>`_), edge to edge, form one group. A split gives each group to one evaluator.
+The **Files** tab ends with a table of every period, one row each: its **Alerts**, **Confirmed ha**, **Reviewed** share, **Source px**, **Clusters**, review **Groups** and alerts **Linked** to earlier loss. The **Summary CSV** tile under it writes the same table to ``periods_summary.csv`` in the project folder; select it again to download the file. When the numbers have changed since (reviews saved, a set rebuilt), the tile reads "Numbers changed since" and an **Update** button writes it again.
 
--   The headline counts the groups ("6 groups of nearby alerts"), or reads "No alert within 300 m of another".
--   The line under it reads, for example, "In a group: 20 of 48 alerts · Alone: 28 · Largest: 5 alerts".
--   The last line counts the groups saved in Analysis ("2 groups saved in Analysis (7 alerts)"), or reads "No group saved in Analysis yet".
+All periods
+^^^^^^^^^^^
 
-When grouping is off, the card uses the project's distance and adds "Reviewing nearby alerts together is off: turn it on in the Evaluation step."
-
-Export the set
-^^^^^^^^^^^^^^
-
-The **Export alerts** card, at the bottom, writes the set's alerts to a file for a geographic information system (GIS) or a spreadsheet. See `The whole set, from the Overview <defo-export-set_>`_.
+Choose **All periods** in the **Alert set** selector to sum the newest set of every period: the key figures, the tabs and the export then cover them all. Hectares and alerts are added up; a pixel count that one set did not record shows "—". The map buttons and **Review alerts** need one set, so they are hidden or disabled. In the **Files** tab, the **Export alerts** card writes every period's alerts to one file, with a ``period`` column (see `The whole set, from the Overview <defo-export-set_>`_).
 
 Common messages
 ^^^^^^^^^^^^^^^
@@ -2606,9 +2610,9 @@ Export
 The app exports alerts in two ways:
 
 -   the files of one reviewed alert, from the Analysis screen; and
--   the alerts of a whole set, from the Overview.
+-   the alerts of a whole set, or of every period, from the Overview.
 
-Every file is written into the alert set's folder in the project (``periods/<start>_<end>/sets/<set>/``, see `Project <defo-project_>`_), so it can also be found there later, in SEPAL's file browser.
+Every file is written into the alert set's folder in the project (``periods/<start>_<end>/sets/<set>/``, see `Project <defo-project_>`_), so it can also be found there later, in SEPAL's file browser. The files of **All periods** go to the project folder.
 
 .. _defo-export-alert:
 
@@ -2686,9 +2690,9 @@ The GIF is saved next to the other files and, when the alert's files are built, 
 The whole set, from the Overview
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The **Export alerts** card, at the bottom of the `Overview <defo-overview_>`_, writes the alerts of the set shown to a single file. Its top line sums up the alerts that the chosen **Alerts** chip writes, with the set's sources and dates (e.g. "11 alerts · 304.9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20" for **Confirmed**). The folder chip next to it copies the folder's path when selected.
+The **Export alerts** card, in the **Files** tab of the `Overview <defo-overview_>`_, writes the alerts of the set shown to a single file. Its top line sums up the alerts that the chosen **Alerts** chip writes, with the set's sources and dates (e.g. "11 alerts · 304.9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20" for **Confirmed**). The folder chip next to it copies the folder's path when selected.
 
-.. shot: export-overview-card | The Export alerts card at the bottom of the Overview of the demo project, on the set 2026-10-01 → 2026-10-20: the summary line ("11 alerts · 304.9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20"), the folder chip; the Alerts chips Confirmed (11) selected, All reviewed (16), Not reviewed (32), All (48); the GeoPackage tile written ("11 polygons · answers · 2026-10-20 02:13 · 224 KB", as a download link) and the CSV table tile still to create ("11 rows · all columns, WKT"); the footer line with the file name. Crop to the card.
+.. shot: export-overview-card | The Export alerts card in the Files tab of the Overview of the demo project, on the set 2026-10-01 → 2026-10-20: the summary line ("11 alerts · 304.9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20"), the folder chip; the Alerts chips Confirmed (11) selected, All reviewed (16), Not reviewed (32), All (48); the GeoPackage tile written ("11 polygons · answers · 2026-10-20 02:13 · 224 KB", as a download link) and the CSV table tile still to create ("11 rows · all columns, WKT"); the footer line with the file name. Crop to the card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/export-overview-card.png
     :alt: The Export alerts card of the Overview
@@ -2717,6 +2721,8 @@ Both files add three columns on `growth <defo-integrate-growth_>`_:
 -   ``history_area_ha``: the confirmed area of the alert's history, 0 for an alert without one.
 
 The file is named after the set's sources, its period and the chosen alerts (e.g. ``alerts_glad-l-glad-s2-radd_2026-08-01_2026-09-30_confirmed.gpkg``): ``_reviewed`` for **All reviewed**, ``_unreviewed`` for **Not reviewed**, and no suffix for **All**. The card's last line shows the name. Answers are written in the app's current language.
+
+With **All periods** chosen in the **Alert set** selector, the card writes every period's alerts to one file in the project folder, with a ``period`` column giving each alert's period. Its name joins the sources of every set and runs from the first period's start to the last period's end (e.g. ``alerts_glad-l_2026-08-01_2026-10-23.gpkg``).
 
 When reviews are saved after a file was written, its tile reads **Reviews changed since**, with an **Update** button. Select it to write the file again.
 
@@ -2945,7 +2951,7 @@ The `Overview <defo-overview_>`_ sums up the October set. In **Area (ha)**:
 -   **Reviewed**: 33 %, "16 of 48 alerts"; and
 -   **Largest alert**: 31.9 ha, the card's "Alert 0". The Overview numbers alerts from 0, in the set's order; the Analysis counter starts at 1, so this is the first alert there.
 
-.. shot: use-case-overview | The Overview dialog on the October set (2026-10-01 → 2026-10-20 · GLAD-L + GLAD-S2 + RADD · 48 alerts), measure Area (ha): the header and the two map switches, then the four key-figure tiles: Confirmed loss 305 with "▼ 780 less than 2026-09-01 → 2026-09-30" and its sparkline, Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 0 · …". Crop to the dialog, down to the bottom of the tiles, without the next row of cards.
+.. shot: use-case-overview | The Overview dialog on the October set (2026-10-01 → 2026-10-20 · GLAD-L + GLAD-S2 + RADD · 48 alerts), measure Area (ha): the header, then the four key figures: Confirmed loss 305 with "▼ 780 less than 2026-09-01 → 2026-09-30", Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 0 · …". Crop to the dialog, down to the bottom of the key figures, without the tabs.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/use-case-overview.png
     :alt: The key figures of the October set
@@ -2954,14 +2960,14 @@ The `Overview <defo-overview_>`_ sums up the October set. In **Area (ha)**:
 
     The comparison needs care. **Confirmed loss** counts only the alerts reviewed as true alerts, and only a third of the October alerts are reviewed; the September figure, too, covers only the September alerts reviewed so far. The arrow means that less loss is *confirmed* so far, not that less forest was lost: the figure grows as the team goes on reviewing.
 
-**Across monitoring periods** shows the two periods side by side, with the share still under review hatched (2870 ha detected in September, 1177 ha in October).
+In the **Over time** tab, **Across monitoring periods** shows the two periods side by side, with the share still under review hatched (2870 ha detected in September, 1177 ha in October).
 
-Further down:
+In the **Answers** tab:
 
 -   the card of the loss-driver question splits the reviewed area by answer (in October: Mining first, then Agriculture expansion); and
 -   the card of the new question splits it by its answers (in October: all "No", 358 ha, with 81.2 ha under "No answer").
 
-See `The figures <defo-overview-figures_>`_ for every card.
+See `The tabs <defo-overview-figures_>`_ for every card.
 
 Share the results
 ^^^^^^^^^^^^^^^^^
@@ -2969,7 +2975,7 @@ Share the results
 The whole set
 """""""""""""
 
-At the bottom of the Overview, the **Export alerts** card writes the October set to a file. The coordinator chooses **Confirmed** (11 alerts, 304.9 ha) and selects the **GeoPackage** tile. The file ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` holds one polygon per confirmed alert with its attributes and both answers, ready for a GIS. The **CSV table** tile writes the same alerts as a table for a spreadsheet. See `The whole set, from the Overview <defo-export-set_>`_.
+In the **Files** tab of the Overview, the **Export alerts** card writes the October set to a file. The coordinator chooses **Confirmed** (11 alerts, 304.9 ha) and selects the **GeoPackage** tile. The file ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` holds one polygon per confirmed alert with its attributes and both answers, ready for a GIS. The **CSV table** tile writes the same alerts as a table for a spreadsheet. See `The whole set, from the Overview <defo-export-set_>`_.
 
 One alert
 """""""""
