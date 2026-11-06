@@ -529,9 +529,9 @@ def step(page, key, wait_ms=2500):
 
 # ---------------------------------------------------------------- shots: project
 def shot_project_empty(page):
-    """Right after the app starts: no project open."""
+    """Right after the app starts: no project open, the demo offered to Continue."""
     project_dialog(page)
-    w.wait_for(lambda: T("steps.project.empty_heading") in w.dialog_text(page), 10, "no project open")
+    w.wait_for(lambda: T("steps.project.continue_lead") in w.dialog_text(page), 10, "no project open")
     quiet(page)
     save(page, "project-empty", box(page, ".dialog-card"))
 

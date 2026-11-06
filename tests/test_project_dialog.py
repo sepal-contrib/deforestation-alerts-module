@@ -97,10 +97,10 @@ def dialog(monkeypatch, tmp_path):
 
     @solara.component
     def _RecorderManage(open, infos, selected, on_select, on_open, on_delete, on_cancel, current=None,
-                        busy=False, covered=False):
+                        busy=False, covered=False, on_rename=None, sizes=None):
         ns.manage.append(dict(open=open, infos=infos, selected=selected, on_select=on_select, on_open=on_open,
                               on_delete=on_delete, on_cancel=on_cancel, current=current, busy=busy,
-                              covered=covered))
+                              covered=covered, on_rename=on_rename, sizes=sizes))
 
     monkeypatch.setattr(pd, "ManageProjectsDialog", _RecorderManage)
     unsubscribe = install_autosave(ns.state)
@@ -159,7 +159,25 @@ def _open_from_manage(ns, name):
 
 
 def _button(finder, label):
-    return next(w for w in finder.find(v.Btn).widgets if label in w.children)
+    """A button by its text, or by the title of an icon button."""
+    return next(w for w in finder.find(v.Btn).widgets
+                if label in w.children or (w.attributes or {}).get("title") == label)
+
+
+def _titles(rc):
+    return [(w.attributes or {}).get("title") for w in rc.find(v.Btn).widgets]
+
+
+def _manage_button(rc):
+    """"Manage projects (N)", whatever N the last list read gave."""
+    prefix = t("steps.project.manage_count", count=0).split("(")[0]
+    return next(w for w in rc.find(v.Btn).widgets
+                if any(isinstance(c, str) and c.startswith(prefix) for c in w.children))
+
+
+def _open_card_shown(rc):
+    """The open project's card is up: its Rename icon is there."""
+    return t("steps.project.rename") in _titles(rc)
 
 
 def _open_form(rc):
@@ -173,7 +191,7 @@ def _name_field(rc):
 
 
 async def _submit_name(rc, name):
-    await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+    await _settle(lambda: _open_form(rc).widgets, "the name form opened", rc=rc)
     _name_field(rc).v_model = name
     _button(_open_form(rc), t("common.create")).fire_event("click", None)
 
@@ -195,7 +213,7 @@ def test_with_no_project_open_the_dialog_offers_new_and_manage(dialog):
     async def main():
         box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {}, "the empty list read")
+            await _settle(lambda: _listed(dialog) == {}, "the empty list read", rc=rc)
             texts = _texts(box)
             assert t("steps.project.empty_heading") in texts and t("steps.project.none_open") in texts
             new = _button(rc, t("steps.project.new"))
@@ -207,7 +225,7 @@ def test_with_no_project_open_the_dialog_offers_new_and_manage(dialog):
         io.save_project(pd.create_project("a"))
         box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the saved project listed")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the saved project listed", rc=rc)
             assert not _button(rc, t("steps.project.manage_count", count=1)).disabled
         finally:
             rc.close()
@@ -223,14 +241,16 @@ def test_an_open_project_shows_its_save_state_and_manage_selects_it(dialog):
             await _settle(lambda: t("steps.project.chip_saved") in _texts(box), "the saved chip")
             chip = next(c for c in rc.find(v.Chip).widgets if c.children == [t("steps.project.chip_saved")])
             assert chip.color == "primary"
-            for label in (t("steps.project.new"), t("steps.project.manage"), t("steps.project.duplicate")):
-                button = _button(rc, label)
-                assert button.outlined and button.small and not button.block, label
+            for button in (_button(rc, t("steps.project.new")), _manage_button(rc),
+                           _button(rc, t("steps.project.import"))):
+                assert button.outlined and button.small and button.block
+            for label in (t("steps.project.rename"), t("steps.project.duplicate")):
+                assert _button(rc, label).icon, label  # icons by the project's name
             dialog.state.save_error.set("disk full")
             await _settle(lambda: t("steps.project.chip_save_failed") in _texts(box), "the failed chip")
             chip = next(c for c in rc.find(v.Chip).widgets if c.children == [t("steps.project.chip_save_failed")])
             assert chip.color == "error" and t("steps.project.chip_saved") not in _texts(box)
-            _button(rc, t("steps.project.manage")).fire_event("click", None)
+            _manage_button(rc).fire_event("click", None)
             await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
             assert dialog.manage[-1]["selected"] == "b" and dialog.manage[-1]["current"] == "b"
             dialog.manage[-1]["on_cancel"]()
@@ -246,11 +266,11 @@ def test_the_list_follows_the_open_projects_saves(dialog):
     not only when a project is installed or closed."""
     async def main(rc):
         dialog.state.new_project_state(pd.create_project("a"))
-        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed")
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed", rc=rc)
         p = dialog.state.project.value
         add_predefined_source(p, "GLAD-L")
         dialog.state.commit(p)  # auto-saved
-        await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the saved source counted")
+        await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the saved source counted", rc=rc)
 
     run_rendered(lambda: dialog.render(), main)
 
@@ -260,7 +280,7 @@ def test_the_name_is_checked_as_it_is_typed(dialog):
         io.save_project(pd.create_project("north"))
         _box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {"north": "0 / 0 / 0"}, "the list read")
+            await _settle(lambda: _listed(dialog) == {"north": "0 / 0 / 0"}, "the list read", rc=rc)
             _button(rc, t("steps.project.new")).fire_event("click", None)
             await _settle(lambda: _open_form(rc).widgets, "the name form opened")
             frame = _open_form(rc).widget
@@ -292,7 +312,7 @@ def test_a_listed_name_offers_to_open_that_project_instead(dialog):
         io.save_project(pd.create_project("north"))
         _box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {"north": "0 / 0 / 0"}, "the list read")
+            await _settle(lambda: _listed(dialog) == {"north": "0 / 0 / 0"}, "the list read", rc=rc)
             _button(rc, t("steps.project.new")).fire_event("click", None)
             await _settle(lambda: _open_form(rc).widgets, "the name form opened")
             label = t("steps.project.open_instead", name="north")
@@ -318,7 +338,7 @@ def test_a_name_taken_on_disk_after_the_form_opened_is_refused(dialog):
         io.save_project(pd.create_project("a"))
         _box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read", rc=rc)
             _button(rc, t("steps.project.new")).fire_event("click", None)
             await _settle(lambda: _open_form(rc).widgets, "the name form opened")
             other = pd.create_project("b")
@@ -357,7 +377,7 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
         _box, rc = dialog.render()
         try:
             dialog.state.current_page_view.value = "aoi_tile"  # AOI is showing
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the saved project listed")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the saved project listed", rc=rc)
             if how in ("open", "duplicate"):
                 _button(rc, t("steps.project.manage_count", count=1)).fire_event("click", None)
                 await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
@@ -370,10 +390,9 @@ def test_a_new_opened_or_duplicated_project_starts_at_aoi_and_closes_the_dialog(
                 await _submit_name(rc, "n")
             if how == "duplicate":
                 label = t("steps.project.duplicate")
-                await _settle(lambda: any(label in w.children for w in rc.find(v.Btn).widgets),
-                              "the Duplicate button")
+                await _settle(lambda: label in _titles(rc), "the Duplicate icon", rc=rc)
                 _button(rc, label).fire_event("click", None)
-                await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+                await _settle(lambda: _open_form(rc).widgets, "the name form opened", rc=rc)
                 assert _name_field(rc).hint == t("steps.project.duplicate_hint")
                 await _submit_name(rc, "c")
             expected = {"open": "a", "new": "n", "duplicate": "c"}[how]
@@ -410,7 +429,7 @@ def test_the_confirmation_shows_the_folder_size_counted_off_thread(dialog):
         (dialog.root / "a" / "data.bin").write_bytes(b"0" * 5_400_000)
         _box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read", rc=rc)
             dialog.manage[-1]["on_delete"]("a")
             await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
             await _settle(lambda: t("steps.project.delete_size", size="5.4 MB") in _texts(_open_form(rc).widget),
@@ -432,7 +451,7 @@ def test_manage_is_covered_while_the_delete_confirmation_is_open(dialog):
         io.save_project(pd.create_project("a"))
         _box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read", rc=rc)
             assert dialog.manage[-1]["covered"] is False
             dialog.manage[-1]["on_delete"]("a")
             await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
@@ -461,7 +480,7 @@ def test_deleting_the_open_project_closes_it_before_the_folder_goes(dialog, monk
     async def main(rc):
         dialog.state.new_project_state(pd.create_project("a"))
         dialog.state.active_step.set(step_index("period"))
-        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed", rc=rc)
         dialog.manage[-1]["on_delete"]("a")
         await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened", rc=rc)
         alerts = _open_form(rc).find(v.Alert).widgets
@@ -490,7 +509,7 @@ def test_a_failed_delete_of_the_open_project_opens_it_again(dialog, monkeypatch)
         p = pd.create_project("a")
         add_predefined_source(p, "RADD")
         dialog.state.new_project_state(p)
-        await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the open project listed")
+        await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the open project listed", rc=rc)
         await _delete(rc, dialog, "a")
         await _settle(lambda: _toasts("error"), "the delete failed")
         assert _toasts("error") == [t("steps.project.delete_failed", name="a", error="denied")]
@@ -509,7 +528,7 @@ def test_a_project_being_written_cannot_be_deleted(dialog):
         io.save_project(pd.create_project("a"))
         _box, rc = dialog.render()
         try:
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read", rc=rc)
             with writing("a"):
                 dialog.manage[-1]["on_delete"]("a")
                 await _settle(lambda: _open_form(rc).widgets, "the confirm dialog opened")
@@ -549,7 +568,7 @@ def test_the_list_follows_saves_made_on_worker_threads(dialog, monkeypatch):
         _container, rc = render_detached(lambda: _Harness(app_state=dialog.state, dismiss=lambda: None), "Project")
         try:
             dialog.state.new_project_state(pd.create_project("a"))
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed", rc=rc)
             errors = []
 
             def commit(source):
@@ -572,7 +591,7 @@ def test_the_list_follows_saves_made_on_worker_threads(dialog, monkeypatch):
                 while worker.is_alive():
                     await asyncio.sleep(0.01)
                 assert errors == [], errors
-                await _settle(lambda: _listed(dialog) == {"a": f"{n} / 0 / 0"}, f"save {n} listed")
+                await _settle(lambda: _listed(dialog) == {"a": f"{n} / 0 / 0"}, f"save {n} listed", rc=rc)
             assert reports == []
             assert dialog.state.last_saved.value is not None and dialog.state.save_error.value is None
         finally:
@@ -646,7 +665,7 @@ def test_a_failed_duplicate_toasts_and_leaves_create_working(dialog, monkeypatch
         try:
             dialog.state.load_project_state(io.load_project("a"))
             label = t("steps.project.duplicate")
-            await _settle(lambda: any(label in w.children for w in rc.find(v.Btn).widgets), "the Duplicate button")
+            await _settle(lambda: label in _titles(rc), "the Duplicate icon")
             _button(rc, label).fire_event("click", None)
             await _submit_name(rc, "c")
             await _settle(lambda: _toasts("error"), "the failure toasted")
@@ -674,11 +693,11 @@ def test_opening_the_open_project_closes_the_dialogs_and_keeps_it_as_it_is(dialo
 
     async def main(rc):
         dialog.state.new_project_state(pd.create_project("a"))
-        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed")
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the open project listed", rc=rc)
         live = dialog.state.project.value
         dialog.state.current_page_view.value = "period_tile"  # wherever the user was
         monkeypatch.setattr(dialog.state, "load_project_state", lambda p: loads.append(p))
-        _button(rc, t("steps.project.manage")).fire_event("click", None)
+        _manage_button(rc).fire_event("click", None)
         await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
         assert dialog.manage[-1]["selected"] == "a"
         dialog.manage[-1]["on_open"]()  # Enter, or a click on Open
@@ -697,7 +716,7 @@ def test_the_open_projects_own_name_is_taken_but_not_offered_to_open(dialog):
         _box, rc = dialog.render()
         try:
             dialog.state.new_project_state(pd.create_project("a"))
-            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0", "north": "0 / 0 / 0"}, "the list read")
+            await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0", "north": "0 / 0 / 0"}, "the list read", rc=rc)
             for form in (t("steps.project.new"), t("steps.project.duplicate")):
                 _button(rc, form).fire_event("click", None)
                 await _settle(lambda: _open_form(rc).widgets, "the name form opened")
@@ -716,6 +735,98 @@ def test_the_open_projects_own_name_is_taken_but_not_offered_to_open(dialog):
     asyncio.run(main())
 
 
+def test_rename_moves_the_open_project_and_refuses_while_writing(dialog):
+    """Rename moves the folder, installs the project under its new name and
+    saves it there; a writer on the project refuses it with a toast."""
+    async def main(rc):
+        io.save_project(pd.create_project("a"))
+        (dialog.root / "a" / "periods").mkdir()
+        dialog.state.load_project_state(io.load_project("a"))
+        label = t("steps.project.rename")
+        await _settle(lambda: _open_card_shown(rc), "the Rename icon")
+
+        _button(rc, label).fire_event("click", None)
+        await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+        _name_field(rc).v_model = "b"
+        with writing("a"):
+            _button(_open_form(rc), label).fire_event("click", None)
+            await _settle(lambda: _toasts("warning"), "the busy refusal")
+        assert _toasts("warning") == [t("steps.project.rename_busy")]
+        assert (dialog.root / "a").is_dir() and dialog.state.project.value.name == "a"
+
+        _button(_open_form(rc), label).fire_event("click", None)  # the form stayed open: retry
+        await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "b", "b installed")
+        assert not (dialog.root / "a").exists() and (dialog.root / "b" / "periods").is_dir()
+        assert json.loads((dialog.root / "b" / paths.MANIFEST).read_text())["name"] == "b"
+        assert _toasts("success")[-1] == t("steps.project.renamed", name="b")
+
+    run_rendered(lambda: dialog.render(), main)
+
+
+def test_continue_replaces_the_empty_text_and_opens_the_last_changed_project(dialog):
+    """With saved projects and none open, the start window offers the most
+    recently saved one (not the list's first or last) instead of "No project open"."""
+    io.save_project(pd.create_project("b"))
+    io.save_project(pd.create_project("a"))  # saved last: the one to continue
+
+    async def main(rc):
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0", "b": "0 / 0 / 0"}, "the list read", rc=rc)
+        texts = _texts(rc.container)
+        assert t("steps.project.continue_lead") in texts and "a" in texts and "b" not in texts
+        assert t("steps.project.none_open") not in texts
+        assert _button(rc, t("steps.project.new")).outlined  # Continue is the main action now
+        _button(rc, t("steps.project.continue")).fire_event("click", None)
+        await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "a", "a opened")
+
+    run_rendered(lambda: dialog.render(), main)
+
+
+def test_rename_from_manage_moves_a_closed_project_and_keeps_its_row_selected(dialog):
+    """A row's pencil renames a project that is not open: the form starts on
+    its name (Rename off until it changes), the folder moves, the open project
+    is left alone and the Manage selection follows the new name."""
+    async def main(rc):
+        io.save_project(pd.create_project("b"))
+        dialog.state.new_project_state(pd.create_project("a"))
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0", "b": "0 / 0 / 0"}, "the list read", rc=rc)
+        dialog.manage[-1]["on_select"]("b")
+        dialog.manage[-1]["on_rename"]("b")
+        await _settle(lambda: _open_form(rc).widgets, "the name form opened")
+        assert dialog.manage[-1]["covered"] is True
+        field = _name_field(rc)
+        assert field.v_model == "b" and not field.error_messages  # its own name is not "taken"
+        label = t("steps.project.rename")
+        assert _button(_open_form(rc), label).disabled
+        field.v_model = "a"
+        assert field.error_messages == [t("steps.project.name_exists")]
+        field.v_model = "c"
+        with writing("b"):
+            _button(_open_form(rc), label).fire_event("click", None)
+            await _settle(lambda: _toasts("warning"), "the busy refusal")
+        assert (dialog.root / "b").is_dir()
+        _button(_open_form(rc), label).fire_event("click", None)
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0", "c": "0 / 0 / 0"}, "the list read again", rc=rc)
+        assert not (dialog.root / "b").exists() and io.load_project("c").name == "c"
+        assert dialog.state.project.value.name == "a"
+        assert dialog.manage[-1]["selected"] == "c"
+        assert not _open_form(rc).widgets
+
+    run_rendered(lambda: dialog.render(), main)
+
+
+def test_manage_gets_each_projects_size_once_it_opens(dialog):
+    io.save_project(pd.create_project("a"))
+    (dialog.root / "a" / "data.bin").write_bytes(b"0" * 5_000)
+
+    async def main(rc):
+        await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the list read", rc=rc)
+        assert not dialog.manage[-1]["sizes"]  # nothing measured while Manage is closed
+        _manage_button(rc).fire_event("click", None)
+        await _settle(lambda: (dialog.manage[-1]["sizes"] or {}).get("a", 0) > 5_000, "a measured")
+
+    run_rendered(lambda: dialog.render(), main)
+
+
 def test_a_review_copy_offers_no_duplicate(dialog):
     """Spec §6.3: Duplicate is hidden for a review copy (New and Manage stay)."""
     async def main(rc):
@@ -723,10 +834,9 @@ def test_a_review_copy_offers_no_duplicate(dialog):
         p.review_copy = ReviewCopy(evaluator="Ana", evaluator_index=1, set_id="x", split_id="sp",
                                    set_fingerprint="f", origin_project="orig", imported_at=datetime.now())
         dialog.state.new_project_state(p)
-        await _settle(lambda: any(t("steps.project.manage") in w.children for w in rc.find(v.Btn).widgets),
-                      "the open project's buttons")
+        await _settle(lambda: _open_card_shown(rc), "the open project's card")
         labels = [c for w in rc.find(v.Btn).widgets for c in w.children if isinstance(c, str)]
-        assert t("steps.project.new") in labels and t("steps.project.duplicate") not in labels
+        assert t("steps.project.new") in labels and t("steps.project.duplicate") not in _titles(rc)
 
     run_rendered(lambda: dialog.render(), main)
 
@@ -758,10 +868,10 @@ def _ana_filter():
 
 def test_import_is_offered_with_and_without_an_open_project(dialog):
     async def main(rc):
-        assert _button(rc, t("steps.project.import")).block  # the empty state's column of buttons
+        assert _button(rc, t("steps.project.import")).block  # the column of buttons
         dialog.state.new_project_state(pd.create_project("b"))
-        await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
-                                  for w in rc.find(v.Btn).widgets), "Import beside New and Manage")
+        await _settle(lambda: _open_card_shown(rc), "the open project's card")
+        assert _button(rc, t("steps.project.import")).block  # the same column under it
 
     run_rendered(lambda: dialog.render(), main)
 
@@ -846,8 +956,7 @@ def test_open_existing_copy_on_the_open_copy_lands_again_without_a_reload(dialog
     async def main(rc):
         dialog.state.new_project_state(_review_copy())
         dialog.state.current_page_view.value = "aoi_tile"
-        await _settle(lambda: any(t("steps.project.import") in w.children and not w.block
-                                  for w in rc.find(v.Btn).widgets), "the open copy's buttons")
+        await _settle(lambda: _open_card_shown(rc), "the open copy's card")
         assert dialog.filters == []
         await _import_zip(rc, dialog.root / "c__x__e01-ana__review.zip")
         message = t("steps.project.import_existing_message", name="c__e01-ana", evaluator="Ana")
@@ -865,7 +974,7 @@ def test_opening_a_review_copy_from_manage_lands_on_analysis(dialog):
     io.save_project(_review_copy())
 
     async def main(rc):
-        await _settle(lambda: "c__e01-ana" in (_listed(dialog) or {}), "the copy listed")
+        await _settle(lambda: "c__e01-ana" in (_listed(dialog) or {}), "the copy listed", rc=rc)
         _button(rc, t("steps.project.manage_count", count=1)).fire_event("click", None)
         await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
         _open_from_manage(dialog, "c__e01-ana")

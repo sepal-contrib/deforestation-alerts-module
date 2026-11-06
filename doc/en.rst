@@ -141,12 +141,12 @@ Use the **Project** dialog to create, open, import, copy and delete projects. It
 When no project is open
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: project-empty | The Project dialog right after the app starts, with no project open: folder icon, "No project open" heading, the three buttons New project / Manage projects (n) / Import. Crop to the dialog.
+.. shot: project-empty | The Project dialog right after the app starts, with no project open: the "Continue where you left off" card for the demo project (name, count chips, AOI, "modified … ago", Continue button), then the three buttons New project / Manage projects (n) / Import. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/project-empty.png
     :alt: The Project dialog with no project open
 
-The dialog reads **No project open** and offers three buttons:
+With saved projects, the dialog offers the one changed last under **Continue where you left off**, with its counts, its AOI and when it was changed: select **Continue** to open it. With no saved project, it reads **No project open**. Below are three buttons:
 
 .. list-table::
     :header-rows: 1
@@ -168,7 +168,7 @@ The dialog reads **No project open** and offers three buttons:
 When a project is open
 ^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: project-open | The Project dialog with the demo project open: project name in bold with the green "saved" chip, the summary line "PER_Madre_De_Dios · 3 sources · 1 period · 1 alert set", the "Saved … ago" line, and the buttons New project / Manage / Import / Duplicate. Crop to the dialog.
+.. shot: project-open | The Project dialog with the demo project open: a tinted card with the project name in bold, the green "saved" chip and the pencil and copy icons, the count chips, the AOI "PER_Madre_De_Dios" and "Saved … ago"; then the buttons New project / Manage projects (n) / Import. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/project-open.png
     :alt: The Project dialog with a project open
@@ -179,7 +179,7 @@ The dialog shows:
 -   a summary: the AOI (or "no AOI yet") and the number of sources, periods and alert sets; and
 -   when the project was last saved (e.g. "Saved 3 minutes ago").
 
-Its buttons are **New project**, **Manage**, **Import** and **Duplicate**.
+The pencil icon next to the name renames the project and the copy icon duplicates it. The buttons below are the same as when no project is open: **New project**, **Manage projects** and **Import**.
 
 .. _defo-project-create:
 
@@ -206,15 +206,16 @@ The new project opens on the `AOI <defo-aoi_>`_ step, always the first step of t
 Open, search and delete projects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: project-manage | The "Manage projects" dialog with three saved projects listed, the demo project selected and marked with the outlined "open" chip, each row showing its count chips (sources, periods, alert sets) and "modified … ago", the Search projects field empty, the Open button enabled. Crop to the dialog.
+.. shot: project-manage | The "Manage projects" dialog with three saved projects listed, the demo project selected and marked with the outlined "open" chip, each row showing its count chips (sources, periods, alert sets), its AOI and "modified … ago", and on the right its size, a pencil and a red bin, the Search projects field empty, the Open button enabled. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/project-manage.png
     :alt: The Manage projects dialog
 
-**Manage** (or **Manage projects** when nothing is open) lists every saved project with:
+**Manage projects** lists every saved project with:
 
 -   small chips for its number of sources, periods and alert sets (the alert-set chip is coloured when the project has results to review);
--   when it was last changed (e.g. "modified 2 days ago"); and
+-   its AOI (or "no AOI yet") and when it was last changed (e.g. "modified 2 days ago");
+-   its size on disk, measured when the dialog opens; and
 -   an **open** chip on the project that is open now.
 
 To open a project:
@@ -222,6 +223,14 @@ To open a project:
 1.  Enter text in the **Search projects** field to keep only the projects whose name contains it.
 2.  Select a project.
 3.  Select **Open**.
+
+To rename a project:
+
+1.  Select the pencil icon on its row (or next to the name of the open project).
+2.  Enter the new name. It follows the same rules as a new project's name.
+3.  Select **Rename**.
+
+A project cannot be renamed while a task is still writing into it.
 
 To delete a project:
 

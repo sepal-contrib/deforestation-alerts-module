@@ -144,7 +144,7 @@ Quand aucun projet n'est ouvert
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/project-empty.png
     :alt: La boîte de dialogue Projet sans projet ouvert
 
-La boîte de dialogue indique **Aucun projet ouvert** et propose trois boutons :
+S'il y a des projets enregistrés, la boîte de dialogue propose le dernier modifié sous **Reprendre là où vous vous étiez arrêté**, avec ses nombres, son AOI et la date de sa modification : sélectionnez **Reprendre** pour l'ouvrir. Sans projet enregistré, elle indique **Aucun projet ouvert**. En dessous, trois boutons :
 
 .. list-table::
     :header-rows: 1
@@ -175,7 +175,7 @@ La boîte de dialogue affiche :
 -   un résumé : l'AOI (ou « pas encore d'AOI ») et le nombre de sources, de périodes et de jeux d'alertes ;
 -   le moment du dernier enregistrement du projet (par exemple « Enregistré il y a 3 minutes »).
 
-Ses boutons sont **Nouveau projet**, **Gérer**, **Importer** et **Dupliquer**.
+L'icône crayon à côté du nom renomme le projet et l'icône de copie le duplique. Les boutons en dessous sont les mêmes que sans projet ouvert : **Nouveau projet**, **Gérer les projets** et **Importer**.
 
 .. _defo-project-create:
 
@@ -205,10 +205,11 @@ Ouvrir, rechercher et supprimer des projets
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/project-manage.png
     :alt: La boîte de dialogue Gérer les projets
 
-**Gérer** (ou **Gérer les projets** quand aucun projet n'est ouvert) liste chaque projet enregistré avec :
+**Gérer les projets** liste chaque projet enregistré avec :
 
 -   de petites pastilles indiquant son nombre de sources, de périodes et de jeux d'alertes (la pastille des jeux d'alertes est colorée quand le projet a des résultats à examiner) ;
--   le moment de sa dernière modification (par exemple « modifié il y a 2 jours ») ;
+-   son AOI (ou « pas encore d'AOI ») et le moment de sa dernière modification (par exemple « modifié il y a 2 jours ») ;
+-   sa taille sur le disque, mesurée à l'ouverture de la boîte de dialogue ;
 -   une pastille **ouvert** sur le projet ouvert en ce moment.
 
 Pour ouvrir un projet :
@@ -216,6 +217,14 @@ Pour ouvrir un projet :
 1.  Saisissez du texte dans le champ **Rechercher des projets** pour ne garder que les projets dont le nom le contient.
 2.  Sélectionnez un projet.
 3.  Sélectionnez **Ouvrir**.
+
+Pour renommer un projet :
+
+1.  Sélectionnez l'icône crayon de sa ligne (ou à côté du nom du projet ouvert).
+2.  Saisissez le nouveau nom. Il suit les mêmes règles que le nom d'un nouveau projet.
+3.  Sélectionnez **Renommer**.
+
+Un projet ne peut pas être renommé tant qu'une tâche écrit encore dedans.
 
 Pour supprimer un projet :
 

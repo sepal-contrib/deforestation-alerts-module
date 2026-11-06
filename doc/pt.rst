@@ -144,7 +144,7 @@ Quando nenhum projeto está aberto
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/project-empty.png
     :alt: A janela Projeto sem nenhum projeto aberto
 
-A janela mostra **Nenhum projeto aberto** e oferece três botões:
+Com projetos salvos, a janela oferece o último alterado em **Continuar de onde parou**, com suas contagens, sua AOI e quando foi alterado: selecione **Continuar** para abri-lo. Sem nenhum projeto salvo, ela mostra **Nenhum projeto aberto**. Abaixo há três botões:
 
 .. list-table::
     :header-rows: 1
@@ -175,7 +175,7 @@ A janela mostra:
 -   um resumo: a AOI (ou "ainda sem AOI") e o número de fontes, períodos e conjuntos de alertas; e
 -   quando o projeto foi salvo pela última vez (por exemplo "Salvo há 3 minutos").
 
-Os botões são **Novo projeto**, **Gerenciar**, **Importar** e **Duplicar**.
+O ícone de lápis ao lado do nome renomeia o projeto e o ícone de cópia o duplica. Os botões abaixo são os mesmos de quando nenhum projeto está aberto: **Novo projeto**, **Gerenciar projetos** e **Importar**.
 
 .. _defo-project-create:
 
@@ -203,10 +203,11 @@ Abrir, pesquisar e excluir projetos
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/project-manage.png
     :alt: A janela Gerenciar projetos
 
-**Gerenciar** (ou **Gerenciar projetos**, quando nada está aberto) lista todos os projetos salvos com:
+**Gerenciar projetos** lista todos os projetos salvos com:
 
 -   pequenas etiquetas com o número de fontes, períodos e conjuntos de alertas (a etiqueta dos conjuntos de alertas fica colorida quando o projeto tem resultados a revisar);
--   quando ele foi alterado pela última vez (por exemplo "modificado há 2 dias"); e
+-   sua AOI (ou "ainda sem AOI") e quando ele foi alterado pela última vez (por exemplo "modificado há 2 dias");
+-   seu tamanho no disco, medido quando a janela abre; e
 -   uma etiqueta **aberto** no projeto que está aberto no momento.
 
 Para abrir um projeto:
@@ -214,6 +215,14 @@ Para abrir um projeto:
 1.  Digite um texto no campo **Pesquisar projetos** para manter apenas os projetos cujo nome o contém.
 2.  Selecione um projeto.
 3.  Selecione **Abrir**.
+
+Para renomear um projeto:
+
+1.  Selecione o ícone de lápis da linha dele (ou ao lado do nome do projeto aberto).
+2.  Digite o novo nome. Ele segue as mesmas regras do nome de um projeto novo.
+3.  Selecione **Renomear**.
+
+Um projeto não pode ser renomeado enquanto uma tarefa ainda grava nele.
 
 Para excluir um projeto:
 

@@ -5,7 +5,7 @@ import pytest
 
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, GridSpec, Period, Project, add_predefined_source,
+    AlertSet, AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,
 )
 
 
@@ -95,6 +95,14 @@ def test_list_skips_folders_without_manifest(root):
     infos = io.list_projects()
     assert [i.name for i in infos] == ["a", "b"]
     assert infos[0].n_sources == 1 and infos[0].n_sets == 0
+    assert infos[0].aoi_name is None
+
+
+def test_list_projects_reads_the_aoi_name(root):
+    p = _project("a")
+    p.aoi = AoiRecord(spec={}, name="PER_Madre_De_Dios", method="ADMIN0", digest="d", bounds=(0, 0, 1, 1))
+    io.save_project(p)
+    assert io.list_projects()[0].aoi_name == "PER_Madre_De_Dios"
 
 
 def test_delete_removes_folder(root):
@@ -103,6 +111,18 @@ def test_delete_removes_folder(root):
     (root / "demo" / "periods" / "x.tif").write_bytes(b"1")
     io.delete_project("demo")
     assert not (root / "demo").exists()
+
+
+def test_rename_moves_the_folder_and_refuses_a_taken_name(root):
+    io.save_project(_project())
+    (root / "demo" / "periods").mkdir()
+    io.rename_project("demo", "north")
+    assert not (root / "demo").exists() and (root / "north" / "periods").is_dir()
+    assert io.load_project("north").name == "north"
+    (root / "empty").mkdir()
+    with pytest.raises(FileExistsError):
+        io.rename_project("north", "empty")
+    assert (root / "north" / paths.MANIFEST).exists()
 
 
 @pytest.mark.parametrize("name,err", [("", "empty"), ("a/b", "chars"), ("dup", "exists"), ("ok name-1", None)])

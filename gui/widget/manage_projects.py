@@ -1,4 +1,4 @@
-"""Manage projects: search, open and delete saved projects (spatial_risk's
+"""Manage projects: search, open, rename and delete saved projects (spatial_risk's
 ``gui/widget/manage_projects.py``, spec D5).
 
 Both dialogs are presentational: every action is a callback of
@@ -57,23 +57,55 @@ def count_chips(info) -> list[tuple[str, bool]]:
     ]
 
 
+def ChipRow(info):
+    """A project's count chips (``count_chips``), as Manage's rows and the
+    Project dialog's cards show them."""
+    with rv.Html(tag="div", style_="display:flex;flex-wrap:wrap;gap:4px;margin:2px 0;"):
+        for label, accent in count_chips(info):
+            rv.Chip(children=[label], x_small=True, color="primary" if accent else None,
+                    text_color="white" if accent else None)
+
+
+#: A row's last line: the AOI and the age, side by side, wrapping on a narrow dialog.
+_META = "display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;"
+_META_ITEM = "display:inline-flex;align-items:center;gap:3px;"
+#: Right-aligned with tabular digits, so the sizes line up from row to row.
+_SIZE = "font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;min-width:56px;text-align:right;"
+
+
+def _row_button(icon, label, on_click, color=None):
+    solara.Button(icon_name=icon, icon=True, small=True, color=color, on_click=on_click,
+                  attributes={"title": label, "aria-label": label})
+
+
+def size_label(size_bytes) -> str:
+    """A row's size on disk; "…" while it is measured (None)."""
+    return "…" if size_bytes is None else size_text(max(size_bytes, 1))
+
+
 @solara.component
 def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, on_cancel, current=None,
-                         busy=False, covered=False):
-    """Search, open and delete the saved projects.
+                         busy=False, covered=False, on_rename=lambda name: None, sizes=None):
+    """Search, open, rename and delete the saved projects.
 
     ``infos``: the ``io.list_projects()`` read the caller holds. ``selected``:
     the row clicked in this dialog; ``current``: the project open in the app,
     badged "open". The two answer different questions, so they are shown by
     different things (the list selection, a chip). ``on_select(name | None)``,
-    ``on_open()`` (the footer), ``on_delete(name)`` (a row's trash button; the
-    caller opens the confirmation), ``on_cancel()`` (Cancel, ESC, a click
-    outside). ``busy``: a load or a delete runs. ``covered``: a dialog opened
-    from this one (the delete confirmation) is on top. This dialog then lets
+    ``on_open()`` (the footer), ``on_rename(name)`` and ``on_delete(name)`` (a
+    row's pencil and trash buttons; the caller opens the form or the
+    confirmation), ``on_cancel()`` (Cancel, ESC, a click outside). ``sizes``:
+    ``{name: bytes}`` measured so far; a row not in it reads "…". ``busy``: a
+    load or a delete runs. ``covered``: a dialog opened from this one (the
+    rename form, the delete confirmation) is on top. This dialog then lets
     go of the focus: two open dialogs that both retain focus pull it back and
     forth (VDialog's ``onFocusin``), so the one on top never keeps it, and the
     browser's call stack overflows.
+
+    Scrollable: only the list scrolls, so the search and the footer's Open
+    stay in view however long the list is.
     """
+    sizes = sizes or {}
     query, set_query = solara.use_state("")
 
     # A filter left from the last time would hide rows on this opening.
@@ -90,16 +122,19 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
     # would open a project the user cannot see.
     open_disabled = busy or not any(i.name == selected for i in shown)
 
-    with rv.Dialog(v_model=open, on_v_model=lambda v: None if v else on_cancel(), max_width="480px",
-                   eager=True, retain_focus=not covered):
+    with rv.Dialog(v_model=open, on_v_model=lambda v: None if v else on_cancel(), max_width="520px",
+                   eager=True, retain_focus=not covered, scrollable=True):
         with rv.Card():
             with rv.CardTitle():
                 solara.Text(t("steps.project.manage_title"))
-            with rv.CardText():
+            # Outside the card text, which is what a scrollable dialog scrolls.
+            with rv.Html(tag="div", class_="px-6 pb-3", style_="flex:0 0 auto;"):
                 if infos:
                     rv.TextField(label=t("steps.project.search"), v_model=query,
                                  on_v_model=lambda v: set_query(v or ""), prepend_inner_icon="mdi-magnify",
                                  dense=True, outlined=True, clearable=True, hide_details=True)
+            rv.Divider()
+            with rv.CardText(style_="max-height:60vh;"):
                 if not infos:
                     solara.Text(t("steps.project.list_empty"), style=MUTED)
                 elif not shown:
@@ -118,19 +153,24 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
                                                                  x_small=True, outlined=True, color="primary",
                                                                  class_="ml-2"))
                                         rv.ListItemTitle(children=title)
-                                        with rv.Html(tag="div",
-                                                     style_="display:flex;flex-wrap:wrap;gap:4px;margin:2px 0;"):
-                                            for label, accent in count_chips(info):
-                                                rv.Chip(children=[label], x_small=True,
-                                                        color="primary" if accent else None,
-                                                        text_color="white" if accent else None)
-                                        if info.updated_at is not None:
-                                            rv.ListItemSubtitle(children=[t(
-                                                "steps.project.modified",
-                                                time_ago=relative_time(info.updated_at, now))])
-                                    with rv.ListItemAction():
-                                        solara.Button(icon_name="mdi-delete-outline", icon=True, small=True,
-                                                      color="error", on_click=lambda n=info.name: on_delete(n))
+                                        ChipRow(info=info)
+                                        with rv.ListItemSubtitle(style_=_META):
+                                            with rv.Html(tag="span", style_=_META_ITEM):
+                                                rv.Icon(x_small=True, children=["mdi-map-marker-outline"])
+                                                solara.Text(info.aoi_name or t("steps.project.no_aoi"))
+                                            if info.updated_at is not None:
+                                                solara.Text(t("steps.project.modified",
+                                                              time_ago=relative_time(info.updated_at, now)))
+                                    with rv.ListItemAction(style_="flex-direction:row;align-items:center;gap:2px;"):
+                                        size = sizes.get(info.name)
+                                        rv.Html(tag="span", children=[size_label(size)],
+                                                style_=_SIZE + ("opacity:0.5;" if size is None else ""),
+                                                attributes={"title": t("steps.project.size_on_disk")})
+                                        _row_button("mdi-pencil-outline", t("steps.project.rename"),
+                                                    lambda n=info.name: on_rename(n))
+                                        _row_button("mdi-delete-outline", t("common.delete"),
+                                                    lambda n=info.name: on_delete(n), color="error")
+            rv.Divider()
             with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
                 solara.Button(t("common.cancel"), text=True, small=True, on_click=on_cancel)
                 solara.Button(t("steps.project.open_selected"), icon_name="mdi-folder-open-outline",

@@ -36,6 +36,7 @@ class ProjectInfo:
     n_periods: int
     n_sets: int
     updated_at: Optional[datetime]
+    aoi_name: Optional[str] = None  # None: no AOI chosen yet
 
 
 def save_project(p: Project, root: Optional[Path] = None) -> Path:
@@ -137,12 +138,15 @@ def list_projects(root: Optional[Path] = None) -> list[ProjectInfo]:
             updated = datetime.fromisoformat(raw["updated_at"]) if raw.get("updated_at") else None
         except (OSError, ValueError, KeyError):
             continue
+        aoi = raw.get("aoi")
+        aoi_name = aoi.get("name") if isinstance(aoi, dict) else None
         infos.append(ProjectInfo(
             name=folder.name,
             n_sources=len(raw.get("sources") or {}),
             n_periods=len(raw.get("periods") or {}),
             n_sets=len(raw.get("alert_sets") or {}),
             updated_at=updated,
+            aoi_name=aoi_name if isinstance(aoi_name, str) else None,
         ))
     return infos
 
@@ -164,6 +168,16 @@ def delete_project(name: str, root: Optional[Path] = None) -> None:
             child.unlink()
     manifest.unlink(missing_ok=True)
     folder.rmdir()
+
+
+def rename_project(old: str, new: str, root: Optional[Path] = None) -> None:
+    """Rename the project folder. Every artifact path is folder-relative and
+    ``load_project`` takes the name from the folder, so the move is all there
+    is. Callers must refuse while a writer is active (gui.store.project_writers)."""
+    src, dst = paths.project_dir(old, root), paths.project_dir(new, root)
+    if dst.exists():  # os.rename would silently replace an empty folder
+        raise FileExistsError(str(dst))
+    os.rename(src, dst)
 
 
 def validate_project_name(name: str, existing: list[str]) -> Optional[str]:

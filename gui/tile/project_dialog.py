@@ -1,15 +1,18 @@
 """The Project rail dialog (spec D5, spatial_risk's ``ProjectPanel``): the open
-project's status, New, Manage projects and Duplicate. Auto-save means there is
-no Save button (D11): the status shows a "saved" chip, or "save failed".
+project's card (Rename and Duplicate by its name), or, with none open, a card
+to Continue the project changed last; then New, Manage projects and Import.
+Auto-save means there is no Save button (D11): the card shows a "saved" chip,
+or "save failed".
 
 These dialogs hang off it, all rendered at its top level:
 
-- the name form of New and Duplicate (``_NameForm``), on the form frame
+- the name form of New, Duplicate and Rename (``_NameForm``), on the form frame
   (``gui/widget/form_dialog.py``). The name is checked as it is typed against
   the folders on disk read when the form opened, and against the disk again
   when Create is pressed: a project created in another tab since must never be
   overwritten.
-- Manage projects (``gui/widget/manage_projects.py``): search, open, delete.
+- Manage projects (``gui/widget/manage_projects.py``): search, open, rename,
+  delete, and each folder's size, counted off-thread when it opens.
 - Import: the package picker (on the form frame) and the re-import question.
 - the delete confirmation, which shows the folder's size, counted off-thread.
 
@@ -39,6 +42,7 @@ import logging
 import os
 import shutil
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -62,6 +66,7 @@ from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import form_card, use_form_dialog
 from gui.widget.manage_projects import (
+    ChipRow,
     ConfirmDeleteDialog,
     ManageProjectsDialog,
     relative_time,
@@ -154,20 +159,29 @@ def folder_size(name: str, root: Optional[Path] = None) -> int:
     return total
 
 
+def _others(names: list[str], own: str) -> list[str]:
+    """``names`` without ``own``, the folder a rename moves (empty: none)."""
+    return [n for n in names if n != own]
+
+
 @solara.component
-def _NameFields(title, open_, on_create, on_open_existing, infos, hint, current):
+def _NameFields(title, open_, on_create, on_open_existing, infos, hint, current, action_label, action_icon,
+                initial):
     """The name form's card. Mounted only while the form is open, so every
-    opening starts with an empty name and reads the folders again.
-    ``current``: the open project's name, taken but never offered to open."""
-    name, set_name = solara.use_state("")
+    opening starts from ``initial`` and reads the folders again.
+    ``current``: the open project's name, taken but never offered to open.
+    ``initial``: Rename's current name, filled in; its own folder does not
+    count as taken, and keeping it is not a rename."""
+    name, set_name = solara.use_state(initial)
     error, set_error = solara.use_state(None)
     # Enter and a click can both press Create before the form closes.
     launched = solara.use_ref(False)
     # The live check's folders, read once when the form opens. Create reads
     # the disk again: another tab may make the folder in between (Review Focus 4).
-    existing = solara.use_memo(names_on_disk, [])
+    existing = solara.use_memo(lambda: _others(names_on_disk(), initial), [])
     live = io.validate_project_name(name, existing)
     typed = name.strip()
+    unchanged = bool(initial) and typed == initial
     # A listed project of that name (folders without a manifest are not listed,
     # so nothing to open there): offered instead of a name that cannot be used.
     # Not the open project: it is open already, and opening it again would
@@ -182,7 +196,9 @@ def _NameFields(title, open_, on_create, on_open_existing, infos, hint, current)
     def _create():
         if launched.current:
             return
-        err = io.validate_project_name(name, names_on_disk())
+        if unchanged:
+            return
+        err = io.validate_project_name(name, _others(names_on_disk(), initial))
         if err:
             set_error(t(_NAME_ERRORS[err]))
             return
@@ -193,8 +209,8 @@ def _NameFields(title, open_, on_create, on_open_existing, infos, hint, current)
         open_.set(False)
 
     def _actions():
-        solara.Button(t("common.create"), icon_name="mdi-plus", color="primary", small=True,
-                      disabled=live is not None, classes=[ENTER_DEFAULT], on_click=_create)
+        solara.Button(action_label or t("common.create"), icon_name=action_icon, color="primary", small=True,
+                      disabled=live is not None or unchanged, classes=[ENTER_DEFAULT], on_click=_create)
 
     with form_card(title, on_cancel=lambda: open_.set(False), actions=_actions, error=error):
         rv.TextField(label=t("steps.project.name_label"), v_model=name, on_v_model=_type, dense=True,
@@ -209,8 +225,9 @@ def _NameFields(title, open_, on_create, on_open_existing, infos, hint, current)
 
 
 @solara.component
-def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None, current=None):
-    """New and Duplicate's name form (420px, on the form frame).
+def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None, current=None, action_label=None,
+              action_icon="mdi-plus", initial=""):
+    """New, Duplicate and Rename's name form (420px, on the form frame).
 
     ``on_create(name)`` installs the project and returns whether it did; the
     form closes itself after, or stays open on the name when it did not.
@@ -219,7 +236,8 @@ def _NameForm(title, open_, on_create, on_open_existing, infos, hint=None, curre
     with use_form_dialog(open_, max_width="420px"):
         if open_.value:
             _NameFields(title=title, open_=open_, on_create=on_create, on_open_existing=on_open_existing,
-                        infos=infos, hint=hint, current=current)
+                        infos=infos, hint=hint, current=current, action_label=action_label, action_icon=action_icon,
+                        initial=initial)
 
 
 @solara.component
@@ -293,6 +311,37 @@ def _SavedAgo(app_state):
                     style=MUTED + "font-size:12px;")
 
 
+#: The open project's card and the Continue card: a translucent primary layer
+#: and a primary left edge, from the theme's ``primary`` class (the theme does
+#: not publish ``--v-primary-base``; see ``gui/tile/analysis/file_tile.py``).
+_CARD = "position:relative;overflow:hidden;border-radius:6px;padding:12px 10px 12px 16px;"
+_TINT = "position:absolute;top:0;right:0;bottom:0;left:0;opacity:0.12;pointer-events:none;"
+_EDGE = "position:absolute;top:0;bottom:0;left:0;width:3px;pointer-events:none;"
+_CARD_GRID = ("position:relative;display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:6px 12px;"
+              "align-items:center;")
+_CARD_META = "display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;font-size:12px;" + MUTED
+_NAME = "font-weight:700;font-size:1.1rem;overflow-wrap:anywhere;"
+
+
+@contextmanager
+def _tinted_card():
+    with rv.Html(tag="div", style_=_CARD):
+        rv.Html(tag="span", class_="primary", style_=_TINT)
+        rv.Html(tag="span", class_="primary", style_=_EDGE)
+        yield
+
+
+def _aoi_item(name: Optional[str]):
+    with rv.Html(tag="span", style_="display:inline-flex;align-items:center;gap:3px;"):
+        rv.Icon(x_small=True, children=["mdi-map-marker-outline"])
+        solara.Text(name or t("steps.project.no_aoi"))
+
+
+def _icon_button(icon, label, on_click):
+    solara.Button(icon_name=icon, icon=True, small=True, on_click=on_click,
+                  attributes={"title": label, "aria-label": label})
+
+
 def _reopen(name: str) -> Optional[Project]:
     """The project as its manifest now reads, or None once that is gone."""
     try:
@@ -311,6 +360,7 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
     refresh, set_refresh = solara.use_state(0)
     new_open = solara.use_reactive(False)
     dup_open = solara.use_reactive(False)
+    rename_open = solara.use_reactive(False)
     manage_open = solara.use_reactive(False)
     import_open = solara.use_reactive(False)
     # The package a re-import asks about: {"path", "name", "evaluator"}.
@@ -325,6 +375,10 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
     selected = solara.use_reactive(None)
     pending_delete, set_pending_delete = solara.use_state(None)
     size, set_size = solara.use_state(None)
+    # The project the Rename form renames: the open one, or a row of Manage.
+    rename_target, set_rename_target = solara.use_state(None)
+    # {name: bytes} of the listed folders, measured each time Manage opens.
+    sizes, set_sizes = solara.use_state({})
 
     infos, set_infos = solara.use_state([])
     # The number of the last read started: a read overtaken by a newer one
@@ -372,6 +426,31 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         spawn_in_context(_count)
 
     solara.use_effect(_start_count, [pending_delete])
+
+    # Every listed folder's size for Manage's rows, counted on a worker each
+    # time it opens (or the list changes while it is open): a stat per file,
+    # so cheap for a project's few dozen files. A size lands as soon as its
+    # folder is counted; an older count is dropped once a newer one starts.
+    measures = solara.use_ref(0)
+    listed_names = tuple(i.name for i in infos)
+
+    def _start_measure():
+        measures.current += 1
+        run = measures.current
+        if not manage_open.value:
+            return
+
+        def _measure():
+            for name in listed_names:
+                if measures.current != run:
+                    return
+                total = folder_size(name)
+                if measures.current == run:
+                    set_sizes(lambda d, name=name, total=total: {**d, name: total})
+
+        spawn_in_context(_measure)
+
+    solara.use_effect(_start_measure, [manage_open.value, listed_names])
 
     def _show_workflow():
         # From any step: the navigation alone closes the dialog only when it
@@ -495,9 +574,14 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         set_refresh(lambda n: n + 1)  # another tab may have made or removed a project
         manage_open.set(True)
 
+    def _ask_rename(name):
+        set_rename_target(name)
+        rename_open.set(True)
+
     def _open_instead(name):
         new_open.set(False)
         dup_open.set(False)
+        rename_open.set(False)
         _open(name)
 
     def _ask_delete(name):
@@ -523,6 +607,33 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         # The copy is where another area gets monitored (spec D10): start at its AOI.
         app_state.new_project_state(copy)
         _show_workflow()
+        return True
+
+    def _rename(name):
+        old = rename_target
+        if not old:
+            return True
+        # Under the publish lock: no commit can save into the old folder between the move and the install.
+        with app_state._lock:
+            if is_writing(old):  # a job would keep writing into the old folder
+                notifications.warning(t("steps.project.rename_busy"))
+                return False
+            live = app_state.project.peek()
+            try:
+                io.rename_project(old, name)
+            except OSError as exc:
+                notifications.error(t("steps.project.rename_failed", name=old, error=error_text(exc)))
+                return False
+            if live is not None and live.name == old:
+                # Installed, not just published, so every path held for the old
+                # folder is read again; saved at once, unsaved changes included.
+                # Another project is just a folder move: loading takes the name
+                # from the folder (io.load_project).
+                app_state.new_project_state(live.model_copy(update={"name": name}))
+        if selected.peek() == old:
+            selected.set(name)
+        set_refresh(lambda n: n + 1)
+        notifications.success(t("steps.project.renamed", name=name))
         return True
 
     async def _delete():
@@ -567,42 +678,60 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         if not delete_task.pending:
             delete_task()
 
+    # The project changed last, offered to Continue while none is open.
+    recent = max(infos, key=lambda i: i.updated_at or datetime.min, default=None)
+
     with solara.Column(style="gap:8px;padding:8px;"):
-        if p is None:
+        if p is None and recent is None:
             # Centred, not stretched: a full-width icon's ::after overlay
             # (Vuetify scales it 1.3x) overflows the dialog into a scrollbar.
             rv.Icon(children=["mdi-folder-plus-outline"], style_="font-size:40px;opacity:0.5;align-self:center;")
             solara.Text(t("steps.project.empty_heading"), style="font-weight:600;")
             solara.Text(t("steps.project.none_open"), style=MUTED)
-            solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
-                          on_click=lambda: new_open.set(True))
-            solara.Button(t("steps.project.manage_count", count=len(infos)),
-                          icon_name="mdi-folder-multiple-outline", color="primary", outlined=True, small=True,
-                          block=True, disabled=not infos, on_click=_open_manage)
-            solara.Button(t("steps.project.import"), icon_name="mdi-import", color="primary", outlined=True,
-                          small=True, block=True, on_click=lambda: import_open.set(True))
+        elif p is None:
+            with _tinted_card():
+                with rv.Html(tag="div", style_=_CARD_GRID):
+                    with rv.Html(tag="div", style_="display:grid;gap:4px;min-width:0;"):
+                        rv.Html(tag="div", class_="primary--text", style_="font-size:12.5px;font-weight:500;",
+                                children=[t("steps.project.continue_lead")])
+                        solara.Text(recent.name, style=_NAME)
+                        ChipRow(info=recent)
+                        with rv.Html(tag="div", style_=_CARD_META):
+                            _aoi_item(recent.aoi_name)
+                            if recent.updated_at is not None:
+                                solara.Text(t("steps.project.modified",
+                                              time_ago=relative_time(recent.updated_at, datetime.now())))
+                    solara.Button(t("steps.project.continue"), icon_name="mdi-folder-open-outline", color="primary",
+                                  small=True, disabled=load_task.pending, on_click=lambda: _open(recent.name))
         else:
-            with solara.Row(style="gap:8px;align-items:center;"):
-                solara.Text(p.name, style="font-weight:600;font-size:1.1rem;")
-                _SaveChip(app_state=app_state)
-            solara.Text(t(
-                "steps.project.summary",
-                aoi=p.aoi.name if p.aoi else t("steps.project.no_aoi"),
-                sources=t("steps.project.count_sources", count=len(p.sources)),
-                periods=t("steps.project.count_periods", count=len(p.periods)),
-                sets=t("steps.project.count_sets", count=len(p.alert_sets)),
-            ), style=MUTED + "font-size:12px;")
-            _SavedAgo(app_state=app_state)
-            with solara.Row(style="gap:8px;flex-wrap:wrap;"):
-                solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", outlined=True,
-                              small=True, on_click=lambda: new_open.set(True))
-                solara.Button(t("steps.project.manage"), icon_name="mdi-folder-multiple-outline", color="primary",
-                              outlined=True, small=True, on_click=_open_manage)
-                solara.Button(t("steps.project.import"), icon_name="mdi-import", color="primary", outlined=True,
-                              small=True, on_click=lambda: import_open.set(True))
-                if not read_only(p):  # spec §6.3: a review copy is not duplicated
-                    solara.Button(t("steps.project.duplicate"), icon_name="mdi-content-copy", color="primary",
-                                  outlined=True, small=True, on_click=lambda: dup_open.set(True))
+            with _tinted_card():
+                with rv.Html(tag="div", style_=_CARD_GRID):
+                    with rv.Html(tag="div", style_="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"
+                                                   "min-width:0;"):
+                        solara.Text(p.name, style=_NAME)
+                        _SaveChip(app_state=app_state)
+                    with rv.Html(tag="div", style_="display:flex;"):
+                        _icon_button("mdi-pencil-outline", t("steps.project.rename"), lambda: _ask_rename(p.name))
+                        if not read_only(p):  # spec §6.3: a review copy is not duplicated
+                            _icon_button("mdi-content-copy", t("steps.project.duplicate"),
+                                         lambda: dup_open.set(True))
+                    with rv.Html(tag="div", style_="grid-column:1 / -1;"):
+                        ChipRow(info=io.ProjectInfo(name=p.name, n_sources=len(p.sources),
+                                                    n_periods=len(p.periods), n_sets=len(p.alert_sets),
+                                                    updated_at=p.updated_at))
+                    with rv.Html(tag="div", style_="grid-column:1 / -1;justify-content:space-between;"
+                                                   + _CARD_META):
+                        _aoi_item(p.aoi.name if p.aoi else None)
+                        _SavedAgo(app_state=app_state)
+        # The same three buttons with or without an open project; New is the
+        # filled one only when there is nothing to continue.
+        solara.Button(t("steps.project.new"), icon_name="mdi-plus", color="primary", small=True, block=True,
+                      outlined=p is not None or recent is not None, on_click=lambda: new_open.set(True))
+        solara.Button(t("steps.project.manage_count", count=len(infos)),
+                      icon_name="mdi-folder-multiple-outline", color="primary", outlined=True, small=True,
+                      block=True, disabled=not infos, on_click=_open_manage)
+        solara.Button(t("steps.project.import"), icon_name="mdi-import", color="primary", outlined=True,
+                      small=True, block=True, on_click=lambda: import_open.set(True))
 
     # Every dialog below is always mounted, the Duplicate form too: one that
     # came and went with the open project would shift the ones after it, and
@@ -614,12 +743,17 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
     _NameForm(title=t("steps.project.duplicate_title", name=p.name) if p is not None else "", open_=dup_open,
               on_create=_duplicate, on_open_existing=_open_instead, infos=infos,
               hint=t("steps.project.duplicate_hint"), current=current)
+    _NameForm(title=t("steps.project.rename_title", name=rename_target or ""), open_=rename_open,
+              # no "Open X instead": a rename is not a search for a project to open
+              on_create=_rename, on_open_existing=_open_instead, infos=[], current=current,
+              action_label=t("steps.project.rename"), action_icon="mdi-pencil-outline",
+              initial=rename_target or "")
 
     ManageProjectsDialog(
         open=manage_open.value, infos=infos, selected=selected.value, on_select=selected.set,
         on_open=lambda: _open(selected.peek()), on_delete=_ask_delete, on_cancel=lambda: manage_open.set(False),
         current=current, busy=load_task.pending or delete_task.pending or import_task.pending or peek_task.pending,
-        covered=pending_delete is not None,
+        covered=pending_delete is not None or rename_open.value, on_rename=_ask_rename, sizes=sizes,
     )
     ConfirmDeleteDialog(
         open=pending_delete is not None, name=pending_delete or "", size_bytes=size,

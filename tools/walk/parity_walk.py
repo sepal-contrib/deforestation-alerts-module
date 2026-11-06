@@ -71,8 +71,9 @@ def outside_clicks_nudge(page, rec, key):
 
 
 def startup(page, rec, *, out, port):
-    """The app opens on the Project dialog: 560 px, nothing open, Manage
-    projects counting the three seeded projects (spec A4, D5)."""
+    """The app opens on the Project dialog: 560 px, nothing open but the last
+    saved project offered to Continue, Manage projects counting the three
+    seeded projects (spec A4, D5)."""
     page.goto(w.app_url(port), wait_until="load", timeout=180000)
     manage_btn = page.locator(f"{w.RAIL_DIALOG} {w.MANAGE_BUTTON}:visible").first
     w.wait_for(lambda: w.dialog_visible(page) and manage_btn.count(), 300, "the Project dialog at startup")
@@ -81,7 +82,7 @@ def startup(page, rec, *, out, port):
     rec["dialog_px"] = page.evaluate(_RAIL_WIDTH_JS)
     rec["manage_button"] = manage_btn.inner_text()
     w.shot(page, out, "startup_project")
-    assert w.en("steps.project.empty_heading").lower() in rec["dialog"].lower(), rec["dialog"]
+    assert w.en("steps.project.continue_lead").lower() in rec["dialog"].lower(), rec["dialog"]
     assert abs((rec["dialog_px"] or 0) - PROJECT_DIALOG_PX) <= 2, rec["dialog_px"]
     assert manage_btn.is_enabled() and "(3)" in rec["manage_button"], rec["manage_button"]
 

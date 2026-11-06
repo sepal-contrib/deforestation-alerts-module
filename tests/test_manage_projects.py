@@ -31,17 +31,21 @@ def _button(finder, label):
 
 
 def _trash(rc):
-    return [b for b in rc.find(v.Btn).widgets
-            if any(isinstance(c, v.Icon) and c.children == ["mdi-delete-outline"] for c in b.children)]
+    return _icon_buttons(rc, "mdi-delete-outline")
 
 
 def _titles(rc):
     return [w.children[0] for w in rc.find(v.ListItemTitle).widgets]
 
 
-def _info(name, sources=1, periods=0, sets=0, minutes=5):
+def _info(name, sources=1, periods=0, sets=0, minutes=5, aoi=None):
     return ProjectInfo(name=name, n_sources=sources, n_periods=periods, n_sets=sets,
-                       updated_at=datetime.now() - timedelta(minutes=minutes))
+                       updated_at=datetime.now() - timedelta(minutes=minutes), aoi_name=aoi)
+
+
+def _icon_buttons(rc, icon):
+    return [b for b in rc.find(v.Btn).widgets
+            if any(isinstance(c, v.Icon) and c.children == [icon] for c in b.children)]
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +79,7 @@ def test_count_chips_accent_only_the_alert_sets():
 # ---------------------------------------------------------------------------
 # ManageProjectsDialog
 # ---------------------------------------------------------------------------
-def _render_manage(infos, *, current=None, busy=False, selected=None, covered=False):
+def _render_manage(infos, *, current=None, busy=False, selected=None, covered=False, sizes=None):
     ns = SimpleNamespace(calls=[], open=solara.reactive(True), selected=solara.reactive(selected))
 
     def _select(name):
@@ -88,7 +92,9 @@ def _render_manage(infos, *, current=None, busy=False, selected=None, covered=Fa
             open=ns.open.value, infos=infos, selected=ns.selected.value, on_select=_select,
             on_open=lambda: ns.calls.append(("open", ns.selected.value)),
             on_delete=lambda name: ns.calls.append(("delete", name)),
-            on_cancel=lambda: ns.calls.append(("cancel",)), current=current, busy=busy, covered=covered)
+            on_rename=lambda name: ns.calls.append(("rename", name)),
+            on_cancel=lambda: ns.calls.append(("cancel",)), current=current, busy=busy, covered=covered,
+            sizes=sizes)
 
     ns.box, ns.rc = reacton.render(Page(), handle_error=False)
     return ns
@@ -98,7 +104,8 @@ def test_the_manage_frame_is_spatial_risks():
     ns = _render_manage([_info("a")])
     try:
         dialog = ns.rc.find(v.Dialog).widget
-        assert dialog.max_width == "480px" and dialog.eager and not dialog.persistent
+        # Scrollable: only the list scrolls, so Open stays in view on a long list.
+        assert dialog.max_width == "520px" and dialog.eager and not dialog.persistent and dialog.scrollable
         assert t("steps.project.manage_title") in _texts(dialog)
     finally:
         ns.rc.close()
@@ -134,6 +141,27 @@ def test_rows_show_the_open_chip_the_counts_and_the_age():
         assert {"2 sources", "0 periods", "0 alert sets"} <= set(texts)
         assert t("steps.project.modified", time_ago="5 minutes ago") in texts
         assert t("steps.project.modified", time_ago="just now") in texts
+    finally:
+        ns.rc.close()
+
+
+def test_rows_show_the_aoi_and_the_size_measured_so_far():
+    ns = _render_manage([_info("north", aoi="PER_Madre_De_Dios"), _info("south")], sizes={"north": 1_400_000_000})
+    try:
+        texts = _texts(ns.rc.find(v.Dialog).widget)
+        assert "PER_Madre_De_Dios" in texts and t("steps.project.no_aoi") in texts
+        assert "1.4 GB" in texts and "…" in texts  # south is still being measured
+    finally:
+        ns.rc.close()
+
+
+def test_the_pencil_reports_a_rename_of_its_row():
+    ns = _render_manage([_info("north"), _info("south")])
+    try:
+        pencils = _icon_buttons(ns.rc, "mdi-pencil-outline")
+        assert [b.attributes["title"] for b in pencils] == [t("steps.project.rename")] * 2
+        pencils[1].fire_event("click", None)
+        assert ns.calls == [("rename", "south")]
     finally:
         ns.rc.close()
 
