@@ -321,6 +321,8 @@ def period_rows(project, history) -> tuple:
     return tuple(out)
 
 
+#: The summary CSV's file, in the project folder.
+SUMMARY_CSV_NAME = "periods_summary.csv"
 #: The summary CSV's columns, in order (English, like every other column name).
 SUMMARY_CSV_COLUMNS = ("period_start", "period_end", "alerts", "confirmed_ha", "reviewed", "source_px",
                        "clusters", "review_groups", "linked_to_earlier_loss")
@@ -396,7 +398,7 @@ def table_rows(summary, measure: str) -> tuple:
 
 #: The fixed figures every dashboard holds. ``draw_figures`` returns these
 #: keys plus one ``"q:<key>"`` per question it is given.
-FIGURES = ("spark", "status", "history", "sizes", "timing", "sources")
+FIGURES = ("status", "history", "sizes", "timing", "sources")
 
 
 def draw_figures(summary, series, *, measure: str, theme: dict, label_of, questions=()) -> dict:
@@ -409,9 +411,7 @@ def draw_figures(summary, series, *, measure: str, theme: dict, label_of, questi
     falls back to its numbers in text, and no other card is affected (spec,
     Error handling).
     """
-    spark = [status_value(s, CONFIRMED_CODE, measure) for _, s, _ in series]
     jobs = {
-        "spark": lambda: charts.chart_spark(spark, theme=theme),
         "status": lambda: charts.chart_status(summary, measure=measure, theme=theme),
         "history": lambda: charts.chart_trend(series, measure=measure, theme=theme),
         "sizes": lambda: charts.chart_sizes(summary, measure=measure, theme=theme),

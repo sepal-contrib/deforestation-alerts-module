@@ -492,26 +492,3 @@ def chart_sources(summary, *, measure: str, theme: dict) -> str:
     return _ranking(summary.by_source, measure=measure, theme=theme,
                     label_of=lambda key: key or t("overview_tile.source_unknown"),
                     width=420, height=110, left=0.32)
-
-
-# --- the sparkline beside a headline number ------------------------------
-
-def chart_spark(values, *, theme: dict) -> str:
-    """A 120x30 line with no axes: the shape of a run of periods, for a KPI
-    tile. Support for a number, not a chart to read values off.
-    """
-    values = [float(value) for value in values]
-    if len(values) < 2:
-        return _empty(120, 30, theme)
-    fig, ax = _figure(120, 30, theme, rect=(0.03, 0.12, 0.94, 0.76))
-    ax.plot(range(len(values)), values, color=theme["accent"], linewidth=2.0,
-            solid_capstyle="round", zorder=2)
-    ax.plot([len(values) - 1], [values[-1]], marker="o", markersize=4.0,
-            color=theme["accent"], zorder=3)
-    low, high = min(values), max(values)
-    pad = (high - low) * 0.18 or (abs(high) * 0.1 or 1.0)
-    ax.set_ylim(low - pad, high + pad)
-    ax.set_xlim(-0.3, len(values) - 0.7 + 0.4)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    return to_inline_svg(fig, label="; ".join(format_number(value, 1) for value in values))

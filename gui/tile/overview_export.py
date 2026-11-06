@@ -36,7 +36,7 @@ from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import (
     EXPORT_FORMATS, SCOPES, export_alerts_gdf, export_name, scope_counts, scope_rows,
 )
-from gui.i18n import format_number, t
+from gui.i18n import format_number, t, tn
 from gui.scripts import questions as questions_mod
 from gui.scripts.error_text import error_text
 from gui.scripts.legend_specs import status_colors
@@ -295,3 +295,78 @@ def relabel_export_card(card):
     built once per set, so a language switch relabels it rather than
     rebuilding it (which would lose a write in progress)."""
     return card.relabel()
+
+
+class SummaryFile(v.Html):
+    """The Files tab's *Summary CSV* tile: ``text`` (``overview_data.summary_csv``)
+    written to ``path`` on a click. The tile reads the file on disk: absent, it
+    is the button that writes it; the same text, the download link; other text
+    (reviews saved since), the link with a warning and an Update button. Built
+    per text by the Overview's ``use_memo``. The write is a few hundred bytes,
+    so it runs on the click, under ``writing(project)`` like every export."""
+
+    def __init__(self, text, path, project, n_periods):
+        self._text, self._path, self._project, self._n = text, Path(path), project, n_periods
+        self.tile = FileTile("csv", "", "")
+        self.update_btn = sw.Btn(msg="", gliph="mdi-refresh", small=True, text=True, color="warning").hide()
+        self.tile.on_event("click", self._on_create)
+        self.update_btn.on_event("click", lambda *_: self._write())
+        super().__init__(tag="div", children=[
+            self.tile, v.Html(tag="div", class_="d-flex justify-end", children=[self.update_btn])])
+        self.relabel()
+
+    def _what(self):
+        return tn("overview_tile.summary_periods", self._n)
+
+    def _write(self):
+        try:
+            with writing(self._project):
+                self._path.parent.mkdir(parents=True, exist_ok=True)
+                self._path.write_text(self._text, encoding="utf-8")
+        except OSError as exc:
+            logger.exception("could not write %s", self._path)
+            self.tile.set_file(None)
+            self.tile.set_action(False, error_text(exc), icon="mdi-alert-outline")
+            return
+        self._face()
+
+    def _on_create(self, widget, event, data):
+        # A tile with a file is a link: the browser downloads it.
+        if self.tile.path is None and not self.tile.disabled:
+            self._write()
+
+    def _face(self):
+        try:
+            on_disk = self._path.read_text(encoding="utf-8")
+            mtime = self._path.stat().st_mtime
+        except OSError:
+            on_disk = None
+        if on_disk is None:
+            self.tile.set_file(None)
+            self.tile.set_action(True, t("overview_tile.summary_not_written", what=self._what()),
+                                 icon="mdi-file-plus-outline")
+            self.update_btn.hide()
+            return
+        stale = on_disk != self._text
+        when = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+        try:
+            self.tile.set_file(str(self._path), detail=t("overview_tile.export_written", what=self._what(), when=when),
+                               warning=t("overview_tile.summary_stale") if stale else None)
+        except ValueError as exc:  # NotDownloadable: a link to it would 404
+            self.tile.set_file(None)
+            self.tile.set_action(False, error_text(exc), icon="mdi-link-off")
+            self.update_btn.hide()
+            return
+        self.update_btn.show() if stale else self.update_btn.hide()
+
+    def relabel(self):
+        """Its labels in the current language, and the face its file calls for."""
+        self.tile.set_title(t("overview_tile.summary_csv"))
+        self.update_btn.msg = t("overview_tile.export_update")
+        self._face()
+        return self
+
+
+def build_summary_file(text, path, project, n_periods):
+    """The Summary CSV tile (see ``SummaryFile``)."""
+    return SummaryFile(text, path, project, n_periods)

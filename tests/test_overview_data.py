@@ -175,3 +175,36 @@ def test_draw_figures_without_questions_draws_only_the_fixed_figures(tmp_path, m
     figures = overview_data.draw_figures(summary, (), measure=charts.MEASURE_AREA,
                                          theme=charts.theme_for(False), label_of=lambda q, code: code)
     assert set(figures) == set(overview_data.FIGURES)
+
+
+# --- All periods: the sums and the summary CSV ---------------------------
+
+def _px(sources, masks=(), **counts):
+    fields = dict(analysable_px=None, too_small_px=None, over_cap_px=None, clusters=None, clusters_kept=None)
+    return overview_data.PixelCounts(pixel_ha=0.01, sources=sources, masks=masks, **{**fields, **counts})
+
+
+def test_sum_pixels_adds_each_source_and_count_and_a_missing_count_stays_missing():
+    jan = _px((("RADD", 10, 8), ("GLAD-L", 100, 90)), (("Forest", "keep"),),
+              analysable_px=70, too_small_px=20, over_cap_px=0, clusters=9, clusters_kept=5)
+    feb = _px((("GLAD-L", 50, 40),), (("Water", "exclude"),),
+              analysable_px=30, too_small_px=5, over_cap_px=None, clusters=4, clusters_kept=2)
+    total = overview_data.sum_pixels([jan, feb])
+    assert total.sources == (("GLAD-L", 150, 130), ("RADD", 10, 8))
+    assert total.masks == (("Forest", "keep"), ("Water", "exclude"))
+    assert (total.analysable_px, total.too_small_px, total.clusters, total.clusters_kept) == (100, 25, 13, 7)
+    assert total.over_cap_px is None and total.combined_px is None  # February did not record it
+    assert total.total(1) == 160 and total.total(2) == 138
+    assert overview_data.sum_pixels([]) is None
+
+
+def test_the_summary_csv_has_a_line_per_period_and_empty_cells_for_unrecorded_counts():
+    from types import SimpleNamespace
+    project = SimpleNamespace(periods={"2026-01-01_2026-01-31": SimpleNamespace(
+        start=date(2026, 1, 1), end=date(2026, 1, 31))})
+    rows = [overview_data.PeriodRow("2026-01-01_2026-01-31", 4, 1.5, 3, 1000, 9, 2, 1),
+            overview_data.PeriodRow("2026-02-01_2026-02-28", 2, 3.0, 1, None, None, 0, None)]
+    lines = overview_data.summary_csv(project, rows).splitlines()
+    assert lines == [",".join(overview_data.SUMMARY_CSV_COLUMNS),
+                     "2026-01-01,2026-01-31,4,1.50,3,1000,9,2,1",
+                     "2026-02-01,2026-02-28,2,3.00,1,,,0,"]  # a period gone from the project reads its id

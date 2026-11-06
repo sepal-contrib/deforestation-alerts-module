@@ -47,26 +47,48 @@ def select_set(app_state, project_name: str, set_id: str) -> bool:
     return app_state.update_project(project_name, lambda p: setattr(p, "active_set", set_id))
 
 
+#: The value of the Overview's "All periods" item.
+ALL_SETS = "__all__"
+
+
 @solara.component
-def SetSelector(app_state):
+def SetSelector(app_state, all_text=None, all_picked: bool = False, on_all=None):
+    """The selector for a Solara view. ``all_text``, when given, is an "All
+    periods" item offered first (the Overview's, never Analysis's): picking it
+    calls ``on_all(True)`` and leaves the active set alone; a set picked after
+    it calls ``on_all(False)`` once the switch has happened. ``all_picked``
+    shows that item as the selection."""
     p = app_state.project.value
     redraw, set_redraw = solara.use_state(0)
     items = set_items(p)
     if not items:
         return
+    if all_text:
+        items = [{"text": all_text, "value": ALL_SETS}, {"divider": True}, *items]
 
     def _picked(set_id):
         if not set_id:
             return
+        if set_id == ALL_SETS:
+            if on_all is not None:
+                on_all(True)
+            return
         moved = []
+
+        def _move():
+            moved.append(select_set(app_state, p.name, set_id))
+            if on_all is not None:
+                on_all(False)
+
         # A set switch changes the alert: it asks first over unsaved work.
-        app_state.guard(lambda: moved.append(select_set(app_state, p.name, set_id)))
+        app_state.guard(_move)
         if not moved:
             # asked first (a dialog over this one): the select goes back to
             # the active set until the user answers
             set_redraw(lambda n: n + 1)
 
-    rv.Select(label=t("steps.sets.label"), items=items, v_model=p.active_set, on_v_model=_picked, dense=True,
+    rv.Select(label=t("steps.sets.label"), items=items,
+              v_model=ALL_SETS if all_text and all_picked else p.active_set, on_v_model=_picked, dense=True,
               outlined=True, hide_details=True).key(f"sets-{redraw}")
 
 

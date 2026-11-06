@@ -60,7 +60,6 @@ def theme():
 def _builders(summary, theme, measure=charts.MEASURE_AREA):
     """Every public chart, bound to one summary -- name -> zero-argument call."""
     return {
-        "spark": lambda: charts.chart_spark((1.0, 4.0, 2.0, 9.0), theme=theme),
         "status": lambda: charts.chart_status(summary, measure=measure, theme=theme),
         "trend": lambda: charts.chart_trend(
             (("Jan", summary, False), ("Feb", summary, True)), measure=measure, theme=theme),
@@ -72,7 +71,7 @@ def _builders(summary, theme, measure=charts.MEASURE_AREA):
     }
 
 
-ALL_CHARTS = ["spark", "status", "trend", "sizes", "timing", "question", "sources"]
+ALL_CHARTS = ["status", "trend", "sizes", "timing", "question", "sources"]
 
 
 # --- the module's own contracts -------------------------------------------
@@ -297,16 +296,3 @@ def test_sources_draws_a_row_for_alerts_with_no_recorded_source(summary, theme):
     assert charts.chart_sources(summary, measure=charts.MEASURE_AREA, theme=theme).startswith("<svg")
 
 
-# --- the sparkline --------------------------------------------------------
-
-def test_the_sparkline_is_small_and_needs_no_axes(theme):
-    svg = charts.chart_spark((1.0, 4.0, 2.0, 9.0), theme=theme)
-    assert 'viewBox="0 0 120 30"' in svg
-
-
-def test_a_sparkline_of_one_point_renders(theme):
-    assert charts.chart_spark((3.0,), theme=theme).startswith("<svg")
-
-
-def test_a_sparkline_of_nothing_renders(theme):
-    assert charts.chart_spark((), theme=theme).startswith("<svg")

@@ -85,6 +85,7 @@ SAME_IN = {
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",
         "steps.integrate.attr_col_raster", "steps.integrate.attr_stat_max", "steps.integrate.attr_stat_min",
         "steps.layers.field_max", "steps.layers.field_min", "steps.prepare.col_mode",
+        "overview_tile.col_source", "overview_tile.col_mode", "overview_tile.tab_pixels",
         # ramp names, the SWIR acronym and "Palette" are the same in French
         "steps.layers.ramp_magma", "steps.layers.ramp_oranges", "steps.layers.ramp_terrain",
         "steps.layers.ramp_viridis", "steps.layers.role_swir", "steps.layers.palette_menu",
@@ -113,6 +114,7 @@ SAME_IN = {
         # words in Brazilian Portuguese; ramp names, band acronyms and R/G/B too.
         "common._test.one", "analysis.timeline.area_normal", "analysis_tile.facts.status",
         "overview_tile.table_status", "overview_tile.table_total", "steps.integrate.attr_col_raster",
+        "overview_tile.tab_status", "overview_tile.tab_pixels",
         "steps.prepare.col_status", "steps.layers.ramp_magma", "steps.layers.ramp_viridis",
         "steps.layers.role_nir", "steps.layers.role_swir", "steps.layers.summary_rgb",
         "steps.layers.summary_classes.other",  # "classes" is the same word
@@ -209,6 +211,7 @@ def _dynamic_keys():
     from gui.scripts.vis_layers import KINDS
     from gui.scripts.vis_palettes import QUALITATIVE, RAMPS, RGB_COMBOS, ROLES
     from gui.tile.analysis.state import IMAGE_AREAS
+    from gui.tile import overview_tile
     from gui.tile.integrate_step import SORTINGS
     from gui.widget.attribute_form import _STATS
     from gui.scripts.prepare_view import WHY_KEYS
@@ -256,6 +259,8 @@ def _dynamic_keys():
         # gui.tile.overview_export's tiles and scope chips
         "overview_tile.export_": ["csv", "gpkg"],
         "overview_tile.export_scope_": ["confirmed", "reviewed", "unreviewed", "all"],
+        # gui.tile.overview_tile's tabs
+        "overview_tile.tab_": list(overview_tile.TABS),
         # gui.tile.analysis.timeline's image-area choices
         "analysis.timeline.area_": list(IMAGE_AREAS),
     }

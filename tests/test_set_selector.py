@@ -107,6 +107,31 @@ def test_the_components_pick_asks_first_and_shows_the_active_set_meanwhile():
         rc.close()
 
 
+def test_the_all_periods_item_comes_first_and_leaves_the_active_set_alone():
+    p, jan, feb_a, _ = _project()
+    state = AppState()
+    state.new_project_state(p)
+    picked = []
+
+    @solara.component
+    def Page():
+        all_on, set_all = solara.use_state(False)
+        picked.append(all_on)
+        set_selector.SetSelector(app_state=state, all_text="All periods", all_picked=all_on, on_all=set_all)
+
+    _, rc = reacton.render(Page(), handle_error=False)
+    try:
+        select = rc.find(v.Select).widget
+        assert select.items[0] == {"text": "All periods", "value": set_selector.ALL_SETS}
+        select.v_model = set_selector.ALL_SETS
+        assert picked[-1] is True and state.project.value.active_set == jan.id
+        assert rc.find(v.Select).widget.v_model == set_selector.ALL_SETS
+        rc.find(v.Select).widget.v_model = feb_a.id
+        assert picked[-1] is False and state.project.value.active_set == feb_a.id
+    finally:
+        rc.close()
+
+
 def test_the_raw_selector_follows_publishes_from_any_thread_and_never_picks_back(monkeypatch):
     p, jan, feb_a, feb_b = _project()
     state = AppState()

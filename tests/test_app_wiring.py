@@ -428,17 +428,22 @@ def test_the_shell_installs_auto_save_and_one_set_context():
 
 def test_only_the_shell_draws_the_alert_layers():
     """Integrate & vectorize switches them with two booleans on ``app_state``
-    and the Overview view draws nothing: every ``MapLayers`` call for an alert
-    set is in ``_AlertLayers``, which the shell mounts."""
+    and so does the Overview: every ``MapLayers`` call for an alert set is in
+    ``_AlertLayers``, which the shell mounts."""
     body = _component_body(_src("gui/solara_app.py"), "_AlertLayers")
     for call in ("layers.hide(alert_layers.SET_LAYER_KEY)", "layers.show(alert_layers.SET_LAYER_KEY",
                  "map_.on_interaction(_on_map)"):
         assert call in body, call
-    for rel in ("gui/tile/integrate_step.py", "gui/tile/overview_tile.py"):
-        step = _src(rel)
-        for call in ("layers.show(", "layers.hide(", "layers.toggle(", "layers.refresh(", "add_centroid_layer(",
-                     "add_set_pmtiles("):
-            assert call not in step, f"{rel}: {call}"
+    step = _src("gui/tile/integrate_step.py")
+    for call in ("layers.show(", "layers.hide(", "layers.toggle(", "layers.refresh(", "add_centroid_layer(",
+                 "add_set_pmtiles("):
+        assert call not in step, f"integrate_step.py: {call}"
+    # the Overview's eyes draw a source's or a mask's raster, as Prepare's do,
+    # never the set's alerts: those go through the shell's booleans too
+    overview = _src("gui/tile/overview_tile.py")
+    for call in ("layers.toggle(", "layers.refresh(", "add_centroid_layer(", "add_set_pmtiles(",
+                 "show(alert_layers.SET_LAYER_KEY", "hide(alert_layers.SET_LAYER_KEY"):
+        assert call not in overview, f"overview_tile.py: {call}"
     # and the switches write nothing but the two booleans
     integrate = _src("gui/tile/integrate_step.py")
     assert "on_v_model=app_state.show_alerts.set" in integrate

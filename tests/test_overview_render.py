@@ -31,7 +31,7 @@ from pysepal.solara.notifications import NotificationProvider
 from shapely.geometry import box
 
 from deforestation_alerts.engine.fingerprint import (
-    fingerprint, harm_key, harmonized_inputs, raw_alert_inputs, raw_key, set_inputs,
+    combined_key, fingerprint, harm_key, harmonized_inputs, raw_alert_inputs, raw_key, set_inputs,
 )
 from deforestation_alerts.project.growth import run_id_of
 from deforestation_alerts.project.models import (
@@ -55,7 +55,8 @@ from gui.store.workflow_steps import active_set
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 from gui.tile import overview_tile
-from gui.tile.overview_export import ExportCard
+from gui.tile.overview_export import ExportCard, SummaryFile
+from gui.widget.set_selector import ALL_SETS
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 FEB = Period(id="2026-02-01_2026-02-28", start=date(2026, 2, 1), end=date(2026, 2, 28))
@@ -251,9 +252,17 @@ def _numbers(rc):
 
 
 def _kpi(rc, label):
-    """The one KPI card titled ``label``, as its strings."""
-    [card] = [c for c in rc.find(v.Card).widgets if label in _strings(c)]
-    return _strings(card)
+    """The one headline number titled ``label``, as its strings."""
+    [stat] = [c for c in rc.find(v.Html).widgets if c.class_ == "ov-stat" and label in _strings(c)]
+    return _strings(stat)
+
+
+def _open(rc, key):
+    """Open the tab ``key`` (``overview_tile.TABS``), as a click on it does."""
+    tabs = rc.find(v.Tabs).widget
+    label = t(f"overview_tile.tab_{key}")
+    [index] = [i for i, tab in enumerate(tabs.children) if _strings(tab)[0].startswith(label)]
+    tabs.v_model = index
 
 
 def _btn(rc, label):
@@ -357,6 +366,7 @@ def test_the_admin_card_switches_between_country_and_level_1(ov, tmp_path):
     _write_store(tmp_path, "d", p.alert_sets[p.active_set], gdf)
     map_, layers, rc = ov.render(_state(p, gdf))
     try:
+        _open(rc, "place")
         head, rows = _table(rc, t("overview_tile.admin_level_country"))
         assert [row[0] for row in rows] == ["Paraguay"]  # Brazil's alert is not reviewed
         assert rows[0][1:] == ["3.8", "1.5", "3"]
@@ -376,6 +386,7 @@ def test_the_admin_card_switches_between_country_and_level_1(ov, tmp_path):
 def test_one_monitoring_period_asks_for_a_second_instead_of_charting_one_column(ov, tmp_path):
     map_, layers, rc = ov.render(_state(_project(tmp_path), _alerts()))
     try:
+        _open(rc, "time")
         assert t("overview_tile.history_one_period") in _texts(rc)
         assert t("overview_tile.delta_same", period="") not in _texts(rc)
     finally:
@@ -406,6 +417,7 @@ def test_a_period_whose_store_is_gone_is_left_out_of_the_trend(ov, tmp_path):
     map_, layers, rc = ov.render(_state(p, None))
     try:
         assert _numbers(rc)[t("overview_tile.table_total")][0] == "2"  # February's own alerts
+        _open(rc, "time")
         assert t("overview_tile.history_one_period") in _texts(rc)
         assert t("overview_tile.read_failed", error="") not in _texts(rc)
     finally:
@@ -485,7 +497,9 @@ def test_a_figure_that_cannot_be_drawn_falls_back_to_its_own_numbers(ov, tmp_pat
         texts = _texts(rc)
         assert t("overview_tile.chart_failed") in texts
         assert f"{t('legend.status.confirmed')} — 1.5" in texts
-        assert len(_figures(rc)) >= 4  # sizes, timing, the Loss driver answers, sources still drawn
+        assert len(_figures(rc)) == 1  # the sizes, beside it, still drawn
+        _open(rc, "time")
+        assert len(_figures(rc)) == 1  # the timing (one period: no trend)
     finally:
         rc.close()
 
@@ -527,6 +541,7 @@ def test_each_question_gets_its_own_card_in_questionnaire_order(ov, tmp_path):
     _write_store(tmp_path, "d", p.alert_sets[p.active_set], _answered_alerts())
     map_, layers, rc = ov.render(_state(p, None))
     try:
+        _open(rc, "answers")
         texts = _texts(rc)
         loss, road = qs.question_label(p.questions[0]), "Road access"
         assert loss in texts and road in texts
@@ -551,6 +566,7 @@ def test_a_question_chart_that_cannot_be_drawn_lists_its_answers(ov, tmp_path, m
     _write_store(tmp_path, "d", p.alert_sets[p.active_set], gdf)
     map_, layers, rc = ov.render(_state(p, None))
     try:
+        _open(rc, "answers")
         texts = _texts(rc)
         assert texts.count(t("overview_tile.chart_failed")) == 2  # both question cards
         rows = [x for x in texts if " — " in x]
@@ -581,6 +597,7 @@ def test_a_question_nobody_has_answered_yet_says_so_in_its_card(ov, tmp_path):
     _write_store(tmp_path, "d", p.alert_sets[p.active_set], unreviewed)
     map_, layers, rc = ov.render(_state(p, None))
     try:
+        _open(rc, "answers")
         assert t("overview_tile.answers_empty") in _texts(rc)
         assert t("overview_tile.answers_empty") == "No reviewed alert answered this yet."
     finally:
@@ -594,6 +611,7 @@ def test_a_question_added_to_an_old_store_shows_its_card_unanswered(ov, tmp_path
     state = _state(p, None)
     map_, layers, rc = ov.render(state)
     try:
+        _open(rc, "answers")
         assert _answer_notes(rc) == 1
         state.update_project("d", lambda x: x.questions.append(ROAD))
         ov.settle()
@@ -632,6 +650,7 @@ def test_the_export_card_follows_a_language_switch(ov, tmp_path):
     set_locale("en")
     map_, layers, rc = ov.render(state)
     try:
+        _open(rc, "files")
         [card] = _export_cards(rc)
         set_locale("fr")
         cards = [w for w in rc.find(v.Card).widgets if w is card]
@@ -652,13 +671,17 @@ def test_the_set_label_and_the_export_card_only_with_alerts(ov, tmp_path):
     try:
         [select] = rc.find(v.Select).widgets
         assert select.v_model == p.active_set
-        assert select.items == [{"text": "2026-01-01 → 2026-01-31 · GLAD-L · 4 alerts · 3 reviewed",
-                                 "value": p.active_set}]
-        assert len(_export_cards(rc)) == 1
+        assert select.items == [
+            {"text": t("overview_tile.all_periods", sets="1 set", alerts="4 alerts"), "value": ALL_SETS},
+            {"divider": True},
+            {"text": "2026-01-01 → 2026-01-31 · GLAD-L · 4 alerts · 3 reviewed", "value": p.active_set}]
         assert t("steps.overview.stale") not in _texts(rc)  # a current set: no banner
+        _open(rc, "files")
+        assert len(_export_cards(rc)) == 1
 
         state.alerts_gdf.set(_alerts().iloc[0:0])  # an empty session: nothing to export
         assert _export_cards(rc) == []
+        _open(rc, "status")
         assert _numbers(rc)[t("overview_tile.table_total")][0] == "4"  # the store still counts
         state.alerts_gdf.set(None)
         assert _export_cards(rc) == []
@@ -702,6 +725,7 @@ def test_a_rebuilt_export_card_keeps_the_scope_the_user_picked(ov, tmp_path):
     state = _state(_project(tmp_path), alerts)
     map_, layers, rc = ov.render(state)
     try:
+        _open(rc, "files")
         [card] = _export_cards(rc)
         assert card.scope == "confirmed"
         card.scope_group.v_model = "all"
@@ -713,51 +737,56 @@ def test_a_rebuilt_export_card_keeps_the_scope_the_user_picked(ov, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# The map switches (the same two Integrate & vectorize offers)
+# The layer buttons (the same three booleans Integrate & vectorize switches)
 # ---------------------------------------------------------------------------
-def _switch(rc, label):
-    return next(s for s in rc.find(v.Switch).widgets if s.label == label)
+def _layer(rc, label):
+    return next(b for b in rc.find(v.Btn).widgets if _strings(b)[-1:] == [label])
 
 
-def test_the_map_switches_drive_the_shells_two_booleans(ov, tmp_path):
-    """Neither switch calls the map: ``_AlertLayers`` owns every MapLayers call,
+def _layers_offered(rc):
+    labels = (t("overview_tile.layer_alerts"), t("overview_tile.layer_unanalysable"), t("overview_tile.layer_earlier"))
+    return [_strings(b)[-1] for b in rc.find(v.Btn).widgets if _strings(b) and _strings(b)[-1] in labels]
+
+
+def test_the_layer_buttons_drive_the_shells_booleans(ov, tmp_path):
+    """No button calls the map: ``_AlertLayers`` owns every MapLayers call,
     which is what lets the same control sit here and in Integrate."""
     p = _project(tmp_path)
     state = _state(p, _alerts(set_id=p.active_set))
     map_, layers, rc = ov.render(state)
     try:
         assert not state.show_alerts.value
-        _switch(rc, t("steps.integrate.show_alerts")).v_model = True
+        _layer(rc, t("overview_tile.layer_alerts")).fire_event("click", None)
         assert state.show_alerts.value is True
         assert layers.on.value == frozenset()  # no layer registered from here
-        _switch(rc, t("steps.integrate.show_alerts")).v_model = False
+        _layer(rc, t("overview_tile.layer_alerts")).fire_event("click", None)
         assert state.show_alerts.value is False
     finally:
         rc.close()
 
 
-def test_switching_a_layer_on_closes_the_dialog_and_off_leaves_it_open(ov, tmp_path):
-    """The map is behind this dialog: a switch that stays open would look like
-    it did nothing. Switching off has nothing to go and look at."""
+def test_turning_a_layer_on_closes_the_dialog_and_off_leaves_it_open(ov, tmp_path):
+    """The map is behind this dialog: a button that left it open would look
+    like it did nothing. Turning off has nothing to go and look at."""
     p = _project(tmp_path)
     closed = []
     state = _state(p, _alerts(set_id=p.active_set))
     map_, layers, rc = ov.render(state, dismiss=lambda: closed.append(state.show_alerts.value))
     try:
-        _switch(rc, t("steps.integrate.show_alerts")).v_model = True
+        _layer(rc, t("overview_tile.layer_alerts")).fire_event("click", None)
         assert closed == [True]  # dismissed with the layer already asked for
-        _switch(rc, t("steps.integrate.show_alerts")).v_model = False
+        _layer(rc, t("overview_tile.layer_alerts")).fire_event("click", None)
         assert closed == [True]
     finally:
         rc.close()
 
 
-def test_the_earlier_sets_switch_only_with_an_earlier_set(ov, tmp_path):
+def test_the_earlier_sets_button_only_with_an_earlier_set(ov, tmp_path):
     p = _project(tmp_path)
     state = _state(p, _alerts(set_id=p.active_set))
     map_, layers, rc = ov.render(state)
     try:
-        assert [s.label for s in rc.find(v.Switch).widgets] == [t("steps.integrate.show_alerts")]
+        assert _layers_offered(rc) == [t("overview_tile.layer_alerts")]
     finally:
         rc.close()
 
@@ -766,35 +795,34 @@ def test_the_earlier_sets_switch_only_with_an_earlier_set(ov, tmp_path):
     state = _state(p, _alerts(set_id=february.id))
     map_, layers, rc = ov.render(state)
     try:
-        assert [s.label for s in rc.find(v.Switch).widgets] == [
-            t("steps.integrate.show_alerts"), t("steps.integrate.show_earlier")]
-        _switch(rc, t("steps.integrate.show_earlier")).v_model = True
+        assert _layers_offered(rc) == [t("overview_tile.layer_alerts"), t("overview_tile.layer_earlier")]
+        _layer(rc, t("overview_tile.layer_earlier")).fire_event("click", None)
         assert state.show_earlier_sets.value is True
     finally:
         rc.close()
 
 
-def test_a_switch_is_held_while_its_own_layer_is_being_built(ov, tmp_path):
-    """A flip here must not race a build Integrate started: the shell's
-    registry publishes the keys in flight and the switch follows it."""
+def test_a_layer_button_is_held_while_its_own_layer_is_being_built(ov, tmp_path):
+    """A click here must not race a build Integrate started: the shell's
+    registry publishes the keys in flight and the button follows it."""
     p = _project(tmp_path)
     state = _state(p, _alerts(set_id=p.active_set))
     map_, layers, rc = ov.render(state)
     try:
-        assert _switch(rc, t("steps.integrate.show_alerts")).disabled is False
+        assert _layer(rc, t("overview_tile.layer_alerts")).disabled is False
         layers.inflight.set(frozenset({alert_layers.SET_LAYER_KEY}))
-        assert _switch(rc, t("steps.integrate.show_alerts")).disabled is True
+        assert _layer(rc, t("overview_tile.layer_alerts")).disabled is True
     finally:
         rc.close()
 
 
-def test_no_map_switch_without_the_alerts_on_hand(ov, tmp_path):
-    """``_AlertLayers`` draws nothing without them, so a switch offered here
+def test_no_alerts_button_without_the_alerts_on_hand(ov, tmp_path):
+    """``_AlertLayers`` draws nothing without them, so a button offered here
     would be a lie -- and the alerts on hand are another set's until the
     shell's loader has read the one the selector picked."""
     map_, layers, rc = ov.render(_state(_project(tmp_path), None))
     try:
-        assert rc.find(v.Switch).widgets == []
+        assert _layers_offered(rc) == []
     finally:
         rc.close()
 
@@ -814,23 +842,25 @@ def _growth_february(p, tmp_path):
     return feb, gdf
 
 
-def test_growth_card_hidden_without_growth(ov, tmp_path):
+def test_linked_card_says_when_nothing_is_linked(ov, tmp_path):
     p = _project(tmp_path)
     _with_february(p, tmp_path)  # an old set: no growth columns
     map_, layers, rc = ov.render(_state(p, None))
     try:
-        assert t("overview_tile.card_growth") not in _texts(rc)
+        _open(rc, "clusters")
+        assert t("overview_tile.linked_none") in _card_texts(rc, t("overview_tile.card_linked"))
     finally:
         rc.close()
 
 
-def test_growth_card_lists_the_history_and_follows_the_measure(ov, tmp_path):
+def test_linked_card_lists_the_history_and_follows_the_measure(ov, tmp_path):
     p = _project(tmp_path)
     _growth_february(p, tmp_path)
     map_, layers, rc = ov.render(_state(p, None))
     try:
+        _open(rc, "clusters")
         texts = _texts(rc)
-        assert t("overview_tile.card_growth") in texts
+        assert t("overview_tile.card_linked") in texts
         assert any(text.startswith("1 growth alert ·") and text.endswith(" ha") for text in texts), texts
         assert "Growth: 1 · Under minimum area: 0 · 1 reviewed" in texts, texts
         head, rows = _table(rc, t("overview_tile.growth_period"))
@@ -843,7 +873,7 @@ def test_growth_card_lists_the_history_and_follows_the_measure(ov, tmp_path):
         rc.close()
 
 
-def test_growth_card_review_button_jumps(ov, tmp_path, monkeypatch):
+def test_linked_card_review_button_jumps(ov, tmp_path, monkeypatch):
     p = _project(tmp_path)
     feb, gdf = _growth_february(p, tmp_path)
     calls, closed = [], []
@@ -851,6 +881,7 @@ def test_growth_card_review_button_jumps(ov, tmp_path, monkeypatch):
     state = _state(p, gdf)
     map_, layers, rc = ov.render(state, dismiss=lambda: closed.append(True))
     try:
+        _open(rc, "clusters")
         _btn(rc, t("overview_tile.growth_review")).click()
         assert calls == [(state, "d", feb.id, 10, 0)]
         assert closed == [True]
@@ -858,18 +889,19 @@ def test_growth_card_review_button_jumps(ov, tmp_path, monkeypatch):
         rc.close()
 
 
-def test_growth_card_review_button_waits_for_the_alerts(ov, tmp_path):
+def test_linked_card_review_button_waits_for_the_alerts(ov, tmp_path):
     p = _project(tmp_path)
     _growth_february(p, tmp_path)
     map_, layers, rc = ov.render(_state(p, None))  # the session holds no alerts yet
     try:
+        _open(rc, "clusters")
         assert _btn(rc, t("overview_tile.growth_review")).disabled is True
     finally:
         rc.close()
 
 
 # ---------------------------------------------------------------------------
-# The Nearby alerts card: how the alerts chain at the grouping distance
+# Nearby alerts: how the alerts chain at the grouping distance
 # ---------------------------------------------------------------------------
 def _nearby_store(p, tmp_path):
     """January's four alerts with the first three in a chain about 111 m apart
@@ -888,59 +920,194 @@ def _card_texts(rc, title):
     return _strings(card)
 
 
-def test_nearby_card_counts_chains_and_saved_groups(ov, tmp_path):
+def _nearby_rows(rc):
+    _, rows = _table(rc, "")
+    return {row[0]: row[1:] for row in rows}
+
+
+def test_nearby_alerts_count_chains_and_saved_groups_in_one_table(ov, tmp_path):
     p = _project(tmp_path)
     p.group_review = GroupReview(enabled=True, radius_m=300.0)
     _nearby_store(p, tmp_path)
     map_, layers, rc = ov.render(_state(p, None))
     try:
-        texts = _card_texts(rc, t("overview_tile.card_nearby"))
+        _open(rc, "clusters")
+        texts = _card_texts(rc, t("overview_tile.card_clusters"))
         assert t("overview_tile.nearby_note", radius="300") in texts
-        assert "1 group of nearby alerts" in texts
-        assert "In a group: 3 of 4 alerts · Alone: 1 · Largest: 3 alerts" in texts
-        assert "1 group saved in Analysis (2 alerts)" in texts
+        assert _nearby_rows(rc) == {
+            t("overview_tile.nearby_found"): ["1", t("overview_tile.nearby_of", grouped="3", alerts="4", largest="3")],
+            t("overview_tile.nearby_saved_row"): ["1", "2"]}
         assert t("overview_tile.nearby_off") not in texts
     finally:
         rc.close()
 
 
-def test_nearby_card_recounts_when_the_distance_changes(ov, tmp_path):
+def test_nearby_alerts_recount_when_the_distance_changes(ov, tmp_path):
     p = _project(tmp_path)
     p.group_review = GroupReview(enabled=True, radius_m=300.0)
     _nearby_store(p, tmp_path)
     state = _state(p, None)
     map_, layers, rc = ov.render(state)
     try:
+        _open(rc, "clusters")
         state.project.set(p.model_copy(update={"group_review": GroupReview(enabled=True, radius_m=50.0)}))
         ov.settle()
-        texts = _card_texts(rc, t("overview_tile.card_nearby"))
-        assert t("overview_tile.nearby_note", radius="50") in texts
+        assert t("overview_tile.nearby_note", radius="50") in _texts(rc)
         # the saved group stays one unit; alert 2 is now alone
-        assert "In a group: 2 of 4 alerts · Alone: 2 · Largest: 2 alerts" in texts
+        assert _nearby_rows(rc)[t("overview_tile.nearby_found")] == [
+            "1", t("overview_tile.nearby_of", grouped="2", alerts="4", largest="2")]
     finally:
         rc.close()
 
 
-def test_nearby_card_while_grouping_is_off_says_so(ov, tmp_path):
+def test_nearby_alerts_while_grouping_is_off_say_so(ov, tmp_path):
     p = _project(tmp_path)  # grouping off, the default 300 m; the alerts are far apart
     map_, layers, rc = ov.render(_state(p, None))
     try:
-        texts = _card_texts(rc, t("overview_tile.card_nearby"))
-        assert t("overview_tile.nearby_headline_none", radius="300") in texts
-        assert t("overview_tile.nearby_saved_none") in texts
-        assert t("overview_tile.nearby_off") in texts
+        _open(rc, "clusters")
+        assert _nearby_rows(rc)[t("overview_tile.nearby_found")][0] == "0"
+        assert t("overview_tile.nearby_off") in _texts(rc)
     finally:
         rc.close()
 
 
-def test_nearby_card_survives_a_failed_count(ov, tmp_path, monkeypatch):
+def test_nearby_alerts_survive_a_failed_count(ov, tmp_path, monkeypatch):
     p = _project(tmp_path)
     monkeypatch.setattr(overview_data, "nearby_of", lambda *a: 1 / 0)
     monkeypatch.setattr(overview_tile.logger, "exception", lambda *a, **k: None)
     map_, layers, rc = ov.render(_state(p, None))
     try:
+        _open(rc, "clusters")
         texts = _texts(rc)
         assert t("overview_tile.card_nearby") not in texts
-        assert t("overview_tile.card_numbers") in texts
+        assert t("overview_tile.card_clusters") in texts
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Pixels and clusters
+# ---------------------------------------------------------------------------
+def _counted(p):
+    """January's set as an Integrate run that counted everything records it:
+    1,000 GLAD-L pixels, 200 of them masked; 790 combined, 600 in alerts."""
+    s = p.alert_sets[p.active_set]
+    p.artifacts[harm_key(JAN.id, "GLAD-L")].stats = {"alert_pixels": 800, "alert_pixels_unmasked": 1000}
+    p.artifacts[combined_key(s.id)] = Artifact(
+        key=combined_key(s.id), kind="combined", rel_path="c.tif", inputs={}, fingerprint="f", content_id="c",
+        created_at=datetime.now(), stats={"states": 1, "analysable_px": 600, "too_small_px": 150,
+                                          "over_cap_px": 40, "clusters": 9, "clusters_kept": 5})
+    s.masks_used = [{"name": "Forest", "mode": "keep", "content_id": "m"}]
+    return s
+
+
+def _walk(widget):
+    """Every widget under ``widget`` (``rc.find`` skips some raw children)."""
+    yield widget
+    for child in getattr(widget, "children", None) or []:
+        if not isinstance(child, str):
+            yield from _walk(child)
+
+
+def _funnel_values(rc, which=0):
+    """The ``which``-th funnel's rows as ``{label: value}``, as the reader sees them."""
+    grids = [w for w in _walk(rc.container) if "minmax(150px" in (getattr(w, "style_", None) or "")]
+    rows = {}
+    cells = grids[which].children
+    for label, _, value, _ in zip(*[iter(cells)] * 4):
+        rows[" ".join(_strings(label)).strip()] = _strings(value)[0]
+    return rows
+
+
+def test_the_pixels_tab_follows_the_pixels_from_the_sources_to_the_alerts(ov, tmp_path):
+    p = _project(tmp_path)
+    _counted(p)
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        _open(rc, "pixels")
+        assert _funnel_values(rc) == {
+            t("overview_tile.px_source"): "1,000", t("overview_tile.px_masked"): "−200",
+            t("overview_tile.px_kept"): "800", t("overview_tile.px_combined"): "790",
+            t("overview_tile.px_too_small"): "−150", t("overview_tile.px_over_cap"): "−40",
+            t("overview_tile.px_alerts"): "600"}
+        _, rows = _table(rc, t("overview_tile.col_source"))
+        assert rows == [["GLAD-L", "1,000", "−200 (20%)", "800", "mdi-map-plus"]]  # its eye: the raw source
+        _, masks = _table(rc, t("overview_tile.col_mask"))
+        assert masks == [["Forest", t("steps.prepare.mask_mode_keep"), ""]]  # no aligned file: no eye
+        assert t("overview_tile.not_recorded") not in _texts(rc)
+    finally:
+        rc.close()
+
+
+def test_a_set_built_before_the_counts_shows_dashes(ov, tmp_path):
+    map_, layers, rc = ov.render(_state(_project(tmp_path), None))
+    try:
+        _open(rc, "pixels")
+        assert set(_funnel_values(rc).values()) == {"—"}
+        assert t("overview_tile.not_recorded") in _texts(rc)
+    finally:
+        rc.close()
+
+
+def test_the_clusters_tab_follows_the_clusters_to_the_alerts(ov, tmp_path):
+    p = _project(tmp_path)
+    _counted(p)
+    map_, layers, rc = ov.render(_state(p, _alerts(set_id=p.active_set)))
+    try:
+        _open(rc, "clusters")
+        assert _funnel_values(rc, 0) == {
+            t("overview_tile.cl_formed"): "9", t("overview_tile.cl_small"): "−4",
+            t("overview_tile.cl_over_cap"): "−1", t("overview_tile.cl_alerts"): "4",
+            t("overview_tile.cl_reviewed"): "3"}
+        # the not-analysable pixels have a layer: their button joins the alerts'
+        assert t("overview_tile.layer_unanalysable") in _texts(rc)
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# All periods and the summary of every period
+# ---------------------------------------------------------------------------
+def test_all_periods_sums_every_period_and_leaves_the_active_set_alone(ov, tmp_path):
+    p = _project(tmp_path)
+    february = _with_february(p, tmp_path)
+    state = _state(p, _february_alerts().assign(set_id=february.id))
+    map_, layers, rc = ov.render(state)
+    try:
+        rc.find(v.Select).widget.v_model = ALL_SETS
+        ov.settle()
+        assert state.project.value.active_set == february.id
+        assert _numbers(rc)[t("overview_tile.table_total")][:2] == ["6", "8.0"]  # 4 + 2 alerts, 4.5 + 3.5 ha
+        assert _btn(rc, t("overview_tile.review_button")).disabled is True
+        assert _layers_offered(rc) == []  # the layers belong to one set
+        assert not any(text.startswith("▲") or text.startswith("▼") for text in _texts(rc))  # no delta
+        _open(rc, "files")
+        [card] = _export_cards(rc)
+        assert len(card._gdf) == 6 and set(card._gdf["period"]) == {JAN.id, FEB.id}
+        assert card._folder == str(tmp_path / "d")
+        assert (card._start, card._end) == ("2026-01-01", "2026-02-28")
+    finally:
+        rc.close()
+
+
+def test_the_summary_of_every_period_writes_its_csv_and_says_when_it_is_out_of_date(ov, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))  # download links are relative to it
+    p = _project(tmp_path)
+    _with_february(p, tmp_path)
+    map_, layers, rc = ov.render(_state(p, None))
+    try:
+        _open(rc, "files")
+        _, rows = _table(rc, t("overview_tile.col_period"))
+        assert [row[:4] for row in rows] == [
+            [f"{JAN.start} → {JAN.end}", "4", "1.5", "75%"], [f"{FEB.start} → {FEB.end}", "2", "3.0", "50%"]]
+        [summary] = [w for w in _walk(rc.container) if isinstance(w, SummaryFile)]
+        tile = summary.tile
+        tile.fire_event("click", None)
+        path = tmp_path / "d" / overview_data.SUMMARY_CSV_NAME
+        assert path.read_text().splitlines()[0] == ",".join(overview_data.SUMMARY_CSV_COLUMNS)
+        assert tile.path == str(path) and tile.warning is None
+        path.write_text("older numbers")
+        summary.relabel()
+        assert tile.warning == t("overview_tile.summary_stale")
     finally:
         rc.close()
