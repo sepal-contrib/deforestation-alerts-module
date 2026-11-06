@@ -3,6 +3,7 @@ report's language; the built-in placeholders are the ones REPORT_PLACEHOLDERS
 lists."""
 
 import pandas as pd
+import pytest
 from docx import Document
 from pysepal.i18n import set_locale
 
@@ -83,14 +84,23 @@ def test_without_a_centroid_the_qr_marker_is_cleared(tmp_path):
     assert doc.paragraphs[0].text == "" and not doc.inline_shapes
 
 
-def test_the_default_template_uses_only_placeholders_the_builder_fills():
+def _template_text(name):
+    from pathlib import Path
+    doc = Document(Path(report_builder.__file__).parents[2] / "data" / name)
+    return " ".join(p.text for p in report_builder._paragraphs(doc))
+
+
+@pytest.mark.parametrize("locale", ["en", "es-ES", "fr", "pt-BR"])
+def test_the_default_template_uses_only_placeholders_the_builder_fills(locale):
     """Every ``{name}`` in the packaged template is a built-in placeholder or
     ``{verdict}``: a question placeholder would stay literal in a project
-    that deleted that question."""
+    that deleted that question. Each language's copy has the English one's."""
     import re
-    from pathlib import Path
-    doc = Document(Path(report_builder.__file__).parents[2] / "data" / "report_template.docx")
-    text = " ".join(p.text for p in report_builder._paragraphs(doc))
+    from gui.i18n import app_available_locales
+    assert locale in app_available_locales()
+    english = _template_text("report_template.docx")
+    text = english if locale == "en" else _template_text(f"report_template_{locale}.docx")
     assert set(re.findall(r"\{(\w+)\}", text)) <= {*REPORT_PLACEHOLDERS, "verdict"}
+    assert set(re.findall(r"\{(\w+)\}", text)) == set(re.findall(r"\{(\w+)\}", english))
     assert report_builder.QR_MARKER in text
     assert all(f"[Placeholder for Image {n}]" in text for n in range(1, 7))

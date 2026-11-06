@@ -1579,7 +1579,7 @@ In Analysis, each reviewed alert can be exported with a Word report (see `Export
 
 The **Report template** line names the template in use, with a chip: **default** (the app's own template), **custom** (your file) or **missing** (your file was moved or deleted). Open it with the arrow on the right side:
 
--   **Report template (.docx)**: choose a Word file in your SEPAL folder. Every report of this project is then built from it. Clear the field to go back to the default template.
+-   **Report template (.docx)**: choose a Word file in your SEPAL folder. Every report of this project is then built from it. Clear the field to go back to the default template, which is in the app's language (English, Spanish, French or Portuguese).
 -   **Placeholders the template can use (click to copy):** select a chip to copy its placeholder, then paste it into the template.
 
 .. list-table::

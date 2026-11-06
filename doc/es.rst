@@ -1533,7 +1533,7 @@ En Análisis, cada alerta revisada se puede exportar con un informe de Word (con
 
 La línea **Plantilla del informe** indica la plantilla en uso, con una etiqueta: **predeterminada** (la plantilla propia de la aplicación), **propia** (tu archivo) o **no encontrada** (tu archivo se movió o se eliminó). Despliégala con la flecha de la derecha:
 
--   **Plantilla de informe (.docx)**: elige un archivo de Word de tu carpeta de SEPAL. A partir de entonces, todos los informes de este proyecto se generan con él. Vacía el campo para volver a la plantilla predeterminada.
+-   **Plantilla de informe (.docx)**: elige un archivo de Word de tu carpeta de SEPAL. A partir de entonces, todos los informes de este proyecto se generan con él. Vacía el campo para volver a la plantilla predeterminada, que está en el idioma de la aplicación (inglés, español, francés o portugués).
 -   **Marcadores que puede usar la plantilla (clic para copiar):** selecciona una etiqueta para copiar su marcador y luego pégalo en la plantilla.
 
 .. list-table::

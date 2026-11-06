@@ -1535,7 +1535,7 @@ Dans Analyse, chaque alerte examinée peut être exportée avec un rapport Word 
 
 La ligne **Modèle de rapport** nomme le modèle utilisé, avec une pastille : **par défaut** (le modèle propre à l'application), **personnalisé** (votre fichier) ou **introuvable** (votre fichier a été déplacé ou supprimé). Dépliez-la avec la flèche à droite :
 
--   **Modèle de rapport (.docx)** : choisissez un fichier Word dans votre dossier SEPAL. Tous les rapports de ce projet sont alors construits à partir de lui. Videz le champ pour revenir au modèle par défaut.
+-   **Modèle de rapport (.docx)** : choisissez un fichier Word dans votre dossier SEPAL. Tous les rapports de ce projet sont alors construits à partir de lui. Videz le champ pour revenir au modèle par défaut, qui est dans la langue de l'application (anglais, espagnol, français ou portugais).
 -   **Balises utilisables dans le modèle (cliquer pour copier) :** sélectionnez une pastille pour copier sa balise, puis collez-la dans le modèle.
 
 .. list-table::

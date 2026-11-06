@@ -1537,7 +1537,7 @@ Na Análise, cada alerta revisado pode ser exportado com um relatório Word (vej
 
 A linha **Modelo do relatório** indica o modelo em uso, com uma etiqueta: **padrão** (o modelo do próprio app), **personalizado** (o seu arquivo) ou **não encontrado** (o seu arquivo foi movido ou apagado). Abra-a com a seta à direita:
 
--   **Modelo de relatório (.docx)**: escolha um arquivo Word na sua pasta do SEPAL. Todos os relatórios deste projeto passam a ser gerados a partir dele. Limpe o campo para voltar ao modelo padrão.
+-   **Modelo de relatório (.docx)**: escolha um arquivo Word na sua pasta do SEPAL. Todos os relatórios deste projeto passam a ser gerados a partir dele. Limpe o campo para voltar ao modelo padrão, que está no idioma do aplicativo (inglês, espanhol, francês ou português).
 -   **Marcadores que o modelo pode usar (clique para copiar):** selecione uma etiqueta para copiar o marcador e depois cole-o no modelo.
 
 .. list-table::

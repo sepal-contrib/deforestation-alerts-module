@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import geopandas as gpd
+from pysepal.i18n import current_locale
 
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.growth import links_of
@@ -36,6 +37,14 @@ DEFAULT_REPORT_TEMPLATE = str(
 )
 
 
+def default_report_template() -> Path:
+    """The default template in the app's language (``report_template_<locale>.docx``,
+    written by ``tools/translate_report_template.py``); English when there is none."""
+    english = Path(DEFAULT_REPORT_TEMPLATE)
+    localized = english.with_name(f"report_template_{current_locale()}.docx")
+    return localized if localized.is_file() else english
+
+
 class ReportTemplateMissing(KeyedError, RuntimeError):
     """The project's report template is gone from disk: the download writes nothing."""
 
@@ -48,7 +57,7 @@ class ReportTemplateMissing(KeyedError, RuntimeError):
 def report_template_path(template: Optional[str]) -> Path:
     """The ``.docx`` a report is built from: the project's, or the app's default."""
     if not template:
-        return Path(DEFAULT_REPORT_TEMPLATE)
+        return default_report_template()
     path = Path(template)
     if not path.is_file():
         raise ReportTemplateMissing(template)

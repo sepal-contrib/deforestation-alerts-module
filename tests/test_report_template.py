@@ -36,7 +36,17 @@ def test_template_value(tmp_path):
         rt.template_value(str(tmp_path / "notes.txt"))
 
 
-def test_report_template_path(tmp_path):
+def test_the_default_template_follows_the_language(english_locale):
+    from pysepal.i18n import set_locale
+    english = Path(alert_files.DEFAULT_REPORT_TEMPLATE)
+    assert alert_files.report_template_path(None) == english
+    set_locale("fr")
+    assert alert_files.report_template_path(None) == english.with_name("report_template_fr.docx")
+    set_locale("de")  # no German copy: English
+    assert alert_files.report_template_path("") == english
+
+
+def test_report_template_path(tmp_path, english_locale):
     assert alert_files.report_template_path(None) == Path(alert_files.DEFAULT_REPORT_TEMPLATE)
     assert alert_files.report_template_path("") == Path(alert_files.DEFAULT_REPORT_TEMPLATE)
     mine = _docx(tmp_path / "mine.docx")
