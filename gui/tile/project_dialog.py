@@ -66,9 +66,12 @@ from gui.widget.confirm_dialog import ConfirmDialog
 from gui.widget.enter_key import ENTER_DEFAULT
 from gui.widget.form_dialog import form_card, use_form_dialog
 from gui.widget.manage_projects import (
+    META,
     ChipRow,
     ConfirmDeleteDialog,
     ManageProjectsDialog,
+    aoi_item,
+    icon_button,
     relative_time,
 )
 from gui.widget.text_style import MUTED
@@ -319,7 +322,7 @@ _TINT = "position:absolute;top:0;right:0;bottom:0;left:0;opacity:0.12;pointer-ev
 _EDGE = "position:absolute;top:0;bottom:0;left:0;width:3px;pointer-events:none;"
 _CARD_GRID = ("position:relative;display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:6px 12px;"
               "align-items:center;")
-_CARD_META = "display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;font-size:12px;" + MUTED
+_CARD_META = META + "font-size:12px;" + MUTED
 _NAME = "font-weight:700;font-size:1.1rem;overflow-wrap:anywhere;"
 
 
@@ -329,17 +332,6 @@ def _tinted_card():
         rv.Html(tag="span", class_="primary", style_=_TINT)
         rv.Html(tag="span", class_="primary", style_=_EDGE)
         yield
-
-
-def _aoi_item(name: Optional[str]):
-    with rv.Html(tag="span", style_="display:inline-flex;align-items:center;gap:3px;"):
-        rv.Icon(x_small=True, children=["mdi-map-marker-outline"])
-        solara.Text(name or t("steps.project.no_aoi"))
-
-
-def _icon_button(icon, label, on_click):
-    solara.Button(icon_name=icon, icon=True, small=True, on_click=on_click,
-                  attributes={"title": label, "aria-label": label})
 
 
 def _reopen(name: str) -> Optional[Project]:
@@ -697,7 +689,7 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
                         solara.Text(recent.name, style=_NAME)
                         ChipRow(info=recent)
                         with rv.Html(tag="div", style_=_CARD_META):
-                            _aoi_item(recent.aoi_name)
+                            aoi_item(recent.aoi_name)
                             if recent.updated_at is not None:
                                 solara.Text(t("steps.project.modified",
                                               time_ago=relative_time(recent.updated_at, datetime.now())))
@@ -711,9 +703,9 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
                         solara.Text(p.name, style=_NAME)
                         _SaveChip(app_state=app_state)
                     with rv.Html(tag="div", style_="display:flex;"):
-                        _icon_button("mdi-pencil-outline", t("steps.project.rename"), lambda: _ask_rename(p.name))
+                        icon_button("mdi-pencil-outline", t("steps.project.rename"), lambda: _ask_rename(p.name))
                         if not read_only(p):  # spec §6.3: a review copy is not duplicated
-                            _icon_button("mdi-content-copy", t("steps.project.duplicate"),
+                            icon_button("mdi-content-copy", t("steps.project.duplicate"),
                                          lambda: dup_open.set(True))
                     with rv.Html(tag="div", style_="grid-column:1 / -1;"):
                         ChipRow(info=io.ProjectInfo(name=p.name, n_sources=len(p.sources),
@@ -721,7 +713,7 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
                                                     updated_at=p.updated_at))
                     with rv.Html(tag="div", style_="grid-column:1 / -1;justify-content:space-between;"
                                                    + _CARD_META):
-                        _aoi_item(p.aoi.name if p.aoi else None)
+                        aoi_item(p.aoi.name if p.aoi else None)
                         _SavedAgo(app_state=app_state)
         # The same three buttons with or without an open project; New is the
         # filled one only when there is nothing to continue.

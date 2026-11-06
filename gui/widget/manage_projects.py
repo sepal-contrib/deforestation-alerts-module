@@ -66,16 +66,24 @@ def ChipRow(info):
                     text_color="white" if accent else None)
 
 
-#: A row's last line: the AOI and the age, side by side, wrapping on a narrow dialog.
-_META = "display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;"
-_META_ITEM = "display:inline-flex;align-items:center;gap:3px;"
+#: A row's (or a Project card's) last line: the AOI and the age, side by
+#: side, wrapping on a narrow dialog.
+META = "display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;"
 #: Right-aligned with tabular digits, so the sizes line up from row to row.
 _SIZE = "font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;min-width:56px;text-align:right;"
 
 
-def _row_button(icon, label, on_click, color=None):
+def icon_button(icon, label, on_click, color=None):
+    """A small icon button; ``label`` is its tooltip and its accessible name."""
     solara.Button(icon_name=icon, icon=True, small=True, color=color, on_click=on_click,
                   attributes={"title": label, "aria-label": label})
+
+
+def aoi_item(name):
+    """A marker and the AOI's name, or "no AOI yet"."""
+    with rv.Html(tag="span", style_="display:inline-flex;align-items:center;gap:3px;"):
+        rv.Icon(x_small=True, children=["mdi-map-marker-outline"])
+        solara.Text(name or t("steps.project.no_aoi"))
 
 
 def size_label(size_bytes) -> str:
@@ -154,10 +162,8 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
                                                                  class_="ml-2"))
                                         rv.ListItemTitle(children=title)
                                         ChipRow(info=info)
-                                        with rv.ListItemSubtitle(style_=_META):
-                                            with rv.Html(tag="span", style_=_META_ITEM):
-                                                rv.Icon(x_small=True, children=["mdi-map-marker-outline"])
-                                                solara.Text(info.aoi_name or t("steps.project.no_aoi"))
+                                        with rv.ListItemSubtitle(style_=META):
+                                            aoi_item(info.aoi_name)
                                             if info.updated_at is not None:
                                                 solara.Text(t("steps.project.modified",
                                                               time_ago=relative_time(info.updated_at, now)))
@@ -166,9 +172,9 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
                                         rv.Html(tag="span", children=[size_label(size)],
                                                 style_=_SIZE + ("opacity:0.5;" if size is None else ""),
                                                 attributes={"title": t("steps.project.size_on_disk")})
-                                        _row_button("mdi-pencil-outline", t("steps.project.rename"),
+                                        icon_button("mdi-pencil-outline", t("steps.project.rename"),
                                                     lambda n=info.name: on_rename(n))
-                                        _row_button("mdi-delete-outline", t("common.delete"),
+                                        icon_button("mdi-delete-outline", t("common.delete"),
                                                     lambda n=info.name: on_delete(n), color="error")
             rv.Divider()
             with rv.CardActions(style_="justify-content:flex-end;gap:8px;"):
