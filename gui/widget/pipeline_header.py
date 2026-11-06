@@ -252,6 +252,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
 
         # Back / Next: fixed labels, so the buttons never grow with a long step
         # name; the target's name is the tooltip. Back skips locked steps, as Next.
+        # small, as every action button of the steps and the Analysis footer.
         with rv.Html(tag="div", class_="defo-workflow-footer"):
             if prev_t is None:
                 rv.Html(tag="span")  # keeps Next on the right
@@ -260,6 +261,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     t("workflow.back"),
                     icon_name="mdi-chevron-left",
                     text=True,
+                    small=True,
                     on_click=lambda: on_navigate(prev_t),
                     attributes={"data-nav": "back", "title": t(STEPS[prev_t].label_key)},
                 )
@@ -268,6 +270,7 @@ def PipelineHeader(active_step: int, on_navigate, project, dark=None):
                     children=[t("workflow.next"), rv.Icon(children=["mdi-chevron-right"], right=True)],
                     color="primary",
                     depressed=True,
+                    small=True,
                     on_click=lambda: on_navigate(next_t),
                     attributes={"data-nav": "next", "title": t(STEPS[next_t].label_key)},
                 )
