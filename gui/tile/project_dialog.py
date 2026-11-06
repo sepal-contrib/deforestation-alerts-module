@@ -315,11 +315,11 @@ def _SavedAgo(app_state):
 
 
 #: The open project's card and the Continue card: a translucent primary layer
-#: and a primary left edge, from the theme's ``primary`` class (the theme does
+#: and a thin primary outline like the outlined buttons, from the theme's ``primary`` class (the theme does
 #: not publish ``--v-primary-base``; see ``gui/tile/analysis/file_tile.py``).
-_CARD = "position:relative;overflow:hidden;border-radius:6px;padding:12px 10px 12px 16px;"
+_CARD = "position:relative;overflow:hidden;border-radius:6px;padding:12px 10px 12px 14px;"
 _TINT = "position:absolute;top:0;right:0;bottom:0;left:0;opacity:0.12;pointer-events:none;"
-_EDGE = "position:absolute;top:0;bottom:0;left:0;width:3px;pointer-events:none;"
+_EDGE = "position:absolute;top:0;right:0;bottom:0;left:0;border:thin solid currentColor;border-radius:inherit;pointer-events:none;"
 _CARD_GRID = ("position:relative;display:grid;grid-template-columns:minmax(0, 1fr) auto;gap:6px 12px;"
               "align-items:center;")
 _CARD_META = META + "font-size:12px;" + MUTED
@@ -330,7 +330,7 @@ _NAME = "font-weight:700;font-size:1.1rem;overflow-wrap:anywhere;"
 def _tinted_card():
     with rv.Html(tag="div", style_=_CARD):
         rv.Html(tag="span", class_="primary", style_=_TINT)
-        rv.Html(tag="span", class_="primary", style_=_EDGE)
+        rv.Html(tag="span", class_="primary--text", style_=_EDGE)
         yield
 
 
