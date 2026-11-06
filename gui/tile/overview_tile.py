@@ -504,26 +504,27 @@ def _clusters_tab(summary, px, nearby, grouping_on: bool, growth, measure: str, 
 
 
 def _files_tab(export_card, rows, periods, summary_file, all_periods: bool):
-    with _pair():
-        with _column():
+    # stacked, not paired: the summary table needs the width for its eight columns
+    with solara.Column(style="gap: 10px;"):
+        with solara.Div():
             if export_card is not None:
                 # A child of a reacton element, so the raw card is part of the rendered tree.
                 rv.Html(tag="div", children=[export_card])
             solara.Text(t("overview_tile.export_all_note" if all_periods else "overview_tile.export_pick_all"),
                         style=_NOTE)
-        with _column():
-            with _card(t("overview_tile.card_summary"), t("overview_tile.summary_note")):
-                _table((t("overview_tile.col_period"), t("overview_tile.table_alerts"),
-                        t("overview_tile.col_confirmed_ha"), t("overview_tile.col_reviewed"),
-                        t("overview_tile.col_source_px"), t("overview_tile.col_clusters"),
-                        t("overview_tile.col_groups"), t("overview_tile.col_linked")), [
-                    [_period_id_label(periods, row.period_id), format_number(row.n_alerts, 0),
-                     format_number(row.confirmed_ha, 1),
-                     _share(row.n_reviewed / row.n_alerts if row.n_alerts else 0.0), _count(row.source_px),
-                     _count(row.clusters), format_number(row.groups, 0), _count(row.linked)]
-                    for row in rows])
-                if summary_file is not None:
-                    rv.Html(tag="div", children=[summary_file])
+        with _card(t("overview_tile.card_summary"), t("overview_tile.summary_note")):
+            _table((t("overview_tile.col_period"), t("overview_tile.table_alerts"),
+                    t("overview_tile.col_confirmed_ha"), t("overview_tile.col_reviewed"),
+                    t("overview_tile.col_source_px"), t("overview_tile.col_clusters"),
+                    t("overview_tile.col_groups"), t("overview_tile.col_linked")), [
+                [rv.Html(tag="span", style_="white-space: nowrap;",
+                         children=[_period_id_label(periods, row.period_id)]),
+                 format_number(row.n_alerts, 0), format_number(row.confirmed_ha, 1),
+                 _share(row.n_reviewed / row.n_alerts if row.n_alerts else 0.0), _count(row.source_px),
+                 _count(row.clusters), format_number(row.groups, 0), _count(row.linked)]
+                for row in rows])
+            if summary_file is not None:
+                rv.Html(tag="div", children=[summary_file])
 
 
 def _tab_label(key: str, count=None) -> str:
@@ -858,24 +859,25 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
                 rv.Html(tag="div", children=[export_card])
             return
 
-        _headline(summary, history, measure, all_periods)
         shown = [k for k in TABS if k != "answers" or questions]
         current = shown[min(tab, len(shown) - 1)]
         counts = {"answers": len(questions), "clusters": summary.n_alerts}
-        with solara.Row(style="gap: 8px; align-items: center; flex-wrap: wrap;"):
-            with solara.Div(style="flex: 1 1 560px; min-width: 0;"):
-                rv.Tabs(v_model=shown.index(current), on_v_model=set_tab, show_arrows=True, height=36,
-                        children=[rv.Tab(children=[_tab_label(k, counts.get(k))]) for k in shown])
-            layer_buttons = [(key_, label) for key_, label in (
-                ("alerts", t("overview_tile.layer_alerts")), ("states", t("overview_tile.layer_unanalysable")),
-                ("earlier", t("overview_tile.layer_earlier"))) if key_ in eyes]
+        layer_buttons = [(key_, label) for key_, label in (
+            ("alerts", t("overview_tile.layer_alerts")), ("states", t("overview_tile.layer_unanalysable")),
+            ("earlier", t("overview_tile.layer_earlier"))) if key_ in eyes]
+        # the map buttons sit right of the headline: the tabs keep the whole width
+        with solara.Row(style="gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap;"):
+            _headline(summary, history, measure, all_periods)
             if layer_buttons:
-                solara.Text(t("overview_tile.on_the_map"), style=_NOTE)
-                for key_, label in layer_buttons:
-                    shown_on, on_click, busy = eyes[key_]
-                    solara.Button(label, x_small=True, outlined=not shown_on, depressed=True,
-                                  color="primary" if shown_on else None, loading=busy, disabled=busy,
-                                  icon_name=action_icon("map_toggle", shown_on), on_click=on_click)
+                with solara.Row(style="gap: 6px; align-items: center; flex-wrap: wrap;"):
+                    solara.Text(t("overview_tile.on_the_map"), style=_NOTE)
+                    for key_, label in layer_buttons:
+                        shown_on, on_click, busy = eyes[key_]
+                        solara.Button(label, x_small=True, outlined=not shown_on, depressed=True,
+                                      color="primary" if shown_on else None, loading=busy, disabled=busy,
+                                      icon_name=action_icon("map_toggle", shown_on), on_click=on_click)
+        rv.Tabs(v_model=shown.index(current), on_v_model=set_tab, show_arrows=True, height=36,
+                children=[rv.Tab(children=[_tab_label(k, counts.get(k))]) for k in shown])
         if current == "status":
             _status_tab(summary, figures, measure)
         elif current == "time":
