@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>leaflet-multiview: plain page</title>
+  <!-- The host page owns Leaflet and Geoman, loaded with plain tags (global L). -->
+  <link rel="stylesheet" href="../node_modules/leaflet/dist/leaflet.css">
+  <link rel="stylesheet" href="../node_modules/@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css">
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    body { margin: 0; font-family: Roboto, sans-serif; }
+    #host { width: 880px; height: 560px; }
+  </style>
+  <script src="../node_modules/leaflet/dist/leaflet.js"></script>
+  <script src="../node_modules/@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.js"></script>
+</head>
+<body>
+  <div id="host"></div>
+  <script type="module">
+    // ?manual: load the library into window.__mvlib and build nothing (the
+    // Playwright harness, tests/_plain_page.py, builds what it needs).
+    // Otherwise: a demo, 3 views in a grid with no basemap.
+    const square = (lng, lat, size) => ({
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        properties: {},
+        geometry: {type: "Polygon", coordinates: [[[lng, lat], [lng + size, lat], [lng + size, lat + size], [lng, lat + size], [lng, lat]]]},
+      }],
+    });
+
+    function demo(lib) {
+      const mv = lib.createMultiView(document.getElementById("host"), {
+        views: [{id: "a", title: "View A"}, {id: "b", title: "View B"}, {id: "c", title: "View C"}],
+        layout: "grid",
+        basemap: null,
+        view: {center: [-3.1, -60.0], zoom: 11},
+      });
+      if (lib.layerMenu) mv.use(lib.layerMenu);
+      mv.setLayers([
+        {id: "area", view: "all", kind: "geojson", name: "Area", visible: true, z: 1,
+         style: {color: "#1565c0", weight: 2, fillOpacity: 0.1}, data: square(-60.05, -3.15, 0.1)},
+        {id: "b-only", view: "b", kind: "geojson", name: "Only in B", visible: true, z: 2,
+         style: {color: "#c62828", weight: 2}, data: square(-60.02, -3.12, 0.04)},
+      ]);
+      window.__mv = mv;
+    }
+
+    try {
+      const lib = await import("../src/index.js");
+      window.__mvlib = lib;
+      if (!new URLSearchParams(location.search).has("manual")) demo(lib);
+    } catch (err) {
+      window.__mvError = String((err && err.stack) || err);
+      window.__mvlib = null;
+      const pre = document.createElement("pre");
+      pre.textContent = window.__mvError;
+      document.body.prepend(pre);
+    }
+  </script>
+</body>
+</html>

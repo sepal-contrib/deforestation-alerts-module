@@ -1,0 +1,167 @@
+"""AOI persistence (spec §6.1). Solara-free.
+
+The project stores the pysepal ``AoiSpec`` (replayed by ``AoiView(spec=...)``
+on load), the name, WGS84 bounds (the grid is built from them) and a digest
+that changes only when the geometry does. AOIs with a local gdf also get an
+``aoi.geojson`` sidecar; Earth Engine admin/asset AOIs are identified by their
+code or asset id (plus the column filter, which picks another geometry).
+"""
+
+import hashlib
+import json
+import os
+import re
+import uuid
+from datetime import date
+from pathlib import Path
+from typing import Optional
+
+from deforestation_alerts.errors import ProjectRuleError
+from deforestation_alerts.project import paths
+from deforestation_alerts.project.models import AoiRecord
+
+_DIGEST_GRID = 1e-6  # degrees: finer than any selection, coarser than GeoJSON noise
+
+
+def geometry_digest(gdf) -> str:
+    import shapely
+
+    h = hashlib.sha256()
+    for geom in gdf.to_crs(epsg=4326).geometry:
+        h.update(shapely.to_wkb(shapely.set_precision(geom, _DIGEST_GRID)))
+    return h.hexdigest()
+
+
+def lazy_digest(result) -> Optional[str]:
+    if getattr(result, "admin", None) and str(result.method).startswith("ADMIN"):
+        return f"admin:{result.admin}"
+    spec = getattr(result, "spec", None)
+    asset = getattr(spec, "asset_id", None)
+    if result.method == "ASSET" and asset:
+        # A fresh unfiltered pick carries column "ALL"; a spec restored from
+        # the manifest carries None (AoiSpec.to_dict drops it). Both are the
+        # whole asset.
+        column = getattr(spec, "column", None)
+        if column in (None, "ALL"):
+            return f"asset:{asset}"
+        return f"asset:{asset}|{column}={getattr(spec, 'value', None)!r}"
+    return None
+
+
+def bounds_from_geojson(geom: dict) -> tuple:
+    from shapely.geometry import shape
+
+    return tuple(float(v) for v in shape(geom).bounds)
+
+
+def build_record(result, gdf, bounds) -> AoiRecord:
+    spec = result.spec.to_dict() if getattr(result, "spec", None) is not None else {}
+    digest = geometry_digest(gdf) if gdf is not None else lazy_digest(result)
+    return AoiRecord(
+        spec=spec,
+        name=str(result.name),
+        method=str(result.method),
+        digest=digest or "unknown",
+        bounds=tuple(bounds),
+        geometry_file=paths.AOI_SIDECAR if gdf is not None else None,
+    )
+
+
+def gdf_bounds(gdf) -> tuple:
+    return tuple(float(v) for v in gdf.to_crs(epsg=4326).total_bounds)
+
+
+def apply_aoi(p, record: AoiRecord) -> list:
+    """Set a new AOI (spec §6.1): the grid goes (it is derived from the AOI
+    bounds) and every artifact record is dropped. Returns the files to delete
+    once the change is published. Coverage records are keyed by AOI digest, so
+    they go stale by themselves."""
+    from deforestation_alerts.project.cleanup import drop_artifacts
+
+    p.aoi = record
+    p.grid = None
+    return drop_artifacts(p, list(p.artifacts))
+
+
+def stage_sidecar(pdir: Path, gdf) -> Path:
+    """Write the sidecar to a temporary name in ``pdir``; the caller moves it
+    into place (``os.replace``) once the project accepted the AOI."""
+    pdir = Path(pdir)
+    pdir.mkdir(parents=True, exist_ok=True)
+    tmp = pdir / f".{paths.AOI_SIDECAR}.{uuid.uuid4().hex}.tmp"
+    try:
+        gdf.to_crs(epsg=4326).to_file(tmp, driver="GeoJSON")
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return tmp
+
+
+def write_sidecar(pdir: Path, gdf) -> None:
+    staged = stage_sidecar(pdir, gdf)
+    try:
+        os.replace(staged, Path(pdir) / paths.AOI_SIDECAR)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+
+
+def auto_project_name(aoi_name: str, existing: list, today: date) -> str:
+    base = re.sub(r"[^A-Za-z0-9 _-]+", "_", str(aoi_name or "aoi")).strip(" _") or "aoi"
+    name = f"{base}_{today:%Y%m%d}"
+    taken = {e.casefold() for e in existing}
+    candidate, n = name, 2
+    while candidate.casefold() in taken:
+        candidate, n = f"{name}_{n}", n + 1
+    return candidate
+
+
+def ee_aoi(result, pdir: Optional[Path]):
+    """The ``ee.FeatureCollection`` downloads and previews clip to.
+
+    The picker's object is used when there is one; an IMAGE or IMAGE_COLLECTION
+    asset (or a bare geometry) is wrapped as a one-feature collection of its
+    footprint. Without a selection, the ``aoi.geojson`` sidecar is the fallback,
+    converted the way pysepal converts a picked gdf (planar edges).
+
+    Raises:
+        ProjectRuleError: neither exists (``steps.aoi.no_geometry``; a toast
+            renders it with ``error_text``).
+    """
+    import ee
+
+    obj = getattr(result, "feature_collection", None) if result is not None else None
+    if obj is not None:
+        if isinstance(obj, ee.FeatureCollection):
+            return obj
+        geometry = obj if isinstance(obj, ee.Geometry) else obj.geometry()
+        return ee.FeatureCollection([ee.Feature(geometry)])
+    sidecar = Path(pdir) / paths.AOI_SIDECAR if pdir is not None else None
+    if sidecar is not None and sidecar.exists():
+        from pysepal.scripts.utils import geojson_to_ee
+
+        return geojson_to_ee(json.loads(sidecar.read_text()))
+    raise ProjectRuleError("no AOI selection and no aoi.geojson", key="steps.aoi.no_geometry")
+
+
+#: metres: the simplify tolerance of an Earth Engine AOI fetched for the sidecar.
+#: The sidecar only clips GeoTIFF inputs (the AOI raster), so an edge pixel may
+#: move by up to this much; 10 m made a national or archipelago boundary
+#: (Indonesia) a payload of several MB through ``get_info_async``, close to
+#: Earth Engine's response limits. The loader logs the payload size.
+SIDECAR_SIMPLIFY_M = 30
+
+
+def sidecar_request(aoi_fc):
+    """The AOI collection's geometries, simplified, without properties (unevaluated)."""
+    import ee
+
+    return aoi_fc.map(lambda f: ee.Feature(ee.Feature(f).geometry().simplify(SIDECAR_SIMPLIFY_M)))
+
+
+def sidecar_gdf(info: dict):
+    import geopandas as gpd
+
+    if not info["features"]:
+        return gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
+    return gpd.GeoDataFrame.from_features(info["features"], crs="EPSG:4326")

@@ -1,0 +1,94 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "replace": "Replace",
+    "delete": "Delete",
+    "close": "Close",
+    "actions": "Actions",
+    "_test_fmt": "hello {name}",
+    "_test": {
+      "one": "{count} item",
+      "other": "{count} items"
+    }
+  },
+  "dialog": {
+    "confirm_default_title": "Delete?",
+    "confirm_default_message": "This action cannot be undone.",
+    "confirm_default_label": "Delete"
+  },
+  "widgets": {
+    "product_table": {
+      "status_running": "running",
+      "status_ready": "ready",
+      "status_completed": "completed",
+      "status_failed": "failed",
+      "status_cancelled": "cancelled",
+      "status_stale": "out of date",
+      "status_missing": "missing",
+      "status_no_data": "no data",
+      "status_not_covered": "not covered",
+      "status_unchecked": "not checked",
+      "action_edit": "Edit",
+      "action_delete": "Delete",
+      "action_download": "Download",
+      "action_redownload": "Download again",
+      "action_cancel": "Stop",
+      "action_open": "Open",
+      "action_dismiss": "Dismiss",
+      "action_move_up": "Move up",
+      "action_move_down": "Move down",
+      "action_show": "Show on the map",
+      "action_hide": "Hide from the map",
+      "action_select": "Make active",
+      "action_info": "Details",
+      "action_refresh": "Download again",
+      "action_menu": "More actions"
+    }
+  },
+  "workflow": {
+    "lock_alerts": "Add a period first.",
+    "lock_project": "Open a project first.",
+    "lock_review": "Build an alert set first.",
+    "lock_period": "Pick the AOI first.",
+    "lock_harmonize": "Download a source first.",
+    "lock_integrate": "Download and harmonize at least one source first.",
+    "count_sources": {
+      "one": "{count} source",
+      "other": "{count} sources"
+    },
+    "count_layers": {
+      "one": "{count} layer",
+      "other": "{count} layers"
+    },
+    "count_questions": {
+      "one": "{count} question",
+      "other": "{count} questions"
+    },
+    "count_periods": {
+      "one": "{count} period",
+      "other": "{count} periods"
+    },
+    "count_ready": {
+      "one": "{count} ready",
+      "other": "{count} ready"
+    },
+    "count_clusters": {
+      "one": "{count} cluster",
+      "other": "{count} clusters"
+    },
+    "step_badge": "{n} / {total}",
+    "back": "Back",
+    "next": "Next",
+    "count_empty": "nothing yet",
+    "count_optional": "optional",
+    "level_prepare": "Prepare alerts",
+    "level_review": "Set up review",
+    "start_analysis": "Start analysis",
+    "count_evaluators": {
+      "one": "{count} evaluator",
+      "other": "{count} evaluators"
+    }
+  }
+}

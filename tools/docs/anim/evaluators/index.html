@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=960, height=540" />
+    <title>Evaluators</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 960px; height: 540px; overflow: hidden; background: #f7f8f6; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #f7f8f6; }
+      #stage { position: absolute; inset: 0; }
+      #stage svg { display: block; width: 960px; height: 540px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="10" data-width="960" data-height="540">
+      <div id="stage"></div>
+    </div>
+    <script>
+      // Evaluator colours: pysepal primary_contrast gold and the chart accent blue.
+      // Review status colours: gui/scripts/legend_specs.py (not reviewed / confirmed / false positive).
+      const EV = ["#bf8f2d", "#1565c0"], GREY = "#9e9e9e", RED = "#d32f2f", GREEN = "#388e3c", INK = "#202124",
+            CARD = "#ffffff", EDGE = "#c4c7c5", PRIMARY = "#5bb624";
+      const ACCOUNT = "M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z";
+      const CHECK_CIRCLE = "M12 2C6.5 2 2 6.5 2 12S6.5 22 12 22 22 17.5 22 12 17.5 2 12 2M10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z";
+      const NS = "http://www.w3.org/2000/svg";
+      const el = (tag, attrs, parent) => {
+        const e = document.createElementNS(NS, tag);
+        for (const k in attrs) e.setAttribute(k, attrs[k]);
+        if (parent) parent.appendChild(e);
+        return e;
+      };
+      const svg = el("svg", { viewBox: "0 0 960 540" }, document.getElementById("stage"));
+
+      const CX = 480, CY = 270, COLS = 6, ROWS = 4, SP = 36, R = 12;
+      const PK_SP = 30, PK_COLS = 4, PK_ROWS = 3;
+      const PK_NEAR = [CX - 196, CX + 196], PK_FAR = [196, 764], PERSON = [70, 890];
+      const home = (k) => ({ x: CX + ((k % COLS) - (COLS - 1) / 2) * SP, y: CY + (Math.floor(k / COLS) - (ROWS - 1) / 2) * SP });
+      const slot = (k, px) => { const j = Math.floor(k / 2); return { x: px + ((j % PK_COLS) - (PK_COLS - 1) / 2) * PK_SP, y: CY + (Math.floor(j / PK_COLS) - (PK_ROWS - 1) / 2) * PK_SP }; };
+      // a fixed review outcome per alert
+      const STATUS = [GREEN, RED, GREEN, GREEN, RED, GREEN, GREEN, GREEN, RED, GREEN, RED, GREEN,
+                      GREEN, GREEN, RED, GREEN, GREEN, RED, GREEN, GREEN, GREEN, RED, GREEN, GREEN];
+
+      // paths from the packages to the people
+      for (let e = 0; e < 2; e++)
+        el("line", { x1: PK_NEAR[e], y1: CY, x2: PERSON[e], y2: CY, stroke: EDGE, "stroke-width": 3, "stroke-dasharray": "2 9", "stroke-linecap": "round" }, svg);
+      // the alert set
+      const SW = COLS * SP + 24, SH = ROWS * SP + 24;
+      el("rect", { x: CX - SW / 2, y: CY - SH / 2, width: SW, height: SH, rx: 14, fill: CARD, stroke: EDGE, "stroke-width": 3 }, svg);
+      for (let k = 0; k < COLS * ROWS; k++) { const p = home(k); el("circle", { cx: p.x, cy: p.y, r: R - 2, fill: "#eceeec" }, svg); }
+      const setBadge = el("g", { id: "setbadge" }, svg);
+      el("circle", { cx: 0, cy: 0, r: 17, fill: "#ffffff" }, setBadge);
+      el("path", { d: CHECK_CIRCLE, fill: PRIMARY, transform: "translate(-20 -20) scale(1.667)" }, setBadge);
+      // the people
+      for (let e = 0; e < 2; e++) {
+        const g = el("g", { id: `person${e}` }, svg);
+        el("circle", { cx: 0, cy: 0, r: 46, fill: EV[e] }, g);
+        el("path", { d: ACCOUNT, fill: "#ffffff", transform: "translate(-30 -32) scale(2.5)" }, g);
+      }
+      // the packages (cards; their dots move with them)
+      const PW = PK_COLS * PK_SP + 22, PH = PK_ROWS * PK_SP + 22;
+      for (let e = 0; e < 2; e++) {
+        const g = el("g", { id: `pk${e}` }, svg);
+        el("rect", { x: -PW / 2, y: -PH / 2, width: PW, height: PH, rx: 12, fill: CARD, stroke: EV[e], "stroke-width": 4 }, g);
+        const b = el("g", { id: `pkbadge${e}` }, g);
+        el("circle", { cx: 0, cy: 0, r: 15, fill: "#ffffff" }, b);
+        el("path", { d: CHECK_CIRCLE, fill: PRIMARY, transform: "translate(-18 -18) scale(1.5)" }, b);
+      }
+      // the alerts
+      for (let k = 0; k < COLS * ROWS; k++) {
+        const g = el("g", { id: `d${k}` }, svg);
+        el("circle", { id: `dc${k}`, cx: 0, cy: 0, r: R, fill: GREY, stroke: "#ffffff", "stroke-width": 3 }, g);
+        el("path", { id: `dt${k}`, d: "M-5.5 0.5L-1.8 4.2L5.5 -3.6", fill: "none", stroke: "#ffffff", "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" }, g);
+      }
+
+      // initial state = last frame
+      const N = COLS * ROWS;
+      for (let k = 0; k < N; k++) { const p = home(k); gsap.set(`#d${k}`, { x: p.x, y: p.y }); gsap.set(`#dt${k}`, { opacity: 0 }); }
+      gsap.set("#setbadge", { x: CX + SW / 2 - 4, y: CY - SH / 2 + 4, scale: 0, transformOrigin: "50% 50%" });
+      for (let e = 0; e < 2; e++) {
+        gsap.set(`#person${e}`, { x: PERSON[e], y: CY, scale: 1, transformOrigin: "50% 50%" });
+        gsap.set(`#pk${e}`, { x: PK_NEAR[e], y: CY, opacity: 0, scale: 0.85, transformOrigin: "50% 50%" });
+        gsap.set(`#pkbadge${e}`, { x: PW / 2 - 6, y: -PH / 2 + 6, scale: 0, transformOrigin: "50% 50%" });
+      }
+
+      const tl = gsap.timeline({ paused: true });
+      const ev = (k) => k % 2; // round-robin
+      // 1. round-robin split: each alert gets its evaluator's colour
+      for (let k = 0; k < N; k++) tl.to(`#dc${k}`, { attr: { stroke: EV[ev(k)] }, duration: 0.2 }, 0.5 + k * 0.04);
+      // 2. two packages
+      for (let e = 0; e < 2; e++) tl.to(`#pk${e}`, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.6)" }, 1.55);
+      for (let k = 0; k < N; k++) { const p = slot(k, PK_NEAR[ev(k)]); tl.to(`#d${k}`, { x: p.x, y: p.y, duration: 0.6, ease: "power2.inOut" }, 1.75 + k * 0.015); }
+      // 3. each package travels to its evaluator
+      const T3 = 2.75, TD = 0.85;
+      for (let e = 0; e < 2; e++) tl.to(`#pk${e}`, { x: PK_FAR[e], duration: TD, ease: "power2.inOut" }, T3);
+      for (let k = 0; k < N; k++) { const p = slot(k, PK_FAR[ev(k)]); tl.to(`#d${k}`, { x: p.x, y: p.y, duration: TD, ease: "power2.inOut" }, T3); }
+      // 4. reviewed: each alert gets its status and a tick
+      const T4 = 3.75;
+      for (let e = 0; e < 2; e++) tl.to(`#person${e}`, { scale: 1.12, duration: 0.2, yoyo: true, repeat: 1, ease: "power1.inOut" }, T4);
+      for (let k = 0; k < N; k++) {
+        const t = T4 + 0.25 + Math.floor(k / 2) * 0.07;
+        tl.to(`#dc${k}`, { attr: { fill: STATUS[k] }, duration: 0.15 }, t);
+        tl.to(`#dt${k}`, { opacity: 1, duration: 0.15 }, t);
+      }
+      for (let e = 0; e < 2; e++) tl.to(`#pkbadge${e}`, { scale: 1, duration: 0.3, ease: "back.out(2.5)" }, T4 + 1.1);
+      // 5. back, and merged into the set
+      const T5 = 5.35;
+      for (let e = 0; e < 2; e++) tl.to(`#pk${e}`, { x: PK_NEAR[e], duration: TD, ease: "power2.inOut" }, T5);
+      for (let k = 0; k < N; k++) { const p = slot(k, PK_NEAR[ev(k)]); tl.to(`#d${k}`, { x: p.x, y: p.y, duration: TD, ease: "power2.inOut" }, T5); }
+      const T6 = T5 + TD + 0.15;
+      for (let k = 0; k < N; k++) { const p = home(k); tl.to(`#d${k}`, { x: p.x, y: p.y, duration: 0.6, ease: "power2.inOut" }, T6 + k * 0.015); }
+      for (let e = 0; e < 2; e++) tl.to(`#pk${e}`, { opacity: 0, scale: 0.85, duration: 0.35 }, T6 + 0.5);
+      for (let k = 0; k < N; k++) tl.to(`#dc${k}`, { attr: { stroke: "#ffffff" }, duration: 0.3 }, T6 + 0.7);
+      tl.to("#setbadge", { scale: 1, duration: 0.35, ease: "back.out(2.5)" }, T6 + 0.9);
+      // 6. back to the start
+      const RS = 8.7;
+      for (let k = 0; k < N; k++) {
+        tl.to(`#dc${k}`, { attr: { fill: GREY }, duration: 0.5 }, RS);
+        tl.to(`#dt${k}`, { opacity: 0, duration: 0.4 }, RS);
+      }
+      tl.to("#setbadge", { scale: 0, duration: 0.3 }, RS);
+      for (let e = 0; e < 2; e++) tl.set(`#pkbadge${e}`, { scale: 0 }, RS);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

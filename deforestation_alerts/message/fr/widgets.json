@@ -1,0 +1,102 @@
+{
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "replace": "Remplacer",
+    "delete": "Supprimer",
+    "close": "Fermer",
+    "actions": "Actions",
+    "_test_fmt": "bonjour {name}",
+    "_test": {
+      "one": "{count} élément",
+      "many": "{count} d'éléments",
+      "other": "{count} éléments"
+    }
+  },
+  "dialog": {
+    "confirm_default_title": "Supprimer ?",
+    "confirm_default_message": "Cette action est irréversible.",
+    "confirm_default_label": "Supprimer"
+  },
+  "widgets": {
+    "product_table": {
+      "status_running": "en cours",
+      "status_ready": "prête",
+      "status_completed": "terminée",
+      "status_failed": "échouée",
+      "status_cancelled": "annulée",
+      "status_stale": "obsolète",
+      "status_missing": "manquante",
+      "status_no_data": "aucune donnée",
+      "status_not_covered": "non couverte",
+      "status_unchecked": "non vérifiée",
+      "action_edit": "Modifier",
+      "action_delete": "Supprimer",
+      "action_download": "Télécharger",
+      "action_redownload": "Télécharger à nouveau",
+      "action_cancel": "Arrêter",
+      "action_open": "Ouvrir",
+      "action_dismiss": "Ignorer",
+      "action_move_up": "Monter",
+      "action_move_down": "Descendre",
+      "action_show": "Afficher sur la carte",
+      "action_hide": "Masquer de la carte",
+      "action_select": "Rendre actif",
+      "action_info": "Détails",
+      "action_refresh": "Télécharger à nouveau",
+      "action_menu": "Plus d'actions"
+    }
+  },
+  "workflow": {
+    "lock_alerts": "Ajoutez d'abord une période.",
+    "lock_project": "Ouvrez d'abord un projet.",
+    "lock_review": "Construisez d'abord un jeu d'alertes.",
+    "lock_period": "Choisissez d'abord la zone d'intérêt.",
+    "lock_harmonize": "Téléchargez d'abord une source.",
+    "lock_integrate": "Téléchargez et harmonisez d'abord au moins une source.",
+    "count_sources": {
+      "one": "{count} source",
+      "many": "{count} de sources",
+      "other": "{count} sources"
+    },
+    "count_layers": {
+      "one": "{count} couche",
+      "many": "{count} de couches",
+      "other": "{count} couches"
+    },
+    "count_questions": {
+      "one": "{count} question",
+      "many": "{count} de questions",
+      "other": "{count} questions"
+    },
+    "count_periods": {
+      "one": "{count} période",
+      "many": "{count} de périodes",
+      "other": "{count} périodes"
+    },
+    "count_ready": {
+      "one": "{count} prête",
+      "many": "{count} prêtes",
+      "other": "{count} prêtes"
+    },
+    "count_clusters": {
+      "one": "{count} groupe",
+      "many": "{count} de groupes",
+      "other": "{count} groupes"
+    },
+    "step_badge": "{n} / {total}",
+    "back": "Retour",
+    "next": "Suivant",
+    "count_empty": "rien pour l'instant",
+    "count_optional": "facultatif",
+    "level_prepare": "Préparer les alertes",
+    "level_review": "Configurer la revue",
+    "start_analysis": "Lancer l'analyse",
+    "count_evaluators": {
+      "one": "{count} évaluateur",
+      "many": "{count} d'évaluateurs",
+      "other": "{count} évaluateurs"
+    }
+  }
+}

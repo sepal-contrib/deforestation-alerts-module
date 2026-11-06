@@ -1,0 +1,221 @@
+"""S1 file tiles of the Export section (spec D6): one row per file the build
+makes -- a format badge, its name, what is inside and its size, a download
+icon -- the whole tile a download link.
+
+A ``custom_sw.DownloadBtn`` underneath, so ``set_url`` builds the link from
+``local_files`` (the served-root-relative path under the download base, which
+follows whichever SEPAL serves the app), sets the ``download`` attribute and
+disables the tile on "#". ``set_file`` is what the
+export section calls: the set-folder path of the file, or None to clear.
+``set_action`` gives a tile with no file a second face, for Overview's
+tiles: a plain button (no link) that makes the file when clicked, its detail
+saying whether it can.
+
+``BuildTile`` is the Analysis list's last row (user, 2026-10-26): the build
+of the files above, in the same row shape, with an icon where a file has its
+format badge.
+"""
+
+from pathlib import Path
+from typing import Optional
+
+import ipyvuetify as v
+
+from deforestation_alerts.scripts import local_files
+from gui.widget import custom_sw
+
+#: The format badge (mockup S1 ``.ic``): primary text on a translucent primary
+#: layer. Both come from the theme's ``primary`` / ``primary--text`` classes,
+#: not a colour here: the theme does not publish ``--v-primary-base``, so a
+#: ``var()`` fell back to the light green on the dark (gold) theme too.
+_BADGE = ("position:relative;overflow:hidden;width:30px;height:30px;border-radius:5px;display:flex;"
+          "align-items:center;justify-content:center;flex:0 0 auto;font-size:10px;font-weight:700;")
+_BADGE_LAYER = "position:absolute;top:0;right:0;bottom:0;left:0;opacity:0.15;"
+#: The tile itself (mockup S1 ``.tile``): a neutral border that reads on both
+#: themes, the theme's own text colour, never underlined (it is an ``<a>``).
+TILE_STYLE = ("height:auto;min-height:52px;justify-content:flex-start;text-transform:none;letter-spacing:normal;"
+              "text-decoration:none;border-color:rgba(128,128,128,0.35);border-radius:6px;"
+              "padding:8px 10px;margin:0 0 6px 0;")
+_TITLE = "font-size:13px;font-weight:600;line-height:1.3;text-decoration:none;"
+_DETAIL = "opacity:0.6;text-decoration:none;white-space:normal;"
+
+
+def human_size(n: int) -> str:
+    """``n`` bytes for a person: whole B and KB, one decimal from MB up. A
+    value that ROUNDS to 1024 of a unit reads in the next one ("1.0 MB", never
+    "1024 KB")."""
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        decimals = 0 if unit in ("B", "KB") else 1
+        if round(size, decimals) < 1024 or unit == "GB":
+            return f"{size:.{decimals}f} {unit}"
+        size /= 1024
+    return f"{n} B"  # unreachable: the loop returns at "GB"
+
+
+class FileTile(custom_sw.DownloadBtn):
+    """One downloadable file of the build, disabled until ``set_file`` gives
+    it one. ``kind`` (``"zip"`` / ``"docx"`` / ``"gif"``) is the badge text and
+    what a caller finds the tile by; ``size_text`` is the size shown, ``""``
+    while there is no file or it cannot be read."""
+
+    def __init__(self, kind: str, title: str, detail: str, **kwargs):
+        self.kind = kind
+        self.size_text = ""
+        self.path: Optional[str] = None
+        #: The warning leading the detail of a linked file, None without one.
+        self.warning: Optional[str] = None
+        self._detail = detail
+        #: The detail ``set_action`` wrote, None when the tile is not an action.
+        self._action: Optional[str] = None
+        self._title = v.Html(tag="div", style_=_TITLE, children=[title])
+        self._meta = v.Html(tag="div", class_="caption", style_=_DETAIL, children=[detail])
+        self._icon = v.Icon(small=True, class_="primary--text", children=["mdi-download"])
+        # No ``color``: an outlined primary button underlined and tinted the
+        # whole row; only the badge and the download icon carry the primary.
+        super().__init__(text=title, block=True, outlined=True, color=None, class_="defo-file-tile",
+                         style_=TILE_STYLE, **kwargs)
+        # ``DownloadBtn`` puts its own icon + text in; the tile is the S1 row.
+        self.children = [
+            v.Html(tag="div", class_="primary--text defo-file-badge", style_=_BADGE, children=[
+                v.Html(tag="span", class_="primary", style_=_BADGE_LAYER),
+                v.Html(tag="span", style_="position:relative;", children=[kind.upper()]),
+            ]),
+            v.Html(tag="div", class_="ml-3 text-left", style_="flex:1 1 auto;min-width:0;", children=[
+                self._title,
+                self._meta,
+            ]),
+            self._icon,
+        ]
+
+    def set_title(self, title: str) -> "FileTile":
+        """Rename the tile (a language switch)."""
+        self._title.children = [title]
+        return self
+
+    def _draw_meta(self):
+        """The line under the title, from the tile's state."""
+        if self._action is not None:
+            self._meta.children = [self._action]
+            return
+        line = f"{self._detail} · {self.size_text}" if self.path and self.size_text else self._detail
+        self._meta.children = ([v.Html(tag="span", class_="warning--text", children=[self.warning]), f" · {line}"]
+                               if self.path and self.warning else [line])
+
+    def set_detail(self, detail: str) -> "FileTile":
+        """The tile's own detail in another language (a language switch):
+        the file, its size, its warning and an action stay as they are."""
+        self._detail = detail
+        self._draw_meta()
+        return self
+
+    def relabel_action(self, detail: str) -> "FileTile":
+        """An action tile's text in another language. Text only: whether it
+        can be clicked, its spinner and its icon stay as they are (a running
+        GIF holds them). A tile that is not an action is left alone."""
+        if self._action is not None:
+            self._action = detail
+            self._draw_meta()
+        return self
+
+    def set_file(self, path: Optional[str], detail: Optional[str] = None,
+                 warning: Optional[str] = None) -> "FileTile":
+        """Link ``path`` (a file in the set folder), or clear the tile (None).
+
+        ``detail`` replaces the line under the title; ``warning``, when given,
+        leads it in the theme's warning colour (a file older than what it was
+        made from).
+
+        Raises ``ValueError`` (``local_files.served_relative``) for a path the
+        sandbox cannot serve, before anything on the tile changes: the export
+        worker reports it as a FAILED build, and the tile stays as it was.
+        """
+        if not path:
+            if detail is not None:
+                self._detail = detail
+            self.warning = None
+            self.size_text = ""
+            self.path = None
+            self._action = None
+            self._draw_meta()
+            self._icon.children = ["mdi-download"]
+            return self.set_url()
+        url_path = local_files.served_relative(path)
+        self._action = None
+        if detail is not None:
+            self._detail = detail
+        self.path = path
+        self._icon.children = ["mdi-download"]
+        try:
+            self.size_text = human_size(Path(path).stat().st_size)
+        except OSError:
+            self.size_text = ""
+        self.warning = warning
+        self._draw_meta()
+        return self.set_url(path=url_path)
+
+    def set_action(self, enabled: bool, detail: str, icon: str = "mdi-filmstrip") -> "FileTile":
+        """The tile while it has no file: a button that makes one. No ``href``,
+        so the click reaches the handler instead of opening "#" in a new tab;
+        ``enabled`` says whether it can be clicked, ``detail`` why (or what a
+        click does). A tile that has a file is left as it is."""
+        if self.path is not None:
+            return self
+        self.href = None
+        self.disabled = not enabled
+        self._action = detail
+        self._draw_meta()
+        self._icon.children = [icon]
+        return self
+
+
+#: The build row's icon box: the badge's size, outlined in the primary.
+_BUILD_BADGE = ("width:30px;height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;"
+                "flex:0 0 auto;border:1px solid currentColor;")
+
+
+class BuildTile(v.Btn):
+    """The last row of the Analysis file list: *Build files* until the files
+    exist, *Rebuild files* after, *Building files…* (a spinner in the icon
+    box) while a build runs. A plain button, not a link; its click is the
+    export section's build. ``set_face`` writes what it says, ``set_busy``
+    swaps the icon for the spinner."""
+
+    def __init__(self, **kwargs):
+        self._title = v.Html(tag="div", class_="primary--text", style_=_TITLE, children=[""])
+        self._meta = v.Html(tag="div", class_="caption", style_=_DETAIL, children=[""])
+        self._glyph = v.Icon(small=True, children=["mdi-cogs"])
+        self._spinner = v.ProgressCircular(indeterminate=True, size=16, width=2, style_="display:none;")
+        self._box = v.Html(tag="div", class_="primary--text", style_=_BUILD_BADGE,
+                           children=[self._glyph, self._spinner])
+        super().__init__(text=True, block=True, class_="defo-file-tile defo-build-tile", style_=TILE_STYLE,
+                         children=[
+                             self._box,
+                             v.Html(tag="div", class_="ml-3 text-left", style_="flex:1 1 auto;min-width:0;",
+                                    children=[self._title, self._meta]),
+                         ], **kwargs)
+        self.busy = False
+
+    def set_face(self, title: str, detail: str, icon: str) -> "BuildTile":
+        """What the row says, and the icon it shows when not busy."""
+        self._title.children = [title]
+        self._meta.children = [detail]
+        self._glyph.children = [icon]
+        return self
+
+    def set_busy(self, flag: bool) -> "BuildTile":
+        """A build runs: the spinner in place of the icon, and no click."""
+        self.busy = bool(flag)
+        self._glyph.style_ = "display:none;" if self.busy else ""
+        self._spinner.style_ = "" if self.busy else "display:none;"
+        if self.busy:
+            self.disabled = True
+        return self
+
+    @property
+    def title(self) -> str:
+        return self._title.children[0]
+
+    @property
+    def detail(self) -> str:
+        return self._meta.children[0]

@@ -1,0 +1,226 @@
+"""Writing and checking rasters on the project grid.
+
+Every engine raster is Int32 with no-data 0 (spec D16), tiled 512 px, DEFLATE,
+with *internal* overviews built with nearest-neighbour (averaging would invent
+alert codes). Files are written as ``<name>.part`` in the destination folder and
+renamed when complete, so a reader never opens half a file (spec §5.2).
+Before a run writes one, ``ensure_free_space`` checks the project disk against
+a multiple of the raster's *compressed* size estimate (``compressed_estimate``).
+"""
+
+import contextlib
+import math
+import os
+import shutil
+import threading
+from pathlib import Path
+from typing import Iterator
+
+import rasterio
+from rasterio.crs import CRS
+from rasterio.enums import Resampling
+from rasterio.windows import Window
+
+from deforestation_alerts.errors import KeyedError, UserFileMissing
+from deforestation_alerts.project.models import GridSpec
+
+# One lock per user GeoTIFF, process-wide: its ``.ovr`` sidecar is one file
+# that the shared map's and the Analysis maps' layer builds (and every kernel
+# of the server process) may want to build at once.
+_OVERVIEW_LOCKS: dict = {}
+_OVERVIEW_LOCKS_GUARD = threading.Lock()
+
+BLOCK = 512
+
+
+class GridMismatchError(KeyedError, RuntimeError):
+    """A written raster is not on the project grid."""
+
+    key = "errors.off_grid"
+
+
+class NotEnoughSpaceError(KeyedError, RuntimeError):
+    """The project disk cannot hold the file about to be written."""
+
+    key = "errors.not_enough_space"
+
+
+def grid_profile(grid: GridSpec, count: int) -> dict:
+    return {
+        "driver": "GTiff",
+        "dtype": "int32",
+        "nodata": 0,
+        "count": count,
+        "width": grid.width,
+        "height": grid.height,
+        "crs": CRS.from_user_input(grid.epsg),
+        "transform": grid.affine,
+        "tiled": True,
+        "blockxsize": BLOCK,
+        "blockysize": BLOCK,
+        "compress": "deflate",
+        "predictor": 2,
+        "bigtiff": "if_safer",
+    }
+
+
+def row_windows(grid: GridSpec, rows: int = 2048) -> Iterator[Window]:
+    for row0 in range(0, grid.height, rows):
+        yield Window(0, row0, grid.width, min(rows, grid.height - row0))
+
+
+#: Window size of the mask and harmonize passes (spec §7.3): full-width
+#: 2048-row strips held about 3 GB per mask at national 10 m.
+TILE = 2048
+
+
+def tile_windows(grid: GridSpec, size: int = TILE) -> Iterator[Window]:
+    for row0 in range(0, grid.height, size):
+        for col0 in range(0, grid.width, size):
+            yield Window(col0, row0, min(size, grid.width - col0), min(size, grid.height - row0))
+
+
+def _overview_levels(width: int, height: int) -> list[int]:
+    levels, f = [], 2
+    while max(width, height) / f >= 256:
+        levels.append(f)
+        f *= 2
+    return levels
+
+
+@contextlib.contextmanager
+def part_file(path: Path, grid: GridSpec) -> Iterator[Path]:
+    """Yield ``<path>.part`` to be written; on success check it is on ``grid``
+    and rename it to ``path``, on any failure delete it (spec §5.2)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    part = path.with_name(path.name + ".part")
+    part.unlink(missing_ok=True)
+    try:
+        yield part
+        check_header(part, grid)
+        part.replace(path)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+
+
+def build_nearest_overviews(dst) -> None:
+    """Internal overviews of an open, writable raster, nearest-neighbour."""
+    levels = _overview_levels(dst.width, dst.height)
+    if levels:
+        dst.build_overviews(levels, Resampling.nearest)
+        dst.update_tags(ns="rio_overview", resampling="nearest")
+
+
+@contextlib.contextmanager
+def write_grid_raster(path: Path, grid: GridSpec, count: int):
+    with part_file(path, grid) as part:
+        with rasterio.open(part, "w", **grid_profile(grid, count)) as dst:
+            yield dst
+            build_nearest_overviews(dst)
+
+
+def check_header(path, grid: GridSpec) -> None:
+    with rasterio.open(path) as src:
+        same_crs = src.crs is not None and src.crs == CRS.from_user_input(grid.epsg)
+        same_shape = (src.width, src.height) == (grid.width, grid.height)
+        same_transform = src.transform.almost_equals(grid.affine, precision=1e-6)
+    if not (same_crs and same_shape and same_transform):
+        raise GridMismatchError(
+            f"{path} is not on the project grid "
+            f"(crs={same_crs}, shape={same_shape}, transform={same_transform})",
+            path=str(path),
+        )
+
+
+#: What an alert raster takes on disk, as a fraction of its uncompressed size
+#: (``grid.estimate_bytes`` / ``download.estimate_native_bytes``). Every
+#: free-space gate asks for a multiple of ``compressed_estimate`` (user decision
+#: 2026-10-01; spec §11 asked for twice the uncompressed size). Our rasters are
+#: Int32, DEFLATE, 512-px tiles, no-data 0 (geedim writes the raw downloads the
+#: same way) and mostly no-data. Measured, overviews included: real GLAD/RADD
+#: alert rasters 0.001-0.005; synthetic 4096-px rasters with 85 % of the pixels
+#: alerted in 16-px patches (one code and date each) 0.016; per-pixel random
+#: codes and dates, which real alerts are not, 0.05 with 5 % of the pixels
+#: alerted and 0.30-0.39 with 85 %. A raster denser than the fraction passes the
+#: gate and can then fail on a full disk: its ``.part`` is deleted, so only the
+#: run time is lost.
+COMPRESSED_FRACTION = 0.05
+
+
+def compressed_estimate(uncompressed_bytes: int) -> int:
+    """The bytes a raster of ``uncompressed_bytes`` is expected to take on disk."""
+    return math.ceil(uncompressed_bytes * COMPRESSED_FRACTION)
+
+
+def _existing(folder: Path) -> Path:
+    """``folder`` or its nearest existing parent (what a disk check can probe)."""
+    probe = Path(folder)
+    while not probe.exists():
+        probe = probe.parent
+    return probe
+
+
+def same_disk(a, b) -> bool:
+    """True when folders ``a`` and ``b`` (or their nearest existing parents)
+    are on one filesystem, so their free space is one budget."""
+    return os.stat(_existing(a)).st_dev == os.stat(_existing(b)).st_dev
+
+
+def ensure_free_space(folder: Path, needed_bytes: int) -> None:
+    """Raise ``NotEnoughSpaceError`` when ``folder``'s disk (or that of its
+    nearest existing parent) has less than ``needed_bytes`` free. Callers pass
+    a multiple of ``compressed_estimate``."""
+    folder = Path(folder)
+    free = shutil.disk_usage(_existing(folder)).free
+    if free < needed_bytes:
+        raise NotEnoughSpaceError(
+            f"needs {math.ceil(needed_bytes / 1e9)} GB free in {folder}, "
+            f"has {free // 10**9} GB",
+            needed_gb=math.ceil(needed_bytes / 1e9),
+            free_gb=free // 10**9,
+            folder=str(folder),
+        )
+
+
+def ensure_overviews(path, resampling: str = "nearest") -> bool:
+    """External ``.ovr`` for a user GeoTIFF we must not modify (spatial_risk
+    ``overviews.ensure_overviews``, nearest by default). Rebuilt when older than
+    the raster. Returns True when a pyramid was built.
+
+    ``gdal.ExceptionMgr()`` scopes GDAL's exception state to this call instead
+    of emitting a "neither UseExceptions() nor DontUseExceptions() called"
+    FutureWarning on every ``gdal.Open`` (ruling #43).
+    """
+    path = str(path)
+    if not Path(path).exists():  # not GDAL's raw RuntimeError (slice-1 Task 5 minor)
+        raise UserFileMissing(f"file not found: {path}", path=path)
+    with _overview_lock(path):  # check-and-build: one writer of the sidecar at a time
+        return _ensure_overviews(path, resampling)
+
+
+def _overview_lock(path: str) -> threading.Lock:
+    key = str(Path(path).resolve())
+    with _OVERVIEW_LOCKS_GUARD:
+        return _OVERVIEW_LOCKS.setdefault(key, threading.Lock())
+
+
+def _ensure_overviews(path: str, resampling: str) -> bool:
+    from osgeo import gdal
+
+    sidecar = Path(path + ".ovr")
+    if sidecar.exists() and sidecar.stat().st_mtime < Path(path).stat().st_mtime:
+        sidecar.unlink()
+    with gdal.ExceptionMgr(useExceptions=True):
+        ds = gdal.Open(path, gdal.GA_ReadOnly)
+        try:
+            if ds.GetRasterBand(1).GetOverviewCount() > 0:
+                return False
+            levels = _overview_levels(ds.RasterXSize, ds.RasterYSize)
+            if not levels:
+                return False
+            ds.BuildOverviews(resampling.upper(), levels, options=["COMPRESS_OVERVIEW=DEFLATE"])
+            return True
+        finally:
+            ds = None

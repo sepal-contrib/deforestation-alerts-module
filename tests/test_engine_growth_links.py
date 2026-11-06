@@ -1,0 +1,103 @@
+"""Integrate's growth links (spec 2026-10-20 §4): the touch mask and the vector-side links."""
+
+from datetime import date
+
+import geopandas as gpd
+from shapely.geometry import box
+
+from deforestation_alerts.engine.growth_links import burn_touch_mask, link_parents
+from deforestation_alerts.project.growth import Candidate, Node
+from deforestation_alerts.project.store_schema import GROWS_FROM_AUTO
+
+from tests._integrate_helpers import GRID
+
+RES = GRID.resolution
+
+
+def _px(row, col, rows=1, cols=1):
+    """A pixel-edged rectangle of the grid, in the grid's CRS."""
+    x0, y0 = GRID.xmin + col * RES, GRID.ymax - row * RES
+    return box(x0, y0 - rows * RES, x0 + cols * RES, y0)
+
+
+def _candidate(shape_grid, set_id="dec", alert_id=0, run_id="r1"):
+    shape = gpd.GeoSeries([shape_grid], crs=GRID.epsg).to_crs(epsg=4326).iloc[0]  # stored as EPSG:4326
+    node = Node(set_id=set_id, alert_id=alert_id, period_id="p", period_start=date(2025, 12, 1),
+                period_end=date(2025, 12, 31), status="Confirmed", area_ha=1.0, date_min=None, date_max=None,
+                shape=shape, links=())
+    return Candidate(node, run_id)
+
+
+def _clusters(shapes, below_min):
+    return gpd.GeoDataFrame({"below_min": below_min, "count": range(len(shapes))}, geometry=shapes, crs=GRID.epsg)
+
+
+def test_link_parents_reaches_one_pixel():
+    parent = _candidate(_px(10, 10, 2, 2))  # rows and columns 10-11
+    vgdf = _clusters(
+        # corner, edge, one empty pixel away, two away, one away diagonally (sqrt 2 pixels)
+        [_px(12, 12), _px(10, 12), _px(10, 13), _px(10, 14), _px(13, 13)],
+        [False] * 5,
+    )
+    out = link_parents(vgdf, [parent], GRID)
+    assert list(out[GROWS_FROM_AUTO]) == [["dec#0@r1"], ["dec#0@r1"], ["dec#0@r1"], [], []]
+
+
+def test_link_parents_links_overlapping_parents():
+    shape = _px(10, 10, 2, 2)
+    cands = [_candidate(shape, "set_b", 3, "rb"), _candidate(shape, "set_a", 1, "ra")]
+    out = link_parents(_clusters([_px(12, 10)], [True]), cands, GRID)
+    assert list(out[GROWS_FROM_AUTO]) == [["set_a#1@ra", "set_b#3@rb"]]
+
+
+def test_link_parents_drops_unlinked_small():
+    parent = _candidate(_px(10, 10))
+    vgdf = _clusters([_px(30, 30, 5, 5), _px(20, 20), _px(11, 11)], [False, True, True])
+    out = link_parents(vgdf, [parent], GRID)
+    assert list(out["count"]) == [0, 2] and list(out.index) == [0, 1]
+    assert list(out[GROWS_FROM_AUTO]) == [[], ["dec#0@r1"]]
+
+
+def test_link_parents_keeps_a_small_cluster_one_pixel_away():
+    parent = _candidate(_px(10, 10))
+    out = link_parents(_clusters([_px(10, 12), _px(10, 13)], [True, True]), [parent], GRID)
+    assert list(out["count"]) == [0] and list(out[GROWS_FROM_AUTO]) == [["dec#0@r1"]]
+
+
+def test_link_parents_without_candidates_keeps_the_big_ones():
+    out = link_parents(_clusters([_px(0, 0, 5, 5), _px(20, 20)], [False, True]), [], GRID)
+    assert list(out["count"]) == [0] and list(out[GROWS_FROM_AUTO]) == [[]]
+
+
+def test_burn_touch_mask_none_without_candidates(tmp_path):
+    assert burn_touch_mask([], GRID, tmp_path / "touch.tif") is None
+    assert not (tmp_path / "touch.tif").exists()
+
+
+def test_burn_touch_mask_covers_two_rings_around_the_parent(tmp_path):
+    import rasterio
+
+    out = burn_touch_mask([_candidate(_px(10, 10, 2, 2))], GRID, tmp_path / "touch.tif")
+    with rasterio.open(out) as src:
+        m = src.read(1)
+        assert str(src.dtypes[0]) == "int32"
+    assert m[8:14, 8:14].all()  # the parent and the two rings a cluster within one pixel can reach
+    assert int(m.sum()) == 36
+
+
+def test_a_later_cluster_links_to_the_main_only(monkeypatch):
+    """Group review (spec 2026-10-26 §7.2): an undrawn group is one candidate,
+    keyed to its main, shaped as the union of its rows."""
+    from dataclasses import replace
+
+    from deforestation_alerts.engine import growth_links
+
+    main = _candidate(_px(10, 10), alert_id=0)
+    member = _candidate(_px(10, 20), alert_id=1)
+    rows = [replace(main, node=replace(main.node, review_group=0)),
+            replace(member, node=replace(member.node, review_group=0))]
+    monkeypatch.setattr(growth_links, "project_rows", lambda p, pdir, period: rows)
+    cands = growth_links.project_candidates(None, None, None)
+    assert [c.link for c in cands] == ["dec#0@r1"]
+    out = link_parents(_clusters([_px(10, 21)], [False]), cands, GRID)  # touches the member only
+    assert list(out[GROWS_FROM_AUTO]) == [["dec#0@r1"]]

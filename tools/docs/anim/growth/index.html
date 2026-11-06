@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=960, height=540" />
+    <title>Growth of earlier loss</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 960px; height: 540px; overflow: hidden; background: #f7f8f6; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #f7f8f6; }
+      #stage { position: absolute; inset: 0; }
+      #stage svg { display: block; width: 960px; height: 540px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="12" data-width="960" data-height="540">
+      <div id="stage"></div>
+    </div>
+    <script>
+      // Growth of earlier loss: period 1's alert is confirmed. In period 2 (no
+      // look-back) the clearing grows at its edge: the new cluster is under the
+      // minimum size but touches the confirmed alert, so it is kept and linked
+      // as a growth alert. A small cluster that touches nothing is set aside.
+      // Colours: app primary green (period, alert outline), alert orange
+      // (gui/scripts/legend_specs.py), "confirmed" status red (legend_specs),
+      // growth purple (gui/tile/analysis/context.py GROWTH_PURPLE), chart greys.
+      const GREEN = "#5bb624", GREEN_INK = "#3f8a14", RULE = "#9aa0a6", INK = "#202124",
+            ORANGE = "#ff9800", DONE = "#8a9096", RED = "#d32f2f", PURPLE = "#7e57c2",
+            CELL_BG = "#ffffff", GRID = "#e3e5e2";
+      const NS = "http://www.w3.org/2000/svg";
+      const el = (tag, attrs, parent) => {
+        const e = document.createElementNS(NS, tag);
+        for (const k in attrs) e.setAttribute(k, attrs[k]);
+        if (parent) parent.appendChild(e);
+        return e;
+      };
+      const svg = el("svg", { viewBox: "0 0 960 540" }, document.getElementById("stage"));
+      const defs = el("defs", {}, svg);
+      const hatch = (id, bg, fg) => {
+        const p = el("pattern", { id, width: 10, height: 10, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+        el("rect", { width: 10, height: 10, fill: bg }, p);
+        el("line", { x1: 0, y1: 0, x2: 0, y2: 10, stroke: fg, "stroke-width": 4 }, p);
+      };
+      hatch("aside", "#f1f2f0", "#b5b9b6"); // pixels set aside: too small
+
+      // ---------------------------------------------------------------- time
+      // the same two periods as the look-back animation, here with no look-back
+      const AXIS_Y = 186, ROW_Y = [62, 128], ROW_H = 40;
+      const P = [{ a: 200, b: 500 }, { a: 500, b: 800 }];
+      el("line", { x1: 120, y1: AXIS_Y, x2: 870, y2: AXIS_Y, stroke: INK, "stroke-width": 3 }, svg);
+      el("path", { d: `M870 ${AXIS_Y - 9}L888 ${AXIS_Y}L870 ${AXIS_Y + 9}Z`, fill: INK }, svg);
+      for (let x = 150; x <= 850; x += 50) el("line", { x1: x, y1: AXIS_Y, x2: x, y2: AXIS_Y + 8, stroke: RULE, "stroke-width": 2 }, svg);
+      P.forEach((p, i) => {
+        const y = ROW_Y[i], g = el("g", { id: `row${i}` }, svg);
+        for (const x of [p.a, p.b]) el("line", { x1: x, y1: y + ROW_H / 2, x2: x, y2: AXIS_Y, stroke: RULE, "stroke-width": 1.5, "stroke-dasharray": "4 6" }, g);
+        el("rect", { x: p.a, y: y - ROW_H / 2, width: p.b - p.a, height: ROW_H, rx: 8, fill: GREEN, "fill-opacity": 0.16, stroke: GREEN, "stroke-width": 3 }, g);
+        el("circle", { cx: 70, cy: y, r: 19, fill: "#ffffff", stroke: GREEN_INK, "stroke-width": 3 }, g);
+        const t = el("text", { x: 70, y: y + 8, "text-anchor": "middle", "font-family": "sans-serif", "font-size": 22, "font-weight": 700, fill: GREEN_INK }, g);
+        t.textContent = String(i + 1);
+      });
+
+      // ---------------------------------------------------------------- map
+      const GX = 150, GY = 244, C = 30, COLS = 14, ROWS = 8;
+      el("rect", { x: GX, y: GY, width: COLS * C, height: ROWS * C, fill: CELL_BG, stroke: RULE, "stroke-width": 1.5 }, svg);
+      for (let i = 1; i < COLS; i++) el("line", { x1: GX + i * C, y1: GY, x2: GX + i * C, y2: GY + ROWS * C, stroke: GRID, "stroke-width": 1 }, svg);
+      for (let j = 1; j < ROWS; j++) el("line", { x1: GX, y1: GY + j * C, x2: GX + COLS * C, y2: GY + j * C, stroke: GRID, "stroke-width": 1 }, svg);
+      // pixels: [col, row, date x on the time axis]
+      const A = [[3, 2, 225], [4, 2, 250], [3, 3, 280], [4, 3, 305], [5, 3, 335], [4, 4, 365], [5, 4, 395], [6, 3, 425], [5, 5, 455]];
+      const G = [[7, 3, 545], [7, 4, 615], [8, 4, 690]];   // period 2, at the edge of A
+      const S = [[11, 6, 580], [12, 6, 660]];              // period 2, touching nothing
+      const gCells = el("g", {}, svg), gTicks = el("g", {}, svg), gLines = el("g", {}, svg);
+      const cell = (name, [c, r, x], k) => {
+        el("rect", { id: `${name}${k}`, class: `px ${name}`, x: GX + c * C + 2, y: GY + r * C + 2, width: C - 4, height: C - 4, rx: 3, fill: ORANGE }, gCells);
+        el("circle", { id: `t${name}${k}`, class: `tick t${name}`, cx: x, cy: AXIS_Y - 14, r: 5, fill: ORANGE }, gTicks);
+      };
+      A.forEach((p, k) => cell("A", p, k));
+      G.forEach((p, k) => cell("G", p, k));
+      S.forEach((p, k) => cell("S", p, k));
+      // the outline of a cluster: the cell edges with no neighbour in the cluster
+      const outline = (id, cells, stroke) => {
+        const has = new Set(cells.map(([c, r]) => `${c},${r}`));
+        let d = "";
+        for (const [c, r] of cells) {
+          const x = GX + c * C, y = GY + r * C;
+          if (!has.has(`${c},${r - 1}`)) d += `M${x} ${y}H${x + C}`;
+          if (!has.has(`${c},${r + 1}`)) d += `M${x} ${y + C}H${x + C}`;
+          if (!has.has(`${c - 1},${r}`)) d += `M${x} ${y}V${y + C}`;
+          if (!has.has(`${c + 1},${r}`)) d += `M${x + C} ${y}V${y + C}`;
+        }
+        return el("path", { id, d, fill: "none", stroke, "stroke-width": 4, "stroke-linecap": "square" }, gLines);
+      };
+      outline("olA", A, GREEN_INK);
+      outline("olG", G, PURPLE);
+      // the edge the growth shares with the confirmed alert: where the link is made
+      const ex = GX + 7 * C, ey = GY + 3 * C;
+      el("path", { id: "edge", d: `M${ex} ${ey}V${ey + C}`, stroke: PURPLE, "stroke-width": 10, "stroke-linecap": "round" }, gLines);
+      // the review: a "confirmed" badge on the earlier alert
+      const badge = el("g", { id: "badge" }, svg);
+      const bx = GX + 3 * C - 4, by = GY + 2 * C - 4;
+      el("circle", { cx: bx, cy: by, r: 17, fill: RED, stroke: "#ffffff", "stroke-width": 3 }, badge);
+      el("path", { d: `M${bx - 8} ${by}l5 6l11 -12`, fill: "none", stroke: "#ffffff", "stroke-width": 4.5, "stroke-linecap": "round", "stroke-linejoin": "round" }, badge);
+      // a link between the two: chain arc from the growth to the earlier alert
+      el("path", { id: "link", d: `M${GX + 8 * C + 15} ${GY + 4 * C + 30}C${GX + 8 * C + 15} ${GY + 7 * C + 10} ${GX + 4 * C + 15} ${GY + 7 * C + 10} ${GX + 4 * C + 15} ${GY + 5 * C + 4}`, fill: "none", stroke: PURPLE, "stroke-width": 3.5, "stroke-dasharray": "7 6", "stroke-linecap": "round" }, gLines);
+      el("path", { id: "linkhead", d: `M${GX + 4 * C + 6} ${GY + 5 * C + 16}L${GX + 4 * C + 15} ${GY + 5 * C + 2}L${GX + 4 * C + 24} ${GY + 5 * C + 16}`, fill: "none", stroke: PURPLE, "stroke-width": 3.5, "stroke-linecap": "round", "stroke-linejoin": "round" }, gLines);
+
+      // ---------------------------------------------------------------- size gauge
+      // the growth cluster's size against the minimum alert size (6 pixels)
+      const GAX = 700, GAW = 46, GAB = GY + ROWS * C, UNIT = 24, MIN = 6;
+      el("rect", { x: GAX, y: GAB - 9 * UNIT, width: GAW, height: 9 * UNIT, rx: 6, fill: "#ffffff", stroke: RULE, "stroke-width": 2 }, svg);
+      el("rect", { id: "gfill", x: GAX + 4, y: GAB, width: GAW - 8, height: 0, rx: 3, fill: ORANGE }, svg);
+      const thr = el("g", { id: "thr" }, svg);
+      el("line", { x1: GAX - 16, y1: GAB - MIN * UNIT, x2: GAX + GAW + 16, y2: GAB - MIN * UNIT, stroke: INK, "stroke-width": 3, "stroke-dasharray": "8 5" }, thr);
+      el("path", { d: `M${GAX - 30} ${GAB - MIN * UNIT - 9}L${GAX - 16} ${GAB - MIN * UNIT}L${GAX - 30} ${GAB - MIN * UNIT + 9}Z`, fill: INK }, thr);
+      // a dotted lead from the growth cluster to its gauge
+      el("path", { id: "lead", d: `M${GX + 9 * C + 6} ${GY + 4 * C + 15}H${GAX - 40}`, stroke: RULE, "stroke-width": 2, "stroke-dasharray": "2 6", "stroke-linecap": "round" }, svg);
+      el("path", { id: "check", d: `M${GAX + 10} ${GAB - 9 * UNIT - 34}l10 10l20 -22`, fill: "none", stroke: PURPLE, "stroke-width": 6, "stroke-linecap": "round", "stroke-linejoin": "round" }, svg);
+      const level = (n) => ({ attr: { y: GAB - 4 - n * UNIT + 4, height: Math.max(0, n * UNIT - 4) } });
+
+      // cursor ("today"), over the time rows only
+      const cur = el("g", { id: "cur" }, svg);
+      el("line", { x1: 0, y1: 30, x2: 0, y2: AXIS_Y, stroke: INK, "stroke-width": 2.5 }, cur);
+      el("path", { d: `M-9 ${AXIS_Y + 20}L0 ${AXIS_Y + 6}L9 ${AXIS_Y + 20}Z`, fill: INK }, cur);
+
+      // ---------------------------------------------------------------- initial state
+      const X0 = 200;
+      gsap.set("#cur", { x: X0, opacity: 1 });
+      gsap.set("#row0, #row1", { opacity: 0.35 });
+      gsap.set(".px, .tick", { opacity: 0, scale: 0, transformOrigin: "50% 50%" });
+      gsap.set("#badge", { opacity: 0, scale: 0, transformOrigin: `${bx}px ${by}px` });
+      gsap.set("#olA, #olG, #edge, #link, #linkhead, #check", { opacity: 0 });
+      gsap.set("#gfill", level(0));
+
+      const tl = gsap.timeline({ paused: true });
+      const V = 125; // cursor speed, px per second
+      const pop = (sel, t) => tl.to(sel, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2.5)" }, t);
+      // period 1: a clearing big enough to be an alert
+      let t = 0.3;
+      tl.to("#row0", { opacity: 1, duration: 0.3 }, t);
+      tl.to("#cur", { x: 500, duration: 300 / V, ease: "none" }, t);
+      A.forEach((p, k) => pop(`#A${k}, #tA${k}`, t + (p[2] - X0) / V));
+      const t1 = t + 300 / V + 0.3;
+      tl.to("#olA", { opacity: 1, duration: 0.4 }, t1);
+      // its review: confirmed
+      tl.to("#olA", { attr: { stroke: RED }, duration: 0.4 }, t1 + 0.7);
+      tl.to("#badge", { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2.5)" }, t1 + 0.7);
+      // period 2 opens with no look-back: period 1's pixels are its footprint,
+      // never reported again; the confirmed alert's shape stays as earlier loss
+      const t2 = t1 + 1.5;
+      tl.to("#row1", { opacity: 1, duration: 0.3 }, t2);
+      tl.to(".A", { attr: { fill: DONE }, opacity: 0.55, duration: 0.5 }, t2);
+      tl.to(".tA", { attr: { fill: DONE }, duration: 0.5 }, t2);
+      // period 2: the clearing grows at its edge; elsewhere, a small new cluster
+      const t3 = t2 + 0.6;
+      tl.to("#cur", { x: 800, duration: 300 / V, ease: "none" }, t3);
+      G.forEach((p, k) => {
+        pop(`#G${k}, #tG${k}`, t3 + (p[2] - 500) / V);
+        tl.to("#gfill", { ...level(k + 1), duration: 0.3 }, t3 + (p[2] - 500) / V);
+      });
+      S.forEach((p, k) => pop(`#S${k}, #tS${k}`, t3 + (p[2] - 500) / V));
+      // period 2's run: both clusters are under the minimum size
+      const t4 = t3 + 300 / V + 0.3;
+      tl.fromTo("#thr", { x: 0 }, { x: 5, duration: 0.07, repeat: 5, yoyo: true, ease: "none" }, t4);
+      // the one that touches nothing is set aside
+      tl.to(".S", { attr: { fill: "url(#aside)" }, duration: 0.01 }, t4 + 0.5);
+      tl.to(".tS", { attr: { fill: DONE }, duration: 0.3 }, t4 + 0.5);
+      // the one that touches the confirmed alert is kept and linked to it
+      const t5 = t4 + 1.0;
+      tl.to("#edge", { opacity: 1, duration: 0.2 }, t5);
+      tl.fromTo("#edge", { scale: 1 }, { scale: 1.25, duration: 0.2, repeat: 3, yoyo: true, transformOrigin: "50% 50%" }, t5);
+      tl.to("#olG", { opacity: 1, duration: 0.4 }, t5 + 0.6);
+      tl.to("#gfill", { attr: { fill: PURPLE }, duration: 0.3 }, t5 + 0.6);
+      tl.to("#check", { opacity: 1, duration: 0.3 }, t5 + 0.6);
+      tl.fromTo("#link", { attr: { "stroke-dashoffset": 60 } }, { attr: { "stroke-dashoffset": 0 }, opacity: 1, duration: 0.6 }, t5 + 0.9);
+      tl.to("#linkhead", { opacity: 1, duration: 0.3 }, t5 + 1.3);
+      // back to the start
+      const R = 11.0;
+      tl.to(".px, .tick", { opacity: 0, scale: 0, duration: 0.4 }, R);
+      tl.to("#olA, #olG, #edge, #link, #linkhead, #check", { opacity: 0, duration: 0.4 }, R);
+      tl.to("#badge", { opacity: 0, scale: 0, duration: 0.4 }, R);
+      tl.to("#gfill", { ...level(0), duration: 0.4 }, R);
+      tl.to("#row0, #row1", { opacity: 0.35, duration: 0.4 }, R);
+      tl.to("#cur", { opacity: 0, duration: 0.3 }, R);
+      tl.set(".px, .tick", { attr: { fill: ORANGE } }, R + 0.45);
+      tl.set("#olA", { attr: { stroke: GREEN_INK } }, R + 0.45);
+      tl.set("#gfill", { attr: { fill: ORANGE } }, R + 0.45);
+      tl.set("#cur", { x: X0 }, R + 0.45);
+      tl.to("#cur", { opacity: 1, duration: 0.3 }, R + 0.6);
+      tl.set({}, {}, 12);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

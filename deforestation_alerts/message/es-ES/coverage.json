@@ -1,0 +1,30 @@
+{
+  "coverage": {
+    "unchecked": "Cobertura sin comprobar",
+    "not_covered": "{source} no cubre esta AOI",
+    "not_covered_glad_l": "GLAD-L no cubre esta AOI: su área es la tierra de sus cuatro mosaicos regionales (Asia, África, América Central y del Sur) entre aproximadamente 35°S y 35°N",
+    "not_covered_radd": "RADD no cubre esta AOI: su área son los trópicos húmedos de África, el Sudeste Asiático y América Central y del Sur",
+    "not_covered_glad_s2": "GLAD-S2 no cubre esta AOI: su área es 90°O–30°O, 20°S–20°N",
+    "no_data_starts": "{source} empieza el {first} aquí",
+    "no_data_until": "{source} tiene datos hasta el {last}",
+    "no_data_gap": "Ninguna colección de {source} cubre {start} → {end}",
+    "no_data_window": "{source} no tiene datos para esta ventana aquí",
+    "partial_share": "cubre el {pct}% de la AOI; el resto no recibe alertas de esta fuente",
+    "partial_starts": "{source} empieza el {first} aquí; las alertas anteriores no se buscan",
+    "partial_until": "tiene datos hasta el {last}; las alertas posteriores llegan con la retrospección del siguiente período",
+    "partial_gap": "Ninguna colección de {source} cubre {start} → {end}; faltan las alertas de ese tramo",
+    "chip_full": "cubre la AOI",
+    "chip_partial": "cubre el {pct}% de la AOI",
+    "chip_none": "no cubre la AOI",
+    "chip_unchecked": "cobertura sin comprobar",
+    "chip_checking": "comprobando…",
+    "radd_note": "RADD solo detecta en bosque húmedo tropical primario; en el resto de su área no reporta alertas.",
+    "dates": "{first} → {last}",
+    "dates_region": "{region}: {first} → {last}",
+    "check_failed": "No se pudo comprobar la cobertura de las fuentes: {error}",
+    "check_again": "Comprobar de nuevo",
+    "not_covered_row": "No cubierta: {reason}",
+    "no_data_row": "Sin datos para este período: {reason}",
+    "unchecked_row": "Cobertura sin comprobar"
+  }
+}

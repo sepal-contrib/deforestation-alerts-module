@@ -1,0 +1,102 @@
+{
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "create": "Crear",
+    "replace": "Reemplazar",
+    "delete": "Eliminar",
+    "close": "Cerrar",
+    "actions": "Acciones",
+    "_test_fmt": "hola {name}",
+    "_test": {
+      "one": "{count} elemento",
+      "many": "{count} de elementos",
+      "other": "{count} elementos"
+    }
+  },
+  "dialog": {
+    "confirm_default_title": "¿Eliminar?",
+    "confirm_default_message": "Esta acción no se puede deshacer.",
+    "confirm_default_label": "Eliminar"
+  },
+  "widgets": {
+    "product_table": {
+      "status_running": "en ejecución",
+      "status_ready": "lista",
+      "status_completed": "completada",
+      "status_failed": "fallida",
+      "status_cancelled": "cancelada",
+      "status_stale": "desactualizada",
+      "status_missing": "falta",
+      "status_no_data": "sin datos",
+      "status_not_covered": "no cubierta",
+      "status_unchecked": "sin comprobar",
+      "action_edit": "Editar",
+      "action_delete": "Eliminar",
+      "action_download": "Descargar",
+      "action_redownload": "Descargar de nuevo",
+      "action_cancel": "Detener",
+      "action_open": "Abrir",
+      "action_dismiss": "Descartar",
+      "action_move_up": "Subir",
+      "action_move_down": "Bajar",
+      "action_show": "Mostrar en el mapa",
+      "action_hide": "Ocultar del mapa",
+      "action_select": "Activar",
+      "action_info": "Detalles",
+      "action_refresh": "Descargar de nuevo",
+      "action_menu": "Más acciones"
+    }
+  },
+  "workflow": {
+    "lock_alerts": "Añade primero un período.",
+    "lock_project": "Abra un proyecto primero.",
+    "lock_review": "Crea primero un conjunto de alertas.",
+    "lock_period": "Elige primero el área de interés.",
+    "lock_harmonize": "Descarga primero una fuente.",
+    "lock_integrate": "Descarga y armoniza primero al menos una fuente.",
+    "count_sources": {
+      "one": "{count} fuente",
+      "many": "{count} de fuentes",
+      "other": "{count} fuentes"
+    },
+    "count_layers": {
+      "one": "{count} capa",
+      "many": "{count} de capas",
+      "other": "{count} capas"
+    },
+    "count_questions": {
+      "one": "{count} pregunta",
+      "many": "{count} de preguntas",
+      "other": "{count} preguntas"
+    },
+    "count_periods": {
+      "one": "{count} período",
+      "many": "{count} de períodos",
+      "other": "{count} períodos"
+    },
+    "count_ready": {
+      "one": "{count} lista",
+      "many": "{count} listas",
+      "other": "{count} listas"
+    },
+    "count_clusters": {
+      "one": "{count} grupo",
+      "many": "{count} de grupos",
+      "other": "{count} grupos"
+    },
+    "step_badge": "{n} / {total}",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "count_empty": "nada todavía",
+    "count_optional": "opcional",
+    "level_prepare": "Preparar alertas",
+    "level_review": "Preparar la revisión",
+    "start_analysis": "Iniciar análisis",
+    "count_evaluators": {
+      "one": "{count} evaluador",
+      "many": "{count} de evaluadores",
+      "other": "{count} evaluadores"
+    }
+  }
+}

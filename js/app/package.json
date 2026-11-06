@@ -1,0 +1,17 @@
+{
+  "name": "defo-alerts-multiview-bundle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The defo-alerts app bundle (gui/widget/static/multiview.{js,css}): leaflet-multiview's anywidget adapter, the registered plugins and the app plugins, with Leaflet and Geoman behind the page-L shim.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@geoman-io/leaflet-geoman-free": "2.20.2",
+    "leaflet": "1.9.4"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
