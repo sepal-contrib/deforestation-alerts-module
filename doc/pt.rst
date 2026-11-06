@@ -1558,6 +1558,10 @@ A linha **Modelo do relatório** indica o modelo em uso, com uma etiqueta: **pad
         -   As fontes que detectaram o alerta.
     *   -   ``{area_loss}``
         -   A área do alerta, em hectares (a do grupo, para um grupo).
+    *   -   ``{centroid}``
+        -   O centro do alerta (do contorno do grupo, para um grupo) como latitude, longitude em graus decimais ("-12.345678, -69.123456").
+    *   -   ``{centroid_lat}``, ``{centroid_lon}``
+        -   A mesma latitude e longitude, cada uma separada ("-12.345678", "-69.123456").
     *   -   ``{group_size}``, ``{group_alerts}``
         -   Para um alerta revisado num grupo: o número de alertas do grupo e os números deles ("12, 15, 16"). Nos outros casos, "1" e o número do próprio alerta.
     *   -   ``{verdict}`` (verde)

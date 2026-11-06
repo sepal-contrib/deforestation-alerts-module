@@ -1554,6 +1554,10 @@ La línea **Plantilla del informe** indica la plantilla en uso, con una etiqueta
         -   Las fuentes que detectaron la alerta.
     *   -   ``{area_loss}``
         -   La superficie de la alerta, en hectáreas (la del grupo, para un grupo).
+    *   -   ``{centroid}``
+        -   El centro de la alerta (del contorno del grupo, para un grupo) como latitud, longitud en grados decimales ("-12.345678, -69.123456").
+    *   -   ``{centroid_lat}``, ``{centroid_lon}``
+        -   La misma latitud y longitud, cada una por separado ("-12.345678", "-69.123456").
     *   -   ``{group_size}``, ``{group_alerts}``
         -   Para una alerta revisada en un grupo: el número de alertas del grupo y sus números ("12, 15, 16"). En los demás casos, "1" y el número de la propia alerta.
     *   -   ``{verdict}`` (verde)

@@ -1572,7 +1572,7 @@ The report template
 
 In Analysis, each reviewed alert can be exported with a Word report (see `Export <defo-export_>`_). The report is built from a .docx template, where *placeholders* such as ``{area_loss}`` are replaced by the alert's values.
 
-.. shot: questionnaire-template | The Report template card expanded: "Report template · Default template" with its "default" chip, the "Report template (.docx)" file picker and its hint, and the placeholder chips under "Placeholders the template can use (click to copy):", the grey ones (ending with {group_size} and {group_alerts}) then the green {verdict}, {loss_driver} and the added question's key, with the note under them. Crop to the card.
+.. shot: questionnaire-template | The Report template card expanded: "Report template · Default template" with its "default" chip, the "Report template (.docx)" file picker and its hint, and the placeholder chips under "Placeholders the template can use (click to copy):", the grey ones (ending with {group_alerts}, {centroid}, {centroid_lat} and {centroid_lon}) then the green {verdict}, {loss_driver} and the added question's key, with the note under them. Crop to the card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/questionnaire-template.png
     :alt: The report template and its placeholders
@@ -1600,6 +1600,10 @@ The **Report template** line names the template in use, with a chip: **default**
         -   The sources that detected the alert.
     *   -   ``{area_loss}``
         -   The alert's area, in hectares (the group's, for a group).
+    *   -   ``{centroid}``
+        -   The centre of the alert (of the group's outline, for a group) as latitude, longitude in decimal degrees ("-12.345678, -69.123456").
+    *   -   ``{centroid_lat}``, ``{centroid_lon}``
+        -   The same latitude and longitude, each on its own ("-12.345678", "-69.123456").
     *   -   ``{group_size}``, ``{group_alerts}``
         -   For an alert reviewed in a group: the number of alerts in the group and their numbers ("12, 15, 16"). Otherwise "1" and the alert's own number.
     *   -   ``{verdict}`` (green)

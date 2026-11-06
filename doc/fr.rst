@@ -1556,6 +1556,10 @@ La ligne **Modèle de rapport** nomme le modèle utilisé, avec une pastille : *
         -   Les sources qui ont détecté l'alerte.
     *   -   ``{area_loss}``
         -   La superficie de l'alerte, en hectares (celle du groupe, pour un groupe).
+    *   -   ``{centroid}``
+        -   Le centre de l'alerte (du contour du groupe, pour un groupe) en latitude, longitude, en degrés décimaux (« -12.345678, -69.123456 »).
+    *   -   ``{centroid_lat}``, ``{centroid_lon}``
+        -   La même latitude et la même longitude, chacune seule (« -12.345678 », « -69.123456 »).
     *   -   ``{group_size}``, ``{group_alerts}``
         -   Pour une alerte examinée en groupe : le nombre d'alertes du groupe et leurs numéros (« 12, 15, 16 »). Sinon « 1 » et le numéro de l'alerte elle-même.
     *   -   ``{verdict}`` (en vert)

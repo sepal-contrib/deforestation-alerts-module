@@ -134,7 +134,18 @@ def row_attributes(gdf_row) -> dict:
         "area_loss": "{:.2f}".format(gdf_row["area_ha"]),
         "group_size": str(int(gdf_row["group_size"])) if _present(gdf_row, "group_size") else "1",
         "group_alerts": str(gdf_row["group_alerts"]) if _present(gdf_row, "group_alerts") else "",
+        **_centroid(gdf_row.get("geometry")),
     }
+
+
+def _centroid(geom) -> dict:
+    """``centroid`` ("lat, lon"), ``centroid_lat`` and ``centroid_lon`` of the
+    geometry's centroid, 6 decimals (~0.1 m); empty without a geometry. The
+    alert file is EPSG:4326; a planar centroid in degrees is exact enough at alert size."""
+    if geom is None or geom.is_empty:
+        return {"centroid": "", "centroid_lat": "", "centroid_lon": ""}
+    lat, lon = f"{geom.centroid.y:.6f}", f"{geom.centroid.x:.6f}"
+    return {"centroid": f"{lat}, {lon}", "centroid_lat": lat, "centroid_lon": lon}
 
 
 def _fill_placeholders(doc, attributes: dict):
