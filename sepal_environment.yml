@@ -65,6 +65,7 @@ dependencies:
       - matplotlib-scalebar==0.9.0
       - MightyMosaic==1.2.3
       - python-docx==1.2.0
+      - segno==1.6.6   # the report's centroid QR code (scripts/report_builder.py)
       - pygaul==0.4.2
       # pysepal 4.x resolves the credential source from runtime topology, so
       # Voila/Jupyter get a PROCESS session without the old fork's

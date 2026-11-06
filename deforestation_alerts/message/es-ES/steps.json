@@ -767,7 +767,7 @@
       "expanded_hint": "Desactivado, la sección Preguntas empieza contraída; igual se abre cuando un veredicto necesita una respuesta obligatoria.",
       "template_title": "Plantilla del informe",
       "placeholders_label": "Marcadores que puede usar la plantilla (clic para copiar):",
-      "placeholders_review": "Los verdes vienen de la revisión. Se reemplazan en los párrafos del documento, no dentro de tablas, encabezados ni pies de página.",
+      "placeholders_review": "Los verdes vienen de la revisión. Se reemplazan en los párrafos y las tablas del documento, no en encabezados ni pies de página.",
       "copied": "{placeholder} copiado",
       "template_default": "Plantilla predeterminada",
       "template_chip_default": "predeterminada",

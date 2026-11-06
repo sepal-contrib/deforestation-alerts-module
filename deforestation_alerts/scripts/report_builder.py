@@ -148,14 +148,68 @@ def _centroid(geom) -> dict:
     return {"centroid": f"{lat}, {lon}", "centroid_lat": lat, "centroid_lon": lon}
 
 
+def _paragraphs(doc):
+    """The body paragraphs, then those of every table cell (nested tables
+    too). Headers and footers are left as they are."""
+    def walk(tables):
+        for table in tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    yield from cell.paragraphs
+                    yield from walk(cell.tables)
+
+    yield from doc.paragraphs
+    yield from walk(doc.tables)
+
+
 def _fill_placeholders(doc, attributes: dict):
-    """Replace every ``{key}`` in the body paragraphs (not tables, headers or
-    footers: spec D3 says so in the UI). Returns ``doc``."""
-    for para in doc.paragraphs:
+    """Replace every ``{key}`` in the body paragraphs and table cells (not
+    headers or footers). Returns ``doc``."""
+    for para in _paragraphs(doc):
         for key, value in attributes.items():
             if f"{{{key}}}" in para.text:
                 para.text = para.text.replace(f"{{{key}}}", str(value))
     return doc
+
+
+#: The widest a figure is drawn, and the QR code; narrower in a smaller table cell.
+IMAGE_WIDTH = Pt(250)
+QR_WIDTH = Pt(80)
+#: What a cell's own left + right margins take (Word's default is 2 x 5.4 pt).
+_CELL_PADDING = Pt(14)
+QR_MARKER = "[Placeholder for Centroid QR]"
+
+
+def _place_picture(para, path, widest):
+    """Replace the marker paragraph's text with the picture at ``path``,
+    ``widest`` wide or the width of its table cell when that is narrower."""
+    cell_width = getattr(para._parent, "width", None)  # a _Cell has one, the body does not
+    width = min(widest, cell_width - _CELL_PADDING) if cell_width else widest
+    para.text = ""
+    para.add_run().add_picture(str(path), width=width)
+
+
+def maps_url(lat, lon) -> str:
+    return f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+
+
+def _place_qr(doc, attributes, folder_temp):
+    """Draw the centroid's Google Maps QR code where the template has
+    ``QR_MARKER``; without a centroid the marker is just cleared."""
+    markers = [p for p in _paragraphs(doc) if QR_MARKER in p.text]
+    if not markers:
+        return
+    if not attributes.get("centroid_lat"):
+        for para in markers:
+            para.text = para.text.replace(QR_MARKER, "")
+        return
+    import segno
+
+    png = Path(folder_temp) / "centroid_qr.png"
+    segno.make(maps_url(attributes["centroid_lat"], attributes["centroid_lon"]), error="m").save(
+        str(png), scale=10, border=2)
+    for para in markers:
+        _place_picture(para, png, QR_WIDTH)
 
 
 def generate_deforestation_report_with_word_template(
@@ -191,106 +245,35 @@ def generate_deforestation_report_with_word_template(
 
     with local_files.scratch_dir() as folder_temp:
         local_doc = folder_temp / "report.docx"
+        _place_qr(doc, attributes, folder_temp)
         _render_report(doc, geodataframe, image_path, folder_temp, local_doc)
         local_files.copy_into(local_doc, output_path)
     return str(output_path)
 
 
+#: Marker number -> (bands, outline drawn): the composite is the before
+#: image's B, G, R, NIR then the after image's.
+_FIGURES = {
+    1: ((4, 3, 2), False),  # before, false colour
+    2: ((8, 7, 6), False),  # after, false colour
+    3: ((8, 7, 6), True),   # after, false colour, alert outline
+    4: ((3, 2, 1), False),  # before, true colour
+    5: ((7, 6, 5), False),  # after, true colour
+    6: ((7, 6, 5), True),   # after, true colour, alert outline
+}
+
+
 def _render_report(doc, geodataframe, image_path, folder_temp, local_doc):
     """Plot the six figures into ``folder_temp``, place them in ``doc`` and
     save it as ``local_doc``."""
-    folder_temp = str(folder_temp)
-
-    # Process Image 1
-    img1_path_jpg = folder_temp + "/output_image1.jpg"
-    plot_tiff_with_overlay(
-        image_path,
-        Path(img1_path_jpg),
-        bands=(4, 3, 2),
-        vector_overlay=None,
-        overlay_color="red",
-    )
-
-    # Process Image 2
-    img2_path_jpg = folder_temp + "/output_image2.jpg"
-    plot_tiff_with_overlay(
-        image_path,
-        Path(img2_path_jpg),
-        bands=(8, 7, 6),
-        vector_overlay=None,
-        overlay_color="red",
-    )
-
-    # Process Image 3
-    img3_path_jpg = folder_temp + "/output_image3.jpg"
-    plot_tiff_with_overlay(
-        image_path,
-        Path(img3_path_jpg),
-        bands=(8, 7, 6),
-        vector_overlay=geodataframe,
-        overlay_color="red",
-    )
-
-    # Process Image 4
-    img4_path_jpg = folder_temp + "/output_image4.jpg"
-    plot_tiff_with_overlay(
-        image_path,
-        Path(img4_path_jpg),
-        bands=(3, 2, 1),
-        vector_overlay=None,
-        overlay_color="red",
-    )
-
-    # Process Image 2
-    img5_path_jpg = folder_temp + "/output_image5.jpg"
-    plot_tiff_with_overlay(
-        image_path,
-        Path(img5_path_jpg),
-        bands=(7, 6, 5),
-        vector_overlay=None,
-        overlay_color="red",
-    )
-
-    # Process Image 2
-    img6_path_jpg = folder_temp + "/output_image6.jpg"
-    plot_tiff_with_overlay(
-        image_path,
-        Path(img6_path_jpg),
-        bands=(7, 6, 5),
-        vector_overlay=geodataframe,
-        overlay_color="red",
-    )
-
-    # Insert images in place of placeholders
-    for para in doc.paragraphs:
-        if "[Placeholder for Image 1]" in para.text:
-            para.text = ""  # Clear placeholder text
-            run = para.add_run()
-            run.add_picture(img1_path_jpg, width=Pt(250))
-
-        elif "[Placeholder for Image 2]" in para.text:
-            para.text = ""  # Clear placeholder text
-            run = para.add_run()
-            run.add_picture(img2_path_jpg, width=Pt(250))
-
-        elif "[Placeholder for Image 3]" in para.text:
-            para.text = ""  # Clear placeholder text
-            run = para.add_run()
-            run.add_picture(img3_path_jpg, width=Pt(250))
-
-        if "[Placeholder for Image 4]" in para.text:
-            para.text = ""  # Clear placeholder text
-            run = para.add_run()
-            run.add_picture(img4_path_jpg, width=Pt(250))
-
-        elif "[Placeholder for Image 5]" in para.text:
-            para.text = ""  # Clear placeholder text
-            run = para.add_run()
-            run.add_picture(img5_path_jpg, width=Pt(250))
-
-        elif "[Placeholder for Image 6]" in para.text:
-            para.text = ""  # Clear placeholder text
-            run = para.add_run()
-            run.add_picture(img6_path_jpg, width=Pt(250))
-
+    jpgs = {}
+    for n, (bands, outline) in _FIGURES.items():
+        jpgs[n] = Path(folder_temp) / f"output_image{n}.jpg"
+        plot_tiff_with_overlay(image_path, jpgs[n], bands=bands,
+                               vector_overlay=geodataframe if outline else None, overlay_color="red")
+    for para in _paragraphs(doc):
+        for n, jpg in jpgs.items():
+            if f"[Placeholder for Image {n}]" in para.text:
+                _place_picture(para, jpg, IMAGE_WIDTH)
+                break
     doc.save(str(local_doc))

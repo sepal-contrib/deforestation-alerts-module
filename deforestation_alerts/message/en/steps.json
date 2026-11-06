@@ -732,7 +732,7 @@
       "expanded_hint": "Off, the Questions section starts collapsed; it still opens when a verdict needs a required answer.",
       "template_title": "Report template",
       "placeholders_label": "Placeholders the template can use (click to copy):",
-      "placeholders_review": "Green ones come from the review. They are replaced in the document's paragraphs, not inside tables, headers or footers.",
+      "placeholders_review": "Green ones come from the review. They are replaced in the document's paragraphs and tables, not in headers or footers.",
       "copied": "Copied {placeholder}",
       "template_default": "Default template",
       "template_chip_default": "default",

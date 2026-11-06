@@ -1565,12 +1565,12 @@ La línea **Plantilla del informe** indica la plantilla en uso, con una etiqueta
     *   -   Uno por pregunta (verde)
         -   La respuesta a esa pregunta; vacío cuando la pregunta no se hace para el veredicto de la alerta.
 
-Los marcadores verdes provienen de la revisión. Los marcadores se sustituyen en los párrafos del documento, no dentro de tablas, encabezados ni pies de página.
+Los marcadores verdes provienen de la revisión. Los marcadores se sustituyen en los párrafos y las tablas del documento, no en encabezados ni pies de página.
 
 Imágenes en el informe
 """"""""""""""""""""""
 
-El informe también contiene seis imágenes de la alerta, recortadas de las imágenes de antes y después elegidas en la revisión. No están en la lista de etiquetas: la plantilla indica dónde va cada una con un párrafo que solo contiene su marca, de ``[Placeholder for Image 1]`` a ``[Placeholder for Image 6]``. Ese párrafo entero se sustituye por la imagen (de 250 pt de ancho), así que no pongas nada más en él.
+El informe también contiene seis imágenes de la alerta, recortadas de las imágenes de antes y después elegidas en la revisión. No están en la lista de etiquetas: la plantilla indica dónde va cada una con un párrafo que solo contiene su marca, de ``[Placeholder for Image 1]`` a ``[Placeholder for Image 6]``. Ese párrafo entero se sustituye por la imagen (de 250 pt de ancho, o menos para caber en su celda de tabla), así que no pongas nada más en él.
 
 .. list-table::
     :header-rows: 1
@@ -1584,12 +1584,14 @@ El informe también contiene seis imágenes de la alerta, recortadas de las imá
         -   La imagen de después.
     *   -   ``[Placeholder for Image 3]``, ``[Placeholder for Image 6]``
         -   La imagen de después con el contorno de la alerta en rojo.
+    *   -   ``[Placeholder for Centroid QR]``
+        -   Un código QR que abre el centroide de la alerta en Google Maps (de 80 pt de ancho, o menos para caber en su celda de tabla). Sin centroide, la marca se elimina.
 
-Las imágenes 1 a 3 muestran las imágenes en una combinación de bandas, y las imágenes 4 a 6 en otra. La plantilla predeterminada las coloca bajo sus leyendas, en inglés ("Image 1: Pre-deforestation …", "Image 2: Post-deforestation …" e "Image 3: Deforestation alert generated."), dos imágenes por leyenda. Una plantilla sin estas marcas genera un informe sin imágenes.
+Las imágenes 1 a 3 están en falso color (infrarrojo cercano, rojo, verde) y las imágenes 4 a 6 en color verdadero (rojo, verde, azul). Conservan la resolución de la más fina de las dos imágenes (Sentinel-2 10 m, Landsat 15 m, Planet 4,77 m). La plantilla predeterminada las organiza en una cuadrícula de tres columnas (antes, después, después con el contorno) y dos filas (color verdadero, falso color), y coloca el código QR junto a los detalles de la alerta. Una plantilla sin estas marcas genera un informe sin imágenes.
 
 .. tip::
 
-    Para crear una plantilla propia, organízala como la predeterminada: el texto con los marcadores de arriba y, después, cada leyenda seguida de sus marcas de imagen, cada marca sola en su párrafo.
+    Para crear una plantilla propia, parte de una copia de la predeterminada. Deja cada marca sola en su párrafo; en una celda de tabla, una leyenda puede seguirla en su propio párrafo.
 
 La plantilla puede mostrar dos mensajes:
 

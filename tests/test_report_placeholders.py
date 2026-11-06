@@ -55,3 +55,42 @@ def test_row_attributes_give_the_centroid_as_lat_lon():
     out = report_builder.row_attributes(pd.Series({**base, "geometry": box(-69.2, -12.4, -69.0, -12.2)}))
     assert (out["centroid"], out["centroid_lat"], out["centroid_lon"]) == (
         "-12.300000, -69.100000", "-12.300000", "-69.100000")
+
+
+def test_the_builder_fills_table_cells_and_places_the_qr_code(tmp_path):
+    """Placeholders and markers inside a table cell are replaced too; the QR
+    code is no wider than its cell."""
+    from docx.shared import Inches, Pt
+    doc = Document()
+    table = doc.add_table(rows=1, cols=2)
+    table.cell(0, 0).paragraphs[0].text = "Lat {centroid_lat}"
+    qr_cell = table.cell(0, 1)
+    qr_cell.width = Inches(0.8)
+    qr_cell.paragraphs[0].text = report_builder.QR_MARKER
+    attrs = {"centroid_lat": "-12.300000", "centroid_lon": "-69.100000"}
+    report_builder._fill_placeholders(doc, attrs)
+    report_builder._place_qr(doc, attrs, tmp_path)
+    assert table.cell(0, 0).paragraphs[0].text == "Lat -12.300000"
+    shapes = doc.inline_shapes
+    assert len(shapes) == 1 and shapes[0].width <= Inches(0.8) - Pt(14)
+    assert report_builder.maps_url("-12.3", "-69.1") == "https://www.google.com/maps/search/?api=1&query=-12.3,-69.1"
+
+
+def test_without_a_centroid_the_qr_marker_is_cleared(tmp_path):
+    doc = Document()
+    doc.add_paragraph(report_builder.QR_MARKER)
+    report_builder._place_qr(doc, {"centroid_lat": "", "centroid_lon": ""}, tmp_path)
+    assert doc.paragraphs[0].text == "" and not doc.inline_shapes
+
+
+def test_the_default_template_uses_only_placeholders_the_builder_fills():
+    """Every ``{name}`` in the packaged template is a built-in placeholder or
+    ``{verdict}``: a question placeholder would stay literal in a project
+    that deleted that question."""
+    import re
+    from pathlib import Path
+    doc = Document(Path(report_builder.__file__).parents[2] / "data" / "report_template.docx")
+    text = " ".join(p.text for p in report_builder._paragraphs(doc))
+    assert set(re.findall(r"\{(\w+)\}", text)) <= {*REPORT_PLACEHOLDERS, "verdict"}
+    assert report_builder.QR_MARKER in text
+    assert all(f"[Placeholder for Image {n}]" in text for n in range(1, 7))

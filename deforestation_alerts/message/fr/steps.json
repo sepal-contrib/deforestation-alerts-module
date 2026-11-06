@@ -767,7 +767,7 @@
       "expanded_hint": "Désactivé, la section Questions démarre repliée ; elle s'ouvre quand même lorsqu'un verdict exige une réponse obligatoire.",
       "template_title": "Modèle de rapport",
       "placeholders_label": "Balises utilisables dans le modèle (cliquer pour copier) :",
-      "placeholders_review": "Les vertes viennent de la revue. Elles sont remplacées dans les paragraphes du document, pas dans les tableaux, en-têtes ou pieds de page.",
+      "placeholders_review": "Les vertes viennent de la revue. Elles sont remplacées dans les paragraphes et les tableaux du document, pas dans les en-têtes ou pieds de page.",
       "copied": "{placeholder} copié",
       "template_default": "Modèle par défaut",
       "template_chip_default": "par défaut",

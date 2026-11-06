@@ -1611,12 +1611,12 @@ The **Report template** line names the template in use, with a chip: **default**
     *   -   One per question (green)
         -   The answer to that question; empty when the question is not asked for the alert's verdict.
 
-The green placeholders come from the review. Placeholders are replaced in the document's paragraphs, not inside tables, headers or footers.
+The green placeholders come from the review. Placeholders are replaced in the document's paragraphs and tables, not in headers or footers.
 
 Images in the report
 """"""""""""""""""""
 
-The report also holds six pictures of the alert, cut from the before and after images chosen in the review. They are not in the chip list: the template marks where each one goes with a paragraph holding only its marker, from ``[Placeholder for Image 1]`` to ``[Placeholder for Image 6]``. That whole paragraph is replaced by the picture (250 pt wide), so put nothing else in it.
+The report also holds six pictures of the alert, cut from the before and after images chosen in the review. They are not in the chip list: the template marks where each one goes with a paragraph holding only its marker, from ``[Placeholder for Image 1]`` to ``[Placeholder for Image 6]``. That whole paragraph is replaced by the picture (250 pt wide, or narrower to fit its table cell), so put nothing else in it.
 
 .. list-table::
     :header-rows: 1
@@ -1630,12 +1630,14 @@ The report also holds six pictures of the alert, cut from the before and after i
         -   The after image.
     *   -   ``[Placeholder for Image 3]``, ``[Placeholder for Image 6]``
         -   The after image with the alert's outline in red.
+    *   -   ``[Placeholder for Centroid QR]``
+        -   A QR code that opens the alert's centroid in Google Maps (80 pt wide, or narrower to fit its table cell). Without a centroid, the marker is removed.
 
-Images 1–3 show the images in one band combination, and images 4–6 in another. The default template places them under its captions ("Image 1: Pre-deforestation …", "Image 2: Post-deforestation …" and "Image 3: Deforestation alert generated."), two pictures per caption. A template without these markers gets a report with no pictures.
+Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. A template without these markers gets a report with no pictures.
 
 .. tip::
 
-    To make a custom template, lay it out like the default one: the text with the placeholders above, then each caption followed by its image markers, every marker alone in its paragraph.
+    To make a custom template, start from a copy of the default one. Keep every marker alone in its paragraph; in a table cell, a caption can follow it in a paragraph of its own.
 
 The template can show two messages:
 

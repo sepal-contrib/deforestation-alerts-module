@@ -1567,12 +1567,12 @@ La ligne **Modèle de rapport** nomme le modèle utilisé, avec une pastille : *
     *   -   Une par question (en vert)
         -   La réponse à cette question ; vide quand la question n'est pas posée pour le verdict de l'alerte.
 
-Les balises vertes proviennent de l'examen. Les balises sont remplacées dans les paragraphes du document, pas dans les tableaux, les en-têtes ni les pieds de page.
+Les balises vertes proviennent de l'examen. Les balises sont remplacées dans les paragraphes et les tableaux du document, pas dans les en-têtes ni les pieds de page.
 
 Images dans le rapport
 """"""""""""""""""""""
 
-Le rapport contient aussi six vues de l'alerte, découpées dans les images d'avant et d'après choisies pendant l'examen. Elles ne figurent pas dans la liste des pastilles : le modèle indique l'emplacement de chacune par un paragraphe qui ne contient que son marqueur, de ``[Placeholder for Image 1]`` à ``[Placeholder for Image 6]``. Ce paragraphe est remplacé en entier par l'image (250 pt de large) : n'y mettez donc rien d'autre.
+Le rapport contient aussi six vues de l'alerte, découpées dans les images d'avant et d'après choisies pendant l'examen. Elles ne figurent pas dans la liste des pastilles : le modèle indique l'emplacement de chacune par un paragraphe qui ne contient que son marqueur, de ``[Placeholder for Image 1]`` à ``[Placeholder for Image 6]``. Ce paragraphe est remplacé en entier par l'image (250 pt de large, ou moins pour tenir dans sa cellule de tableau) : n'y mettez donc rien d'autre.
 
 .. list-table::
     :header-rows: 1
@@ -1586,12 +1586,14 @@ Le rapport contient aussi six vues de l'alerte, découpées dans les images d'av
         -   L'image d'après.
     *   -   ``[Placeholder for Image 3]``, ``[Placeholder for Image 6]``
         -   L'image d'après avec le contour de l'alerte en rouge.
+    *   -   ``[Placeholder for Centroid QR]``
+        -   Un code QR qui ouvre le centroïde de l'alerte dans Google Maps (80 pt de large, ou moins pour tenir dans sa cellule de tableau). Sans centroïde, le marqueur est supprimé.
 
-Les images 1 à 3 montrent les images dans une combinaison de bandes, et les images 4 à 6 dans une autre. Le modèle par défaut les place sous ses légendes, en anglais (« Image 1: Pre-deforestation … », « Image 2: Post-deforestation … » et « Image 3: Deforestation alert generated. »), deux images par légende. Un modèle sans ces marqueurs donne un rapport sans images.
+Les images 1 à 3 sont en fausses couleurs (proche infrarouge, rouge, vert) et les images 4 à 6 en couleurs naturelles (rouge, vert, bleu). Elles gardent la résolution de la plus fine des deux images (Sentinel-2 10 m, Landsat 15 m, Planet 4,77 m). Le modèle par défaut les dispose en une grille de trois colonnes (avant, après, après avec le contour) et deux lignes (couleurs naturelles, fausses couleurs), et place le code QR à côté des détails de l'alerte. Un modèle sans ces marqueurs donne un rapport sans images.
 
 .. tip::
 
-    Pour créer un modèle personnalisé, organisez-le comme le modèle par défaut : le texte avec les balises ci-dessus, puis chaque légende suivie de ses marqueurs d'image, chaque marqueur seul dans son paragraphe.
+    Pour créer un modèle personnalisé, partez d'une copie du modèle par défaut. Laissez chaque marqueur seul dans son paragraphe ; dans une cellule de tableau, une légende peut le suivre dans son propre paragraphe.
 
 Le modèle peut afficher deux messages :
 

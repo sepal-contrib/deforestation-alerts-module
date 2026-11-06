@@ -1569,12 +1569,12 @@ A linha **Modelo do relatório** indica o modelo em uso, com uma etiqueta: **pad
     *   -   Um por pergunta (verde)
         -   A resposta a essa pergunta; vazio quando a pergunta não é feita para o veredito do alerta.
 
-Os marcadores verdes vêm da revisão. Os marcadores são substituídos nos parágrafos do documento, não dentro de tabelas, cabeçalhos ou rodapés.
+Os marcadores verdes vêm da revisão. Os marcadores são substituídos nos parágrafos e nas tabelas do documento, não em cabeçalhos ou rodapés.
 
 Imagens no relatório
 """"""""""""""""""""
 
-O relatório também traz seis figuras do alerta, recortadas das imagens de antes e depois escolhidas na revisão. Elas não estão na lista de etiquetas: o modelo indica onde vai cada uma com um parágrafo que contém apenas o seu indicador, de ``[Placeholder for Image 1]`` a ``[Placeholder for Image 6]``. Esse parágrafo inteiro é substituído pela figura (com 250 pt de largura), então não coloque mais nada nele.
+O relatório também traz seis figuras do alerta, recortadas das imagens de antes e depois escolhidas na revisão. Elas não estão na lista de etiquetas: o modelo indica onde vai cada uma com um parágrafo que contém apenas o seu indicador, de ``[Placeholder for Image 1]`` a ``[Placeholder for Image 6]``. Esse parágrafo inteiro é substituído pela figura (com 250 pt de largura, ou menos para caber na sua célula de tabela), então não coloque mais nada nele.
 
 .. list-table::
     :header-rows: 1
@@ -1588,12 +1588,14 @@ O relatório também traz seis figuras do alerta, recortadas das imagens de ante
         -   A imagem de depois.
     *   -   ``[Placeholder for Image 3]``, ``[Placeholder for Image 6]``
         -   A imagem de depois com o contorno do alerta em vermelho.
+    *   -   ``[Placeholder for Centroid QR]``
+        -   Um código QR que abre o centroide do alerta no Google Maps (com 80 pt de largura, ou menos para caber na sua célula de tabela). Sem centroide, o indicador é removido.
 
-As imagens 1–3 mostram as imagens numa combinação de bandas, e as imagens 4–6, em outra. O modelo padrão as coloca sob as suas legendas, em inglês ("Image 1: Pre-deforestation …", "Image 2: Post-deforestation …" e "Image 3: Deforestation alert generated."), duas figuras por legenda. Um modelo sem esses indicadores gera um relatório sem figuras.
+As imagens 1–3 estão em falsa cor (infravermelho próximo, vermelho, verde) e as imagens 4–6 em cor verdadeira (vermelho, verde, azul). Elas mantêm a resolução da mais fina das duas imagens (Sentinel-2 10 m, Landsat 15 m, Planet 4,77 m). O modelo padrão as organiza numa grade de três colunas (antes, depois, depois com o contorno) e duas linhas (cor verdadeira, falsa cor), e coloca o código QR ao lado dos detalhes do alerta. Um modelo sem esses indicadores gera um relatório sem figuras.
 
 .. tip::
 
-    Para criar um modelo personalizado, organize-o como o padrão: o texto com os marcadores acima e, depois, cada legenda seguida dos indicadores das suas imagens, cada indicador sozinho no seu parágrafo.
+    Para criar um modelo personalizado, parta de uma cópia do padrão. Deixe cada indicador sozinho no seu parágrafo; numa célula de tabela, uma legenda pode segui-lo no seu próprio parágrafo.
 
 O modelo pode mostrar duas mensagens:
 

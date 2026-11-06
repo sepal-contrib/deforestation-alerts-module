@@ -767,7 +767,7 @@
       "expanded_hint": "Desligado, a seção Perguntas começa recolhida; ela ainda se abre quando um veredito exige uma resposta obrigatória.",
       "template_title": "Modelo do relatório",
       "placeholders_label": "Marcadores que o modelo pode usar (clique para copiar):",
-      "placeholders_review": "Os verdes vêm da revisão. Eles são substituídos nos parágrafos do documento, não dentro de tabelas, cabeçalhos ou rodapés.",
+      "placeholders_review": "Os verdes vêm da revisão. Eles são substituídos nos parágrafos e nas tabelas do documento, não em cabeçalhos ou rodapés.",
       "copied": "{placeholder} copiado",
       "template_default": "Modelo padrão",
       "template_chip_default": "padrão",

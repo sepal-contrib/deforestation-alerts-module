@@ -77,6 +77,17 @@ def _scale_for_source(image, source):
     raise ValueError(f"Unsupported imagery source: {source!r}")
 
 
+#: Each imagery source's own pixel size, in metres (Landsat: pan-sharpened).
+NATIVE_SCALE_M = {"Sentinel 2": 10.0, "Landsat": 15.0, "Planet NICFI": 4.77}
+
+
+def composite_scale(source1, source2) -> float:
+    """The pixel size the before/after composite is downloaded at: the finer
+    of the two images' own, so neither loses detail and neither is upsampled
+    on Earth Engine (the CNN resamples to its 4.77 m locally, ``cnn_worker``)."""
+    return min(NATIVE_SCALE_M[source1], NATIVE_SCALE_M[source2])
+
+
 def download_both_images(image1, image2, image_name, source1, source2, region):
     from deforestation_alerts.scripts.raster_export import download_ee_image
 
@@ -86,7 +97,7 @@ def download_both_images(image1, image2, image_name, source1, source2, region):
     download_ee_image(
         rimage1.addBands(rimage2),
         image_name,
-        scale=4.77,
+        scale=composite_scale(source1, source2),
         crs="EPSG:3857",
         region=region,
         overwrite=True,

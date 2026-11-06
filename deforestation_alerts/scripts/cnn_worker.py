@@ -9,6 +9,7 @@ import os
 import threading
 
 import rasterio
+from rasterio.enums import Resampling
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, models
@@ -42,7 +43,28 @@ class RepeatElements(layers.Layer):
         return config
 
 
-def save_prediction_prob(original_img, prediction, output_path):
+#: The pixel size the CNNs were trained at (Planet NICFI), in the composite's metres.
+MODEL_SCALE_M = 4.77
+
+
+def read_at_model_scale(path):
+    """``(bands, meta)`` of the composite at ``MODEL_SCALE_M``. A composite
+    downloaded at its images' own scale (Sentinel-2 10 m, Landsat 15 m) is
+    upsampled here, nearest neighbour as Earth Engine's default resampling
+    did when it delivered 4.77 m; a 4.77 m one is read as it is."""
+    with rasterio.open(path) as src:
+        meta = src.meta.copy()
+        if abs(src.res[0] - MODEL_SCALE_M) < 0.01:
+            return src.read(), meta
+        width = max(1, round(src.width * src.res[0] / MODEL_SCALE_M))
+        height = max(1, round(src.height * src.res[1] / MODEL_SCALE_M))
+        bands = src.read(out_shape=(src.count, height, width), resampling=Resampling.nearest)
+        transform = src.transform * src.transform.scale(src.width / width, src.height / height)
+    meta.update(width=width, height=height, transform=transform)
+    return bands, meta
+
+
+def save_prediction_prob(original_img, prediction, output_path, meta=None):
     """Save ``prediction`` as a 1-band float32 GeoTIFF on ``original_img``'s grid.
 
     Written to a ``.part`` beside ``output_path`` and moved into place
@@ -53,9 +75,13 @@ def save_prediction_prob(original_img, prediction, output_path):
     - original_img (str): the input raster's path; its grid is copied.
     - prediction (array): the probabilities, the input's height x width.
     - output_path (str): the output raster's path.
+    - meta (dict): the grid to write on instead of ``original_img``'s (the
+      composite resampled to the model's scale, ``read_at_model_scale``).
     """
-    with rasterio.open(original_img) as src1:
-        out_meta = src1.meta.copy()
+    if meta is None:
+        with rasterio.open(original_img) as src1:
+            meta = src1.meta
+    out_meta = meta.copy()
     out_meta.update(count=1, dtype="float32", driver="GTiff", compress="deflate")
     with local_files.write_into(output_path) as part:
         with rasterio.open(part, "w", **out_meta) as dest:
@@ -74,14 +100,6 @@ def _load_model(path, mtime_ns):
 
 
 def apply_dl_model(image, model, suffix):
-    def read_image(file_path):
-        file_path = file_path  # .decode('utf-8')
-        with rasterio.open(file_path) as src:
-            img_array = src.read()
-        img_array2 = img_array / 255
-        img_array3 = np.transpose(img_array2, (1, 2, 0))
-        return img_array3.astype(np.float32)
-
     if not os.path.exists(image):
         raise ProjectRuleError("First download selected images.", key="errors.no_images")
 
@@ -90,7 +108,8 @@ def apply_dl_model(image, model, suffix):
     # Input model
     model_path = os.path.abspath(model)
 
-    img = read_image(input_image)
+    bands, grid = read_at_model_scale(input_image)
+    img = np.transpose(bands / 255, (1, 2, 0)).astype(np.float32)
 
     mosaic = MightyMosaic.from_array(img, (256, 256), overlap_factor=2)
     with _PREDICT_LOCK:
@@ -107,6 +126,6 @@ def apply_dl_model(image, model, suffix):
     )
 
     output = save_prediction_prob(
-        input_image, np.squeeze(final_prediction1), new_filename
+        input_image, np.squeeze(final_prediction1), new_filename, meta=grid
     )
     return output

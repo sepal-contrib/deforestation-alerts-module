@@ -30,3 +30,9 @@ def test_downloads_even_when_the_target_exists(monkeypatch, tmp_path):
         object(), object(), str(target), "Sentinel 2", "Landsat", region=None
     )
     assert calls == [str(target)]
+
+
+def test_the_composite_is_downloaded_at_the_finer_native_scale():
+    assert mosaics_helper.composite_scale("Sentinel 2", "Landsat") == 10.0
+    assert mosaics_helper.composite_scale("Landsat", "Landsat") == 15.0
+    assert mosaics_helper.composite_scale("Planet NICFI", "Sentinel 2") == 4.77
