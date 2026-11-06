@@ -385,7 +385,7 @@ def wire_panes(widgets, analysis, selected_alerts_model):
             # above is already this pick's, so leaving the previous pick's
             # ee.Image in place is a pair whose metadata and pixels are of
             # different scenes, which a Run would stage as one composite
-            # (``edit_tools._images_ready`` / ``alert_files.images_picked`` refuse
+            # (``alert_files.images_picked`` refuses
             # while it is None).
             image_reactive.set(None)
 

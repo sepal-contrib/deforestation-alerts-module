@@ -51,7 +51,18 @@ def new_key(label: str, questions: list, columns=()) -> str:
     ``q_`` prefix may have written one)."""
     taken = set(RESERVED_KEYS) | {q.key for q in questions}
     taken |= {c[len("q_"):] for c in columns if isinstance(c, str) and c.startswith("q_")}
+    if column(LOSS_DRIVER_KEY) in columns:
+        taken.add(LOSS_DRIVER_KEY)
     return _unique(slug(label), taken, "question")
+
+
+def reserved_columns(project, store_columns=()) -> set:
+    """The store columns a new question's column must not take: the
+    attribute layers', the deleted questions' (``retired_question_keys``) and
+    the answer columns of ``store_columns`` (a store's, which may hold the
+    answers of a question deleted before keys were retired)."""
+    return (attribute_columns(project) | {column(k) for k in project.retired_question_keys}
+            | {c for c in store_columns if is_answer_column(c)})
 
 
 def attribute_columns(project) -> set:

@@ -14,6 +14,7 @@ from shapely.geometry import box
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project
 from gui.i18n import t
+from gui.scripts.alert_filter import next_unreviewed_match
 from gui.store.state_manager import AppState
 from gui.tile.analysis import context
 
@@ -174,11 +175,14 @@ def test_the_counter_opens_the_jump_menu_and_the_field_is_one_based(tmp_path, mo
 
 
 def test_next_unreviewed_skips_reviewed_alerts_and_wraps(tmp_path, monkeypatch):
+    def nxt(gdf, i):
+        return next_unreviewed_match(gdf, np.ones(len(gdf), bool) if gdf is not None else None, i)
+
     gdf = _alerts(["Not reviewed", "Confirmed", "False Positive", None, "Need revision"])
-    assert context.next_unreviewed(gdf, 0) == 3
-    assert context.next_unreviewed(gdf, 3) == 0          # wraps round
-    assert context.next_unreviewed(_alerts(["Not reviewed", "Confirmed"]), 0) is None
-    assert context.next_unreviewed(None, 0) is None
+    assert nxt(gdf, 0) == 3
+    assert nxt(gdf, 3) == 0          # wraps round
+    assert nxt(_alerts(["Not reviewed", "Confirmed"]), 0) is None
+    assert nxt(None, 0) is None
 
 
 def test_the_skip_icon_beside_next_goes_to_the_next_unreviewed_alert(tmp_path, monkeypatch):

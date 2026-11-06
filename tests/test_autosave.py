@@ -9,7 +9,7 @@ def _p(name="a"):
     return Project(name=name, created_at=datetime.now(), updated_at=datetime.now())
 
 
-def test_every_commit_saves_but_loads_do_not():
+def test_every_update_saves_but_loads_do_not():
     s = AppState()
     saved = []
     install_autosave(s, save=lambda p: saved.append(p.name))
@@ -17,7 +17,7 @@ def test_every_commit_saves_but_loads_do_not():
     assert saved == []  # loading from disk must not rewrite it
     p = s.project.value
     p.look_back_days = 10
-    s.commit(p)
+    s.update_project(p.name, lambda _p: None)
     assert saved == ["loaded"]
     assert s.last_saved.value is not None and s.save_error.value is None
 

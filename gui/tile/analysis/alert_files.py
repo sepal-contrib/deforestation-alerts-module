@@ -234,6 +234,7 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
                 actual_alert_id,
                 *picked,
                 alert.grid,
+                getattr(alert, "image_area", "normal"),
             )
         if task is not None:
             task.set_progress(None)  # zip + report: back to indeterminate

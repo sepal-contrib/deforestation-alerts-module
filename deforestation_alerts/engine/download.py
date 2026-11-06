@@ -60,15 +60,30 @@ def estimate_native_bytes(bounds, key_or_native) -> int:
     return math.ceil((maxx - minx) / size) * math.ceil((maxy - miny) / size) * 2 * 4
 
 
-def _check_raw(path: Path, crs: str) -> None:
-    with rasterio.open(path) as src:
-        same_crs = src.crs is not None and src.crs == CRS.from_user_input(crs)
-        dtypes = src.dtypes
-    if not (same_crs and dtypes == ("int32", "int32")):
-        raise RawRasterError(
-            f"{path} is not a 2-band Int32 raster in {crs} (crs={same_crs}, dtypes={dtypes})",
-            path=str(path), crs=str(crs),
-        )
+def download_checked(image, aoi, out_path, *, crs, scale, dtypes: tuple, error, on_tiles=None, on_wait=None) -> Path:
+    """Download ``image`` over ``aoi`` to ``out_path`` in ``crs`` and ``scale``
+    (no-data -> 0), as ``<out_path>.part`` renamed once it is ``dtypes`` in
+    ``crs``, else ``error`` (a ``KeyedError`` class) is raised. On any failure
+    nothing is left behind. Run it on a worker thread."""
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    part = out_path.with_name(out_path.name + ".part")
+    part.unlink(missing_ok=True)
+    try:
+        with geedim_tile_progress(on_tiles), geedim_download_wait(on_wait):
+            download_ee_image(image, str(part), region=aoi, crs=crs, scale=scale, dtype=dtypes[0],
+                              unmask_value=0, nodata_value=0)
+        with rasterio.open(part) as src:
+            same_crs = src.crs is not None and src.crs == CRS.from_user_input(crs)
+            got = src.dtypes
+        if not (same_crs and got == tuple(dtypes)):
+            raise error(f"{part} is not a {len(dtypes)}-band {dtypes[0]} raster in {crs} (crs={same_crs}, "
+                        f"dtypes={got})", path=str(part), crs=str(crs))
+        part.replace(out_path)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    return out_path
 
 
 def export_native(image, key_or_native, aoi, out_path, *, on_tiles=None, on_wait=None) -> Path:
@@ -78,25 +93,5 @@ def export_native(image, key_or_native, aoi, out_path, *, on_tiles=None, on_wait
     checked; on any failure nothing is left behind. Run it on a worker thread.
     """
     crs, scale = _native(key_or_native)
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    part = out_path.with_name(out_path.name + ".part")
-    part.unlink(missing_ok=True)
-    try:
-        with geedim_tile_progress(on_tiles), geedim_download_wait(on_wait):
-            download_ee_image(
-                image.select(["alert", "date"]).toInt32(),
-                str(part),
-                region=aoi,
-                crs=crs,
-                scale=scale,
-                dtype="int32",
-                unmask_value=0,
-                nodata_value=0,
-            )
-        _check_raw(part, crs)
-        part.replace(out_path)
-    except BaseException:
-        part.unlink(missing_ok=True)
-        raise
-    return out_path
+    return download_checked(image.select(["alert", "date"]).toInt32(), aoi, out_path, crs=crs, scale=scale,
+                            dtypes=("int32", "int32"), error=RawRasterError, on_tiles=on_tiles, on_wait=on_wait)

@@ -269,7 +269,7 @@ def test_the_list_follows_the_open_projects_saves(dialog):
         await _settle(lambda: _listed(dialog) == {"a": "0 / 0 / 0"}, "the new project listed", rc=rc)
         p = dialog.state.project.value
         add_predefined_source(p, "GLAD-L")
-        dialog.state.commit(p)  # auto-saved
+        dialog.state.update_project(p.name, lambda _p: None)  # auto-saved
         await _settle(lambda: _listed(dialog) == {"a": "1 / 0 / 0"}, "the saved source counted", rc=rc)
 
     run_rendered(lambda: dialog.render(), main)
@@ -550,7 +550,7 @@ def test_a_project_being_written_cannot_be_deleted(dialog):
 
 def test_the_list_follows_saves_made_on_worker_threads(dialog, monkeypatch):
     """A finished Prepare row, an Integrate and a review Save publish the
-    project (``update_project``, ``commit``) from worker threads with no event
+    project (``update_project``) from worker threads with no event
     loop; the auto-save then sets ``last_saved`` there and the always-mounted
     dialog re-renders on that thread. Rendered as the shell renders it, the
     dialog must neither raise into those publishers nor fail its render, and
@@ -575,7 +575,7 @@ def test_the_list_follows_saves_made_on_worker_threads(dialog, monkeypatch):
                 try:
                     p = dialog.state.project.value
                     add_predefined_source(p, source)
-                    dialog.state.commit(p)
+                    dialog.state.update_project(p.name, lambda _p: None)
                 except BaseException:  # noqa: BLE001 - reported below
                     errors.append(traceback.format_exc())
 
@@ -615,7 +615,7 @@ def test_saved_ago_follows_the_manifest_and_every_save(dialog):
                           "the manifest's save time")
             p = dialog.state.project.value
             add_predefined_source(p, "GLAD-L")
-            dialog.state.commit(p)  # auto-saved
+            dialog.state.update_project(p.name, lambda _p: None)  # auto-saved
             await _settle(lambda: t("steps.project.saved_ago", time_ago="just now") in _texts(box),
                           "the new save")
         finally:
@@ -983,6 +983,28 @@ def test_opening_a_review_copy_from_manage_lands_on_analysis(dialog):
         assert dialog.state.current_page_view.value == "analysis_tile"
         assert dialog.filters == [(dialog.analysis, _ana_filter())]
         await _settle(lambda: dialog.dismissed == 1, "the dialog closed")
+
+    run_rendered(lambda: dialog.render(), main)
+
+
+def test_opening_another_project_over_unsaved_analysis_work_asks_first(dialog):
+    """The switch would drop the unsaved review: it waits for the dock's
+    Discard (``app_state.guard``), with the dialog closed so the prompt shows."""
+    io.save_project(pd.create_project("b"))
+    dialog.state.new_project_state(pd.create_project("a"))
+    asked = []
+    dialog.state.guard = asked.append
+    dialog.analysis.dirty.set(True)
+
+    async def main(rc):
+        await _settle(lambda: "b" in (_listed(dialog) or {}), "b listed", rc=rc)
+        _button(rc, t("steps.project.manage_count", count=2)).fire_event("click", None)
+        await _settle(lambda: dialog.manage[-1]["open"], "Manage opened")
+        _open_from_manage(dialog, "b")
+        await _settle(lambda: len(asked) == 1, "the switch held for the prompt")
+        assert dialog.state.project.value.name == "a" and dialog.dismissed == 1
+        asked[0]()  # Discard
+        await _settle(lambda: getattr(dialog.state.project.value, "name", None) == "b", "b opened")
 
     run_rendered(lambda: dialog.render(), main)
 

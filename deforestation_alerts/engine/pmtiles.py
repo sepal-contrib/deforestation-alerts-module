@@ -28,6 +28,10 @@ logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 POLYGON_MIN_ZOOM = 11
 
+#: Seconds a tippecanoe run may take (a country of alerts takes minutes): a
+#: hung one fails the tile build, which callers report as a tile failure.
+TIPPECANOE_TIMEOUT_S = 30 * 60
+
 
 class TippecanoeMissing(KeyedError, RuntimeError):
     """tippecanoe is neither on the PATH nor next to the interpreter."""
@@ -98,7 +102,7 @@ def alerts_to_pmtiles(alerts_gdf, out_path, *, guard: Optional[Callable[[], None
             "-L", json.dumps({"file": str(polys), "layer": "alerts"}),
             "-L", json.dumps({"file": str(points), "layer": "points"}),
         ]
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=TIPPECANOE_TIMEOUT_S)
         # Staged beside the target under a name of its own (two builders of
         # one set must not share it), created with the umask's default mode:
         # mkstemp made it 0600, which the rename carried onto alerts.pmtiles.

@@ -381,9 +381,6 @@ def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = 
         # checks it is still that store (set_store.generation_changed).
         set_store.stamp_generation(result.alerts, paths.resolve(job.pdir, result.alert_set.store_rel_path))
         n = len(result.alerts)
-        if n:
-            task.step(t("steps.integrate.step_tiles"))
-            _build_tiles(job, result, notifier)
         changed, orphans = [], []
 
         def _record(p):
@@ -394,12 +391,17 @@ def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = 
                 raise _ProjectChanged(why)
             apply_result(p, result)
 
+        # Recorded before the tiles: the set's files are already swapped in,
+        # and a tile build that hangs or dies must not leave them under the
+        # previous run's record. The tiles are optional (rebuilt on demand).
         try:
             recorded = app_state.update_project(name, _record)
         except _ProjectChanged:
             recorded = True  # the project is still open: nothing else to record into
         if not recorded:
             _record_in_own_project(job, result)
+            if n:
+                _build_tiles(job, result, notifier)
             return
         if changed:
             logger.warning("set %s is not recorded in project %s: its %s changed during the run",
@@ -408,6 +410,9 @@ def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = 
             if notifier is not None:
                 notifier.warning(t("steps.integrate.project_changed"))
             return
+        if n:
+            task.step(t("steps.integrate.step_tiles"))
+            _build_tiles(job, result, notifier)
         # The new set goes to Analysis while it is still the open, active set
         # (else the project was switched or closed right after the record).
         if not set_store.publish_set_alerts(app_state, name, result.alert_set, result.alerts):

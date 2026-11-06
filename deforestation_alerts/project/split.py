@@ -13,9 +13,7 @@ import pandas as pd
 
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.review_status import is_reviewed
-
-#: The store column the split writes.
-EVALUATOR_COLUMN = "evaluator"
+from deforestation_alerts.project.store_schema import EVALUATOR as EVALUATOR_COLUMN  # the column the split writes
 #: At most this many evaluators per split.
 MAX_EVALUATORS = 50
 

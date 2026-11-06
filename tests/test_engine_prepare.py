@@ -17,6 +17,7 @@ from affine import Affine
 from pyproj import Transformer
 
 from deforestation_alerts.engine import catalogue, download, raster_io, runner
+from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.engine import harmonize as hz
@@ -159,7 +160,7 @@ def test_run_writes_raw_and_harmonized(job_factory, tmp_path):
         alert, dates = src.read(1), src.read(2)
     assert alert[2, 2] == 1 and dates[2, 2] == 2026010  # north of the middle latitude
     assert alert[17, 2] == 0 and dates[17, 2] == 0  # south of it
-    rows = runner.plan_prepare(p, tmp_path, JAN)
+    rows = plan_prepare(p, tmp_path, JAN)
     assert rows[0].ready
 
 
@@ -183,7 +184,7 @@ def test_grid_change_reharmonizes_without_downloading(job_factory, tmp_path):
     runner.apply_artifacts(p, arts)
     assert p.artifacts[RKEY] == raw_before
     raster_io.check_header(tmp_path / arts[HKEY].rel_path, p.grid)
-    assert runner.plan_prepare(p, tmp_path, JAN)[0].ready
+    assert plan_prepare(p, tmp_path, JAN)[0].ready
 
 
 def test_missing_catalogue_metadata_is_a_clear_error(job_factory):

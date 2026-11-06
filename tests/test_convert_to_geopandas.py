@@ -5,6 +5,8 @@ from shapely.geometry import Polygon
 
 from deforestation_alerts.scripts.alert_table import convert_to_geopandas
 
+_DIGITS = {0: "GLAD-L", 1: "RADD", 2: "GLAD-S2"}
+
 
 def _vectorized_gdf():
     poly = Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])
@@ -22,7 +24,7 @@ def _vectorized_gdf():
 
 
 def test_convert_sets_polygon_geometry_and_backcompat_columns():
-    gdf = convert_to_geopandas(_vectorized_gdf())
+    gdf = convert_to_geopandas(_vectorized_gdf(), _DIGITS)
     assert gdf.geometry.iloc[0].geom_type == "Polygon"          # D2 active geom
     assert gdf["bounding_box"].iloc[0].geom_type in ("Polygon", "LineString")
     assert gdf["point"].iloc[0].geom_type == "Point"
@@ -30,7 +32,7 @@ def test_convert_sets_polygon_geometry_and_backcompat_columns():
 
 
 def test_convert_decodes_alert_sources():
-    gdf = convert_to_geopandas(_vectorized_gdf())
+    gdf = convert_to_geopandas(_vectorized_gdf(), _DIGITS)
     assert gdf["alert_sources"].iloc[0] == "GLAD-L"
     # 110 -> RADD (tens) + GLAD-S2 (hundreds); membership check (order-independent)
     parts = gdf["alert_sources"].iloc[1].replace(" and ", ", ").split(", ")
@@ -52,15 +54,15 @@ def _custom_coded_gdf():
     )
 
 
-def test_convert_threads_custom_names_into_alert_sources():
-    out = convert_to_geopandas(_custom_coded_gdf(), custom_names={0: "MyAlerts"})
+def test_convert_names_a_custom_source_by_its_digit():
+    out = convert_to_geopandas(_custom_coded_gdf(), {**_DIGITS, 4: "MyAlerts"})
     assert out["alert_sources"].iloc[0] == "MyAlerts"
     parts = out["alert_sources"].iloc[1].replace(" and ", ", ").split(", ")
     assert set(parts) == {"GLAD-L", "MyAlerts"}
 
 
 def test_convert_adds_empty_review_columns():
-    gdf = convert_to_geopandas(_vectorized_gdf())
+    gdf = convert_to_geopandas(_vectorized_gdf(), _DIGITS)
     for col in ("status", "before_img", "after_img", "alert_polygon",
                 "description", "admin1", "admin2", "admin3"):
         assert col in gdf.columns

@@ -235,22 +235,6 @@ def jump_refusal(card):
     return getattr(card, _SLOTS)["refusal"]
 
 
-def next_unreviewed(gdf, index):
-    """The position of the first unreviewed alert after ``index``, wrapping
-    round to the start, or ``None`` when every other alert is reviewed.
-    Unreviewed is what ``review_counts`` does not count."""
-    if gdf is None or len(gdf) == 0:
-        return None
-    n = len(gdf)
-    todo = (~reviewed_mask(gdf)).to_numpy()  # an older store without status: nothing reviewed
-    start = max(index, -1)
-    for step in range(1, n + 1):
-        i = (start + step) % n
-        if i != index and todo[i]:
-            return i
-    return None
-
-
 def facts_widgets(card):
     """``(source, detected, chip)`` of a card built by ``build_context``. The
     chip's children are ``[swatch, label]``: the colour is on the swatch's

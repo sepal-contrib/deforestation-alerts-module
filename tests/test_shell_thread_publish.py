@@ -16,7 +16,7 @@ leaves ``_AppShell`` renders in its own context (``_NavBridge``,
 ``_ActiveSetLoader``, ``MapLegend``, compiled from gui/solara_app.py as
 tests/test_active_set_loader.py does, and ``RemoteFactsLoader``), and a
 worker thread drives both entry points,
-``AppState.update_project`` and ``AppState.commit``, through the changes
+``AppState.update_project``, through the changes
 each worker makes: artifacts recorded row by row, a set recorded and its
 alerts published, the navigation to the analysis screen, a Save under the project's
 writer mark, a layer build landing its legend on its own thread. Nothing may
@@ -376,7 +376,7 @@ def test_every_mounted_tile_survives_the_workers_publishes(shell, caplog, monkey
             with writing(NAME):
                 live = state.project.value
                 live.alert_sets[sid].n_reviewed = 1
-                state.commit(live)
+                state.update_project(NAME, lambda _p: None)
                 state.alerts_gdf.value = state.alerts_gdf.value.copy()  # _apply_save's rebind
 
         await _wait(_publish(save, errors))

@@ -229,6 +229,24 @@ def test_a_failed_store_write_leaves_the_live_review_row_untouched(tmp_path, mon
     assert gdf.at[0, "before_img"] is None
 
 
+def test_a_save_with_no_pick_keeps_the_rows_saved_pair(tmp_path, monkeypatch):
+    """A reopened alert whose saved pick is not restored yet (scene index
+    still loading) saves its verdict, not an empty pair over the saved one."""
+    from gui.tile.analysis.state import capture_alert
+
+    gdf = _review_row()
+    gdf["before_img"], gdf["after_img"] = ["S2_saved_b"], ["S2_saved_a"]
+    export, app_state, analysis, widgets, model, _alert = _save_pieces(monkeypatch, gdf, verdict="Confirmed")
+    analysis.before_info.set(None)
+    analysis.after_info.set(None)
+    monkeypatch.setattr("gui.tile.analysis.review_save.write_store", lambda *a, **k: None)
+
+    alert = capture_alert(analysis, widgets, app_state)
+    assert export._save_attributes(widgets, app_state, analysis, model, alert=alert) is True
+    assert gdf.at[0, "status"] == "Confirmed"
+    assert gdf.at[0, "before_img"] == "S2_saved_b" and gdf.at[0, "after_img"] == "S2_saved_a"
+
+
 def test_a_save_that_wrote_publishes_every_field_to_the_live_row(tmp_path, monkeypatch):
     """...and a save that goes through still writes the row it persisted."""
     gdf = _review_row()

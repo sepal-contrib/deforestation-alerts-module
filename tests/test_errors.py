@@ -46,7 +46,6 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/scripts/alert_export.py", "ValueError", "Unsupported export format"),
     ("deforestation_alerts/scripts/alert_export.py", "ValueError", "Unknown export scope"),
     ("deforestation_alerts/scripts/raster_export.py", "ValueError", "image must be an ee.Image"),
-    ("deforestation_alerts/scripts/custom_sources.py", "ValueError", "custom source slot out of range"),
     ("deforestation_alerts/scripts/report_builder.py", "ValueError", "Input must be a string or a list"),
     ("deforestation_alerts/scripts/mosaics_helper.py", "ValueError", "Unsupported imagery source"),
     ("deforestation_alerts/scripts/mosaics_helper.py", "ValueError", "not found in the GeoDataFrame"),
@@ -63,6 +62,8 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/scripts/scene_index.py", "ValueError", "scene arrays of different length"),
     # assemble_gif: callers (gui/tile/analysis/gif.py) build matching lists; a mismatch is a programmer error
     ("deforestation_alerts/scripts/alert_gif.py", "ValueError", "a GIF needs at least two labelled frames"),
+    # download_checked: ``error`` is the caller's KeyedError class (RawRasterError, MaskRasterError)
+    ("deforestation_alerts/engine/download.py", "error", "-band"),
 }
 
 

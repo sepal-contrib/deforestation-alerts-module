@@ -1,7 +1,7 @@
 """Save the project after every committed change (spec D11).
 
 The hook subscribes to ``app_state.project`` and saves synchronously, in the
-thread that published: ``commit``, ``update_project`` and the
+thread that published: ``update_project`` and the
 ``*_project_state`` methods publish under ``AppState._lock``, so saves never
 overlap and a job's result is on disk before ``update_project`` returns. A
 load is skipped (it would only rewrite the file just read), and so is a close.

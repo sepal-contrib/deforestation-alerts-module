@@ -257,10 +257,15 @@ def save_review(alert, app_tile_model):
     # (``reset_alert``), or the next alert's drawn polygon replaces it, and
     # neither belongs to the alert this Save writes.
     defo_layer = alert.defo_layer
-    updates["before_img"] = None if before_info is None else before_info[3]
-    updates["before_img_info"] = None if before_info is None else before_info[1]
-    updates["after_img"] = None if after_info is None else after_info[3]
-    updates["after_img_info"] = None if after_info is None else after_info[1]
+    # A side with no pick keeps what the row has: a reopened alert whose
+    # saved pick is not restored yet (scene index loading or failed) must
+    # not lose its saved pair, which gates its GIF (spec D9).
+    if before_info is not None:
+        updates["before_img"] = before_info[3]
+        updates["before_img_info"] = before_info[1]
+    if after_info is not None:
+        updates["after_img"] = after_info[3]
+        updates["after_img_info"] = after_info[1]
     updates[IMAGE_AREA] = getattr(alert, "image_area", "normal")
 
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).

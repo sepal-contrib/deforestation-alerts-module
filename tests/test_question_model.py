@@ -127,3 +127,18 @@ def test_new_key_avoids_a_column_an_attribution_layer_already_writes():
     assert new_key("Cover", p.questions, cols) == "cover_2"
     assert new_key("Slope", p.questions, cols) == "slope"  # its column is q_slope: no clash
     assert attribute_columns(_project()) == set()
+
+
+def test_a_deleted_question_never_lends_its_column_to_a_new_one():
+    """Its answers stay in the store: a new "Road access" must not read them
+    as its own, nor a new "Loss driver" the deleted default's ``description``."""
+    from deforestation_alerts.project.questions import reserved_columns
+
+    p = _project(questions=[], retired_question_keys=["road_access"])
+    cols = reserved_columns(p)
+    assert new_key("Road access", p.questions, cols) == "road_access_2"
+    stored = reserved_columns(_project(questions=[]), ["q_fire", "description", "area_ha"])
+    assert stored == {"q_fire", "description"}
+    assert new_key("Fire", [], stored) == "fire_2"
+    assert new_key("Loss driver", [], stored) == "loss_driver_2"
+    assert Project.model_validate_json(p.model_dump_json()).retired_question_keys == ["road_access"]

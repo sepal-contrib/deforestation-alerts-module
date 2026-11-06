@@ -167,6 +167,22 @@ def test_the_same_pick_is_always_the_same_composite():
     # same two collections is a different composite.
     landsat_before = ["Landsat", *_BEFORE_INFO[1:]]
     assert paths.alert_image_name("/f", 0, landsat_before, _AFTER_INFO) != name
+    # Another image area is another composite; "normal" keeps the old name.
+    assert paths.alert_image_name("/f", 0, _BEFORE_INFO, _AFTER_INFO, "normal") == name
+    large = paths.alert_image_name("/f", 0, _BEFORE_INFO, _AFTER_INFO, "large")
+    assert large != name and large.endswith("_large.tif")
+
+
+def test_a_set_folders_per_alert_files_are_told_from_the_sets_own(tmp_path):
+    """What Integrate deletes when it renumbers the alerts."""
+    from deforestation_alerts.project.paths import per_alert_files
+
+    own = ["alert_db.parquet", "alerts.pmtiles", "combined.tif", "footprint.tif"]
+    per_alert = ["alert_5.gpkg", "alert_5.zip", "alert_12_s2_2026-01-01_s2_2026-02-01.tif"]
+    for name in own + per_alert:
+        (tmp_path / name).write_bytes(b"x")
+    assert sorted(f.name for f in per_alert_files(tmp_path)) == sorted(per_alert)
+    assert per_alert_files(tmp_path / "missing") == []
 
 
 def test_a_failed_composite_download_leaves_no_composite_or_part_file(download_ctx, monkeypatch):

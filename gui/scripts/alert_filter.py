@@ -294,8 +294,7 @@ def first_unreviewed(gdf, mask) -> Optional[int]:
 
 def next_unreviewed_match(gdf, mask, pos: int) -> Optional[int]:
     """The first matching, unreviewed position after ``pos``, wrapping round
-    to the start, never ``pos`` itself; None when there is none (as
-    ``context.next_unreviewed`` does over every alert)."""
+    to the start, never ``pos`` itself; None when there is none."""
     if gdf is None or not len(gdf):
         return None
     todo = _todo(gdf, mask)

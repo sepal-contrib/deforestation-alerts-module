@@ -8,7 +8,8 @@ import rasterio
 from affine import Affine
 from shapely.geometry import box
 
-from deforestation_alerts.scripts.mosaics_helper import calculate_total_area, prediction_patches
+from deforestation_alerts.project.review_groups import polygon_area_ha
+from deforestation_alerts.scripts.mosaics_helper import prediction_patches
 
 UTM = "EPSG:32721"  # Paraguay's zone
 
@@ -50,6 +51,16 @@ def test_a_patch_exactly_at_the_minimum_is_kept(tmp_path):
     assert len(patches) == 2
 
 
+def test_blobs_touching_at_a_corner_are_one_patch_as_in_integrate(tmp_path):
+    """Integrate joins pixels 8-connected (``vectorize``); two 0.3 ha blobs
+    meeting at a corner are one 0.6 ha alert there, so one patch here."""
+    prob = np.zeros((30, 30), np.float32)
+    prob[0:5, 0:6] = 0.9   # 30 px = 0.3 ha
+    prob[5:10, 6:12] = 0.9  # meets the first only at its corner
+    patches = prediction_patches(_prediction(tmp_path / "corner.tif", prob), 0.20, crs=UTM, min_size_ha=0.5)
+    assert patches["area_ha"].tolist() == pytest.approx([0.6])
+
+
 def test_a_prediction_with_nothing_above_the_threshold_has_no_patches(tmp_path):
     """No placeholder centroid any more: nothing found is an empty frame."""
     path = _prediction(tmp_path / "empty.tif", np.full((8, 8), 0.1))
@@ -72,9 +83,9 @@ def test_the_area_is_measured_in_the_given_crs_not_web_mercator(tmp_path):
 
 def test_total_area_uses_the_given_crs():
     drawn = gpd.GeoDataFrame(geometry=[box(500_000, 7_340_000, 500_100, 7_340_100)], crs=UTM)
-    assert calculate_total_area(drawn.to_crs(4326), UTM) == pytest.approx(1.0, rel=1e-6)
+    assert polygon_area_ha(drawn.to_crs(4326).geometry.iloc[0], UTM) == pytest.approx(1.0, rel=1e-6)
 
 
 def test_total_area_without_a_crs_uses_the_local_utm_zone():
     drawn = gpd.GeoDataFrame(geometry=[box(500_000, 7_340_000, 500_100, 7_340_100)], crs=UTM)
-    assert calculate_total_area(drawn.to_crs(4326)) == pytest.approx(1.0, rel=1e-6)
+    assert polygon_area_ha(drawn.to_crs(4326).geometry.iloc[0]) == pytest.approx(1.0, rel=1e-6)

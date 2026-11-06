@@ -16,10 +16,14 @@ import threading
 from pathlib import Path
 from typing import Iterator
 
+import numpy as np
 import rasterio
+from affine import Affine
+from rasterio import features
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.windows import Window
+from shapely.geometry import box
 
 from deforestation_alerts.errors import KeyedError, UserFileMissing
 from deforestation_alerts.project.models import GridSpec
@@ -224,3 +228,35 @@ def _ensure_overviews(path: str, resampling: str) -> bool:
             return True
         finally:
             ds = None
+
+
+def window_transform(grid: GridSpec, w: Window) -> Affine:
+    """The affine transform of window ``w`` of ``grid``."""
+    return grid.affine @ Affine.translation(w.col_off, w.row_off)
+
+
+def burn(geoms, sindex, grid: GridSpec, w: Window, all_touched: bool = False) -> np.ndarray:
+    """The window's pixels covered by ``geoms`` (a GeoSeries in the grid's CRS,
+    ``sindex`` its spatial index or None when empty), or, with
+    ``all_touched``, every pixel they touch."""
+    shp = (int(w.height), int(w.width))
+    t = window_transform(grid, w)
+    if sindex is None:
+        return np.zeros(shp, bool)
+    idx = sindex.query(box(t.c, t.f + t.e * shp[0], t.c + t.a * shp[1], t.f))
+    if not len(idx):
+        return np.zeros(shp, bool)
+    return features.rasterize(((g, 1) for g in geoms.iloc[idx]), out_shape=shp, transform=t, fill=0,
+                              all_touched=all_touched, dtype="uint8").astype(bool)
+
+
+def rasterize_footprint(gdf_grid, grid: GridSpec, out_path, *, all_touched: bool = False, windows=None) -> Path:
+    """Burn the polygons (in the grid's CRS) into an Int32 0/1 raster on
+    ``grid``, window by window (``windows``, default ``tile_windows``):
+    never a whole-grid rasterize."""
+    geoms = gdf_grid.geometry
+    sindex = geoms.sindex if len(geoms) else None
+    with write_grid_raster(Path(out_path), grid, count=1) as dst:
+        for w in (windows if windows is not None else tile_windows(grid)):
+            dst.write(burn(geoms, sindex, grid, w, all_touched).astype(np.int32), 1, window=w)
+    return Path(out_path)

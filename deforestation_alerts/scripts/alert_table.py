@@ -7,7 +7,7 @@ from deforestation_alerts.project.review_status import NOT_REVIEWED
 from deforestation_alerts.scripts.alert_codes import format_list, get_unique_alerts
 
 
-def convert_to_geopandas(vectorized_gdf, custom_names=None, digit_map=None):
+def convert_to_geopandas(vectorized_gdf, digit_map):
     """Assemble alerts_gdf from the local-vectorize output.
 
     Input: gpd.GeoDataFrame with columns geometry(Polygon), alert_type_unique(list),
@@ -16,10 +16,8 @@ def convert_to_geopandas(vectorized_gdf, custom_names=None, digit_map=None):
     plus the back-compat `bounding_box`, `point`, decoded `alert_sources`, and the
     empty user-review columns. Preserves the integer alert-code decoding.
 
-    ``custom_names`` (``{slot: name}``) labels the user-defined custom alert
-    sources in ``alert_sources``; unnamed slots decode as "Custom <n>".
-    ``digit_map`` (``{digit: name}``, an alert set's own) replaces both when
-    given: see ``alert_codes.get_unique_alerts``.
+    ``digit_map`` (``{digit: name}``, the alert set's own) names the sources
+    in ``alert_sources``: see ``alert_codes.get_unique_alerts``.
     """
     gdf = vectorized_gdf.copy()
 
@@ -29,7 +27,7 @@ def convert_to_geopandas(vectorized_gdf, custom_names=None, digit_map=None):
 
     gdf["status"] = NOT_REVIEWED
     gdf["alert_sources"] = gdf["alert_type_unique"].apply(
-        lambda x: format_list(get_unique_alerts(x, custom_names=custom_names, digit_map=digit_map))
+        lambda x: format_list(get_unique_alerts(x, digit_map))
     )
     gdf["before_img"] = pd.Series([], dtype="str")
     gdf["before_img_info"] = pd.Series([], dtype="object")

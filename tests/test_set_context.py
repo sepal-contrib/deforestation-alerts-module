@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 
 from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project, default_questions
-from deforestation_alerts.scripts import mosaics_helper
+from deforestation_alerts.project.review_groups import polygon_area_ha
 from gui.scripts import questions
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
@@ -682,7 +682,7 @@ def test_an_alert_change_during_the_lookups_keeps_the_saved_alerts_polygon(tmp_p
     assert export._save_attributes(widgets, s, analysis, ctx) is True
 
     saved = gpd.read_parquet(_store(tmp_path, "d", "glad-l"))
-    assert saved.loc[0, "area_ha"] == pytest.approx(mosaics_helper.calculate_total_area(drawn_a))
+    assert saved.loc[0, "area_ha"] == pytest.approx(polygon_area_ha(drawn_a.union_all()))
 
 
 def test_a_save_stores_the_loss_drivers_as_codes(tmp_path, monkeypatch):

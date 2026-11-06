@@ -11,7 +11,7 @@ from pysepal.i18n import set_locale
 from shapely.geometry import box
 
 from deforestation_alerts.project.models import Project, Question, QuestionOption, default_questions
-from deforestation_alerts.scripts import mosaics_helper
+from deforestation_alerts.project.review_groups import polygon_area_ha
 from gui.scripts.set_context import SetContext
 from gui.store.state_manager import AppState
 from gui.tile.analysis import export
@@ -168,9 +168,9 @@ def test_a_store_missing_a_non_answer_column_still_saves(tmp_path, monkeypatch):
     assert export._save_attributes(SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None)),
                                    s, analysis, ctx) is True
     saved = pd.read_parquet(_store(tmp_path, "d", "glad-l"), columns=["area_ha", "q_road_access"])
-    assert saved.loc[0, "area_ha"] == pytest.approx(mosaics_helper.calculate_total_area(drawn))
+    assert saved.loc[0, "area_ha"] == pytest.approx(polygon_area_ha(drawn.union_all()))
     assert saved["q_road_access"].tolist() == ["yes", ""]
-    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(mosaics_helper.calculate_total_area(drawn))
+    assert s.alerts_gdf.value.loc[0, "area_ha"] == pytest.approx(polygon_area_ha(drawn.union_all()))
 
 
 def test_drafts_of_deleted_questions_are_ignored(tmp_path, monkeypatch):

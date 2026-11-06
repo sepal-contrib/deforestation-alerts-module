@@ -51,6 +51,7 @@ from gui.i18n import t
 from gui.scripts import aoi_io, remote_facts, vis_layers
 from gui.scripts.error_text import ee_no_access, error_text
 from gui.scripts.solara_threads import to_thread_in_context, use_loop_dependencies
+from gui.store.project_writers import writing
 
 #: Under ``SEPALUI.deforestation_alerts`` so a failure reaches the server log
 #: (``notify_bridge.install_server_log_handler`` takes WARNING+ there). The
@@ -343,12 +344,16 @@ def SceneIndexLoader(app_state, gee_interface):
         # below is blocked, and the next ``read_index`` sees the mismatch and
         # rebuilds), but it costs a refetch, so the window is kept as narrow
         # as one check can make it.
-        if not _still_current():
-            return None
-        merged, manifest = await to_thread_in_context(
-            scene_cache.store_chunk, pdir, tables, window, digest, planet=planet,
-            now=datetime.now(timezone.utc), replace=(mode == "rebuild"),
-        )
+        # Marked a writer before the check: a delete or rename of the project
+        # (``project_dialog``) is refused while the chunk is written, or it
+        # closed the project first and the check stops here.
+        with writing(name):
+            if not _still_current():
+                return None
+            merged, manifest = await to_thread_in_context(
+                scene_cache.store_chunk, pdir, tables, window, digest, planet=planet,
+                now=datetime.now(timezone.utc), replace=(mode == "rebuild"),
+            )
         if not _still_current():
             return None
         _publish(app_state.scene_index, merged)

@@ -2,6 +2,7 @@
 the read-only module mount, so nothing may be relative to it."""
 
 import os
+import re
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -97,6 +98,19 @@ def store_path(set_directory) -> Path:
 
 def pmtiles_path(set_directory) -> Path:
     return Path(set_directory) / "alerts.pmtiles"
+
+
+#: The per-alert files the Analysis screen builds in a set folder
+#: (``alert_<id>.gpkg``, ``alert_<id>_<pair>.tif``, its prediction, GIF, zip
+#: and report). ``alert_db.parquet`` is the store, not one of them.
+_PER_ALERT = re.compile(r"alert_\d+[._]")
+
+
+def per_alert_files(set_directory) -> list[Path]:
+    """The per-alert files of a set folder: named by alert position, so they
+    belong to the run that numbered the alerts."""
+    d = Path(set_directory)
+    return [f for f in d.iterdir() if f.is_file() and _PER_ALERT.match(f.name)] if d.is_dir() else []
 
 
 def rel(pdir, path) -> str:

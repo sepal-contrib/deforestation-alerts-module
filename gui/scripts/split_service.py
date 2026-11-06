@@ -113,7 +113,7 @@ def apply_split(app_state, app_tile_model, evaluators: list[str], include_review
         units = None
         if g is not None:
             eligible = [i for i, st in enumerate(statuses) if include_reviewed or not is_reviewed(st)]
-            units = review_groups.neighbourhoods(gdf, g.radius_m, area_crs(p), eligible=eligible)
+            units = review_groups.neighbourhoods(gdf, g.radius_m, review_groups.area_crs(p), eligible=eligible)
         dealt = deal(statuses, names, include_reviewed, units=units)
         if not any(dealt):
             raise SplitError("evaluators.err.none_eligible")
@@ -127,12 +127,6 @@ def apply_split(app_state, app_tile_model, evaluators: list[str], include_review
                            group_include_reviewed=g.include_reviewed if g else False)
     app_tile_model._update_set(staged, "split", split, target)
     return split
-
-
-def area_crs(p):
-    """The grid CRS the review measures distances and areas in (``None``
-    before there is a grid). Same rule as ``state.area_crs`` in the GUI."""
-    return p.grid.epsg if p is not None and p.grid is not None else None
 
 
 def largest_unit(app_state, n_evaluators: int) -> int:
@@ -149,7 +143,7 @@ def largest_unit(app_state, n_evaluators: int) -> int:
     eligible = [i for i, name in enumerate(assignments(gdf).tolist()) if name]
     if not eligible:
         return 0
-    return oversized(review_groups.neighbourhoods(gdf, g.radius_m, area_crs(p), eligible=eligible), n_evaluators)
+    return oversized(review_groups.neighbourhoods(gdf, g.radius_m, review_groups.area_crs(p), eligible=eligible), n_evaluators)
 
 
 def remove_split(app_state, app_tile_model) -> None:

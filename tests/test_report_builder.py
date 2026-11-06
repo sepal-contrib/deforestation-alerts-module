@@ -5,11 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from deforestation_alerts.scripts.report_builder import (
-    get_unique_alerts,
-    format_list,
-    parse_formatted_string,
-)
+from deforestation_alerts.scripts.alert_codes import format_list, get_unique_alerts, parse_formatted_string
+
+#: The four predefined sources on their first digits.
+_FIXED = {0: "GLAD-L", 1: "RADD", 2: "GLAD-S2", 3: "CCDC"}
 
 
 # Smallest valid JPEG, so python-docx's ``add_picture`` accepts the stubbed
@@ -34,47 +33,23 @@ _JPEG_1PX = base64.b64decode(
     ],
 )
 def test_get_unique_alerts_decodes_digit_encoding(value, expected):
-    assert set(get_unique_alerts([value])) == expected
-
-
-@pytest.mark.parametrize(
-    "value, expected",
-    [
-        (10000, {"MyAlerts"}),                       # slot 0, code 1
-        (20000, {"MyAlerts"}),                       # slot 0, code 2
-        (10001, {"GLAD-L", "MyAlerts"}),             # union with GLAD-L
-        (11000, {"CCDC", "MyAlerts"}),               # CCDC stays position-bounded
-        (1, {"GLAD-L"}),                             # custom digits empty
-        (100000, {"Sentinel"}),                      # slot 1
-        (200000020, {"RADD", "Planet"}),             # slot 4 code 2 + RADD code 2
-        (210010, {"RADD", "MyAlerts", "Sentinel"}),  # RADD + slot 0 (1) + slot 1 (2)
-        (1010010, {"RADD", "MyAlerts", "Other"}),    # RADD + slot 0 + slot 2
-    ],
-)
-def test_get_unique_alerts_decodes_custom_slots(value, expected):
-    names = {0: "MyAlerts", 1: "Sentinel", 2: "Other", 4: "Planet"}
-    assert set(get_unique_alerts([value], custom_names=names)) == expected
-
-
-def test_get_unique_alerts_unnamed_slot_falls_back_to_numbered_label():
-    assert set(get_unique_alerts([10000])) == {"Custom 1"}
-    assert set(get_unique_alerts([1000000], custom_names={0: "A"})) == {"Custom 3"}
+    assert set(get_unique_alerts([value], _FIXED)) == expected
 
 
 @pytest.mark.parametrize("value", [10000.0, "10000", "10000.0", "[10000.0]"])
 def test_get_unique_alerts_accepts_float_codes(value):
     # The float64 export and CSV round-trips hand codes over as floats/strings.
     arg = value if isinstance(value, str) and value.startswith("[") else [value]
-    assert set(get_unique_alerts(arg, custom_names={0: "A"})) == {"A"}
+    assert set(get_unique_alerts(arg, {4: "A"})) == {"A"}
 
 
 def test_get_unique_alerts_accepts_stringified_list():
     # Recipe storage round-trips this column as a string; the decoder must parse it.
-    assert set(get_unique_alerts("[1, 10]")) == {"GLAD-L", "RADD"}
+    assert set(get_unique_alerts("[1, 10]", _FIXED)) == {"GLAD-L", "RADD"}
 
 
 def test_get_unique_alerts_invalid_string_returns_empty():
-    assert get_unique_alerts("not a list") == []
+    assert get_unique_alerts("not a list", _FIXED) == []
 
 
 def test_digit_map_decides_names():
@@ -251,6 +226,6 @@ def test_report_intermediates_go_to_a_private_scratch_dir(data_root, tmp_path, s
 
 def test_get_unique_alerts_lists_the_sources_in_digit_order():
     # alert_sources is stored text: the same code must give the same text.
-    assert get_unique_alerts([1011]) == ["GLAD-L", "RADD", "CCDC"]
-    assert get_unique_alerts([21, 10000], custom_names={0: "Mine"}) == ["GLAD-L", "RADD", "Mine"]
+    assert get_unique_alerts([1011], _FIXED) == ["GLAD-L", "RADD", "CCDC"]
+    assert get_unique_alerts([21, 10000], {**_FIXED, 4: "Mine"}) == ["GLAD-L", "RADD", "Mine"]
     assert get_unique_alerts([12], digit_map={1: "B", 0: "A"}) == ["A", "B"]

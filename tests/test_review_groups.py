@@ -339,13 +339,13 @@ def test_group_shape_is_the_drawing_else_the_union():
 
 def test_group_record_sums_the_group_and_numbers_its_alerts_from_one():
     gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[101] * 3 + [None])
-    gdf["alert_sources"] = ["GLAD-L", "RADD; GLAD-L", "RADD", "GLAD-S2"]
+    gdf["alert_sources"] = ["GLAD-L", "RADD and GLAD-L", "RADD, GLAD-L and GLAD-S2", "GLAD-S2"]
     gdf["grows_from"] = pd.Series([[], ["s#1@r", "s#2@r"], [], []], dtype="object")
     row, outline = rg.group_record(gdf, 2)
     assert row["alert_id"] == 101 and row["area_ha"] == 6.0
     assert row["alert_date_min"] == pytest.approx(2026.010)
     assert row["alert_date_max"] == pytest.approx(2026.022)
-    assert row["alert_sources"] == "RADD; GLAD-L"  # the main's first
+    assert row["alert_sources"] == "RADD, GLAD-L and GLAD-S2"  # the main's first, each once
     assert row["grows_from"] == "s#1@r;s#2@r"
     assert row["group_size"] == 3 and row["group_alerts"] == "1, 2, 3"
     assert outline.equals(shapely.union_all(gdf.geometry.iloc[[0, 1, 2]].to_numpy()))

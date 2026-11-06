@@ -16,6 +16,7 @@ this module, is expected to set a run's peak.
 """
 
 import glob
+import logging
 import math
 import os
 from contextlib import ExitStack
@@ -27,10 +28,7 @@ from typing import Callable, Optional, Sequence
 import geopandas as gpd
 import numpy as np
 import rasterio
-from affine import Affine
-from rasterio import features
 from rasterio.windows import Window
-from shapely.geometry import box
 
 from deforestation_alerts.engine.fingerprint import (
     carry_sets, combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, mask_key,
@@ -40,8 +38,9 @@ from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.growth_links import burn_touch_mask, link_parents, project_candidates
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts import gdal_env
+from deforestation_alerts.engine import raster_io
 from deforestation_alerts.engine.raster_io import (
-    BLOCK, check_header, compressed_estimate, ensure_free_space, row_windows, same_disk, write_grid_raster,
+    BLOCK, burn, check_header, compressed_estimate, ensure_free_space, row_windows, same_disk, write_grid_raster,
 )
 from deforestation_alerts.engine.runner import _require_masks_ready
 from deforestation_alerts.engine.vectorize import vectorize_alerts
@@ -51,9 +50,11 @@ from deforestation_alerts.project.models import (
     AlertSet, AlertSetParams, Artifact, GridSpec, Period, Project, period_digit, set_id as make_set_id,
 )
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
-from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
+from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet, store_lock
 from deforestation_alerts.scripts.alert_table import convert_to_geopandas
 from deforestation_alerts.scripts.attribute_source import attribute_alerts_from_config, download_estimate
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 #: Pixels per window (the vectorizer's default block): about 80 MB per Int32
 #: array, until the one-tile-row floor of ``_windows`` takes over above
@@ -65,10 +66,6 @@ def _windows(grid: GridSpec) -> list[Window]:
     """Full-width windows of whole 512-px tile rows, about ``WINDOW_PIXELS`` each."""
     rows = max(BLOCK, WINDOW_PIXELS // max(grid.width, 1) // BLOCK * BLOCK)
     return list(row_windows(grid, rows))
-
-
-def _window_transform(grid: GridSpec, w: Window) -> Affine:
-    return grid.affine @ Affine.translation(w.col_off, w.row_off)
 
 
 def min_cluster_pixels(min_size_ha: float, resolution: float) -> int:
@@ -149,6 +146,9 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
                             on = msrc.read(1, window=w) != 0
                             take &= on if mode == "keep" else ~on
                     code[take] = moved[take].astype(np.int32)
+                    # shortcut: band 2 keeps one date per pixel, the earliest of ALL the earlier
+                    # set's sources, so a pixel carried for some of them keeps a date another one
+                    # may have set (earlier, never later). Exact needs per-source dates in band 2.
                     date[take] = cd[take]
                     confirmed |= take & conf
                 keep = code > 0
@@ -164,28 +164,9 @@ def combine(inputs: Sequence[tuple[Path, int]], grid: GridSpec, out_path, *,
     return total
 
 
-def _burn(geoms, sindex, grid: GridSpec, w: Window, all_touched: bool = False) -> np.ndarray:
-    """The window's pixels covered by ``geoms`` (pixel-edged polygons in the grid's CRS),
-    or, with ``all_touched``, every pixel they touch."""
-    shp = (int(w.height), int(w.width))
-    t = _window_transform(grid, w)
-    if sindex is None:
-        return np.zeros(shp, bool)
-    idx = sindex.query(box(t.c, t.f + t.e * shp[0], t.c + t.a * shp[1], t.f))
-    if not len(idx):
-        return np.zeros(shp, bool)
-    return features.rasterize(((g, 1) for g in geoms.iloc[idx]), out_shape=shp, transform=t, fill=0,
-                              all_touched=all_touched, dtype="uint8").astype(bool)
-
-
 def rasterize_footprint(gdf_grid: gpd.GeoDataFrame, grid: GridSpec, out_path, *, all_touched: bool = False) -> Path:
     """Burn the polygons (in the grid's CRS) into an Int32 0/1 raster on ``grid``."""
-    geoms = gdf_grid.geometry
-    sindex = geoms.sindex if len(geoms) else None
-    with write_grid_raster(Path(out_path), grid, count=1) as dst:
-        for w in _windows(grid):
-            dst.write(_burn(geoms, sindex, grid, w, all_touched).astype(np.int32), 1, window=w)
-    return Path(out_path)
+    return raster_io.rasterize_footprint(gdf_grid, grid, out_path, all_touched=all_touched, windows=_windows(grid))
 
 
 STATE_ANALYSABLE, STATE_TOO_SMALL, STATE_OVER_CAP = 1, 2, 3
@@ -204,8 +185,8 @@ def write_states(base_path, grid: GridSpec, out_path, eligible: gpd.GeoDataFrame
         for w in _windows(grid):
             bands = [src.read(b, window=w) for b in (1, 2, 3)]
             alert = bands[0] > 0
-            in_kept = _burn(k_geoms, k_idx, grid, w) & alert
-            in_elig = _burn(e_geoms, e_idx, grid, w) & alert
+            in_kept = burn(k_geoms, k_idx, grid, w) & alert
+            in_elig = burn(e_geoms, e_idx, grid, w) & alert
             state = np.zeros(alert.shape, np.int32)
             state[alert] = STATE_TOO_SMALL
             state[in_elig] = STATE_OVER_CAP
@@ -470,14 +451,24 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         # Dropped before the swap, so a failure here still leaves the recorded
         # set's own files as they were (its tiles are rebuilt on demand).
         paths.pmtiles_path(sdir).unlink(missing_ok=True)
-        for final, part in staged.items():
-            os.replace(part, final)
+        # Under the store's lock, as every store write: a review Save that
+        # passed its generation check must not land after this swap.
+        with store_lock(store):
+            for final, part in staged.items():
+                os.replace(part, final)
     except BaseException:
         base.unlink(missing_ok=True)
         touch.unlink(missing_ok=True)
         for part in staged.values():
             part.unlink(missing_ok=True)
         raise
+    # The replaced run's per-alert files are named by its alert positions:
+    # left there, the new alert 5 would reuse the old alert 5's imagery.
+    for f in paths.per_alert_files(sdir):
+        try:
+            f.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Integrate: could not remove %s of the replaced run", f)
 
     # New content ids and sizes, taken from the files now in place (spec §5.3).
     artifacts = {

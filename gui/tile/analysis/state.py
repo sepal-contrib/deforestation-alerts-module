@@ -16,6 +16,7 @@ import solara
 
 from deforestation_alerts.project import grouping as grouping_rules
 from deforestation_alerts.project import review_groups
+from deforestation_alerts.project.review_groups import area_crs
 from gui.scripts.alert_filter import AlertFilter
 from gui.store.workflow_steps import active_set
 
@@ -247,14 +248,6 @@ def apply_start_filter(analysis: AnalysisState, f: Optional[AlertFilter]) -> Non
     ran). ``AppState`` resets the filter inside ``_install`` only, never on
     ``project_loaded_signal``, so nothing after the install clears it."""
     analysis.alert_filter.set(f)
-
-
-def area_crs(project) -> Optional[str]:
-    """The CRS every area of the review is measured in: the project's grid
-    CRS, the one Integrate measured the alerts' ``area_ha`` in. ``None``
-    before there is a grid (``calculate_total_area`` then takes the local UTM
-    zone)."""
-    return project.grid.epsg if project is not None and project.grid is not None else None
 
 
 def min_patch_ha(project) -> float:

@@ -43,7 +43,8 @@ module.exports = {
     },
     ocLists() {
       // While the panel is open, any other open menu is one of its lists.
-      return Array.from(document.querySelectorAll(".menuable__content__active"))
+      // .v-menu__content: an open tooltip is menuable__content__active too
+      return Array.from(document.querySelectorAll(".v-menu__content.menuable__content__active"))
         .filter((m) => !m.classList.contains(this.content_class));
     },
     ocInside(target, lists) {

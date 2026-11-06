@@ -226,6 +226,22 @@ def test_a_picked_verdict_with_a_required_question_unanswered_opens_the_section(
     assert not sec.is_open()
 
 
+def test_an_alert_change_neither_opens_the_section_nor_eats_the_next_pick(ctx):
+    """``reset_alert`` setting ``edit_rev`` back to 0 is not an edit; on the
+    next alert, picking the previous alert's verdict is still a pick."""
+    from gui.tile.analysis.state import touch
+
+    _s, a, sec = ctx
+    a.verdict.set("Confirmed")
+    touch(a)
+    sec.set_open(False)
+    a.reset_alert()  # Save & next
+    assert not sec.is_open()
+    a.verdict.set("Confirmed")
+    touch(a)
+    assert sec.is_open()
+
+
 def test_an_auto_save_publish_of_the_same_questions_does_not_rebuild(ctx):
     s, _a, sec = ctx
     before = dict(sec.controls)

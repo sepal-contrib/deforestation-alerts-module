@@ -4,7 +4,10 @@ Single home for code previously duplicated across model_worker.py and
 mosaics_helper. Pure CPU/IO: no solara, no GEE -- spec §4.2 service rule.
 """
 
+import functools
 import os
+import threading
+
 import rasterio
 import numpy as np
 import tensorflow as tf
@@ -53,11 +56,21 @@ def save_prediction_prob(original_img, prediction, output_path):
     """
     with rasterio.open(original_img) as src1:
         out_meta = src1.meta.copy()
-    out_meta.update(count=1, dtype="float32", driver="GTiff")
+    out_meta.update(count=1, dtype="float32", driver="GTiff", compress="deflate")
     with local_files.write_into(output_path) as part:
         with rasterio.open(part, "w", **out_meta) as dest:
             dest.write(prediction, indexes=1)
     return output_path
+
+
+#: one model predicts at a time: a shared Keras model is not safe to call from two threads
+_PREDICT_LOCK = threading.Lock()
+
+
+@functools.lru_cache(maxsize=2)
+def _load_model(path, mtime_ns):
+    """The model at ``path``, loaded once per file version (``mtime_ns`` keys a re-download)."""
+    return models.load_model(path, custom_objects={"RepeatElements": RepeatElements}, compile=False)
 
 
 def apply_dl_model(image, model, suffix):
@@ -79,13 +92,12 @@ def apply_dl_model(image, model, suffix):
 
     img = read_image(input_image)
 
-    model1 = models.load_model(
-        model_path, custom_objects={"RepeatElements": RepeatElements}, compile=False
-    )
     mosaic = MightyMosaic.from_array(img, (256, 256), overlap_factor=2)
-    prediction1 = mosaic.apply(
-        lambda x: model1.predict(x, verbose=0), progress_bar=False, batch_size=2
-    )
+    with _PREDICT_LOCK:
+        model1 = _load_model(model_path, os.stat(model_path).st_mtime_ns)
+        prediction1 = mosaic.apply(
+            lambda x: model1.predict(x, verbose=0), progress_bar=False, batch_size=2
+        )
     final_prediction1 = prediction1.get_fusion()
 
     # Create the new filename with "_prediction" suffix

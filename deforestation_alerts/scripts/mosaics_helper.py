@@ -111,7 +111,7 @@ def prediction_patches(raster_path, threshold, crs, min_size_ha=0.0):
 
     with rasterio.open(raster_path) as src:
         detected = (src.read(1) > threshold).astype(np.uint8)
-        geoms = [shape(geom) for geom, _ in shapes(detected, mask=detected.astype(bool),
+        geoms = [shape(geom) for geom, _ in shapes(detected, mask=detected.astype(bool), connectivity=8,  # as Integrate joins pixels
                                                      transform=src.transform)]
         src_crs = src.crs
     patches = gpd.GeoDataFrame(geometry=geoms, crs=src_crs)
@@ -179,18 +179,6 @@ def convertir_formato3(input_features, color="#2196F3"):
         converted_features.append(new_feature)
 
     return converted_features
-
-
-def calculate_total_area(gdf, crs=None):
-    """The polygons' total area in hectares, measured in ``crs``.
-
-    ``crs`` is the project's grid CRS (``project.grid.epsg``), the one
-    Integrate measures every alert's ``area_ha`` in, so a reviewed polygon and
-    the alert it replaces are on one scale. Without one (no grid yet), the
-    polygons' own UTM zone. Never EPSG:3857: its areas are ~20 % too large at
-    Paraguay's latitudes.
-    """
-    return float(gdf.to_crs(crs or gdf.estimate_utm_crs()).geometry.area.sum()) / 10_000
 
 
 def simplify_and_extract_features(

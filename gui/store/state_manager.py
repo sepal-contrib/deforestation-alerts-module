@@ -2,14 +2,14 @@
 (``solara.use_memo``) and handed to tiles as an argument.
 
 The Project reactive compares by identity: tiles mutate the live Project and
-publish ``p.model_copy()`` (``commit``); value equality would swallow those
+publish ``p.model_copy()`` (``update_project``); value equality would swallow those
 updates. Worker threads never replace the project wholesale: they return what
 they produced and ``update_project`` applies it to the *live* project, only if
 that project is still the open one.
 
 The copy is shallow (spec §5.4), so every published snapshot shares the live
 project's dict fields (``sources``, ``periods``, ``artifacts``, ``alert_sets``,
-``masks``). A callback handed to ``commit`` or ``update_project`` therefore
+``masks``). A callback handed to ``update_project`` therefore
 replaces a container it changes (``p.alert_sets = {**p.alert_sets, sid: s}``)
 and never mutates it in place: the publish runs on the caller's thread while a
 render on another thread may be iterating the same dict, and an in-place
@@ -22,7 +22,7 @@ reactive ``set`` runs its subscribers synchronously in the calling thread, so
 while ``_lock`` is held the auto-save hook writes the manifest and every
 component reading the project re-renders, taking reacton's render lock. Hence:
 
-- call ``commit``, ``update_project`` and the ``*_project_state`` methods from
+- call ``update_project`` and the ``*_project_state`` methods from
   event handlers, tasks or worker threads, never from a render body or an
   effect (effects run inside the render lock, so the two locks would be taken
   in opposite orders by a worker and the render thread);
@@ -136,11 +136,6 @@ class AppState:
     def project_dir(self) -> Optional[Path]:
         p = self.project.value
         return paths.project_dir(p.name) if p is not None else None
-
-    def commit(self, p: Project) -> None:
-        """Publish an in-place mutation (the auto-save hook saves it)."""
-        with self._lock:
-            self.project.set(p.model_copy())
 
     def update_project(self, name: str, fn: Callable[[Project], None]) -> bool:
         """Apply a job's result to the live project and publish it, only if the

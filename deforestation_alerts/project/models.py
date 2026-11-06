@@ -442,6 +442,9 @@ class Project(BaseModel):
     active_set: Optional[str] = None
     report_template: Optional[str] = None
     questions: list[Question] = Field(default_factory=default_questions)
+    #: keys of deleted questions: their answers stay in the stores, so a new
+    #: question never takes one (``questions.new_key``)
+    retired_question_keys: list[str] = []
     #: whether Analysis shows its Questions section open or collapsed
     questions_expanded: bool = False
     #: set when this project was imported from a review package (spec §6)

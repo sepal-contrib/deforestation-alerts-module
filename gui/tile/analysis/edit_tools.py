@@ -117,7 +117,6 @@ from pysepal.solara.notifications import notify
 
 from deforestation_alerts import gdal_env
 from deforestation_alerts.project import review_groups
-from deforestation_alerts.scripts.cnn_worker import apply_dl_model
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import (
     convertir_formato3,
@@ -130,10 +129,11 @@ from gui.i18n import format_number, t, tn
 from gui.scripts.notify_bridge import current_notifier, run_button_job, tile_progress_reporter
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
+from gui.tile.analysis.alert_files import images_picked
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.pane_layers import ALERT_TOP_Z, geojson_spec
 from gui.tile.analysis.paths import stage_alert_image
-from gui.tile.analysis.state import area_crs, capture_alert, drawing_changed, min_patch_ha, touch
+from gui.tile.analysis.state import area_crs, capture_alert, drawing_changed, min_patch_ha, saved_area, touch
 from gui.tile.analysis.section import TYPE_BODY, TYPE_LABEL
 from gui.widget.buttons import btn, set_label
 
@@ -279,18 +279,6 @@ class _EditionButton(v.Btn, sw.SepalWidget):
         super().__init__(**kwargs)
 
 
-def _images_ready(alert) -> bool:
-    """Whether the alert's before/after pair is picked AND drawn.
-
-    The same guard as ``alert_files.images_picked``, for the run that stages the
-    composite: the infos are published at the click and each pane's ee.Image
-    when its rebuild lands, so in between the pair's metadata and its pixels
-    are of different scenes (``imagery.wire_panes``).
-    """
-    return all(v is not None for v in (alert.before_info, alert.after_info,
-                                       alert.before_image, alert.after_image))
-
-
 def _run_cnn_model(
     model_repo,
     model_file,
@@ -329,6 +317,9 @@ def _run_cnn_model(
     """
     from huggingface_hub import hf_hub_download
 
+    # TensorFlow is ~3 s and ~0.6 GB: loaded at the first run, not at app start
+    from deforestation_alerts.scripts.cnn_worker import apply_dl_model
+
     alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
 
     on_tiles = tile_progress_reporter(task) if task is not None else None
@@ -341,6 +332,7 @@ def _run_cnn_model(
             alert.before_image,
             alert.after_image,
             alert.grid,
+            getattr(alert, "image_area", "normal"),
         )
     if task is not None:
         task.set_progress(None)  # model pull + inference: back to indeterminate
@@ -638,20 +630,30 @@ def build_edit_tools(
     # ``(applied, valid)``: whether this was still the current alert's run, and
     # whether the prediction holds anything to add -- an empty one is the
     # ``dl_404`` warning, not a "Found 0 patches" row.
-    def _apply_model(model, pred_path, token, found):
+    def _apply_model(model, pred_path, alert, found):
+        token = alert.token
         if not analysis.is_current(token):
             return False, False
         features, n_patches, area_ha = found
         valid = n_patches > 0
+        applied = []
 
         def _apply():
+            # Same alert, but other imagery or another image area picked
+            # during the run: the prediction is of a composite no longer shown.
+            if (analysis.before_image.value is not alert.before_image
+                    or analysis.after_image.value is not alert.after_image
+                    or saved_area(analysis.image_area.value) != alert.image_area):
+                return
             _record_prediction(model, pred_path)
             features_cache[(token, model)] = features
             _record_prediction_shapes(analysis, model, n_patches, area_ha)
             _set_found(model, valid)
             _show_found(model)
+            applied.append(True)
 
-        return analysis.apply_if_current(token, _apply), valid
+        analysis.apply_if_current(token, _apply)
+        return bool(applied), valid
 
     # ------------------------------------------------------------------
     # An alert change (``AnalysisState.reset_alert``) puts the card back as it
@@ -676,6 +678,7 @@ def build_edit_tools(
             for name in ("save_btn", "stop_btn"):
                 ns[name].disabled = True
             ns["start_btn"].disabled = False
+            ns["stop_dialog"].v_model = False
             _show_edit_slot(False)
             panes = getattr(widgets, "panes", None)
             if panes is not None:
@@ -813,7 +816,7 @@ def build_edit_tools(
 
     def _stop_choice(choice):
         ns["stop_dialog"].v_model = False
-        if choice == "keep":
+        if choice == "keep" or not editing["on"]:  # the alert changed under the dialog
             return
         try:
             if choice == "save":
@@ -884,7 +887,7 @@ def build_edit_tools(
         # the project it writes into after the user switched to another one.
         project = writer_name(app_state)
         repo, filename, suffix = _MODELS[n]
-        valid = {"found": False}
+        valid = {"found": False, "applied": False}
 
         # No ``total_steps`` — the run is one download+inference phase; the
         # composite download drives the ring, the rest is indeterminate.
@@ -892,9 +895,9 @@ def build_edit_tools(
             task.step(t("analysis_tile.model_labels.dl_step_run"))
             # Nothing to run on while a pane is still rebuilding its pick: a
             # composite staged now would carry one pick's name over the other's
-            # pixels (``_images_ready``). Its own reason, so the refusal does
+            # pixels (``alert_files.images_picked``). Its own reason, so the refusal does
             # not read as "you moved on".
-            if not _images_ready(alert):
+            if not images_picked(alert):
                 return t("analysis_tile.model_labels.dl_no_images")
             applied = False
             if analysis.is_current(token):
@@ -909,7 +912,8 @@ def build_edit_tools(
                     # say what was found and *Add* is instant. A failure fails
                     # the run like any other.
                     found = vectorise(pred_path, alert.area_crs, alert.min_patch_ha)
-                applied, valid["found"] = _apply_model(n, pred_path, token, found)
+                applied, valid["found"] = _apply_model(n, pred_path, alert, found)
+                valid["applied"] = applied
             # Another alert is on screen: its result is dropped.
             return None if applied else t("analysis_tile.model_labels.dl_stale")
 
@@ -925,6 +929,10 @@ def build_edit_tools(
         def _release():
             button.loading = False
             button.disabled = False
+            # A refused or failed rerun: what an earlier run found for this
+            # alert and imagery is still on offer.
+            if not valid["applied"] and analysis.is_current(token):
+                _set_found(n, True if analysis.prediction_shapes.value.get(n) else None)
 
         run_button_job(
             t("analysis_tile.model_labels.dl_task_title"), _body,

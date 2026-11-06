@@ -43,7 +43,6 @@ from deforestation_alerts.engine.harmonize import harmonize
 from deforestation_alerts.engine.masks import (
     align_mask, build_aoi_raster, build_mask_image, export_mask_native, mask_raw_estimate,
 )
-from deforestation_alerts.engine.plan import plan_prepare  # re-exported for callers and tests
 from deforestation_alerts.engine.raster_io import compressed_estimate, ensure_free_space
 from deforestation_alerts.errors import KeyedError, ProjectRuleError, UserFileMissing
 from deforestation_alerts.project import paths
@@ -53,7 +52,7 @@ __all__ = [
     "AoiGeometryMissing", "CoverageRefused", "HarmonizeFailed", "MaskFileMissing", "MaskJob", "MaskNativeUnknown",
     "MaskNotReady", "RawNotReady",
     "SourceJob",
-    "apply_artifacts", "ensure_aoi_raster", "plan_prepare", "run_mask_row", "run_source_row",
+    "apply_artifacts", "ensure_aoi_raster", "run_mask_row", "run_source_row",
 ]
 
 

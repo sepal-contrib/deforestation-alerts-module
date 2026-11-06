@@ -15,6 +15,7 @@ import geopandas as gpd
 from shapely import STRtree
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
+from deforestation_alerts.engine.raster_io import rasterize_footprint
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.growth import Candidate, group_candidates, rows_of_set
 from deforestation_alerts.project.models import GridSpec, Period, Project
@@ -64,9 +65,6 @@ def burn_touch_mask(cands: Sequence[Candidate], grid: GridSpec, out_path: Path) 
     the small clusters they kept. None when there is no candidate."""
     if not cands:
         return None
-    # integrate imports this module; its burn is imported here, at call time
-    from deforestation_alerts.engine.integrate import rasterize_footprint
-
     buffered = _grid_shapes(cands, grid).buffer((REACH_PIXELS + 0.5) * grid.resolution)
     return rasterize_footprint(gpd.GeoDataFrame(geometry=buffered), grid, out_path, all_touched=True)
 

@@ -13,7 +13,6 @@ from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from datetime import datetime
 from pathlib import Path
 # The code decoding moved to alert_codes (no report libraries); kept importable from here.
-from deforestation_alerts.scripts.alert_codes import format_list, get_unique_alerts, parse_formatted_string  # noqa: F401
 from deforestation_alerts.scripts import local_files
 
 

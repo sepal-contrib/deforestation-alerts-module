@@ -137,7 +137,10 @@ export const layerMenu = {
         mv.emit("layertoggle", {view: view.id, id, on});
       });
       view.map.on("click", collapse);
-      view.map.on("layeradd layerremove", refreshChecks);
+      // Only our layers move a tick; Geoman adds a marker per vertex.
+      view.map.on("layeradd layerremove", e => {
+        for (const entry of mv.layerEntries(view.id).values()) if (entry.layer === e.layer) return refreshChecks();
+      });
 
       relabel();
       render();

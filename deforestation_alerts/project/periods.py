@@ -71,7 +71,8 @@ def sets_newest_first(p: Project) -> list[AlertSet]:
 def prefill(p: Project, today: date) -> tuple[str, str]:
     latest = latest_period(p)
     start = latest.end + timedelta(days=1) if latest is not None else today.replace(day=1)
-    return start.isoformat(), today.isoformat()
+    # never start == end: the form would open on its "order" error
+    return start.isoformat(), max(today, start + timedelta(days=1)).isoformat()
 
 
 #: the longest look-back accepted, in days (ten years)

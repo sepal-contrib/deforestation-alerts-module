@@ -23,13 +23,13 @@ from collections import OrderedDict
 from typing import Optional
 
 from deforestation_alerts.project import grouping, review_groups
+from deforestation_alerts.project.review_groups import area_crs
 from deforestation_alerts.project.review_status import CONFIRMED, STATUS_CODES
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.scripts.set_summary import read_summary
 from gui.i18n import t
 from gui.scripts import charts, set_store
 from gui.scripts.legend_specs import STACK_ORDER, STATUS_CLASSES, status_colors
-from gui.scripts.split_service import area_crs
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.overview_data")
 

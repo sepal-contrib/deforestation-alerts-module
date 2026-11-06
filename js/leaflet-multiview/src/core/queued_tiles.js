@@ -6,8 +6,9 @@
 // reports "tileerror" only for a tile that failed every try.
 //
 // The tiles are fetched (the server must allow CORS) and shown from a blob
-// URL, revoked once the image has decoded. A tile Leaflet drops (panned out,
-// zoomed past, its layer removed) cancels its request.
+// URL, revoked once the image has decoded or Leaflet dropped the tile. A tile
+// Leaflet drops (panned out, zoomed past, its layer removed) cancels its
+// request.
 import {createTileQueue} from "./tile_queue.js";
 
 let shared = null;
@@ -18,6 +19,12 @@ export function sharedTileQueue() {
   return shared;
 }
 
+// The tile's own blob URL, never ``tile.src``: Leaflet may have replaced it.
+function revoke(tile) {
+  if (tile._mvUrl) URL.revokeObjectURL(tile._mvUrl);
+  tile._mvUrl = null;
+}
+
 export function queuedTileLayer(L, url, options, queue = sharedTileQueue()) {
   const QueuedTileLayer = L.TileLayer.extend({
     createTile(coords, done) {
@@ -25,16 +32,16 @@ export function queuedTileLayer(L, url, options, queue = sharedTileQueue()) {
       tile.alt = "";
       tile.setAttribute("role", "presentation");
       L.DomEvent.on(tile, "load", () => {
-        URL.revokeObjectURL(tile.src);
+        revoke(tile);
         this._tileOnLoad(done, tile);
       });
       L.DomEvent.on(tile, "error", e => {
-        URL.revokeObjectURL(tile.src);
+        revoke(tile);
         this._tileOnError(done, tile, e);
       });
       tile._mvJob = queue.fetch(
         this.getTileUrl(coords),
-        blob => { tile.src = URL.createObjectURL(blob); },
+        blob => { tile.src = tile._mvUrl = URL.createObjectURL(blob); },
         error => done(error, tile),
       );
       return tile;
@@ -43,6 +50,7 @@ export function queuedTileLayer(L, url, options, queue = sharedTileQueue()) {
   const layer = new QueuedTileLayer(url, options);
   const cancel = e => {
     if (e.tile && e.tile._mvJob) e.tile._mvJob.cancel();
+    if (e.tile) revoke(e.tile); // Leaflet swaps src for an empty GIF: the load that follows is not ours
   };
   layer.on("tileunload tileabort", cancel);
   return layer;

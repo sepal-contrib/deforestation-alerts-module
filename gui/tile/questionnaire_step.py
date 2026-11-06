@@ -9,7 +9,7 @@ import reacton.ipyvuetify as rv
 import solara
 
 from deforestation_alerts.project import io
-from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, attribute_columns, column
+from deforestation_alerts.project.questions import REPORT_PLACEHOLDERS, column, reserved_columns
 from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.review_status import VERDICT_LABEL_KEYS
 from gui.i18n import t, tn
@@ -162,8 +162,13 @@ def QuestionnaireStep(app_state):
     def _delete():
         key = pending_delete
         set_pending_delete(None)
-        update_setup(app_state, name, lambda live: setattr(
-            live, "questions", [q for q in live.questions if q.key != key]))
+        def _apply(live):
+            live.questions = [q for q in live.questions if q.key != key]
+            # its answers stay in the stores: a new question never takes its column
+            if key not in live.retired_question_keys:
+                live.retired_question_keys = [*live.retired_question_keys, key]
+
+        update_setup(app_state, name, _apply)
 
     def _edit(q):
         if refuse_setup(app_state):
@@ -205,7 +210,7 @@ def QuestionnaireStep(app_state):
         _TemplateCard(app_state=app_state, questions=p.questions)
 
     QuestionModal(open_=modal_open, questions=p.questions, editing=editing, on_save=_save,
-                  columns=attribute_columns(p))
+                  columns=reserved_columns(p, getattr(app_state.alerts_gdf.value, "columns", ())))
     ConfirmDialog(
         open=doomed is not None,
         on_cancel=lambda: set_pending_delete(None),

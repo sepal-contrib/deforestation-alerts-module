@@ -750,7 +750,7 @@ def _images_drawn(analysis):
     stubbed in these tests) but they have to be there: a run or a build
     refuses while a lane is still rebuilding, because the pair's metadata
     would be the new pick's and its pixels the previous one's
-    (``edit_tools._images_ready``).
+    (``alert_files.images_picked``).
     """
     analysis.before_info.set(["Sentinel 2", 1700000000, None, "S2_before", "_010124"])
     analysis.after_info.set(["Sentinel 2", 1700000001, None, "S2_after", "_020224"])
@@ -1144,8 +1144,10 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch):
     monkeypatch.setattr(
         huggingface_hub, "hf_hub_download", lambda **kw: "/tmp/model.h5"
     )
+    from deforestation_alerts.scripts import cnn_worker
+
     monkeypatch.setattr(
-        edit_tools,
+        cnn_worker,
         "apply_dl_model",
         lambda image, model, suffix: order.append("inference") or "/tmp/pred.tif",
     )

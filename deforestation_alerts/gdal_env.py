@@ -19,6 +19,7 @@ dtype.
 import logging
 import os
 import tempfile
+import threading
 from pathlib import Path
 
 from osgeo import gdal
@@ -34,7 +35,8 @@ def _is_usable(d: Path) -> bool:
     """
     try:
         d.mkdir(parents=True, exist_ok=True)
-        probe = d / f".probe_{os.getpid()}"
+        # per thread too: two threads probing one folder must not delete each other's probe
+        probe = d / f".probe_{os.getpid()}_{threading.get_ident()}"
         probe.write_text("")
         probe.unlink()
         return True

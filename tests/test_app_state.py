@@ -10,13 +10,13 @@ def _p(name="a"):
     return Project(name=name, created_at=datetime.now(), updated_at=datetime.now())
 
 
-def test_commit_publishes_a_new_identity():
+def test_update_publishes_a_new_identity():
     s = AppState()
     p = _p()
     s.new_project_state(p)
     first = s.project.value
     first.look_back_days = 30
-    s.commit(first)
+    s.update_project(first.name, lambda _p: None)
     assert s.project.value is not first and s.project.value.look_back_days == 30
 
 

@@ -106,7 +106,9 @@ export const draw = {
 
     // Every Geoman layer of ours is enabled with these: by enableGlobalEditMode,
     // by Geoman's layeradd handler (from globalOptions) and after removal mode.
-    const EDIT = {allowSelfIntersection: false, removeVertexOn: options.removeVertexOn, snappable: false, draggable: false};
+    // allowSelfIntersectionEdit: a saved union or a pixel prediction can touch
+    // itself at a corner; without it Geoman undoes every drag on such a shape.
+    const EDIT = {allowSelfIntersection: false, allowSelfIntersectionEdit: true, removeVertexOn: options.removeVertexOn, snappable: false, draggable: false};
     const targetIds = viewsOf({view: options.views}, mv.views.map(v => v.id));
     const views = mv.views
       .filter(v => targetIds.includes(v.id))

@@ -180,6 +180,8 @@ def build_questions_section(app_state, analysis, *, labels=None):
         refuse without. Heard on ``edit_rev`` (the reviewer's edits), not on
         ``verdict``, which an alert load also sets -- before its answers --
         and once per verdict, so a section closed again stays closed."""
+        if not analysis.edit_rev.value:  # ``reset_alert`` setting it back to 0: no edit
+            return
         verdict = analysis.verdict.value
         if verdict == picked["verdict"]:
             return
@@ -195,7 +197,7 @@ def build_questions_section(app_state, analysis, *, labels=None):
     analysis.verdict.subscribe(_sync)
     analysis.edit_rev.subscribe(_open_if_required)
     # a new alert: its first pick is a pick, even of the previous one's verdict
-    analysis.alert_token.subscribe(lambda *_: picked.update(verdict=analysis.verdict.value))
+    analysis.alert_token.subscribe(lambda *_: picked.update(verdict=None))
     _rebuild()
 
     def _relabel():

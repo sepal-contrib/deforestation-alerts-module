@@ -31,6 +31,7 @@ from shapely.geometry.base import BaseGeometry
 
 from deforestation_alerts.project import review_status, store_schema
 from deforestation_alerts.project.questions import is_answer_column
+from deforestation_alerts.scripts.alert_codes import format_list, parse_formatted_string
 
 COLUMN = store_schema.REVIEW_GROUP
 NOT_REVIEWED = review_status.NOT_REVIEWED
@@ -267,9 +268,17 @@ def _links(cell) -> list:
     return links_of(cell)
 
 
+def area_crs(project) -> Optional[str]:
+    """The CRS every area and distance of the review is measured in: the
+    project's grid CRS, the one Integrate measured the alerts' ``area_ha`` in.
+    ``None`` before there is a grid (``polygon_area_ha`` then takes the local
+    UTM zone)."""
+    return project.grid.epsg if project is not None and project.grid is not None else None
+
+
 def polygon_area_ha(geom, crs=None, *, source="EPSG:4326") -> float:
     """The area of ``geom`` (in ``source``) in hectares, measured in ``crs``
-    (``state.area_crs``: the grid's, metric), or in its estimated UTM zone."""
+    (``area_crs``: the grid's, metric), or in its estimated UTM zone."""
     series = gpd.GeoSeries([geom], crs=source)
     return float(series.to_crs(crs or series.estimate_utm_crs()).area.iloc[0]) / 10_000.0
 
@@ -383,8 +392,10 @@ def group_shape(gdf, p) -> Optional[BaseGeometry]:
 
 
 def _sources(values) -> str:
-    parts = (part.strip() for value in values if isinstance(value, str) for part in value.split(";"))
-    return "; ".join(dict.fromkeys(part for part in parts if part))
+    """The distinct sources of ``values`` (``alert_table`` writes each as
+    ``format_list`` does: "A, B and C"), in order, written the same way."""
+    parts = (part for value in values if isinstance(value, str) for part in parse_formatted_string(value))
+    return format_list(list(dict.fromkeys(part for part in parts if part)))
 
 
 def group_record(gdf, p) -> tuple:

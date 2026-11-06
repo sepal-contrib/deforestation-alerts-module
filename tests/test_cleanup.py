@@ -35,7 +35,7 @@ def _project(pdir):
 
 def test_deleting_a_source_leaves_none_of_its_files(tmp_path):
     p = _project(tmp_path)
-    keys = cleanup.source_artifact_keys(p, "RADD")
+    keys = [k for pid in p.periods for k in cleanup.source_period_keys(p, pid, "RADD")]
     assert sorted(keys) == sorted([fp.raw_key(JAN.id, "RADD"), fp.harm_key(JAN.id, "RADD"),
                                    fp.raw_key(FEB.id, "RADD"), fp.harm_key(FEB.id, "RADD")])
     before = dict(p.artifacts)

@@ -444,6 +444,20 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
 
     solara.use_effect(_start_measure, [manage_open.value, listed_names])
 
+    def _ask_first(move):
+        """Run ``move`` (it replaces or closes the open project) now, or, over
+        unsaved Analysis work, after the dock's Discard/Stay prompt
+        (``app_state.guard``), with the dialog closed so the prompt shows.
+        Returns ``move()``'s result when it ran now, True otherwise (a form
+        closes)."""
+        if analysis is None or not analysis.dirty.value:
+            return move()
+        for flag in (new_open, dup_open, rename_open, manage_open, import_open):
+            flag.set(False)
+        dismiss()
+        app_state.guard(move)
+        return True
+
     def _show_workflow():
         # From any step: the navigation alone closes the dialog only when it
         # moves the workflow, which it does not when AOI is already showing.
@@ -499,10 +513,14 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
             notifications.error(import_failure_text(exc, Path(path).name))
             return
         import_open.set(False)
-        app_state.load_project_state(made)
         set_refresh(lambda n: n + 1)
-        _land(made)
         notifications.success(t("steps.project.imported", name=made.name))
+
+        def _install():
+            app_state.load_project_state(made)
+            _land(made)
+
+        _ask_first(_install)
 
     import_task = solara.lab.use_task(_held(_import), dependencies=None, prefer_threaded=False, raise_error=False)
 
@@ -559,7 +577,7 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
             manage_open.set(False)
             dismiss()
             return
-        load_task(name)
+        _ask_first(lambda: load_task(name))
 
     def _open_manage():
         selected.set(p.name if p is not None else None)
@@ -582,11 +600,17 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         set_pending_delete(name)
 
     def _create(name):
-        app_state.new_project_state(create_project(name))
-        _show_workflow()
-        return True
+        def _install():
+            app_state.new_project_state(create_project(name))
+            _show_workflow()
+            return True
+
+        return _ask_first(_install)
 
     def _duplicate(name):
+        return _ask_first(lambda: _duplicate_now(name))
+
+    def _duplicate_now(name):
         if p is None:  # closed (a delete) while the form was open
             return True  # nothing to copy: the form just closes
         if read_only(p):  # spec §6.3: a review copy is not duplicated (its button is hidden)
@@ -605,6 +629,12 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         old = rename_target
         if not old:
             return True
+        live = app_state.project.peek()
+        if live is not None and live.name == old:  # reinstalled under the new name
+            return _ask_first(lambda: _rename_now(old, name))
+        return _rename_now(old, name)
+
+    def _rename_now(old, name):
         # Under the publish lock: no commit can save into the old folder between the move and the install.
         with app_state._lock:
             if is_writing(old):  # a job would keep writing into the old folder
@@ -667,7 +697,11 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
     def _confirm_delete():
         # Never call a running delete again: that would cancel its
         # continuation, not the removal of the folder.
-        if not delete_task.pending:
+        if delete_task.pending:
+            return
+        if p is not None and p.name == pending_delete:  # closes the open project
+            _ask_first(delete_task)
+        else:
             delete_task()
 
     # The project changed last, offered to Continue while none is open.

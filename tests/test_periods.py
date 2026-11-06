@@ -138,6 +138,13 @@ def test_prefill_follows_the_latest_period():
     assert periods.prefill(p, today) == ("2026-03-01", "2026-09-30")
 
 
+def test_prefill_never_opens_on_an_order_error():
+    # the 1st of a month with no period, and the day after a period that ended "today"
+    assert periods.prefill(_p(), date(2026, 9, 1)) == ("2026-09-01", "2026-09-02")
+    p = _periods(_p(), ("2026-09-01", "2026-09-29"))
+    assert periods.prefill(p, date(2026, 9, 30)) == ("2026-09-30", "2026-10-01")
+
+
 # ---------------------------------------------------------------------------
 # Frozen dates
 # ---------------------------------------------------------------------------

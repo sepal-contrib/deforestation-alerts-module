@@ -48,7 +48,7 @@ def test_resolve_tippecanoe_falls_back_next_to_python(monkeypatch, tmp_path):
 def test_builds_two_layers_with_status_codes(monkeypatch, tmp_path):
     seen = {}
 
-    def fake_run(cmd, check, capture_output, text):
+    def fake_run(cmd, check, capture_output, text, timeout=None):
         seen["cmd"] = cmd
         for arg in cmd:
             if arg.startswith("{"):
@@ -69,7 +69,7 @@ def test_builds_two_layers_with_status_codes(monkeypatch, tmp_path):
 
 
 def _fake_tippecanoe(monkeypatch):
-    def fake_run(cmd, check, capture_output, text):
+    def fake_run(cmd, check, capture_output, text, timeout=None):
         Path(cmd[cmd.index("-o") + 1]).write_bytes(b"PMTiles")
         return subprocess.CompletedProcess(cmd, 0)
 
