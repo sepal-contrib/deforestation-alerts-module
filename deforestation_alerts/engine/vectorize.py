@@ -207,8 +207,12 @@ def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 
         }
         for root, c in clusters.items()
     ]
+    # every connected cluster, before the size filter: the Overview's "Clusters formed"
+    n_clusters = int(np.count_nonzero(comp_size[1:]))
     if not records:
-        return gpd.GeoDataFrame(columns=columns, geometry="geometry", crs=crs)
+        empty = gpd.GeoDataFrame(columns=columns, geometry="geometry", crs=crs)
+        empty.attrs["clusters"] = n_clusters
+        return empty
     gdf = gpd.GeoDataFrame(
         {
             "geometry": gpd.GeoSeries([r["geometry"] for r in records]).affine_transform(to_grid),
@@ -227,5 +231,7 @@ def vectorize_alerts(raster_path, *, min_cluster_size: int, connectivity: int = 
         gdf["area_ha"] = gdf.geometry.to_crs(utm).area / 10_000.0
     if touch_mask is not None:
         gdf["below_min"] = [r["below_min"] for r in records]
-    return gdf[columns]
+    out = gdf[columns]
+    out.attrs["clusters"] = n_clusters
+    return out
 

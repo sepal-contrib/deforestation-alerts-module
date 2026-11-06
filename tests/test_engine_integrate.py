@@ -219,7 +219,9 @@ def test_combined_band_4_tags_kept_too_small_and_over_cap(ready_project):
     assert state[35, 35] == integrate.STATE_TOO_SMALL
     assert int((state == 1).sum()) == 64
     art = res.artifacts[fp.combined_key(s.id)]
-    assert art.stats == {"states": 1, "too_small_px": 2, "over_cap_px": 16}
+    # three clusters formed, the speck under the minimum, one of the two kept cut by the limit
+    assert art.stats == {"states": 1, "analysable_px": 64, "too_small_px": 2, "over_cap_px": 16,
+                         "clusters": 3, "clusters_kept": 2}
     assert not list(pdir.rglob("*.base*"))
 
 

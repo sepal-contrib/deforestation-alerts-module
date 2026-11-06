@@ -32,6 +32,15 @@ def test_min_cluster_size_filters_small_components(tmp_path):
     a[10:12, 10:13] = 1  # 6 px, kept
     gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=5)
     assert len(gdf) == 1 and gdf.iloc[0]["count"] == 6
+    assert gdf.attrs["clusters"] == 2  # counted before the size filter
+
+
+def test_clusters_split_by_a_block_edge_count_once(tmp_path):
+    a = _blank()
+    a[17:23, 5] = 1  # one cluster read in two blocks
+    a[2:4, 2:4] = 1  # one too small
+    gdf = vectorize_alerts(_raster(tmp_path, a), min_cluster_size=50, block_rows=20)
+    assert len(gdf) == 0 and gdf.attrs["clusters"] == 2
 
 
 def test_cluster_split_by_block_edge_is_kept(tmp_path):

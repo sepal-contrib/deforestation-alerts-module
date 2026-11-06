@@ -180,7 +180,7 @@ def write_states(base_path, grid: GridSpec, out_path, eligible: gpd.GeoDataFrame
     e_geoms, k_geoms = eligible.geometry, kept.geometry
     e_idx = e_geoms.sindex if len(e_geoms) else None
     k_idx = k_geoms.sindex if len(k_geoms) else None
-    counts = {"too_small_px": 0, "over_cap_px": 0}
+    counts = {"analysable_px": 0, "too_small_px": 0, "over_cap_px": 0}
     with rasterio.open(base_path) as src, write_grid_raster(Path(out_path), grid, count=4) as dst:
         for w in _windows(grid):
             bands = [src.read(b, window=w) for b in (1, 2, 3)]
@@ -194,6 +194,7 @@ def write_states(base_path, grid: GridSpec, out_path, eligible: gpd.GeoDataFrame
             for i, arr in enumerate(bands, start=1):
                 dst.write(arr, i, window=w)
             dst.write(state, 4, window=w)
+            counts["analysable_px"] += int((state == STATE_ANALYSABLE).sum())
             counts["too_small_px"] += int((state == STATE_TOO_SMALL).sum())
             counts["over_cap_px"] += int((state == STATE_OVER_CAP).sum())
     return counts
@@ -399,6 +400,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
             base, min_cluster_size=min_cluster_pixels(job.params.min_size_ha, p.grid.resolution), touch_mask=mask
         )
         touch.unlink(missing_ok=True)
+        n_clusters = eligible.attrs.get("clusters")
         if mask is None:
             eligible[BELOW_MIN] = False
         # Linked before the cut: a small cluster that finds no parent is too
@@ -406,6 +408,10 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         eligible = link_parents(eligible, cands, p.grid)
         vgdf = sort_and_cut(eligible, job.params.sorting, job.params.max_alerts)
         state_counts = write_states(base, p.grid, staged[combined], eligible, vgdf)
+        # the Overview's clusters funnel: formed, then kept by the size filter and growth links
+        state_counts["clusters_kept"] = len(eligible)
+        if n_clusters is not None:
+            state_counts["clusters"] = int(n_clusters)
         base.unlink(missing_ok=True)
 
         # The alerts, attribute statistics included, are built before the
