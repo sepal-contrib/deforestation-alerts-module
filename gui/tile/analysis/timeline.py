@@ -499,16 +499,18 @@ def side_for_click(segments, rid, before_id, after_id, a0) -> Optional[str]:
 
 
 def same_day_alternative(sel, rid) -> Optional[str]:
-    """The other collection's image of ``rid``'s day, or ``None``: what the
-    map title offers to switch to. Never a hidden row (the cloud limit hides
-    it for a reason) and never a Planet month (it has no day)."""
+    """The next image of ``rid``'s day in rank order, wrapping round, or
+    ``None``: what the map title offers to switch to, so three images of one
+    day (S2, both passes) are each reachable. Never a hidden row (the cloud
+    limit hides it for a reason) and never a Planet month (it has no day)."""
     if not rid or sel is None or len(sel) == 0:
         return None
-    for _, row in sel.sort_values("source", key=lambda s: s.map(_RANK)).iterrows():
-        other = str(row["id"])
-        if other != rid and not bool(row["hidden"]) and _same_day(rid, other):
-            return other
-    return None
+    day = [str(row["id"]) for _, row in sel.sort_values("source", key=lambda s: s.map(_RANK)).iterrows()
+           if not bool(row["hidden"]) and _same_day(rid, str(row["id"]))]
+    if rid in day:
+        at = day.index(rid)
+        day = day[at + 1:] + day[:at]
+    return next((other for other in day if other != rid), None)
 
 
 # ------------------------------------------------------------ widget helpers

@@ -261,6 +261,16 @@ def test_a_radar_and_an_optical_image_of_one_day_offer_each_other():
     assert timeline.same_day_alternative(sel, "a20260610") == "s20260610"
 
 
+def test_three_images_of_one_day_cycle_in_rank_order():
+    """S2, both passes on one day: the map title walks every one of them in
+    turn, wrapping round, so the second pass is reachable too."""
+    sel = _sel([(S1D, "2026-06-10", float("nan")), (S2, "2026-06-10", 5.0),
+                (S1A, "2026-06-10", float("nan"))])
+    assert timeline.same_day_alternative(sel, "s20260610") == "a20260610"
+    assert timeline.same_day_alternative(sel, "a20260610") == "d20260610"
+    assert timeline.same_day_alternative(sel, "d20260610") == "s20260610"
+
+
 def test_each_collection_keeps_its_own_band_height_on_the_stripe():
     heights = {}
     for src, cloud in ((S2, 8.0), (LS, 8.0), (PL, float("nan"))):
