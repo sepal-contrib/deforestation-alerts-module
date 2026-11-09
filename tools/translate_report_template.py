@@ -30,7 +30,7 @@ EN = [
     "A loss of {area_loss} ha of tree cover was detected by {alert_system} in {admin3}, {admin2} ({admin1}), "
     "centred at {centroid} (latitude, longitude). The first detection is dated {detection_date1} and the last "
     "{detection_date2}. The alert was reviewed on {before_img} (before) and {after_img} (after) imagery, and "
-    "classified as: {verdict}.",
+    "classified as: {verdict}. {radar_summary}",
     "Alert details",
     "Country",
     "Region",
@@ -89,7 +89,7 @@ TRANSLATIONS = {
         "{alert_system} detectó una pérdida de {area_loss} ha de cobertura arbórea en {admin3}, {admin2} "
         "({admin1}), con centro en {centroid} (latitud, longitud). La primera detección es del {detection_date1} "
         "y la última del {detection_date2}. La alerta se revisó con las imágenes {before_img} (antes) y "
-        "{after_img} (después) y se clasificó como: {verdict}.",
+        "{after_img} (después) y se clasificó como: {verdict}. {radar_summary}",
         "Detalles de la alerta",
         "País",
         "Región",
@@ -140,7 +140,7 @@ TRANSLATIONS = {
         "{alert_system} a détecté une perte de {area_loss} ha de couvert arboré à {admin3}, {admin2} ({admin1}), "
         "centrée sur {centroid} (latitude, longitude). La première détection date du {detection_date1} et la "
         "dernière du {detection_date2}. L'alerte a été révisée sur les images {before_img} (avant) et "
-        "{after_img} (après) et classée comme : {verdict}.",
+        "{after_img} (après) et classée comme : {verdict}. {radar_summary}",
         "Détails de l'alerte",
         "Pays",
         "Région",
@@ -190,7 +190,7 @@ TRANSLATIONS = {
         "{alert_system} detectou uma perda de {area_loss} ha de cobertura arbórea em {admin3}, {admin2} "
         "({admin1}), com centro em {centroid} (latitude, longitude). A primeira detecção é de {detection_date1} "
         "e a última de {detection_date2}. O alerta foi revisado com as imagens {before_img} (antes) e "
-        "{after_img} (depois) e classificado como: {verdict}.",
+        "{after_img} (depois) e classificado como: {verdict}. {radar_summary}",
         "Detalhes do alerta",
         "País",
         "Região",

@@ -417,6 +417,7 @@
       "report_note_before": "The before image chosen in the review is a radar image: the optical pictures show the nearest optical image instead.",
       "report_note_after": "The after image chosen in the review is a radar image: the optical pictures show the nearest optical image instead.",
       "report_note_both": "Both images chosen in the review are radar images: the optical pictures show the nearest optical images instead.",
+      "report_radar_summary": "Radar images: {before} (before) and {after} (after).",
       "gif_same_image": "The before and after images are the same image, so the GIF would show no change. Pick two different images on the timeline.",
       "gif_too_few": "Fewer than two images could be rendered for this alert, so no GIF was made.",
       "gif_hint": "Save as a true alert, with the images on screen, to create it",

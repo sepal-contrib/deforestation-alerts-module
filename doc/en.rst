@@ -1572,7 +1572,7 @@ The report template
 
 In Analysis, each reviewed alert can be exported with a Word report (see `Export <defo-export_>`_). The report is built from a .docx template, where *placeholders* such as ``{area_loss}`` are replaced by the alert's values.
 
-.. shot: questionnaire-template | The Report template card expanded: "Report template · Default template" with its "default" chip, the "Report template (.docx)" file picker and its hint, and the placeholder chips under "Placeholders the template can use (click to copy):", the grey ones (ending with {centroid_lat}, {centroid_lon}, {before_radar}, {after_radar} and {image_note}) then the green {verdict}, {loss_driver} and the added question's key, with the note under them. Crop to the card.
+.. shot: questionnaire-template | The Report template card expanded: "Report template · Default template" with its "default" chip, the "Report template (.docx)" file picker and its hint, and the placeholder chips under "Placeholders the template can use (click to copy):", the grey ones (ending with {centroid_lat}, {centroid_lon}, {before_radar}, {after_radar}, {image_note} and {radar_summary}) then the green {verdict}, {loss_driver} and the added question's key, with the note under them. Crop to the card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/questionnaire-template.png
     :alt: The report template and its placeholders
@@ -1606,6 +1606,8 @@ The **Report template** line names the template in use, with a chip: **default**
         -   The same latitude and longitude, each on its own ("-12.345678", "-69.123456").
     *   -   ``{before_radar}``, ``{after_radar}``
         -   With a Sentinel-1 pick: the names of the before and after radar images. A radar image the app added is marked "(nearest radar image)". Empty otherwise.
+    *   -   ``{radar_summary}``
+        -   With a Sentinel-1 pick: "Radar images: … (before) and … (after).", the two radar image names, for the summary. Empty otherwise.
     *   -   ``{image_note}``
         -   With a Sentinel-1 pick: one sentence saying which chosen image is radar and that the optical pictures show the nearest optical image. Empty otherwise; a paragraph holding only this placeholder is then removed.
     *   -   ``{group_size}``, ``{group_alerts}``
@@ -2658,7 +2660,7 @@ The **Export this alert** section sits at the top of the dock of the `Analysis <
     *   -   **Build files**
         -   Builds the alert's data and report from the saved review ("Makes the files above from the saved review"). It is disabled until the review on screen is saved: it then reads "Save this alert first", or "Save your changes first" when there are unsaved changes. A reviewed alert opened on the images it was saved with is ready at once. It runs in the task list ("Building files…") and takes a while: it downloads the before and after images.
     *   -   **Alert data**
-        -   Downloads a .zip file: the alert's GeoPackage, its before and after images as one GeoTIFF and, for a true alert, its GIF.
+        -   Downloads a .zip file: the alert's GeoPackage, its before and after images as one GeoTIFF (two with a Sentinel-1 image: optical and radar) and, for a true alert, its GIF.
     *   -   **Alert report**
         -   Downloads the alert's Word report.
     *   -   **Rebuild files**
@@ -2677,11 +2679,11 @@ The files are named after the alert's row in the set (the counter's number minus
     *   -   ``alert_<n>.gpkg``
         -   The alert as one feature with its attributes and answers (the answers in the app's current language). Its geometry is the polygon drawn in `Refine the polygon <defo-analysis-refine_>`_, or else the alert's bounding box.
     *   -   ``alert_<n>_<before>_<after>.tif``
-        -   The before and after images, cut to the **Image area**. The two date parts name each image's collection (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet) and date.
+        -   The before and after images, cut to the **Image area**. The two date parts name each image's collection (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascending/descending) and date. With a Sentinel-1 image chosen there are two: the optical pair (the nearest optical image standing in for the radar one) and the radar pair.
     *   -   ``alert_<n>_<before>_<after>.gif``
         -   The timelapse, when made, named like the GeoTIFF.
     *   -   ``alert_<n>.zip``
-        -   The GeoPackage, the GeoTIFF and, for a true alert, the GIF.
+        -   The GeoPackage, the GeoTIFF (or the two) and, for a true alert, the GIF.
     *   -   ``alert_<n>.docx``
         -   The Word report.
 
@@ -2692,7 +2694,7 @@ The links of the tiles are for the review on screen. Choosing other images, savi
 The report
 """"""""""
 
-The report is built from the project's Word template, chosen in the `Questionnaire <defo-questionnaire-template_>`_ step, or from the app's default template when the project has none. The template's placeholders are filled with the alert's attributes, its answers and its images. See `The report template <defo-questionnaire-template_>`_ for the list.
+The report is built from the project's Word template, chosen in the `Questionnaire <defo-questionnaire-template_>`_ step, or from the app's default template when the project has none. The template's placeholders are filled with the alert's attributes, its answers and its images. With a Sentinel-1 image chosen, the optical pictures show the nearest optical image instead, a *Radar evidence* row shows the radar pair, and the summary names both the optical and the radar images. See `The report template <defo-questionnaire-template_>`_ for the list.
 
 The timelapse
 """""""""""""

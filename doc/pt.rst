@@ -1564,6 +1564,8 @@ A linha **Modelo do relatório** indica o modelo em uso, com uma etiqueta: **pad
         -   A mesma latitude e longitude, cada uma separada ("-12.345678", "-69.123456").
     *   -   ``{before_radar}``, ``{after_radar}``
         -   Com uma imagem Sentinel-1 escolhida: os nomes das imagens de radar de antes e depois. Uma imagem de radar adicionada pelo app é marcada "(imagem de radar mais próxima)". Vazio caso contrário.
+    *   -   ``{radar_summary}``
+        -   Com uma imagem Sentinel-1 escolhida: "Imagens de radar: … (antes) e … (depois).", os nomes das duas imagens de radar, para o resumo. Vazio caso contrário.
     *   -   ``{image_note}``
         -   Com uma imagem Sentinel-1 escolhida: uma frase que diz qual imagem escolhida é de radar e que as figuras ópticas mostram a imagem óptica mais próxima. Vazio caso contrário; um parágrafo que contém só esta etiqueta é então removido.
     *   -   ``{group_size}``, ``{group_alerts}``
@@ -2588,7 +2590,7 @@ A seção **Exportar este alerta** fica no topo da barra inferior do painel de r
     *   -   **Gerar arquivos**
         -   Gera os dados e o relatório do alerta a partir da revisão salva ("Gera os arquivos acima a partir da revisão salva"). Fica desativado até que a revisão na tela seja salva: mostra então "Salve este alerta primeiro", ou "Salve suas alterações primeiro" quando há alterações não salvas. Um alerta revisado aberto com as imagens com que foi salvo fica pronto na hora. Roda na lista de tarefas ("Gerando arquivos…") e demora um pouco: baixa as imagens de antes e depois.
     *   -   **Dados do alerta**
-        -   Baixa um arquivo .zip: o GeoPackage do alerta, as imagens de antes e depois num único GeoTIFF e, para um alerta verdadeiro, o GIF.
+        -   Baixa um arquivo .zip: o GeoPackage do alerta, as imagens de antes e depois num único GeoTIFF (dois com uma imagem Sentinel-1: óptico e radar) e, para um alerta verdadeiro, o GIF.
     *   -   **Relatório do alerta**
         -   Baixa o relatório Word do alerta.
     *   -   **Gerar arquivos novamente**
@@ -2607,11 +2609,11 @@ Os arquivos levam o número da linha do alerta no conjunto (o número do contado
     *   -   ``alert_<n>.gpkg``
         -   O alerta como uma única feição, com os atributos e as respostas (as respostas no idioma atual do app). A geometria é o polígono desenhado em `Refinar o polígono <defo-analysis-refine_>`_ ou, se não houver, o retângulo envolvente do alerta.
     *   -   ``alert_<n>_<before>_<after>.tif``
-        -   As imagens de antes e depois, recortadas pela **Área da imagem**. As duas partes de data indicam a coleção de cada imagem (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet) e a data.
+        -   As imagens de antes e depois, recortadas pela **Área da imagem**. As duas partes de data indicam a coleção de cada imagem (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendente/descendente) e a data. Com uma imagem Sentinel-1 escolhida há dois: o par óptico (a imagem óptica mais próxima substitui a de radar) e o par de radar.
     *   -   ``alert_<n>_<before>_<after>.gif``
         -   O timelapse, quando criado, com o mesmo nome do GeoTIFF.
     *   -   ``alert_<n>.zip``
-        -   O GeoPackage, o GeoTIFF e, para um alerta verdadeiro, o GIF.
+        -   O GeoPackage, o GeoTIFF (ou os dois) e, para um alerta verdadeiro, o GIF.
     *   -   ``alert_<n>.docx``
         -   O relatório Word.
 
@@ -2622,7 +2624,7 @@ Os links dos blocos valem para a revisão que está na tela. Escolher outras ima
 O relatório
 """""""""""
 
-O relatório é gerado a partir do modelo Word do projeto, escolhido na etapa `Questionário <defo-questionnaire-template_>`_, ou a partir do modelo padrão do app quando o projeto não tem nenhum. Os marcadores do modelo são preenchidos com os atributos, as respostas e as imagens do alerta. Veja a lista em `O modelo de relatório <defo-questionnaire-template_>`_.
+O relatório é gerado a partir do modelo Word do projeto, escolhido na etapa `Questionário <defo-questionnaire-template_>`_, ou a partir do modelo padrão do app quando o projeto não tem nenhum. Os marcadores do modelo são preenchidos com os atributos, as respostas e as imagens do alerta. Com uma imagem Sentinel-1 escolhida, as figuras ópticas mostram em seu lugar a imagem óptica mais próxima, uma linha *Evidência de radar* mostra o par de radar e o resumo cita tanto as imagens ópticas quanto as de radar. Veja a lista em `O modelo de relatório <defo-questionnaire-template_>`_.
 
 O timelapse
 """""""""""

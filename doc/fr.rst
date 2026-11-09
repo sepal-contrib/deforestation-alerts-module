@@ -1562,6 +1562,8 @@ La ligne **Modèle de rapport** nomme le modèle utilisé, avec une pastille : *
         -   La même latitude et la même longitude, chacune seule (« -12.345678 », « -69.123456 »).
     *   -   ``{before_radar}``, ``{after_radar}``
         -   Avec une image Sentinel-1 choisie : les noms des images radar d'avant et d'après. Une image radar ajoutée par l'application est marquée « (image radar la plus proche) ». Vide sinon.
+    *   -   ``{radar_summary}``
+        -   Avec une image Sentinel-1 choisie : « Images radar : … (avant) et … (après). », les noms des deux images radar, pour le résumé. Vide sinon.
     *   -   ``{image_note}``
         -   Avec une image Sentinel-1 choisie : une phrase qui dit quelle image choisie est radar et que les vues optiques montrent l'image optique la plus proche. Vide sinon ; un paragraphe qui ne contient que cette étiquette est alors supprimé.
     *   -   ``{group_size}``, ``{group_alerts}``
@@ -2586,7 +2588,7 @@ La section **Exporter cette alerte** se trouve en haut du dock du panneau d'exam
     *   -   **Générer les fichiers**
         -   Génère les données et le rapport de l'alerte à partir de la révision enregistrée (« Génère les fichiers ci-dessus à partir de la révision enregistrée »). Elle reste désactivée tant que la révision affichée n'est pas enregistrée : elle indique alors « Enregistrez d'abord cette alerte », ou « Enregistrez d'abord vos modifications » s'il y a des modifications non enregistrées. Une alerte examinée, ouverte sur les images avec lesquelles elle a été enregistrée, est prête aussitôt. Elle s'exécute dans la liste des tâches (« Génération des fichiers… ») et prend un moment : elle télécharge les images d'avant et d'après.
     *   -   **Données de l'alerte**
-        -   Télécharge un fichier .zip : le GeoPackage de l'alerte, ses images d'avant et d'après réunies dans un seul GeoTIFF et, pour une alerte réelle, son GIF.
+        -   Télécharge un fichier .zip : le GeoPackage de l'alerte, ses images d'avant et d'après réunies dans un seul GeoTIFF (deux avec une image Sentinel-1 : optique et radar) et, pour une alerte réelle, son GIF.
     *   -   **Rapport de l'alerte**
         -   Télécharge le rapport Word de l'alerte.
     *   -   **Régénérer les fichiers**
@@ -2605,11 +2607,11 @@ Les fichiers sont nommés d'après la ligne de l'alerte dans le jeu (le numéro 
     *   -   ``alert_<n>.gpkg``
         -   L'alerte sous forme d'une entité unique, avec ses attributs et ses réponses (les réponses dans la langue actuelle de l'application). Sa géométrie est le polygone dessiné dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut le rectangle englobant de l'alerte.
     *   -   ``alert_<n>_<before>_<after>.tif``
-        -   Les images d'avant et d'après, découpées selon la **Zone d'image**. Les deux parties de date indiquent la collection de chaque image (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet) et sa date.
+        -   Les images d'avant et d'après, découpées selon la **Zone d'image**. Les deux parties de date indiquent la collection de chaque image (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendant/descendant) et sa date. Avec une image Sentinel-1 choisie, il y en a deux : la paire optique (l'image optique la plus proche remplace l'image radar) et la paire radar.
     *   -   ``alert_<n>_<before>_<after>.gif``
         -   Le timelapse, s'il a été créé, nommé comme le GeoTIFF.
     *   -   ``alert_<n>.zip``
-        -   Le GeoPackage, le GeoTIFF et, pour une alerte réelle, le GIF.
+        -   Le GeoPackage, le GeoTIFF (ou les deux) et, pour une alerte réelle, le GIF.
     *   -   ``alert_<n>.docx``
         -   Le rapport Word.
 
@@ -2620,7 +2622,7 @@ Les liens des tuiles valent pour la révision affichée. Choisir d'autres images
 Le rapport
 """"""""""
 
-Le rapport est construit à partir du modèle Word du projet, choisi à l'étape `Questionnaire <defo-questionnaire-template_>`_, ou à partir du modèle par défaut de l'application quand le projet n'en a pas. Les balises du modèle sont remplies avec les attributs de l'alerte, ses réponses et ses images. La liste figure dans `Le modèle de rapport <defo-questionnaire-template_>`_.
+Le rapport est construit à partir du modèle Word du projet, choisi à l'étape `Questionnaire <defo-questionnaire-template_>`_, ou à partir du modèle par défaut de l'application quand le projet n'en a pas. Les balises du modèle sont remplies avec les attributs de l'alerte, ses réponses et ses images. Avec une image Sentinel-1 choisie, les vues optiques montrent à la place l'image optique la plus proche, une ligne *Preuves radar* montre la paire radar et le résumé nomme à la fois les images optiques et radar. La liste figure dans `Le modèle de rapport <defo-questionnaire-template_>`_.
 
 Le timelapse
 """"""""""""

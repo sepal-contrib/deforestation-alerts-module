@@ -135,6 +135,9 @@ def stage_report_images(plan: ReportImages, alert, folder, area="normal"):
                 missing.update(dict.fromkeys(side_markers, t(note)))
     extra = {"before_radar": _caption(plan.radar[0]), "after_radar": _caption(plan.radar[1]),
              "image_note": t(_NOTES[plan.radar_sides])}
+    # the summary names the radar pair too ("–" for a side with none)
+    extra["radar_summary"] = t("analysis_tile.export_labels.report_radar_summary",
+                               before=extra["before_radar"] or "–", after=extra["after_radar"] or "–")
     for key, shown in (("before_img", plan.optical[0]), ("after_img", plan.optical[1])):
         if shown is not None:  # with none, the caption stays the reviewer's pick
             extra[key] = _caption(shown)

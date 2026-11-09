@@ -258,7 +258,7 @@ def test_a_report_without_radar_drops_the_radar_block(data_root, tmp_path, scrat
         str(tmp_path / "unused.tif"), _alert_gpkg(tmp_path), DEFAULT_REPORT_TEMPLATE, str(tmp_path / "r.docx"))
 
     text = _report_text(out)
-    for gone in ("Radar evidence", "Before · radar", "Radar (Sentinel-1)", "Placeholder", "_radar}", "{image_note}"):
+    for gone in ("Radar evidence", "Before · radar", "Radar (Sentinel-1)", "Placeholder", "_radar}", "{image_note}", "{radar_summary}"):
         assert gone not in text
     assert "Satellite evidence" in text and "True colour:" in text
     assert len(stub_plots) == 6 and _pictures(out) == 6 + 2  # and the centroid QR, twice in its merged cell
@@ -272,13 +272,15 @@ def test_a_radar_report_draws_both_blocks_and_notes_a_missing_side(data_root, tm
     out = generate_deforestation_report_with_word_template(
         str(tmp_path / "optical.tif"), _alert_gpkg(tmp_path), DEFAULT_REPORT_TEMPLATE, str(tmp_path / "r.docx"),
         extra={"before_radar": "Sentinel 1 ascending 2026-05-02", "after_radar": "Sentinel 1 ascending 2026-07-01",
-               "image_note": "The after image is radar.", "after_img": "Sentinel 2 2026-07-04 (nearest optical image)"},
+               "image_note": "The after image is radar.", "after_img": "Sentinel 2 2026-07-04 (nearest optical image)",
+               "radar_summary": "Radar images: A (before) and B (after)."},
         radar_path=str(tmp_path / "radar.tif"),
         missing={"[Placeholder for Image 1]": gone, "[Placeholder for Image 4]": gone})
 
     text = _report_text(out)
     assert "Radar evidence" in text and "Sentinel 1 ascending 2026-07-01" in text
     assert "The after image is radar." in text and "(nearest optical image)" in text
+    assert "(after) imagery, and classified as: {verdict}. Radar images: A (before) and B (after)." in text
     assert text.count(gone) == 2 and "Placeholder" not in text
     assert _pictures(out) == 4 + 3 + 2  # the after optical figures, the radar ones, the QR
     assert sum(p.name.startswith("output_image") for p in stub_plots) == 7

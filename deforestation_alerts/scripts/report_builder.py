@@ -142,6 +142,7 @@ def row_attributes(gdf_row) -> dict:
         "before_radar": "",
         "after_radar": "",
         "image_note": "",
+        "radar_summary": "",
     }
 
 

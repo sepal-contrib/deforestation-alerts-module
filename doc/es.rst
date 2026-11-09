@@ -1560,6 +1560,8 @@ La línea **Plantilla del informe** indica la plantilla en uso, con una etiqueta
         -   La misma latitud y longitud, cada una por separado ("-12.345678", "-69.123456").
     *   -   ``{before_radar}``, ``{after_radar}``
         -   Con una imagen Sentinel-1 elegida: los nombres de las imágenes de radar de antes y después. Una imagen de radar añadida por la aplicación se marca "(imagen de radar más cercana)". Vacío en otro caso.
+    *   -   ``{radar_summary}``
+        -   Con una imagen Sentinel-1 elegida: "Imágenes de radar: … (antes) y … (después).", los nombres de las dos imágenes de radar, para el resumen. Vacío en otro caso.
     *   -   ``{image_note}``
         -   Con una imagen Sentinel-1 elegida: una frase que dice qué imagen elegida es de radar y que las imágenes ópticas muestran la imagen óptica más cercana. Vacío en otro caso; un párrafo que solo contiene esta etiqueta se elimina entonces.
     *   -   ``{group_size}``, ``{group_alerts}``
@@ -2584,7 +2586,7 @@ La sección **Exportar esta alerta** está en la parte superior de la barra de a
     *   -   **Generar archivos**
         -   Genera los datos y el informe de la alerta a partir de la revisión guardada ("Genera los archivos de arriba a partir de la revisión guardada"). Está desactivado hasta que se guarda la revisión en pantalla: entonces indica "Guarda primero esta alerta", o "Guarda primero tus cambios" cuando hay cambios sin guardar. Una alerta revisada que se abre con las imágenes con las que se guardó está lista enseguida. Se ejecuta en la lista de tareas ("Generando archivos…") y tarda un poco: descarga las imágenes de antes y de después.
     *   -   **Datos de la alerta**
-        -   Descarga un archivo .zip: el GeoPackage de la alerta, sus imágenes de antes y de después en un solo GeoTIFF y, para una alerta verdadera, su GIF.
+        -   Descarga un archivo .zip: el GeoPackage de la alerta, sus imágenes de antes y de después en un solo GeoTIFF (dos con una imagen Sentinel-1: óptico y radar) y, para una alerta verdadera, su GIF.
     *   -   **Informe de la alerta**
         -   Descarga el informe de Word de la alerta.
     *   -   **Regenerar archivos**
@@ -2603,11 +2605,11 @@ Los archivos llevan el nombre de la fila de la alerta en el conjunto (el número
     *   -   ``alert_<n>.gpkg``
         -   La alerta como una entidad con sus atributos y respuestas (las respuestas en el idioma actual de la aplicación). Su geometría es el polígono dibujado en `Precisar el polígono <defo-analysis-refine_>`_ o, si no lo hay, el recuadro que delimita la alerta.
     *   -   ``alert_<n>_<before>_<after>.tif``
-        -   Las imágenes de antes y de después, recortadas al **Área de imagen**. Las dos partes de fecha indican la colección de cada imagen (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet) y su fecha.
+        -   Las imágenes de antes y de después, recortadas al **Área de imagen**. Las dos partes de fecha indican la colección de cada imagen (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendente/descendente) y su fecha. Con una imagen Sentinel-1 elegida hay dos: el par óptico (la imagen óptica más cercana sustituye a la de radar) y el par de radar.
     *   -   ``alert_<n>_<before>_<after>.gif``
         -   La secuencia temporal, si se creó, con un nombre como el del GeoTIFF.
     *   -   ``alert_<n>.zip``
-        -   El GeoPackage, el GeoTIFF y, para una alerta verdadera, el GIF.
+        -   El GeoPackage, el GeoTIFF (o los dos) y, para una alerta verdadera, el GIF.
     *   -   ``alert_<n>.docx``
         -   El informe de Word.
 
@@ -2618,7 +2620,7 @@ Los enlaces de los mosaicos corresponden a la revisión en pantalla. Elegir otra
 El informe
 """"""""""
 
-El informe se genera a partir de la plantilla de Word del proyecto, elegida en el paso `Cuestionario <defo-questionnaire-template_>`_, o a partir de la plantilla predeterminada de la aplicación cuando el proyecto no tiene ninguna. Los marcadores de la plantilla se rellenan con los atributos de la alerta, sus respuestas y sus imágenes. Consulta la lista en `La plantilla del informe <defo-questionnaire-template_>`_.
+El informe se genera a partir de la plantilla de Word del proyecto, elegida en el paso `Cuestionario <defo-questionnaire-template_>`_, o a partir de la plantilla predeterminada de la aplicación cuando el proyecto no tiene ninguna. Los marcadores de la plantilla se rellenan con los atributos de la alerta, sus respuestas y sus imágenes. Con una imagen Sentinel-1 elegida, las imágenes ópticas muestran en su lugar la imagen óptica más cercana, una fila *Evidencia de radar* muestra el par de radar y el resumen nombra tanto las imágenes ópticas como las de radar. Consulta la lista en `La plantilla del informe <defo-questionnaire-template_>`_.
 
 La secuencia temporal
 """""""""""""""""""""

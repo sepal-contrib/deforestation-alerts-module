@@ -428,6 +428,7 @@
       "report_note_before": "La imagen de antes elegida en la revisión es de radar: las imágenes ópticas muestran la imagen óptica más cercana.",
       "report_note_after": "La imagen de después elegida en la revisión es de radar: las imágenes ópticas muestran la imagen óptica más cercana.",
       "report_note_both": "Las dos imágenes elegidas en la revisión son de radar: las imágenes ópticas muestran las imágenes ópticas más cercanas.",
+      "report_radar_summary": "Imágenes de radar: {before} (antes) y {after} (después).",
       "gif_same_image": "Las imágenes anterior y posterior son la misma imagen, así que el GIF no mostraría ningún cambio. Elija dos imágenes distintas en la línea de tiempo.",
       "gif_too_few": "Se pudieron generar menos de dos imágenes para esta alerta, así que no se creó el GIF.",
       "gif_hint": "Guárdela como alerta verdadera, con las imágenes que se muestran, para crearlo",
