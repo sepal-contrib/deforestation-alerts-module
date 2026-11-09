@@ -326,7 +326,7 @@ def test_a_replaced_pick_in_the_same_lane_draws_nothing(monkeypatch):
     held, drawn = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
 
-    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None, shown=None):
+    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None, shown=None, image=None):
         """``image_slider_map_callback``'s signature, with the lane's own
         freshness gate: ``spawn_in_context`` forwards positional args only."""
         if analysis_.is_current(token) and (fresh is None or fresh()):
@@ -404,7 +404,7 @@ def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
     held, rebuilt = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
 
-    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None, shown=None):
+    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None, shown=None, image=None):
         """``image_slider_map_callback``'s own signature, so the token is read
         from the position ``wire_panes`` actually passes it in --
         ``spawn_in_context`` forwards positional args only."""
@@ -833,7 +833,7 @@ def test_a_side_without_radar_draws_optical_and_shows_one_chip(monkeypatch):
 
     # the title: one chip, Optical, pressed
     from gui.tile.analysis import timeline
-    from tests.test_timeline import _MIX, _any_index, _fake_state, _fake_widgets
+    from tests.test_timeline import _MIX, _any_index, _fake_state, _fake_widgets, _text
 
     analysis = AnalysisState()
     analysis.shown_kind.set({"before": "radar", "after": "radar"})
@@ -841,7 +841,7 @@ def test_a_side_without_radar_draws_optical_and_shows_one_chip(monkeypatch):
     timeline.build_timeline(_fake_state(index=_any_index(_MIX)), analysis, widgets)  # Sentinel-1 off
     chips = _chips(widgets.map_title_before)
     assert len(chips) == 1
-    assert timeline.t("analysis.timeline.chip_optical") in _chip_text(chips[0])
+    assert timeline.t("analysis.timeline.chip_optical") in _text(chips[0])
     assert chips[0].attributes["aria-pressed"] == "true"
 
 
@@ -864,7 +864,20 @@ def _chips(title):
     return [w for w in _walk(title) if "aria-pressed" in (getattr(w, "attributes", None) or {})]
 
 
-def _chip_text(w):
-    from tests.test_timeline import _text
-
-    return _text(w)
+def test_a_chip_round_trip_keeps_the_stored_images(monkeypatch):
+    """A chip switch is a view change: it draws the stored ee.Image as it is.
+    A new one would read as a new pick (``edit_tools`` compares by identity,
+    so a Run's prediction would be thrown away) and leave the lane pending."""
+    s, panes, rebuilt = _wired_panes(monkeypatch)
+    s.before_info.set(_OPTICAL)
+    s.before_radar_info.set(_RADAR)
+    optical, radar = s.before_image.value, s.before_radar_image.value
+    assert optical is not None and radar is not None
+    rebuilt.clear()
+    s.shown_kind.set({"before": "radar", "after": "optical"})
+    assert _before_ids(panes) == {"before:Radar"}
+    s.shown_kind.set({"before": "optical", "after": "optical"})
+    assert _before_ids(panes) == {"before:True Color", "before:False Color"}
+    assert rebuilt == []
+    assert s.before_image.value is optical and s.before_radar_image.value is radar
+    assert s.dirty.value is False

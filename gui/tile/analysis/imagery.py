@@ -273,7 +273,7 @@ IMAGE_LAYERS = frozenset({"True Color", "False Color", "Radar"})
 
 def image_slider_map_callback(
     selected_item, map_element, model_att, widgets, analysis, selected_alerts_model,
-    token=None, fresh=None, shown=None,
+    token=None, fresh=None, shown=None, image=None,
 ):
     """Draw the chosen image's True/False-colour + All alerts layers.
 
@@ -294,13 +294,15 @@ def image_slider_map_callback(
     A radar source is stored in the radar image of that pane. ``shown`` asks
     whether this kind is the one the pane draws (``AnalysisState.radar_drawn``):
     when it says no, the image is stored but not drawn. ``None`` draws.
+    ``image``, the pane's stored ee.Image, is drawn as it is: no rebuild and
+    no store (a chip switch is a view change, not a new pick).
     """
     if not _wanted(analysis, token, fresh):
         return
     geom = widgets.actual_alert_grid
     img_source = selected_item["source"]
     vis1, vis2 = _VIS.get(img_source, _VIS_DEFAULT)
-    img = rebuild_image(img_source, selected_item.get("keys") or (), geom)
+    img = image if image is not None else rebuild_image(img_source, selected_item.get("keys") or (), geom)
     if img is None:
         # No granules: the selection was cleared by an alert change between
         # the publish and this call. Nothing to draw, and nothing to say.
@@ -316,7 +318,7 @@ def image_slider_map_callback(
         # publish is what the panes, a Run and an export all read.
         if not _wanted(analysis, token, fresh):
             return
-        if target is not None:
+        if target is not None and image is None:
             target.set(img)
         stored.append(True)
 
@@ -411,14 +413,20 @@ def wire_panes(widgets, analysis, selected_alerts_model):
         #: the kind the pane last drew, so a chip switch redraws only on a change
         drawn = {"radar": None}
 
-        def _on_pick(radar):
+        def _on_pick(radar, redraw=False):
             info_reactive, keys_reactive, image_reactive = lanes[radar]
             info = info_reactive.value
             if not info:
                 return  # an alert change: ``reset_alert`` clears the info
             item = {"source": info[0], "keys": list(keys_reactive.value or ())}
             token = analysis.alert_token.value
-            picks[radar] += 1
+            # A redraw of an image already built for this info draws it as it
+            # is: a new ee.Image would read as a new pick (``edit_tools``
+            # compares by identity) and leave the lane pending meanwhile. A
+            # stored image means no rebuild of this kind is on its way.
+            stored = image_reactive.value if redraw else None
+            if stored is None:
+                picks[radar] += 1
             mine = picks[radar]
 
             def fresh():
@@ -436,7 +444,8 @@ def wire_panes(widgets, analysis, selected_alerts_model):
             # different scenes, which a Run would stage as one composite
             # (``alert_files.images_picked`` refuses
             # while it is None).
-            image_reactive.set(None)
+            if stored is None:
+                image_reactive.set(None)
 
             def _work():
                 # The guard is HERE, at the thread boundary, because that is
@@ -452,7 +461,8 @@ def wire_panes(widgets, analysis, selected_alerts_model):
                 # failed visualization layer.
                 try:
                     image_slider_map_callback(item, map_element, pane, widgets, analysis,
-                                              selected_alerts_model, token, fresh=fresh, shown=shown)
+                                              selected_alerts_model, token, fresh=fresh, shown=shown,
+                                              image=stored)
                 except Exception as exc:  # noqa: BLE001 - a dead pane must not be silent
                     logger.exception("Analysis imagery: the %s image could not be drawn",
                                      _SIDE[pane])
@@ -465,7 +475,7 @@ def wire_panes(widgets, analysis, selected_alerts_model):
             # kind now shown, unless the pane already shows it
             radar = analysis.radar_drawn(side)
             if drawn["radar"] != radar:
-                _on_pick(radar)
+                _on_pick(radar, redraw=True)
 
         def _on_radar(*_):
             _on_pick(True)
