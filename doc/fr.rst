@@ -1589,7 +1589,7 @@ Le rapport contient aussi six vues de l'alerte, découpées dans les images d'av
     *   -   ``[Placeholder for Centroid QR]``
         -   Un code QR qui ouvre le centroïde de l'alerte dans Google Maps (80 pt de large, ou moins pour tenir dans sa cellule de tableau). Sans centroïde, le marqueur est supprimé.
 
-Les images 1 à 3 sont en fausses couleurs (proche infrarouge, rouge, vert) et les images 4 à 6 en couleurs naturelles (rouge, vert, bleu). Elles gardent la résolution de la plus fine des deux images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). Le modèle par défaut les dispose en une grille de trois colonnes (avant, après, après avec le contour) et deux lignes (couleurs naturelles, fausses couleurs), et place le code QR à côté des détails de l'alerte. Un modèle sans ces marqueurs donne un rapport sans images.
+Les images 1 à 3 sont en fausses couleurs (proche infrarouge, rouge, vert) et les images 4 à 6 en couleurs naturelles (rouge, vert, bleu). Une image Sentinel-1 donne des images radar, quel que soit leur nom dans le modèle : en couleurs naturelles, le rouge, le vert et le bleu montrent VV, VH et le rapport VV/VH ; en fausses couleurs, VV, VV et VH. Elles gardent la résolution de la plus fine des deux images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). Le modèle par défaut les dispose en une grille de trois colonnes (avant, après, après avec le contour) et deux lignes (couleurs naturelles, fausses couleurs), et place le code QR à côté des détails de l'alerte. Un modèle sans ces marqueurs donne un rapport sans images.
 
 .. tip::
 
@@ -2052,7 +2052,7 @@ La barre d'outils au-dessus de la piste :
         -   Description
         -   Par défaut
     *   -   Bouton **Sources d'images**
-        -   Ouvre le menu des sources d'images, en deux groupes : **Optique** (Sentinel-2, Landsat, Planet) et **Radar** (Sentinel-1). Le bouton porte un point de couleur pour chaque source activée. Chaque ligne a une case à cocher, le point et le nom de la source et, à droite, le nombre de ses images dans la vue actuelle ; une seconde ligne (« 3 au-dessus de la limite de nuages ») apparaît quand la limite de nuages en masque. Planet est grisée, avec « Pas d'accès avec ce compte », quand votre compte GEE n'a pas accès à NICFI. Le choix est enregistré avec le projet, et l'ouverture d'une alerte dont l'image enregistrée vient d'une source désactivée active cette source.
+        -   Ouvre le menu des sources d'images, en deux groupes : **Optique** (Sentinel-2, Landsat, Planet) et **Radar** (Sentinel-1). Le bouton porte un point de couleur pour chaque source activée. Chaque ligne a une case à cocher, le point et le nom de la source et, à droite, le nombre de ses images dans la vue actuelle ; une seconde ligne (« 3 au-dessus de la limite de nuages ») apparaît quand la limite de nuages en masque. Planet est grisée, avec « Pas d'accès avec ce compte », quand votre compte GEE n'a pas accès à NICFI. Le choix est enregistré avec le projet (sur une copie de révision, il ne dure que la session), et l'ouverture d'une alerte dont l'image enregistrée vient d'une source désactivée active cette source.
         -   Sentinel-2 et Landsat activées ; Planet et Sentinel-1 désactivées.
     *   -   Bouton **?**
         -   Affiche ou masque une légende de la frise.
@@ -2363,7 +2363,7 @@ Messages fréquents
 « Aucune image ne couvre cette alerte dans cette fenêtre. »
     Ajoutez des mois avec **+1 mois**, ou relevez **Nuages max.**
 
-« Toutes les images de cette fenêtre se trouvent dans des collections que vous avez désactivées. »
+« Toutes les images de cette fenêtre proviennent de sources que vous avez désactivées. »
     Réactivez la source dans le menu **Sources d'images**.
 
 « Impossible d'afficher l'image avant : … » ou « Impossible d'afficher l'image après : … »

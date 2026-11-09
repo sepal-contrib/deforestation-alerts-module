@@ -3079,8 +3079,8 @@ msgstr "Par défaut"
 msgid "**Image sources** button"
 msgstr "Bouton **Sources d'images**"
 
-msgid "Opens the menu of image sources, in two groups: **Optical** (Sentinel-2, Landsat, Planet) and **Radar** (Sentinel-1). The button carries one coloured dot for each source that is on. Each row has a checkbox, the source's dot and name and, on the right, the number of its images in the current view; a second line (\"3 over cloud limit\") appears when the cloud limit hides some. Planet is greyed out, with \"No access with this account\", when your GEE account has no NICFI access. The choice is saved with the project, and opening an alert whose saved image comes from a source that is off turns that source on."
-msgstr "Ouvre le menu des sources d'images, en deux groupes : **Optique** (Sentinel-2, Landsat, Planet) et **Radar** (Sentinel-1). Le bouton porte un point de couleur pour chaque source activée. Chaque ligne a une case à cocher, le point et le nom de la source et, à droite, le nombre de ses images dans la vue actuelle ; une seconde ligne (« 3 au-dessus de la limite de nuages ») apparaît quand la limite de nuages en masque. Planet est grisée, avec « Pas d'accès avec ce compte », quand votre compte GEE n'a pas accès à NICFI. Le choix est enregistré avec le projet, et l'ouverture d'une alerte dont l'image enregistrée vient d'une source désactivée active cette source."
+msgid "Opens the menu of image sources, in two groups: **Optical** (Sentinel-2, Landsat, Planet) and **Radar** (Sentinel-1). The button carries one coloured dot for each source that is on. Each row has a checkbox, the source's dot and name and, on the right, the number of its images in the current view; a second line (\"3 over cloud limit\") appears when the cloud limit hides some. Planet is greyed out, with \"No access with this account\", when your GEE account has no NICFI access. The choice is saved with the project (on a review copy, it lasts only for the session), and opening an alert whose saved image comes from a source that is off turns that source on."
+msgstr "Ouvre le menu des sources d'images, en deux groupes : **Optique** (Sentinel-2, Landsat, Planet) et **Radar** (Sentinel-1). Le bouton porte un point de couleur pour chaque source activée. Chaque ligne a une case à cocher, le point et le nom de la source et, à droite, le nombre de ses images dans la vue actuelle ; une seconde ligne (« 3 au-dessus de la limite de nuages ») apparaît quand la limite de nuages en masque. Planet est grisée, avec « Pas d'accès avec ce compte », quand votre compte GEE n'a pas accès à NICFI. Le choix est enregistré avec le projet (sur une copie de révision, il ne dure que la session), et l'ouverture d'une alerte dont l'image enregistrée vient d'une source désactivée active cette source."
 
 msgid "Sentinel-2 and Landsat on; Planet and Sentinel-1 off."
 msgstr "Sentinel-2 et Landsat activées ; Planet et Sentinel-1 désactivées."
@@ -3598,8 +3598,8 @@ msgstr "« Aucune image ne couvre cette alerte dans cette fenêtre. »"
 msgid "Add months with **+1 month**, or raise **Max cloud**."
 msgstr "Ajoutez des mois avec **+1 mois**, ou relevez **Nuages max.**"
 
-msgid "\"The images in this window are all in collections you have switched off.\""
-msgstr "« Toutes les images de cette fenêtre se trouvent dans des collections que vous avez désactivées. »"
+msgid "\"The images in this window are all in sources you have switched off.\""
+msgstr "« Toutes les images de cette fenêtre proviennent de sources que vous avez désactivées. »"
 
 msgid "Switch the source back on in the **Image sources** menu."
 msgstr "Réactivez la source dans le menu **Sources d'images**."

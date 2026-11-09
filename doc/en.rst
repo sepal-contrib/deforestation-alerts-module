@@ -1633,7 +1633,7 @@ The report also holds six pictures of the alert, cut from the before and after i
     *   -   ``[Placeholder for Centroid QR]``
         -   A QR code that opens the alert's centroid in Google Maps (80 pt wide, or narrower to fit its table cell). Without a centroid, the marker is removed.
 
-Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. A template without these markers gets a report with no pictures.
+Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). A Sentinel-1 image gives radar pictures, whatever the template calls them: in true colour, red, green and blue show VV, VH and the VV/VH ratio; in false colour, VV, VV and VH. The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. A template without these markers gets a report with no pictures.
 
 .. tip::
 
@@ -2110,7 +2110,7 @@ The toolbar above the track:
         -   Description
         -   Default
     *   -   **Image sources** button
-        -   Opens the menu of image sources, in two groups: **Optical** (Sentinel-2, Landsat, Planet) and **Radar** (Sentinel-1). The button carries one coloured dot for each source that is on. Each row has a checkbox, the source's dot and name and, on the right, the number of its images in the current view; a second line ("3 over cloud limit") appears when the cloud limit hides some. Planet is greyed out, with "No access with this account", when your GEE account has no NICFI access. The choice is saved with the project, and opening an alert whose saved image comes from a source that is off turns that source on.
+        -   Opens the menu of image sources, in two groups: **Optical** (Sentinel-2, Landsat, Planet) and **Radar** (Sentinel-1). The button carries one coloured dot for each source that is on. Each row has a checkbox, the source's dot and name and, on the right, the number of its images in the current view; a second line ("3 over cloud limit") appears when the cloud limit hides some. Planet is greyed out, with "No access with this account", when your GEE account has no NICFI access. The choice is saved with the project (on a review copy, it lasts only for the session), and opening an alert whose saved image comes from a source that is off turns that source on.
         -   Sentinel-2 and Landsat on; Planet and Sentinel-1 off.
     *   -   **?** button
         -   Shows or hides a legend of the timeline.
@@ -2429,7 +2429,7 @@ Common messages
 "No images cover this alert in this window."
     Add months with **+1 month**, or raise **Max cloud**.
 
-"The images in this window are all in collections you have switched off."
+"The images in this window are all in sources you have switched off."
     Switch the source back on in the **Image sources** menu.
 
 "Could not draw the before image: …" or "Could not draw the after image: …"

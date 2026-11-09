@@ -1591,7 +1591,7 @@ O relatório também traz seis figuras do alerta, recortadas das imagens de ante
     *   -   ``[Placeholder for Centroid QR]``
         -   Um código QR que abre o centroide do alerta no Google Maps (com 80 pt de largura, ou menos para caber na sua célula de tabela). Sem centroide, o indicador é removido.
 
-As imagens 1–3 estão em falsa cor (infravermelho próximo, vermelho, verde) e as imagens 4–6 em cor verdadeira (vermelho, verde, azul). Elas mantêm a resolução da mais fina das duas imagens (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). O modelo padrão as organiza numa grade de três colunas (antes, depois, depois com o contorno) e duas linhas (cor verdadeira, falsa cor), e coloca o código QR ao lado dos detalhes do alerta. Um modelo sem esses indicadores gera um relatório sem figuras.
+As imagens 1–3 estão em falsa cor (infravermelho próximo, vermelho, verde) e as imagens 4–6 em cor verdadeira (vermelho, verde, azul). Uma imagem Sentinel-1 dá imagens de radar, seja qual for o nome no modelo: em cor verdadeira, o vermelho, o verde e o azul mostram VV, VH e a razão VV/VH; em falsa cor, VV, VV e VH. Elas mantêm a resolução da mais fina das duas imagens (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). O modelo padrão as organiza numa grade de três colunas (antes, depois, depois com o contorno) e duas linhas (cor verdadeira, falsa cor), e coloca o código QR ao lado dos detalhes do alerta. Um modelo sem esses indicadores gera um relatório sem figuras.
 
 .. tip::
 
@@ -2054,7 +2054,7 @@ A barra de ferramentas acima da trilha:
         -   Descrição
         -   Padrão
     *   -   Botão **Fontes de imagens**
-        -   Abre o menu de fontes de imagens, em dois grupos: **Ópticas** (Sentinel-2, Landsat, Planet) e **Radar** (Sentinel-1). O botão traz um ponto colorido para cada fonte ativada. Cada linha tem uma caixa de seleção, o ponto e o nome da fonte e, à direita, o número de suas imagens na vista atual; uma segunda linha ("3 acima do limite de nuvens") aparece quando o limite de nuvens esconde algumas. O Planet aparece em cinza, com "Sem acesso com esta conta", quando a sua conta do GEE não tem acesso ao NICFI. A escolha é salva com o projeto, e abrir um alerta cuja imagem salva vem de uma fonte desativada ativa essa fonte.
+        -   Abre o menu de fontes de imagens, em dois grupos: **Ópticas** (Sentinel-2, Landsat, Planet) e **Radar** (Sentinel-1). O botão traz um ponto colorido para cada fonte ativada. Cada linha tem uma caixa de seleção, o ponto e o nome da fonte e, à direita, o número de suas imagens na vista atual; uma segunda linha ("3 acima do limite de nuvens") aparece quando o limite de nuvens esconde algumas. O Planet aparece em cinza, com "Sem acesso com esta conta", quando a sua conta do GEE não tem acesso ao NICFI. A escolha é salva com o projeto (numa cópia de revisão, vale só para a sessão), e abrir um alerta cuja imagem salva vem de uma fonte desativada ativa essa fonte.
         -   Sentinel-2 e Landsat ligadas; Planet e Sentinel-1 desligadas.
     *   -   Botão **?**
         -   Mostra ou esconde uma legenda da linha do tempo.
@@ -2365,7 +2365,7 @@ Mensagens comuns
 "Nenhuma imagem cobre este alerta nesta janela."
     Acrescente meses com **+1 mês** ou aumente **Nuvens máx.**
 
-"Todas as imagens desta janela estão em coleções que você desativou."
+"Todas as imagens desta janela estão em fontes que você desativou."
     Ligue de novo a fonte no menu **Fontes de imagens**.
 
 "Não foi possível exibir a imagem de antes: …" ou "Não foi possível exibir a imagem de depois: …"

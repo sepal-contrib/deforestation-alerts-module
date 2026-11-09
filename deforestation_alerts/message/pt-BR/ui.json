@@ -185,7 +185,7 @@
       "expand_all": "Expandir todos os meses",
       "images": "imagens",
       "no_images": "Nenhuma imagem cobre este alerta nesta janela.",
-      "sources_off": "Todas as imagens desta janela estão em coleções que você desativou.",
+      "sources_off": "Todas as imagens desta janela estão em fontes que você desativou.",
       "days_apart": "{days} dias de diferença",
       "same_image": "a mesma imagem dos dois lados",
       "stale": "Índice de {when}",
