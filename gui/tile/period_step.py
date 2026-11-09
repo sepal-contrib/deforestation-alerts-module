@@ -124,7 +124,7 @@ def hide_dropped_layers(layers, content_ids, set_ids=()) -> None:
     """Take off the map every layer drawn from a dropped file (a period's
     harmonized rasters) and the alert layers of removed sets, before the
     files are deleted."""
-    removed = {f"{alert_layers.EARLIER_PREFIX}{sid}" for sid in set_ids}
+    removed = {f"{prefix}{sid}" for sid in set_ids for prefix in (alert_layers.EARLIER_PREFIX, alert_layers.STATES_PREFIX)}
     for key in sorted(layers.on.value):
         content = layers.content_of(key)
         if key in removed or (content is not None and content in content_ids):

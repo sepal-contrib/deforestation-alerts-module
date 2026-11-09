@@ -99,10 +99,6 @@
     "tab_pixels": "Pixels",
     "tab_clusters": "Amas",
     "tab_files": "Fichiers",
-    "on_the_map": "Sur la carte",
-    "layer_alerts": "Alertes",
-    "layer_unanalysable": "Pixels non analysables",
-    "layer_earlier": "Ensembles antérieurs",
     "all_periods": "Toutes les périodes · {sets} · {alerts}",
     "n_sets": {
       "one": "{n} ensemble",
@@ -147,7 +143,6 @@
     "nearby_saved_row": "Enregistrées en groupe d'examen",
     "card_linked": "Liées à des pertes antérieures",
     "linked_note": "Nouvelles alertes qui touchent un défrichement confirmé lors d’une période antérieure : le même défrichement, qui s’étend encore.",
-    "linked_earlier": "Ensembles antérieurs sur la carte",
     "linked_none": "Aucune alerte n’est liée à une perte antérieure.",
     "export_pick_all": "Les alertes de l’ensemble choisi plus haut. Choisissez Toutes les périodes pour télécharger toutes les périodes d’un coup.",
     "export_all_note": "Les alertes de toutes les périodes dans un fichier, avec une colonne period.",
@@ -166,7 +161,16 @@
       "other": "{n} périodes"
     },
     "summary_not_written": "{what} · pas encore écrit",
-    "summary_stale": "Les chiffres ont changé depuis"
+    "summary_stale": "Les chiffres ont changé depuis",
+    "map_layers": "Couches de la carte",
+    "this_set": "Cet ensemble · {period}",
+    "other_periods": "Autres périodes",
+    "every_period": "Toutes les périodes",
+    "show_all": "Tout afficher",
+    "hide_all": "Tout masquer",
+    "menu_alerts": "Alertes · {period}",
+    "menu_states": "Pixels non analysables · {period}",
+    "menu_states_sub": "trop petits, ou au-delà du plafond d'alertes"
   },
   "analysis": {
     "timeline": {

@@ -684,7 +684,6 @@
       "project_changed": "La période, la zone d'intérêt ou la grille du projet ont changé pendant l'exécution, donc le jeu d'alertes n'a pas été enregistré. Relancez Intégrer et vectoriser.",
       "error_min_size": "Saisissez une taille minimale en hectares, 0 ou plus.",
       "error_max_alerts": "Saisissez un nombre entier supérieur à 0.",
-      "layer_name": "Alertes (jeu actif)",
       "go": "Examiner",
       "popup": "Alerte {id} · {status} · {area} ha",
       "show_earlier": "Afficher les jeux antérieurs",

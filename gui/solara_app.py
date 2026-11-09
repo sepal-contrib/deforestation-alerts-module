@@ -56,14 +56,14 @@ from gui.store.navigation import (
     resolve_navigation,
 )
 from gui.i18n import app_available_locales, format_number, t
-from gui.scripts import alert_layers, legend_specs, set_store
+from gui.scripts import alert_layers, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.prepare_scope import PrepareJobs
 from gui.scripts.remote_facts import RemoteFactsLoader
 from gui.scripts.scene_loader import SceneIndexLoader
 from gui.scripts.set_context import SetContext
-from gui.scripts.source_layers import earlier_set_legend, earlier_set_name, set_legend
+from gui.scripts.source_layers import earlier_set_legend, earlier_set_name, set_legend, states_layer_legend
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.autosave import install_autosave
 from gui.store.project_writers import is_writing
@@ -403,7 +403,7 @@ def _AlertLayers(app_state, layers, map_):
     gdf = set_store.active_set_alerts(p, app_state.alerts_gdf.value)
     s = active_set(p)
     show = app_state.show_alerts.value
-    show_earlier = app_state.show_earlier_sets.value
+    shown_sets = app_state.shown_sets.value
     has_alerts = gdf is not None and len(gdf) > 0
     popup_ref = solara.use_ref(None)
     # (project, set id) pairs already told that tippecanoe is missing: a review
@@ -451,11 +451,30 @@ def _AlertLayers(app_state, layers, map_):
         layers.show(alert_layers.STATES_LAYER_KEY,
                     lambda: alert_layers.states_build(map_, project=p, alert_set=s),
                     content_id=states_content, notifier=notifications,
-                    legend=legend_specs.states_legend(alert_layers.STATES_LAYER_KEY))
+                    legend=states_layer_legend(alert_layers.STATES_LAYER_KEY, s))
 
     solara.use_effect(_sync_states, [show_states, s.id if s else None, states_content])
 
-    earlier = alert_layers.earlier_of(p, s) if p is not None else []
+    # The other sets' not-analysable pixels the Map layers menu switched on.
+    states_sets = app_state.states_sets.value
+    others = alert_layers.others_of(p, s) if p is not None else []
+    states_sig = tuple((e.id, getattr(alert_layers.combined_artifact(p, e), "content_id", None)) for e in others
+                       if e.id in states_sets)
+
+    def _sync_other_states():
+        wanted = {alert_layers.states_key(e): e for e in others
+                  if e.id in states_sets and alert_layers.has_states(p, e)}
+        for key in sorted(layers.on.value):
+            if key.startswith(alert_layers.STATES_PREFIX) and key not in wanted:
+                layers.hide(key)
+        for key, e in wanted.items():
+            layers.show(key, lambda key=key, e=e: alert_layers.states_build(map_, project=p, alert_set=e, key=key),
+                        content_id=alert_layers.combined_artifact(p, e).content_id, notifier=notifications,
+                        legend=states_layer_legend(key, e))
+
+    solara.use_effect(_sync_other_states, [p.name if p is not None else None, states_sig])
+
+    earlier = [e for e in others if e.id in shown_sets]
     earlier_sig = tuple((e.id, e.fingerprint, e.n_reviewed) for e in earlier)
 
     def _build_earlier(e):
@@ -463,7 +482,7 @@ def _AlertLayers(app_state, layers, map_):
                                           deferred_keys=earlier_deferred)
 
     def _sync_earlier():
-        wanted = {alert_layers.earlier_key(e): e for e in earlier} if show_earlier else {}
+        wanted = {alert_layers.earlier_key(e): e for e in earlier}
         for key in sorted(layers.on.value):
             if key.startswith(alert_layers.EARLIER_PREFIX) and key not in wanted:
                 layers.hide(key)
@@ -476,7 +495,7 @@ def _AlertLayers(app_state, layers, map_):
             layers.show(key, _build_earlier(e), content_id=f"{e.id}:{e.fingerprint}:{e.n_reviewed}",
                         notifier=notifications, legend=earlier_set_legend(key, e))
 
-    solara.use_effect(_sync_earlier, [show_earlier, p.name if p is not None else None, earlier_sig])
+    solara.use_effect(_sync_earlier, [p.name if p is not None else None, earlier_sig])
 
     def _retry_earlier_when_free():
         # spec §9.2: tiles skipped while the project was being written are
@@ -552,7 +571,7 @@ def _AlertLayers(app_state, layers, map_):
 
     # Re-wired whenever the handler would close over stale alerts: a popup's
     # Review index belongs to the alerts it was opened on.
-    solara.use_effect(_wire_clicks, [show, show_earlier, gdf])
+    solara.use_effect(_wire_clicks, [show, shown_sets, gdf])
 
 
 def legend_props(app_state, translate) -> dict:

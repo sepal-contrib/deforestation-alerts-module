@@ -444,10 +444,10 @@ def test_only_the_shell_draws_the_alert_layers():
     for call in ("layers.toggle(", "layers.refresh(", "add_centroid_layer(", "add_set_pmtiles(",
                  "show(alert_layers.SET_LAYER_KEY", "hide(alert_layers.SET_LAYER_KEY"):
         assert call not in overview, f"overview_tile.py: {call}"
-    # and the switches write nothing but the two booleans
+    # and the switches write nothing but the shell's reactives
     integrate = _src("gui/tile/integrate_step.py")
     assert "on_v_model=app_state.show_alerts.set" in integrate
-    assert "on_v_model=app_state.show_earlier_sets.set" in integrate
+    assert "app_state.shown_sets.set(" in integrate
 
 
 def test_the_active_set_loader_reads_the_store_on_a_worker_and_keeps_published_alerts():

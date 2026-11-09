@@ -94,3 +94,6 @@ def test_states_legend_has_the_two_visible_states():
     assert [t(lb.key) for lb in lg.spec.labels] == [t("legend.state_too_small"), t("legend.state_over_cap")]
     assert lg.spec.colors == ("#9e9e9e", "#fb8c00")
     assert len(ls.state_colormap().colors) == 2
+    named = ls.states_legend("k", "2026-01-01 → 2026-01-31")
+    assert named.label.key == named.spec.title.key == "legend.name.states"
+    assert dict(named.label.args) == {"period": "2026-01-01 → 2026-01-31"}

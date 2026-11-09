@@ -684,7 +684,6 @@
       "project_changed": "O período, a área de interesse ou a grade do projeto mudou durante a execução, então o conjunto de alertas não foi registrado. Execute Integrar e vetorizar novamente.",
       "error_min_size": "Digite um tamanho mínimo em hectares, 0 ou mais.",
       "error_max_alerts": "Digite um número inteiro maior que 0.",
-      "layer_name": "Alertas (conjunto ativo)",
       "go": "Revisar",
       "popup": "Alerta {id} · {status} · {area} ha",
       "show_earlier": "Mostrar conjuntos anteriores",

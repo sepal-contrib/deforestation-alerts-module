@@ -2415,14 +2415,18 @@ Les chiffres clés
     *   -   **Alerte la plus grande**
         -   La superficie de la plus grande alerte, son numéro, son pays (une fois examinée) et sa date. Elle compte toujours des hectares. Le numéro est la ligne de l'alerte dans le jeu, c'est-à-dire le numéro du compteur d'Analyse moins un.
 
-Sur la carte
-^^^^^^^^^^^^
+.. _defo-overview-layers:
 
-Les boutons à côté de **Sur la carte** dessinent une couche sur la carte principale, comme les yeux d'`Intégrer et vectoriser <defo-integrate-map_>`_ ; en sélectionner un ferme l'Aperçu, pour montrer la carte. Ils ne s'affichent que pour un seul jeu qui a des alertes, pas pour **Toutes les périodes**.
+Couches de la carte
+^^^^^^^^^^^^^^^^^^^
 
--   **Alertes** : les alertes du jeu, colorées selon leur statut.
--   **Pixels non analysables** : les pixels laissés hors des alertes, trop petits ou au-delà de la limite d'alertes. Affiché seulement si l'exécution du jeu les a enregistrés.
--   **Ensembles antérieurs** : les alertes des jeux des périodes antérieures. Affiché seulement s'il existe des jeux antérieurs.
+Le bouton **Couches de la carte**, à côté du titre, ouvre la liste des couches que l'Aperçu peut dessiner sur la carte principale, groupées par période. Le bouton compte les couches dessinées. Cochez une couche pour la dessiner : l'Aperçu se ferme, pour montrer la carte. Décochez-la pour retirer la couche. Chaque couche porte sa période dans son nom (« Alertes · 2026-01-01 → 2026-01-31 »), dans la liste, sur la carte et dans la légende.
+
+-   **Cet ensemble** : les **Alertes** du jeu sélectionné, colorées selon leur statut, et ses pixels non analysables (trop petits, ou au-delà du plafond d'alertes), si l'exécution du jeu les a enregistrés.
+-   **Autres périodes** : les alertes du jeu le plus récent de chaque autre période, de la plus récente à la plus ancienne, chacune à part. Quand il y en a plusieurs, **Tout afficher** et **Tout masquer** les dessinent ou les retirent ensemble.
+-   Avec **Toutes les périodes** sélectionné, **Toutes les périodes** liste les alertes et les pixels non analysables du jeu le plus récent de chaque période.
+
+La case d'une couche est grisée pendant que la couche se construit.
 
 .. _defo-overview-figures:
 
@@ -2453,7 +2457,7 @@ Les chiffres sont regroupés en onglets, chacun avec deux cartes côte à côte.
     *   -   **Amas**
         -   Comment ces pixels sont devenus des alertes, les alertes proches et les alertes liées à des pertes antérieures (voir plus bas). L'onglet indique le nombre d'alertes.
     *   -   **Fichiers**
-        -   La carte **Exporter les alertes** (voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_) et le **Résumé de toutes les périodes** (voir plus bas).
+        -   La carte **Exporter les alertes** (voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_) et, avec **Toutes les périodes** sélectionné, le **Résumé de toutes les périodes** (voir plus bas).
 
 Quand un graphique ne peut pas être tracé, sa carte indique « Cette figure n'a pas pu être tracée ; ses chiffres sont ci-dessous. » et les liste.
 
@@ -2486,7 +2490,7 @@ En dessous, **Alertes proches** montre comment les alertes du jeu s'enchaînent 
 
 Quand le regroupement est désactivé, la carte utilise la distance du projet et ajoute « La vérification groupée est désactivée · activez-la dans Évaluation. »
 
-La carte **Liées à des pertes antérieures** suit les `alertes d'extension <defo-integrate-growth_>`_ : les nouvelles alertes qui touchent un défrichement confirmé lors d'une période antérieure. Son œil, **Ensembles antérieurs sur la carte**, dessine les jeux antérieurs. Son titre donne les alertes d'extension et leur superficie (« 3 alertes d’extension · 4,2 ha », ou seulement leur nombre avec **Nombre d'alertes**) ; la ligne en dessous les répartit (« Extension : 2 · Sous la surface minimale : 1 ») et indique combien sont examinées. Sans aucune, elle indique « Aucune alerte n’est liée à une perte antérieure. »
+La carte **Liées à des pertes antérieures** suit les `alertes d'extension <defo-integrate-growth_>`_ : les nouvelles alertes qui touchent un défrichement confirmé lors d'une période antérieure (dessinez les jeux antérieurs depuis `Couches de la carte <defo-overview-layers_>`_). Son titre donne les alertes d'extension et leur superficie (« 3 alertes d’extension · 4,2 ha », ou seulement leur nombre avec **Nombre d'alertes**) ; la ligne en dessous les répartit (« Extension : 2 · Sous la surface minimale : 1 ») et indique combien sont examinées. Sans aucune, elle indique « Aucune alerte n’est liée à une perte antérieure. »
 
 Son tableau liste les historiques qui comprennent une alerte de ce jeu, la plus grande superficie confirmée en premier :
 
@@ -2510,12 +2514,12 @@ Son tableau liste les historiques qui comprennent une alerte de ce jeu, la plus 
 Résumé de toutes les périodes
 """""""""""""""""""""""""""""
 
-L'onglet **Fichiers** se termine par un tableau de toutes les périodes, une ligne chacune : ses **Alertes**, ses **ha confirmés**, sa part **Examinées**, ses **Px des sources**, ses **Amas**, ses **Groupes** d'examen et ses alertes **Liées** à des pertes antérieures. La tuile **CSV de résumé** en dessous écrit le même tableau dans ``periods_summary.csv``, dans le dossier du projet ; sélectionnez-la à nouveau pour télécharger le fichier. Quand les chiffres ont changé depuis (examens enregistrés, jeu reconstruit), la tuile indique « Les chiffres ont changé depuis » et un bouton **Mettre à jour** l'écrit à nouveau.
+Avec **Toutes les périodes** sélectionné, l'onglet **Fichiers** se termine par un tableau de toutes les périodes, une ligne chacune : ses **Alertes**, ses **ha confirmés**, sa part **Examinées**, ses **Px des sources**, ses **Amas**, ses **Groupes** d'examen et ses alertes **Liées** à des pertes antérieures. La tuile **CSV de résumé** en dessous écrit le même tableau dans ``periods_summary.csv``, dans le dossier du projet ; sélectionnez-la à nouveau pour télécharger le fichier. Quand les chiffres ont changé depuis (examens enregistrés, jeu reconstruit), la tuile indique « Les chiffres ont changé depuis » et un bouton **Mettre à jour** l'écrit à nouveau.
 
 Toutes les périodes
 ^^^^^^^^^^^^^^^^^^^
 
-Choisissez **Toutes les périodes** dans le sélecteur **Jeu d'alertes** pour additionner le jeu le plus récent de chaque période : les chiffres clés, les onglets et l'export les couvrent alors toutes. Les hectares et les alertes s'additionnent ; un compte de pixels qu'un jeu n'a pas enregistré affiche « — ». Les boutons de carte et **Réviser les alertes** ont besoin d'un seul jeu : ils sont donc masqués ou désactivés. Dans l'onglet **Fichiers**, la carte **Exporter les alertes** écrit les alertes de toutes les périodes dans un seul fichier, avec une colonne ``period`` (voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_).
+Choisissez **Toutes les périodes** dans le sélecteur **Jeu d'alertes** pour additionner le jeu le plus récent de chaque période : les chiffres clés, les onglets et l'export les couvrent alors toutes. Les hectares et les alertes s'additionnent ; un compte de pixels qu'un jeu n'a pas enregistré affiche « — ». **Couches de la carte** liste les couches de toutes les périodes (voir `Couches de la carte <defo-overview-layers_>`_) ; **Réviser les alertes** a besoin d'un seul jeu : il est donc désactivé. Dans l'onglet **Fichiers**, la carte **Exporter les alertes** écrit les alertes de toutes les périodes dans un seul fichier, avec une colonne ``period`` (voir `Tout le jeu, depuis l'Aperçu <defo-export-set_>`_).
 
 Messages fréquents
 ^^^^^^^^^^^^^^^^^^

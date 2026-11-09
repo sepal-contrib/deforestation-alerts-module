@@ -103,10 +103,12 @@ def status_legend(key: str, name, title: Label, faded: bool = False) -> LayerLeg
         labels=tuple(Label(key=k) for _, _, k in STATUS_CLASSES)))
 
 
-def states_legend(key: str) -> LayerLegend:
-    """The two states drawn (analysable pixels are masked)."""
-    return LayerLegend(layer_id=key, label=Label(key="legend.states_title"), spec=LegendSpec(
-        kind="chips", title=Label(key="legend.states_title"), colors=tuple(c for _, c, _ in STATE_CLASSES),
+def states_legend(key: str, period: str = "") -> LayerLegend:
+    """The two states drawn (analysable pixels are masked), named by the
+    set's ``period`` when given."""
+    label = Label(key="legend.name.states", args=(("period", period),)) if period else Label(key="legend.states_title")
+    return LayerLegend(layer_id=key, label=label, spec=LegendSpec(
+        kind="chips", title=label, colors=tuple(c for _, c, _ in STATE_CLASSES),
         labels=tuple(Label(key=k) for _, _, k in STATE_CLASSES)))
 
 

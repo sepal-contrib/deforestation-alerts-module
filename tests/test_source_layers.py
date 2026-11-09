@@ -100,4 +100,4 @@ def test_the_set_legend_names_its_period_and_sources():
 
     legend = sl.set_legend("alerts:set", SimpleNamespace(period_id=JAN.id, sources=["GLAD-L", "RADD"]))
     assert legend.layer_id == "alerts:set" and legend.spec.title.key == "legend.title.set"
-    assert dict(legend.spec.title.args) == {"period": JAN.id, "sources": "GLAD-L + RADD"}
+    assert dict(legend.spec.title.args) == {"period": "2026-01-01 → 2026-01-31", "sources": "GLAD-L + RADD"}

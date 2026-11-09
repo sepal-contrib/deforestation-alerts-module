@@ -106,9 +106,13 @@ class AppState:
         # so a step never has to hold a build closure. A layer switched on
         # stays on while the user moves between steps (MapLayers ruling #10).
         self.show_alerts = solara.reactive(False)
-        self.show_earlier_sets = solara.reactive(False)
         # the set's too-small / over-cap pixels (combined band 4), likewise
         self.show_unanalysable = solara.reactive(False)
+        # the ids of the project's OTHER sets drawn lightened beside the active
+        # one, and of those whose not-analysable pixels are drawn (Overview's
+        # Map layers menu, Integrate's Show earlier sets)
+        self.shown_sets = solara.reactive(frozenset())
+        self.states_sets = solara.reactive(frozenset())
         # alert review
         self.alerts_gdf = solara.reactive(None)
         self.actual_alert_id = solara.reactive(-1)
@@ -160,8 +164,9 @@ class AppState:
             self.screen.set("workflow")
             self.aoi_result.set(None)
             self.show_alerts.set(False)
-            self.show_earlier_sets.set(False)
             self.show_unanalysable.set(False)
+            self.shown_sets.set(frozenset())
+            self.states_sets.set(frozenset())
             # The filter belongs to the project it was made in. Cleared before
             # the alerts go, and the set it was made on forgotten: the first
             # set published after this keeps a filter set from here on (a

@@ -46,23 +46,46 @@ def mask_layer_legend(project, mask: str):
     return legend_specs.mask_legend(f"mask:{mask}", mask, choice)
 
 
+def period_text(period_id: str) -> str:
+    """A set's period as the layer names say it: ``<start> → <end>`` from its
+    ``<start>_<end>`` id."""
+    start, _, end = period_id.partition("_")
+    return t("steps.period.range", start=start, end=end) if end else period_id
+
+
+def _set_args(alert_set):
+    return (("period", period_text(alert_set.period_id)), ("sources", " + ".join(alert_set.sources)))
+
+
+def set_layer_name(alert_set) -> str:
+    """The active set's layer: ``Alerts · <period> · <sources>``."""
+    return t("legend.title.set", **dict(_set_args(alert_set)))
+
+
 def set_legend(key, alert_set):
     """The Overview set: its PMTiles and the centroid fallback both draw the
     review-status colours, so one legend covers both."""
-    title = Label(key="legend.title.set", args=(("period", alert_set.period_id),
-                                                ("sources", " + ".join(alert_set.sources))))
+    title = Label(key="legend.title.set", args=_set_args(alert_set))
     return legend_specs.status_legend(key, title, title)
 
 
+def states_name(alert_set) -> str:
+    """A set's not-analysable pixels: ``Not analysable · <period>``."""
+    return t("legend.name.states", period=period_text(alert_set.period_id))
+
+
+def states_layer_legend(key, alert_set):
+    return legend_specs.states_legend(key, period_text(alert_set.period_id))
+
+
 def earlier_set_name(alert_set) -> str:
-    return t("legend.name.earlier_set", period=alert_set.period_id, sources=" + ".join(alert_set.sources))
+    return t("legend.name.earlier_set", **dict(_set_args(alert_set)))
 
 
 def earlier_set_legend(key, alert_set):
-    """§9.4's earlier-set row: the four review statuses, lightened."""
-    name = Label(key="legend.name.earlier_set", args=(("period", alert_set.period_id),
-                                                     ("sources", " + ".join(alert_set.sources))))
-    title = Label(key="legend.title.earlier_set", args=(("period", alert_set.period_id),))
+    """§9.4's row of another period's set: the four review statuses, lightened."""
+    name = Label(key="legend.name.earlier_set", args=_set_args(alert_set))
+    title = Label(key="legend.title.earlier_set", args=(("period", period_text(alert_set.period_id)),))
     return legend_specs.status_legend(key, name, title, faded=True)
 
 

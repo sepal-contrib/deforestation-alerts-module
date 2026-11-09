@@ -653,7 +653,6 @@
       "project_changed": "The project's period, area of interest or grid changed while the run was going, so the alert set was not recorded. Run Integrate & vectorize again.",
       "error_min_size": "Enter a minimum size in hectares, 0 or more.",
       "error_max_alerts": "Enter a whole number greater than 0.",
-      "layer_name": "Alerts (active set)",
       "go": "Review",
       "popup": "Alert {id} · {status} · {area} ha",
       "show_earlier": "Show earlier sets",

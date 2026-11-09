@@ -4,7 +4,7 @@ The layers live in the shell's ``_AlertLayers`` leaf, not in a step: they are
 switched on from Integrate & vectorize once a run has produced a set, and a
 layer stays on while the user moves between steps or opens the Overview dialog
 (``MapLayers`` ruling #10). So these tests drive ``app_state.show_alerts`` and
-``app_state.show_earlier_sets`` -- the two booleans the Integrate switches
+``app_state.shown_sets`` -- what the Integrate switches
 write -- never a view flag.
 
 ``_AlertLayers`` is rendered with ``reacton.render`` against a real
@@ -47,7 +47,7 @@ from gui.i18n import t
 from gui.scripts import alert_layers, legend_specs, map_layers, set_store
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.pmtiles_map import STATUS_COLORS
-from gui.scripts.source_layers import earlier_set_name
+from gui.scripts.source_layers import earlier_set_name, set_layer_name
 from gui.store.state_manager import AppState
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
@@ -96,14 +96,25 @@ def _project(tmp_path, name="d"):
     return p
 
 
+def _set_name():
+    """The active (January GLAD-L) set's layer name."""
+    return set_layer_name(SimpleNamespace(period_id=JAN.id, sources=["GLAD-L"]))
+
+
+def _earlier_ids(state):
+    """What Integrate's Show earlier sets switch puts in ``shown_sets``."""
+    p = state.project.value
+    return frozenset(e.id for e in alert_layers.earlier_of(p, p.alert_sets[p.active_set]))
+
+
 def _state(p, gdf, *, alerts_on=True, earlier_on=False):
     """``AppState`` as Integrate leaves it: a project, its alerts published and
-    the two switches as the user set them (``new_project_state`` resets both)."""
+    the switches as the user set them (``new_project_state`` resets them)."""
     state = AppState()
     state.new_project_state(p)
     state.alerts_gdf.set(gdf)
     state.show_alerts.set(alerts_on)
-    state.show_earlier_sets.set(earlier_on)
+    state.shown_sets.set(_earlier_ids(state) if earlier_on else frozenset())
     return state
 
 
@@ -190,7 +201,7 @@ def test_the_set_layer_follows_the_show_alerts_switch(ov, tmp_path):
         assert layers.is_on(KEY)
         ov.run_jobs()
         assert ov.ensured == [("d", make_set_id(JAN.id, ["GLAD-L"]))]
-        assert ov.drawn == [(ov.pm, KEY, t("steps.integrate.layer_name"))]
+        assert ov.drawn == [(ov.pm, KEY, _set_name())]
         assert map_.find_layer(KEY, none_ok=True) is not None
 
         state.show_alerts.set(False)
@@ -236,7 +247,7 @@ def test_the_set_layer_carries_the_sets_legend(ov, tmp_path, monkeypatch):
         ov.run_jobs()
         [(key, legend)] = [(k, lg) for k, lg in shown if k == KEY]
         assert legend.layer_id == KEY and legend.spec.title.key == "legend.title.set"
-        assert dict(legend.spec.title.args) == {"period": JAN.id, "sources": "GLAD-L"}
+        assert dict(legend.spec.title.args) == {"period": "2026-01-01 → 2026-01-31", "sources": "GLAD-L"}
         assert legend.spec.colors == tuple(STATUS_COLORS[code] for code in sorted(STATUS_COLORS))
         assert layers.legends.value == (legend,)
     finally:
@@ -366,7 +377,7 @@ def test_stale_tiles_wait_for_the_projects_writer_and_are_rebuilt_after(ov, tmp_
         assert not is_writing("d")
 
         ov.run_jobs()  # the effect re-ran when the mark was released
-        assert len(ov.ensured) == 2 and ov.drawn == [(ov.pm, KEY, t("steps.integrate.layer_name"))]
+        assert len(ov.ensured) == 2 and ov.drawn == [(ov.pm, KEY, _set_name())]
         assert isinstance(map_.find_layer(KEY, none_ok=True), ipyleaflet.TileLayer)
 
         with writing("d"):  # a later Save: current tiles are not touched, nothing is rebuilt
@@ -405,7 +416,7 @@ def test_a_store_rewritten_under_the_build_is_retiled_once_the_build_is_done(ov,
         # registry starts it once the refused build has cleaned up, in the
         # same run here), from the store as it is now.
         ov.run_jobs()
-        assert len(calls) == 2 and ov.drawn == [(ov.pm, KEY, t("steps.integrate.layer_name"))]
+        assert len(calls) == 2 and ov.drawn == [(ov.pm, KEY, _set_name())]
         assert isinstance(map_.find_layer(KEY, none_ok=True), ipyleaflet.TileLayer)
         assert _toasts(ov, "warning") == [] and _toasts(ov, "error") == []
         ov.run_jobs()
@@ -442,7 +453,7 @@ def test_without_tippecanoe_the_alerts_fall_back_to_centroid_points(ov, tmp_path
             assert drawn["color"] == drawn["fillColor"] == STATUS_COLORS[code]
             assert drawn["fill"] and drawn["fillOpacity"] > 0 and drawn["radius"] == 4
         assert [f["properties"]["status_code"] for f in layer.data["features"]] == [1, 2, 3, 0]
-        assert layer.name == t("steps.integrate.layer_name")
+        assert layer.name == _set_name()
         assert _toasts(ov, "warning") == [t("steps.integrate.no_tippecanoe")]
         assert _toasts(ov, "error") == [] and layers.is_on(KEY)
 
@@ -630,7 +641,7 @@ def test_show_earlier_sets_draws_the_earlier_periods_lightened_with_their_legend
     try:
         key = alert_layers.earlier_key(dec)
         assert not layers.is_on(key)
-        state.show_earlier_sets.set(True)
+        state.shown_sets.set(_earlier_ids(state))
         ov.run_jobs()
         assert layers.is_on(key) and not layers.is_on(alert_layers.earlier_key(feb))
         assert (key, earlier_set_name(dec), True) in drawn
@@ -638,7 +649,7 @@ def test_show_earlier_sets_draws_the_earlier_periods_lightened_with_their_legend
         assert entry.spec.title.key == "legend.title.earlier_set"
         assert entry.spec.colors == tuple(legend_specs.status_colors(faded=True)[code]
                                           for code, _, _ in legend_specs.STATUS_CLASSES)
-        state.show_earlier_sets.set(False)
+        state.shown_sets.set(frozenset())
         assert not layers.is_on(key) and all(e.layer_id != key for e in layers.legends.value)
         assert map_.find_layer(key, none_ok=True) is None
     finally:
@@ -725,7 +736,7 @@ def test_installing_a_project_turns_both_switches_off(ov, tmp_path):
         assert layers.is_on(KEY) and layers.is_on(alert_layers.earlier_key(dec))
         state.load_project_state(p)
         ov.run_jobs()
-        assert state.show_alerts.value is False and state.show_earlier_sets.value is False
+        assert state.show_alerts.value is False and state.shown_sets.value == frozenset()
         assert not layers.is_on(KEY) and not layers.is_on(alert_layers.earlier_key(dec))
     finally:
         rc.close()
@@ -755,7 +766,7 @@ def test_earlier_sets_blocked_by_a_writer_get_their_tiles_once_it_is_done(ov, tm
     try:
         ov.run_jobs()  # the active set's layer (stand-in tiles)
         monkeypatch.setattr(set_store, "ensure_pmtiles", _REAL_ENSURE)
-        state.show_earlier_sets.set(True)
+        state.shown_sets.set(_earlier_ids(state))
         ov.run_jobs()
         for e in (dec, nov):
             key = alert_layers.earlier_key(e)
@@ -776,7 +787,7 @@ def test_an_empty_earlier_set_has_no_tiles(ov, tmp_path):
     map_, layers, rc = ov.render(state)
     try:
         ov.run_jobs()
-        state.show_earlier_sets.set(True)
+        state.shown_sets.set(_earlier_ids(state))
         ov.run_jobs()
         assert (p.name, dec.id) not in ov.ensured
         layer = _centroid_layer(map_, alert_layers.earlier_key(dec))
@@ -804,11 +815,11 @@ def test_an_earlier_sets_alerts_are_let_go_when_it_is_no_longer_shown(ov, tmp_pa
     state = _state(p, _alerts())
     map_, layers, rc = ov.render(state)
     try:
-        state.show_earlier_sets.set(True)
+        state.shown_sets.set(_earlier_ids(state))
         ov.run_jobs()
         gc.collect()
         assert [ref() is not None for ref in loaded] == [True]
-        state.show_earlier_sets.set(False)
+        state.shown_sets.set(frozenset())
         gc.collect()
         assert [ref() is not None for ref in loaded] == [False]
     finally:
@@ -1033,3 +1044,52 @@ def test_two_threads_write_the_states_vrt_through_their_own_part_file(tmp_path, 
     combined = tmp_path / p.name / s.combined_rel_path
     seen = _part_names_of_two_threads(monkeypatch, alert_layers, lambda: alert_layers.states_vrt(combined, "c1"))
     assert len(seen) == 2 and len(set(seen)) == 2
+
+
+def test_any_other_periods_set_can_be_drawn_by_its_id(ov, tmp_path, monkeypatch):
+    """The Overview's Map layers menu picks sets one by one, a later period's too."""
+    drawn = []
+
+    def draw(map_, path, *, key, name, faded=False):
+        drawn.append((key, faded))
+        map_.add_layer(ipyleaflet.TileLayer(name=name), key=key)
+
+    monkeypatch.setattr(alert_layers, "add_set_pmtiles", draw)
+    p = _project(tmp_path)
+    dec, feb = _other_set(p, tmp_path, DEC), _other_set(p, tmp_path, FEB)
+    state = _state(p, _alerts())
+    map_, layers, rc = ov.render(state)
+    try:
+        state.shown_sets.set(frozenset({feb.id}))
+        ov.run_jobs()
+        assert layers.is_on(alert_layers.earlier_key(feb)) and not layers.is_on(alert_layers.earlier_key(dec))
+        assert (alert_layers.earlier_key(feb), True) in drawn
+        # the active set's own id is never drawn twice
+        state.shown_sets.set(frozenset({feb.id, p.active_set}))
+        ov.run_jobs()
+        assert not layers.is_on(alert_layers.earlier_key(p.alert_sets[p.active_set]))
+    finally:
+        rc.close()
+
+
+def test_another_sets_not_analysable_pixels_follow_states_sets(ov, tmp_path, monkeypatch, scratch):
+    drawn = _fake_draw(monkeypatch)
+    p, a = _with_states(_project(tmp_path), content_id="cA")
+    b = a.model_copy(update={"id": "set-b", "period_id": DEC.id, "combined_rel_path": f"{SET_DIR}/b.tif"})
+    p.periods[DEC.id] = DEC
+    p.alert_sets[b.id] = b
+    p.active_set = b.id
+    _with_states(p, content_id="cB")
+    p.active_set = a.id
+    state = _state(p, _alerts(), alerts_on=False)
+    map_, layers, rc = ov.render(state)
+    try:
+        key = alert_layers.states_key(b)
+        state.states_sets.set(frozenset({b.id}))
+        ov.run_jobs()
+        assert layers.is_on(key) and (key, "states_cB.vrt") in drawn
+        assert not layers.is_on(alert_layers.STATES_LAYER_KEY)
+        state.states_sets.set(frozenset())
+        assert not layers.is_on(key)
+    finally:
+        rc.close()

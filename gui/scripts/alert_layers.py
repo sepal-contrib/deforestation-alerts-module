@@ -25,6 +25,7 @@ and ``deferred_keys`` record.
 import logging
 import os
 import threading
+from datetime import date
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -41,7 +42,7 @@ from gui.scripts.error_text import error_text
 from gui.scripts import raster_map
 from gui.scripts.legend_specs import state_colormap, status_colors
 from gui.scripts.pmtiles_map import add_set_pmtiles
-from gui.scripts.source_layers import earlier_set_name
+from gui.scripts.source_layers import earlier_set_name, set_layer_name, states_name
 from gui.store.workflow_steps import active_set
 
 #: MapLayers key of the active set's tiles (or their centroid fallback)
@@ -50,8 +51,10 @@ SET_LAYER_KEY = "alerts:set"
 STATES_LAYER_KEY = "alerts:states"
 #: map key of the click popup
 POPUP_KEY = "alerts:popup"
-#: MapLayers key prefix of the earlier sets' layers (spec §4.3)
+#: MapLayers key prefix of the other sets' layers (spec §4.3)
 EARLIER_PREFIX = "alerts:set:"
+#: MapLayers key prefix of the other sets' not-analysable pixels
+STATES_PREFIX = "alerts:states:"
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.alert_layers")
 
@@ -122,15 +125,16 @@ def states_vrt(combined, content_id: str) -> Path:
     return out
 
 
-def states_build(map_, *, project, alert_set) -> bool:
-    """Draw the set's too-small / over-cap pixels under ``STATES_LAYER_KEY``
-    from a VRT of band 4 of the combined raster (see ``states_vrt``). Adds
-    nothing and returns False for a set without the band."""
+def states_build(map_, *, project, alert_set, key: str = STATES_LAYER_KEY) -> bool:
+    """Draw the set's too-small / over-cap pixels under ``key`` (the active
+    set's ``STATES_LAYER_KEY``, another set's ``states_key``) from a VRT of
+    band 4 of the combined raster (see ``states_vrt``). Adds nothing and
+    returns False for a set without the band."""
     if not has_states(project, alert_set):
         return False
     combined = paths.resolve(paths.project_dir(project.name), alert_set.combined_rel_path)
     vrt = states_vrt(combined, combined_artifact(project, alert_set).content_id)
-    raster_map.add_raster_layer(map_, vrt, key=STATES_LAYER_KEY, name=t("legend.states_title"), band=1,
+    raster_map.add_raster_layer(map_, vrt, key=key, name=states_name(alert_set), band=1,
                                 colormap=state_colormap(), vmin=2, vmax=3, nodata=0)
     return True
 
@@ -138,6 +142,25 @@ def states_build(map_, *, project, alert_set) -> bool:
 def earlier_key(alert_set) -> str:
     """The MapLayers key an earlier set is drawn under."""
     return f"{EARLIER_PREFIX}{alert_set.id}"
+
+
+def states_key(alert_set) -> str:
+    """The MapLayers key another set's not-analysable pixels are drawn under."""
+    return f"{STATES_PREFIX}{alert_set.id}"
+
+
+def others_of(project, alert_set) -> list:
+    """Every set of the project but ``alert_set``, newest period first: the
+    sets the Map layers menu can draw beside the active one."""
+    if project is None:
+        return []
+
+    def _key(e):
+        period = project.periods.get(e.period_id)
+        return (period.start if period is not None else date.min, e.created_at)
+
+    return sorted((e for e in project.alert_sets.values() if alert_set is None or e.id != alert_set.id),
+                  key=_key, reverse=True)
 
 
 def earlier_of(project, alert_set) -> list:
@@ -194,7 +217,7 @@ def active_build(map_, *, project, alert_set, alerts, notifier, warned, deferred
     the centroids, and saying so twice is noise. ``deferred`` is the flag the
     retry effect watches.
     """
-    name = t("steps.integrate.layer_name")
+    name = set_layer_name(alert_set)
 
     def _defer():
         # Called by ensure_pmtiles right before it raises StoreBusy, while its
@@ -282,7 +305,7 @@ def earlier_build(map_, *, project, alert_set, loaded, deferred_keys):
 
 def hit_in(project, current, lon, lat, *, loaded, is_shown):
     """(set, alerts, row position) of the alert under the click, or None: the
-    active set's alerts first, then the earlier sets shown, newest first.
+    active set's alerts first, then the other sets shown, newest first.
 
     ``current`` may be None (the published alerts are still another set's) and
     the project may have no active set at all; either way the earlier sets are
@@ -294,7 +317,7 @@ def hit_in(project, current, lon, lat, *, loaded, is_shown):
     i = set_store.hit_alert(current, lon, lat) if current is not None else None
     if s_now is not None and i is not None:
         return s_now, current, i
-    for e in earlier_of(project, s_now):
+    for e in others_of(project, s_now):
         alerts = loaded.get((project.name, e.id, e.fingerprint))
         if alerts is None or not is_shown(earlier_key(e)):
             continue

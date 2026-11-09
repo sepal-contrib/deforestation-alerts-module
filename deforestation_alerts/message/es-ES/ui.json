@@ -99,10 +99,6 @@
     "tab_pixels": "Píxeles",
     "tab_clusters": "Grupos de píxeles",
     "tab_files": "Archivos",
-    "on_the_map": "En el mapa",
-    "layer_alerts": "Alertas",
-    "layer_unanalysable": "Píxeles no analizables",
-    "layer_earlier": "Conjuntos anteriores",
     "all_periods": "Todos los períodos · {sets} · {alerts}",
     "n_sets": {
       "one": "{n} conjunto",
@@ -147,7 +143,6 @@
     "nearby_saved_row": "Guardadas como grupo de revisión",
     "card_linked": "Vinculadas a pérdidas anteriores",
     "linked_note": "Alertas nuevas que tocan un desmonte confirmado en un período anterior: el mismo desmonte, que sigue creciendo.",
-    "linked_earlier": "Conjuntos anteriores en el mapa",
     "linked_none": "Ninguna alerta está vinculada a pérdidas anteriores.",
     "export_pick_all": "Las alertas del conjunto elegido arriba. Elija Todos los períodos allí para descargar todos los períodos a la vez.",
     "export_all_note": "Las alertas de todos los períodos en un archivo, con una columna period.",
@@ -166,7 +161,16 @@
       "other": "{n} períodos"
     },
     "summary_not_written": "{what} · aún sin escribir",
-    "summary_stale": "Las cifras cambiaron desde entonces"
+    "summary_stale": "Las cifras cambiaron desde entonces",
+    "map_layers": "Capas del mapa",
+    "this_set": "Este conjunto · {period}",
+    "other_periods": "Otros períodos",
+    "every_period": "Todos los períodos",
+    "show_all": "Mostrar todo",
+    "hide_all": "Ocultar todo",
+    "menu_alerts": "Alertas · {period}",
+    "menu_states": "Píxeles no analizables · {period}",
+    "menu_states_sub": "demasiado pequeños o sobre el límite de alertas"
   },
   "analysis": {
     "timeline": {

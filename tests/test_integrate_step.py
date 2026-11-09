@@ -2105,13 +2105,16 @@ def test_the_alert_switches_only_write_the_two_booleans_the_shell_reads(step):
     layers = MapLayers(map_)
     box_, rc = reacton.render(_Harness(app_state=state, map_=map_, layers=layers), handle_error=False)
     try:
-        assert state.show_alerts.value is False and state.show_earlier_sets.value is False
+        assert state.show_alerts.value is False and state.shown_sets.value == frozenset()
         _switches(rc)[t("steps.integrate.show_alerts")].v_model = True
-        assert state.show_alerts.value is True and state.show_earlier_sets.value is False
+        assert state.show_alerts.value is True and state.shown_sets.value == frozenset()
         _switches(rc)[t("steps.integrate.show_earlier")].v_model = True
-        assert state.show_earlier_sets.value is True
+        earlier = state.shown_sets.value
+        assert earlier and earlier.isdisjoint({state.project.value.active_set})
         _switches(rc)[t("steps.integrate.show_alerts")].v_model = False
-        assert state.show_alerts.value is False and state.show_earlier_sets.value is True
+        assert state.show_alerts.value is False and state.shown_sets.value == earlier
+        _switches(rc)[t("steps.integrate.show_earlier")].v_model = False
+        assert state.shown_sets.value == frozenset()
         assert layers.on.value == frozenset()  # no layer was asked for from here
     finally:
         rc.close()

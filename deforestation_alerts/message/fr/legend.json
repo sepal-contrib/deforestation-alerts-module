@@ -23,13 +23,14 @@
       "harmonized": "{source} · {start} → {end}",
       "mask": "Masque {name}",
       "set": "Alertes · {period} · {sources}",
-      "earlier_set": "Jeu antérieur · {period}"
+      "earlier_set": "Alertes · {period}"
     },
     "name": {
       "preview": "{source} · aperçu",
       "harmonized": "{source} · {start} → {end}",
       "mask": "Masque {name}",
-      "earlier_set": "Jeu antérieur · {period} · {sources}"
+      "earlier_set": "Alertes · {period} · {sources}",
+      "states": "Non analysable · {period}"
     },
     "vis": {
       "rgb": "Composite RGB de {bands}, {min}–{max}"

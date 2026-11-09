@@ -2438,7 +2438,7 @@ Open the Overview
 
 Select **Overview** in the left rail. It opens as a large dialog over the map; close it with its cross. It shows the active alert set, or "No alert set yet. Run Integrate & vectorize to produce one." when the project has none.
 
-.. shot: overview-dashboard | The Overview dialog of the demo project, on the newest set with about a third of its 48 alerts reviewed, measure Area (ha), Status tab open: the header with the Alert set selector, Area (ha) filled and Alert count outlined, Review alerts; the four key figures (Confirmed loss 305 ha with "▼ 780 less than 2026-09-01 → 2026-09-30", Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 0 · Peru · …"); the On the map buttons; the tab row; the By review status card with its table and How big the alerts are. Crop to the dialog.
+.. shot: overview-dashboard | The Overview dialog of the demo project, on the newest set with about a third of its 48 alerts reviewed, measure Area (ha), Status tab open: the header with the Alert set selector, Area (ha) filled and Alert count outlined, Review alerts; the four key figures (Confirmed loss 305 ha with "▼ 780 less than 2026-09-01 → 2026-09-30", Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 0 · Peru · …"); the Map layers button; the tab row; the By review status card with its table and How big the alerts are. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/overview-dashboard.png
     :alt: The Overview dashboard
@@ -2483,14 +2483,18 @@ The key figures
     *   -   **Largest alert**
         -   The largest alert's area, its number, its country (once reviewed) and its date. It always counts hectares. The number is the alert's row in the set, which is the Analysis counter's number minus one.
 
-On the map
+.. _defo-overview-layers:
+
+Map layers
 ^^^^^^^^^^
 
-The buttons next to **On the map** draw a layer on the main map, as the eyes of `Integrate & vectorize <defo-integrate-map_>`_ do; selecting one closes the Overview, to show the map. They are shown only for one set with alerts, not for **All periods**.
+The **Map layers** button next to the headline opens a list of the layers the Overview can draw on the main map, grouped by period. The button counts the layers drawn. Tick a layer to draw it: the Overview closes, to show the map. Clear it to take the layer off. Every layer is named with its period ("Alerts · 2026-01-01 → 2026-01-31"), in the list, on the map and in the legend.
 
--   **Alerts**: the set's alerts, coloured by status.
--   **Not-analysable pixels**: the pixels left out of the alerts, too small or over the alert limit. Only shown when the set's run recorded them.
--   **Earlier sets**: the alerts of the earlier periods' sets. Only shown when there are earlier sets.
+-   **This set**: the selected set's **Alerts**, coloured by status, and its not-analysable pixels (too small, or over the alert cap), when the set's run recorded them.
+-   **Other periods**: the alerts of every other period's newest set, newest period first, each on its own. When there are several, **Show all** and **Hide all** draw or clear them together.
+-   With **All periods** selected, **Every period** lists the alerts and the not-analysable pixels of each period's newest set.
+
+A layer's box is greyed while the layer is being built.
 
 .. _defo-overview-figures:
 
@@ -2523,7 +2527,7 @@ The figures are grouped in tabs, each with two cards side by side.
     *   -   **Clusters**
         -   How those pixels became alerts, the nearby alerts and the alerts linked to earlier loss (see below). The tab shows the number of alerts.
     *   -   **Files**
-        -   The **Export alerts** card (see `The whole set, from the Overview <defo-export-set_>`_) and the **Summary of all periods** (see below).
+        -   The **Export alerts** card (see `The whole set, from the Overview <defo-export-set_>`_) and, with **All periods** selected, the **Summary of all periods** (see below).
 
 When a figure cannot be drawn, its card reads "This figure could not be drawn; its numbers are below." and lists them.
 
@@ -2556,7 +2560,7 @@ Under it, **Nearby alerts** shows how the set's alerts chain into groups: alerts
 
 When grouping is off, the card uses the project's distance and adds "Reviewing together is off · turn it on in Evaluation."
 
-The **Linked to earlier loss** card follows the `growth alerts <defo-integrate-growth_>`_: new alerts that touch a clearing confirmed in an earlier period. Its eye, **Earlier sets on the map**, draws the earlier sets. Its headline gives the growth alerts and their area ("3 growth alerts · 4.2 ha", or only the number with **Alert count**); the line under it splits them ("Growth: 2 · Under minimum area: 1") and says how many are reviewed. Without any, it reads "No alert is linked to earlier loss."
+The **Linked to earlier loss** card follows the `growth alerts <defo-integrate-growth_>`_: new alerts that touch a clearing confirmed in an earlier period (draw the earlier sets from `Map layers <defo-overview-layers_>`_). Its headline gives the growth alerts and their area ("3 growth alerts · 4.2 ha", or only the number with **Alert count**); the line under it splits them ("Growth: 2 · Under minimum area: 1") and says how many are reviewed. Without any, it reads "No alert is linked to earlier loss."
 
 Its table lists the histories that include an alert of this set, the largest confirmed area first:
 
@@ -2580,12 +2584,12 @@ Its table lists the histories that include an alert of this set, the largest con
 Summary of all periods
 """"""""""""""""""""""
 
-The **Files** tab ends with a table of every period, one row each: its **Alerts**, **Confirmed ha**, **Reviewed** share, **Source px**, **Clusters**, review **Groups** and alerts **Linked** to earlier loss. The **Summary CSV** tile under it writes the same table to ``periods_summary.csv`` in the project folder; select it again to download the file. When the numbers have changed since (reviews saved, a set rebuilt), the tile reads "Numbers changed since" and an **Update** button writes it again.
+With **All periods** selected, the **Files** tab ends with a table of every period, one row each: its **Alerts**, **Confirmed ha**, **Reviewed** share, **Source px**, **Clusters**, review **Groups** and alerts **Linked** to earlier loss. The **Summary CSV** tile under it writes the same table to ``periods_summary.csv`` in the project folder; select it again to download the file. When the numbers have changed since (reviews saved, a set rebuilt), the tile reads "Numbers changed since" and an **Update** button writes it again.
 
 All periods
 ^^^^^^^^^^^
 
-Choose **All periods** in the **Alert set** selector to sum the newest set of every period: the key figures, the tabs and the export then cover them all. Hectares and alerts are added up; a pixel count that one set did not record shows "—". The map buttons and **Review alerts** need one set, so they are hidden or disabled. In the **Files** tab, the **Export alerts** card writes every period's alerts to one file, with a ``period`` column (see `The whole set, from the Overview <defo-export-set_>`_).
+Choose **All periods** in the **Alert set** selector to sum the newest set of every period: the key figures, the tabs and the export then cover them all. Hectares and alerts are added up; a pixel count that one set did not record shows "—". **Map layers** lists every period's layers (see `Map layers <defo-overview-layers_>`_); **Review alerts** needs one set, so it is disabled. In the **Files** tab, the **Export alerts** card writes every period's alerts to one file, with a ``period`` column (see `The whole set, from the Overview <defo-export-set_>`_).
 
 Common messages
 ^^^^^^^^^^^^^^^

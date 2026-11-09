@@ -2413,14 +2413,18 @@ Las cifras clave
     *   -   **Alerta más grande**
         -   La superficie de la alerta más grande, su número, su país (una vez revisada) y su fecha. Siempre cuenta hectáreas. El número es la fila de la alerta en el conjunto, es decir, el número del contador de Análisis menos uno.
 
-En el mapa
-^^^^^^^^^^
+.. _defo-overview-layers:
 
-Los botones junto a **En el mapa** dibujan una capa en el mapa principal, como los interruptores de `Integrar y vectorizar <defo-integrate-map_>`_; al seleccionar uno, el Resumen se cierra para mostrar el mapa. Solo aparecen para un conjunto con alertas, no para **Todos los períodos**.
+Capas del mapa
+^^^^^^^^^^^^^^
 
--   **Alertas**: las alertas del conjunto, coloreadas según su estado.
--   **Píxeles no analizables**: los píxeles que quedaron fuera de las alertas, por demasiado pequeños o por encima del límite de alertas. Solo aparece cuando la ejecución del conjunto los registró.
--   **Conjuntos anteriores**: las alertas de los conjuntos de los períodos anteriores. Solo aparece cuando hay conjuntos anteriores.
+El botón **Capas del mapa**, junto al titular, abre la lista de las capas que el Resumen puede dibujar en el mapa principal, agrupadas por período. El botón cuenta las capas dibujadas. Marca una capa para dibujarla: el Resumen se cierra para mostrar el mapa. Desmárcala para quitar la capa. Cada capa lleva su período en el nombre ("Alertas · 2026-01-01 → 2026-01-31"), en la lista, en el mapa y en la leyenda.
+
+-   **Este conjunto**: las **Alertas** del conjunto seleccionado, coloreadas según su estado, y sus píxeles no analizables (demasiado pequeños o sobre el límite de alertas), cuando la ejecución del conjunto los registró.
+-   **Otros períodos**: las alertas del conjunto más reciente de cada uno de los demás períodos, del más reciente al más antiguo, cada una por separado. Cuando hay varias, **Mostrar todo** y **Ocultar todo** las dibujan o las quitan juntas.
+-   Con **Todos los períodos** seleccionado, **Todos los períodos** lista las alertas y los píxeles no analizables del conjunto más reciente de cada período.
+
+La casilla de una capa queda en gris mientras se construye la capa.
 
 .. _defo-overview-figures:
 
@@ -2451,7 +2455,7 @@ Las cifras se agrupan en pestañas, cada una con dos tarjetas una al lado de la 
     *   -   **Grupos de píxeles**
         -   Cómo esos píxeles se convirtieron en alertas, las alertas cercanas y las alertas vinculadas a pérdidas anteriores (ver más abajo). La pestaña muestra el número de alertas.
     *   -   **Archivos**
-        -   La tarjeta **Exportar alertas** (consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_) y el **Resumen de todos los períodos** (ver más abajo).
+        -   La tarjeta **Exportar alertas** (consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_) y, con **Todos los períodos** seleccionado, el **Resumen de todos los períodos** (ver más abajo).
 
 Cuando una figura no se puede dibujar, su tarjeta indica "No se pudo dibujar esta figura; sus cifras están abajo." y las enumera.
 
@@ -2484,7 +2488,7 @@ Debajo, **Alertas cercanas** muestra cómo se encadenan en grupos las alertas de
 
 Cuando la agrupación está desactivada, la tarjeta usa la distancia del proyecto y añade "La revisión conjunta está desactivada · actívela en Evaluación."
 
-La tarjeta **Vinculadas a pérdidas anteriores** sigue las `alertas de crecimiento <defo-integrate-growth_>`_: alertas nuevas que tocan un desmonte confirmado en un período anterior. Su ojo, **Conjuntos anteriores en el mapa**, dibuja los conjuntos anteriores. Su titular indica las alertas de crecimiento y su superficie ("3 alertas de crecimiento · 4,2 ha", o solo el número con **Número de alertas**); la línea de debajo las desglosa ("Crecimiento: 2 · Bajo el área mínima: 1") e indica cuántas están revisadas. Si no hay ninguna, indica "Ninguna alerta está vinculada a pérdidas anteriores."
+La tarjeta **Vinculadas a pérdidas anteriores** sigue las `alertas de crecimiento <defo-integrate-growth_>`_: alertas nuevas que tocan un desmonte confirmado en un período anterior (dibuja los conjuntos anteriores desde `Capas del mapa <defo-overview-layers_>`_). Su titular indica las alertas de crecimiento y su superficie ("3 alertas de crecimiento · 4,2 ha", o solo el número con **Número de alertas**); la línea de debajo las desglosa ("Crecimiento: 2 · Bajo el área mínima: 1") e indica cuántas están revisadas. Si no hay ninguna, indica "Ninguna alerta está vinculada a pérdidas anteriores."
 
 Su tabla enumera los historiales que incluyen una alerta de este conjunto, primero el de mayor superficie confirmada:
 
@@ -2508,12 +2512,12 @@ Su tabla enumera los historiales que incluyen una alerta de este conjunto, prime
 Resumen de todos los períodos
 """""""""""""""""""""""""""""
 
-La pestaña **Archivos** termina con una tabla de todos los períodos, una fila por período: sus **Alertas**, **ha confirmadas**, la proporción de **Revisadas**, **Px de fuentes**, **Grupos de píxeles**, **Grupos** de revisión y alertas **Vinculadas** a pérdidas anteriores. El mosaico **CSV de resumen** de debajo escribe la misma tabla en ``periods_summary.csv`` en la carpeta del proyecto; vuelve a seleccionarlo para descargar el archivo. Cuando las cifras han cambiado desde entonces (revisiones guardadas, un conjunto reconstruido), el mosaico indica "Las cifras cambiaron desde entonces" y un botón **Actualizar** lo vuelve a escribir.
+Con **Todos los períodos** seleccionado, la pestaña **Archivos** termina con una tabla de todos los períodos, una fila por período: sus **Alertas**, **ha confirmadas**, la proporción de **Revisadas**, **Px de fuentes**, **Grupos de píxeles**, **Grupos** de revisión y alertas **Vinculadas** a pérdidas anteriores. El mosaico **CSV de resumen** de debajo escribe la misma tabla en ``periods_summary.csv`` en la carpeta del proyecto; vuelve a seleccionarlo para descargar el archivo. Cuando las cifras han cambiado desde entonces (revisiones guardadas, un conjunto reconstruido), el mosaico indica "Las cifras cambiaron desde entonces" y un botón **Actualizar** lo vuelve a escribir.
 
 Todos los períodos
 ^^^^^^^^^^^^^^^^^^
 
-Elige **Todos los períodos** en el selector **Conjunto de alertas** para sumar el conjunto más reciente de cada período: las cifras clave, las pestañas y la exportación los abarcan entonces a todos. Las hectáreas y las alertas se suman; un recuento de píxeles que un conjunto no registró muestra "—". Los botones del mapa y **Revisar alertas** necesitan un solo conjunto, así que se ocultan o se desactivan. En la pestaña **Archivos**, la tarjeta **Exportar alertas** escribe las alertas de todos los períodos en un solo archivo, con una columna ``period`` (consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_).
+Elige **Todos los períodos** en el selector **Conjunto de alertas** para sumar el conjunto más reciente de cada período: las cifras clave, las pestañas y la exportación los abarcan entonces a todos. Las hectáreas y las alertas se suman; un recuento de píxeles que un conjunto no registró muestra "—". **Capas del mapa** lista las capas de todos los períodos (consulta `Capas del mapa <defo-overview-layers_>`_); **Revisar alertas** necesita un solo conjunto, así que se desactiva. En la pestaña **Archivos**, la tarjeta **Exportar alertas** escribe las alertas de todos los períodos en un solo archivo, con una columna ``period`` (consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_).
 
 Mensajes frecuentes
 ^^^^^^^^^^^^^^^^^^^

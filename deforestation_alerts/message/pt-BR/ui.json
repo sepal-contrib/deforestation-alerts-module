@@ -99,10 +99,6 @@
     "tab_pixels": "Pixels",
     "tab_clusters": "Agrupamentos",
     "tab_files": "Arquivos",
-    "on_the_map": "No mapa",
-    "layer_alerts": "Alertas",
-    "layer_unanalysable": "Pixels não analisáveis",
-    "layer_earlier": "Conjuntos anteriores",
     "all_periods": "Todos os períodos · {sets} · {alerts}",
     "n_sets": {
       "one": "{n} conjunto",
@@ -147,7 +143,6 @@
     "nearby_saved_row": "Salvos como grupo de revisão",
     "card_linked": "Vinculados a perdas anteriores",
     "linked_note": "Novos alertas que tocam um desmatamento confirmado em um período anterior: o mesmo desmatamento, ainda crescendo.",
-    "linked_earlier": "Conjuntos anteriores no mapa",
     "linked_none": "Nenhum alerta está vinculado a perdas anteriores.",
     "export_pick_all": "Os alertas do conjunto escolhido acima. Escolha Todos os períodos ali para baixar todos os períodos de uma vez.",
     "export_all_note": "Os alertas de todos os períodos em um arquivo, com uma coluna period.",
@@ -166,7 +161,16 @@
       "other": "{n} períodos"
     },
     "summary_not_written": "{what} · ainda não escrito",
-    "summary_stale": "Os números mudaram desde então"
+    "summary_stale": "Os números mudaram desde então",
+    "map_layers": "Camadas do mapa",
+    "this_set": "Este conjunto · {period}",
+    "other_periods": "Outros períodos",
+    "every_period": "Todos os períodos",
+    "show_all": "Mostrar tudo",
+    "hide_all": "Ocultar tudo",
+    "menu_alerts": "Alertas · {period}",
+    "menu_states": "Pixels não analisáveis · {period}",
+    "menu_states_sub": "pequenos demais, ou acima do limite de alertas"
   },
   "analysis": {
     "timeline": {

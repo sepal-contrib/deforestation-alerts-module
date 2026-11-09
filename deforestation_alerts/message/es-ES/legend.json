@@ -23,13 +23,14 @@
       "harmonized": "{source} · {start} → {end}",
       "mask": "Máscara {name}",
       "set": "Alertas · {period} · {sources}",
-      "earlier_set": "Conjunto anterior · {period}"
+      "earlier_set": "Alertas · {period}"
     },
     "name": {
       "preview": "{source} · vista previa",
       "harmonized": "{source} · {start} → {end}",
       "mask": "Máscara {name}",
-      "earlier_set": "Conjunto anterior · {period} · {sources}"
+      "earlier_set": "Alertas · {period} · {sources}",
+      "states": "No analizable · {period}"
     },
     "vis": {
       "rgb": "Compuesto RGB de {bands}, {min}–{max}"

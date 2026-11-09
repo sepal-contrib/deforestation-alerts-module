@@ -96,10 +96,6 @@
     "tab_pixels": "Pixels",
     "tab_clusters": "Clusters",
     "tab_files": "Files",
-    "on_the_map": "On the map",
-    "layer_alerts": "Alerts",
-    "layer_unanalysable": "Not-analysable pixels",
-    "layer_earlier": "Earlier sets",
     "all_periods": "All periods · {sets} · {alerts}",
     "n_sets": {
       "one": "{n} set",
@@ -143,7 +139,6 @@
     "nearby_saved_row": "Saved as a review group",
     "card_linked": "Linked to earlier loss",
     "linked_note": "New alerts that touch a clearing confirmed in an earlier period: the same clearing, still growing.",
-    "linked_earlier": "Earlier sets on the map",
     "linked_none": "No alert is linked to earlier loss.",
     "export_pick_all": "The alerts of the set picked above. Pick All periods there to download every period at once.",
     "export_all_note": "Every period's alerts in one file, with a period column.",
@@ -161,7 +156,16 @@
       "other": "{n} periods"
     },
     "summary_not_written": "{what} · not written yet",
-    "summary_stale": "Numbers changed since"
+    "summary_stale": "Numbers changed since",
+    "map_layers": "Map layers",
+    "this_set": "This set · {period}",
+    "other_periods": "Other periods",
+    "every_period": "Every period",
+    "show_all": "Show all",
+    "hide_all": "Hide all",
+    "menu_alerts": "Alerts · {period}",
+    "menu_states": "Not-analysable pixels · {period}",
+    "menu_states_sub": "too small, or over the alert cap"
   },
   "analysis": {
     "timeline": {

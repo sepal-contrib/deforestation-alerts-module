@@ -143,7 +143,7 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
         name=p.name, period=period, choices=choices, resolution=p.grid.resolution,
         last=active.params if active is not None else None,
         has_set=active is not None, has_states=alert_layers.has_states(p, active),
-        has_earlier=bool(alert_layers.earlier_of(p, active)),
+        earlier_ids=frozenset(e.id for e in alert_layers.earlier_of(p, active)),
         growth_note=small_growth_note(p, period),
         n_earlier=len(earlier_sets(p, period)),
         # per source, since the carry depends on the sources ticked in the form
@@ -156,7 +156,7 @@ def IntegrateStep(app_state, map_, gee_interface, layers):
 
 @solara.component
 def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, choices, resolution, last,
-                   has_set=False, has_states=False, has_earlier=False, growth_note=None, n_earlier=0,
+                   has_set=False, has_states=False, earlier_ids=frozenset(), growth_note=None, n_earlier=0,
                    carry_from=None, n_alerts=0, active_label=None, active_status=None):
     notifications = use_notifications()
     ready = [c["source"] for c in choices if c["enabled"]]
@@ -348,10 +348,15 @@ def _IntegrateForm(app_state, gee_interface, inflight, layers, name, period, cho
                               v_model=app_state.show_unanalysable.value, on_v_model=app_state.show_unanalysable.set,
                               dense=True, hide_details=True, class_="mt-0",
                               disabled=alert_layers.STATES_LAYER_KEY in inflight_keys)
-                if has_earlier:
-                    rv.Switch(label=t("steps.integrate.show_earlier"), v_model=app_state.show_earlier_sets.value,
-                              on_v_model=app_state.show_earlier_sets.set, dense=True, hide_details=True,
-                              class_="mt-0",
+                if earlier_ids:
+                    # all the earlier sets at once; the Overview's Map layers menu picks them one by one
+                    shown = app_state.shown_sets.value
+
+                    def _show_earlier(on, ids=earlier_ids, shown=shown):
+                        app_state.shown_sets.set(shown | ids if on else shown - ids)
+
+                    rv.Switch(label=t("steps.integrate.show_earlier"), v_model=earlier_ids <= shown,
+                              on_v_model=_show_earlier, dense=True, hide_details=True, class_="mt-0",
                               disabled=any(k.startswith(alert_layers.EARLIER_PREFIX) for k in inflight_keys))
 
     ConfirmDialog(

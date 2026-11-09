@@ -49,7 +49,7 @@ from deforestation_alerts.project.models import set_id as make_set_id
 from gui.i18n import t
 from gui.scripts import alert_layers, charts, overview_data
 from gui.scripts import questions as qs
-from gui.scripts import set_store
+from gui.scripts import set_store, source_layers
 from gui.scripts.map_layers import MapLayers
 from gui.store.workflow_steps import active_set
 from gui.scripts.solara_threads import spawn_in_context
@@ -737,96 +737,7 @@ def test_a_rebuilt_export_card_keeps_the_scope_the_user_picked(ov, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# The layer buttons (the same three booleans Integrate & vectorize switches)
-# ---------------------------------------------------------------------------
-def _layer(rc, label):
-    return next(b for b in rc.find(v.Btn).widgets if _strings(b)[-1:] == [label])
-
-
-def _layers_offered(rc):
-    labels = (t("overview_tile.layer_alerts"), t("overview_tile.layer_unanalysable"), t("overview_tile.layer_earlier"))
-    return [_strings(b)[-1] for b in rc.find(v.Btn).widgets if _strings(b) and _strings(b)[-1] in labels]
-
-
-def test_the_layer_buttons_drive_the_shells_booleans(ov, tmp_path):
-    """No button calls the map: ``_AlertLayers`` owns every MapLayers call,
-    which is what lets the same control sit here and in Integrate."""
-    p = _project(tmp_path)
-    state = _state(p, _alerts(set_id=p.active_set))
-    map_, layers, rc = ov.render(state)
-    try:
-        assert not state.show_alerts.value
-        _layer(rc, t("overview_tile.layer_alerts")).fire_event("click", None)
-        assert state.show_alerts.value is True
-        assert layers.on.value == frozenset()  # no layer registered from here
-        _layer(rc, t("overview_tile.layer_alerts")).fire_event("click", None)
-        assert state.show_alerts.value is False
-    finally:
-        rc.close()
-
-
-def test_turning_a_layer_on_closes_the_dialog_and_off_leaves_it_open(ov, tmp_path):
-    """The map is behind this dialog: a button that left it open would look
-    like it did nothing. Turning off has nothing to go and look at."""
-    p = _project(tmp_path)
-    closed = []
-    state = _state(p, _alerts(set_id=p.active_set))
-    map_, layers, rc = ov.render(state, dismiss=lambda: closed.append(state.show_alerts.value))
-    try:
-        _layer(rc, t("overview_tile.layer_alerts")).fire_event("click", None)
-        assert closed == [True]  # dismissed with the layer already asked for
-        _layer(rc, t("overview_tile.layer_alerts")).fire_event("click", None)
-        assert closed == [True]
-    finally:
-        rc.close()
-
-
-def test_the_earlier_sets_button_only_with_an_earlier_set(ov, tmp_path):
-    p = _project(tmp_path)
-    state = _state(p, _alerts(set_id=p.active_set))
-    map_, layers, rc = ov.render(state)
-    try:
-        assert _layers_offered(rc) == [t("overview_tile.layer_alerts")]
-    finally:
-        rc.close()
-
-    p = _project(tmp_path, "e")
-    february = _with_february(p, tmp_path, "e")
-    state = _state(p, _alerts(set_id=february.id))
-    map_, layers, rc = ov.render(state)
-    try:
-        assert _layers_offered(rc) == [t("overview_tile.layer_alerts"), t("overview_tile.layer_earlier")]
-        _layer(rc, t("overview_tile.layer_earlier")).fire_event("click", None)
-        assert state.show_earlier_sets.value is True
-    finally:
-        rc.close()
-
-
-def test_a_layer_button_is_held_while_its_own_layer_is_being_built(ov, tmp_path):
-    """A click here must not race a build Integrate started: the shell's
-    registry publishes the keys in flight and the button follows it."""
-    p = _project(tmp_path)
-    state = _state(p, _alerts(set_id=p.active_set))
-    map_, layers, rc = ov.render(state)
-    try:
-        assert _layer(rc, t("overview_tile.layer_alerts")).disabled is False
-        layers.inflight.set(frozenset({alert_layers.SET_LAYER_KEY}))
-        assert _layer(rc, t("overview_tile.layer_alerts")).disabled is True
-    finally:
-        rc.close()
-
-
-def test_no_alerts_button_without_the_alerts_on_hand(ov, tmp_path):
-    """``_AlertLayers`` draws nothing without them, so a button offered here
-    would be a lie -- and the alerts on hand are another set's until the
-    shell's loader has read the one the selector picked."""
-    map_, layers, rc = ov.render(_state(_project(tmp_path), None))
-    try:
-        assert _layers_offered(rc) == []
-    finally:
-        rc.close()
-
-
+# The Map layers menu (the shell's reactives Integrate & vectorize switches too)
 # ---------------------------------------------------------------------------
 # The History card: growth alerts and the clearings they grow
 # ---------------------------------------------------------------------------
@@ -988,6 +899,109 @@ def test_nearby_alerts_survive_a_failed_count(ov, tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # Pixels and clusters
 # ---------------------------------------------------------------------------
+JAN_TEXT, FEB_TEXT = (source_layers.period_text(x.id) for x in (JAN, FEB))
+
+
+def _boxes(rc):
+    """The menu's checkboxes by label."""
+    return {b.label: b for b in rc.find(v.Checkbox).widgets}
+
+
+def _alerts_box(period_text):
+    return t("overview_tile.menu_alerts", period=period_text)
+
+
+def _states_box(period_text):
+    return t("overview_tile.menu_states", period=period_text)
+
+
+def test_the_menu_drives_the_shells_reactives(ov, tmp_path):
+    """No checkbox calls the map: ``_AlertLayers`` owns every MapLayers call,
+    which is what lets the same control sit here and in Integrate."""
+    p = _project(tmp_path)
+    state = _state(p, _alerts(set_id=p.active_set))
+    map_, layers, rc = ov.render(state)
+    try:
+        assert not state.show_alerts.value
+        _boxes(rc)[_alerts_box(JAN_TEXT)].v_model = True
+        assert state.show_alerts.value is True
+        assert layers.on.value == frozenset()  # no layer registered from here
+        _boxes(rc)[_alerts_box(JAN_TEXT)].v_model = False
+        assert state.show_alerts.value is False
+    finally:
+        rc.close()
+
+
+def test_turning_a_layer_on_closes_the_dialog_and_off_leaves_it_open(ov, tmp_path):
+    """The map is behind this dialog: a click that left it open would look
+    like it did nothing. Turning off has nothing to go and look at."""
+    p = _project(tmp_path)
+    closed = []
+    state = _state(p, _alerts(set_id=p.active_set))
+    map_, layers, rc = ov.render(state, dismiss=lambda: closed.append(state.show_alerts.value))
+    try:
+        _boxes(rc)[_alerts_box(JAN_TEXT)].v_model = True
+        assert closed == [True]  # dismissed with the layer already asked for
+        _boxes(rc)[_alerts_box(JAN_TEXT)].v_model = False
+        assert closed == [True]
+    finally:
+        rc.close()
+
+
+def test_other_periods_are_offered_one_by_one(ov, tmp_path):
+    p = _project(tmp_path)
+    state = _state(p, _alerts(set_id=p.active_set))
+    map_, layers, rc = ov.render(state)
+    try:
+        assert list(_boxes(rc)) == [_alerts_box(JAN_TEXT)]
+        assert t("overview_tile.other_periods") not in _texts(rc)
+    finally:
+        rc.close()
+
+    p = _project(tmp_path, "e")
+    february = _with_february(p, tmp_path, "e")
+    january = next(a for a in p.alert_sets.values() if a.period_id == JAN.id)
+    state = _state(p, _alerts(set_id=february.id))
+    map_, layers, rc = ov.render(state)
+    try:
+        assert list(_boxes(rc)) == [_alerts_box(FEB_TEXT), _alerts_box(JAN_TEXT)]
+        assert t("overview_tile.this_set", period=FEB_TEXT) in _texts(rc)
+        _boxes(rc)[_alerts_box(JAN_TEXT)].v_model = True
+        assert state.shown_sets.value == frozenset({january.id})
+        _boxes(rc)[_alerts_box(JAN_TEXT)].v_model = False
+        assert state.shown_sets.value == frozenset()
+    finally:
+        rc.close()
+
+
+def test_a_layer_checkbox_is_held_while_its_own_layer_is_being_built(ov, tmp_path):
+    """A click here must not race a build Integrate started: the shell's
+    registry publishes the keys in flight and the checkbox follows it."""
+    p = _project(tmp_path)
+    state = _state(p, _alerts(set_id=p.active_set))
+    map_, layers, rc = ov.render(state)
+    try:
+        assert _boxes(rc)[_alerts_box(JAN_TEXT)].disabled is False
+        layers.inflight.set(frozenset({alert_layers.SET_LAYER_KEY}))
+        assert _boxes(rc)[_alerts_box(JAN_TEXT)].disabled is True
+    finally:
+        rc.close()
+
+
+def test_no_alerts_checkbox_without_the_alerts_on_hand(ov, tmp_path):
+    """``_AlertLayers`` draws nothing without them, so a checkbox offered here
+    would be a lie -- and the alerts on hand are another set's until the
+    shell's loader has read the one the selector picked."""
+    map_, layers, rc = ov.render(_state(_project(tmp_path), None))
+    try:
+        assert _boxes(rc) == {}
+    finally:
+        rc.close()
+
+
+# ---------------------------------------------------------------------------
+# Pixels and clusters
+# ---------------------------------------------------------------------------
 def _counted(p):
     """January's set as an Integrate run that counted everything records it:
     1,000 GLAD-L pixels, 200 of them masked; 790 combined, 600 in alerts."""
@@ -1059,8 +1073,8 @@ def test_the_clusters_tab_follows_the_clusters_to_the_alerts(ov, tmp_path):
             t("overview_tile.cl_formed"): "9", t("overview_tile.cl_small"): "−4",
             t("overview_tile.cl_over_cap"): "−1", t("overview_tile.cl_alerts"): "4",
             t("overview_tile.cl_reviewed"): "3"}
-        # the not-analysable pixels have a layer: their button joins the alerts'
-        assert t("overview_tile.layer_unanalysable") in _texts(rc)
+        # the not-analysable pixels have a layer: the menu offers it, not this tab
+        assert _states_box(JAN_TEXT) in _boxes(rc)
     finally:
         rc.close()
 
@@ -1079,7 +1093,12 @@ def test_all_periods_sums_every_period_and_leaves_the_active_set_alone(ov, tmp_p
         assert state.project.value.active_set == february.id
         assert _numbers(rc)[t("overview_tile.table_total")][:2] == ["6", "8.0"]  # 4 + 2 alerts, 4.5 + 3.5 ha
         assert _btn(rc, t("overview_tile.review_button")).disabled is True
-        assert _layers_offered(rc) == []  # the layers belong to one set
+        # every period's alerts, the active one's drawn by the active layer
+        assert list(_boxes(rc)) == [_alerts_box(JAN_TEXT), _alerts_box(FEB_TEXT)]
+        _boxes(rc)[_alerts_box(JAN_TEXT)].v_model = True
+        assert state.shown_sets.value == {next(a.id for a in p.alert_sets.values() if a.period_id == JAN.id)}
+        _boxes(rc)[_alerts_box(FEB_TEXT)].v_model = True
+        assert state.show_alerts.value is True
         assert not any(text.startswith("▲") or text.startswith("▼") for text in _texts(rc))  # no delta
         _open(rc, "files")
         [card] = _export_cards(rc)
@@ -1097,6 +1116,9 @@ def test_the_summary_of_every_period_writes_its_csv_and_says_when_it_is_out_of_d
     map_, layers, rc = ov.render(_state(p, None))
     try:
         _open(rc, "files")
+        assert t("overview_tile.card_summary") not in _texts(rc)  # one set: no summary of every period
+        rc.find(v.Select).widget.v_model = ALL_SETS
+        ov.settle()
         _, rows = _table(rc, t("overview_tile.col_period"))
         assert [row[:4] for row in rows] == [
             [f"{JAN.start} → {JAN.end}", "4", "1.5", "75%"], [f"{FEB.start} → {FEB.end}", "2", "3.0", "50%"]]
