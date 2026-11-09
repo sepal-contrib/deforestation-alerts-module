@@ -7,6 +7,7 @@ from deforestation_alerts.scripts.image_sources import (
     dated_optical,
     enabled_entries,
     enabled_sources,
+    entry_of,
 )
 
 
@@ -49,3 +50,8 @@ def test_only_dated_optical_sources_feed_the_auto_pick():
 def test_a_project_round_trips_its_image_sources():
     p = _project(image_sources=["Sentinel 1"])
     assert Project.model_validate(p.model_dump(mode="json")).image_sources == ["Sentinel 1"]
+
+
+def test_each_sources_entry_field_matches_the_menu_entry_holding_it():
+    for name, source in SOURCES.items():
+        assert source.entry == entry_of(name).key, name
