@@ -1,6 +1,6 @@
 """A redraw of the timeline closes the widgets it replaces.
 
-``render`` rebuilds the lane, the axis, the blocks, the chips, the titles and
+``render`` rebuilds the lane, the axis, the blocks, the sources menu, the titles and
 the status line on every tick. A widget dropped from a container without
 ``close()`` keeps its comm open and stays in ipywidgets' registry for the rest
 of the session, so a reviewer moving through alerts grew the kernel by a few
@@ -13,7 +13,7 @@ from ipywidgets.widgets.widget import _instances
 
 from gui.tile.analysis import timeline
 from gui.tile.analysis.labels import Labels
-from tests.test_timeline import LS, S2, _ctx, _fake_analysis, _fake_state, _fake_widgets, _walk
+from tests.test_timeline import LS, S2, _ctx, _fake_analysis, _fake_state, _fake_widgets, _tick, _walk
 
 
 def _rows(n=150):
@@ -33,16 +33,11 @@ def test_repeated_redraws_leave_the_live_widget_count_unchanged():
     card = timeline.build_timeline(_fake_state(rows=_rows()), analysis, widgets, labels=labels)
     slider = next(w for w in _walk(card) if isinstance(w, timeline.v.Slider))
 
-    def chip(label):
-        return next(w for w in _walk(card)
-                    if getattr(w, "tag", None) == "button" and "aria-pressed" in (w.attributes or {})
-                    and label in w.children)
-
     def ticks():
         """Every way a reviewer redraws the strip, each one undone, so the
         screen ends where it started."""
-        chip(timeline.SRC_LABEL[LS]).fire_event("click", None)  # off
-        chip(timeline.SRC_LABEL[LS]).fire_event("click", None)  # on again
+        _tick(card, "Landsat")  # off
+        _tick(card, "Landsat")  # on again
         slider.fire_event("change", 10)
         slider.fire_event("change", 40)
         stripe = next(w for w in _walk(card) if "click" in (getattr(w, "_events", None) or [])

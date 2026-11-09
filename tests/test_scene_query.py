@@ -102,6 +102,7 @@ def test_scene_query_never_imports_earth_engine():
 # --------------------------------------------------------------- scenes_for
 
 S2, LS, PL = scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT, scene_index.SOURCE_PLANET
+S1A, S1D = scene_index.SOURCE_S1_ASC, scene_index.SOURCE_S1_DESC
 
 #  west tile [0,0]-[2,2]   east tile [2,0]-[4,2]   wide tile [-1,-1]-[5,3]
 TILES = gpd.GeoDataFrame(
@@ -206,7 +207,7 @@ def test_an_alert_outside_every_tile_returns_an_empty_frame_with_the_columns():
     sel = scene_query.scenes_for(tables, box(80, 80, 81, 81), date(2026, 5, 1), date(2026, 5, 31))
     assert len(sel) == 0
     assert list(sel.columns) == list(scene_query.SELECTION_COLUMNS)
-    assert scene_query.source_counts(sel) == {S2: (0, 0), LS: (0, 0), PL: (0, 0)}
+    assert scene_query.source_counts(sel) == {S2: (0, 0), LS: (0, 0), PL: (0, 0), S1A: (0, 0), S1D: (0, 0)}
     assert scene_query.month_counts(sel) == {}
 
 
@@ -222,7 +223,7 @@ def test_source_counts_split_visible_from_hidden():
         (LS, pd.Timestamp("2026-05-21"), 5.0, "WIDE", "c"),
     ])
     sel = scene_query.scenes_for(tables, ALERT, date(2026, 5, 1), date(2026, 5, 31), max_cloud=40.0)
-    assert scene_query.source_counts(sel) == {S2: (1, 1), LS: (1, 0), PL: (0, 0)}
+    assert scene_query.source_counts(sel) == {S2: (1, 1), LS: (1, 0), PL: (0, 0), S1A: (0, 0), S1D: (0, 0)}
 
 
 def test_month_counts_count_only_the_visible_rows():

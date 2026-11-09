@@ -191,7 +191,7 @@ def scenes_for(tables, bbox, start: date, end: date, *, max_cloud: Optional[floa
 def source_counts(sel: pd.DataFrame) -> dict[str, tuple[int, int]]:
     """``{source: (visible, hidden)}`` for the collection toggles, every source
     present even at zero so the toolbar shows a count rather than nothing."""
-    out = {name: (0, 0) for name, s in SOURCES.items() if s.optical}  # radar joins with its lanes
+    out = {name: (0, 0) for name in SOURCES}
     for name, part in sel.groupby("source", sort=False):
         hidden = int(part["hidden"].sum())
         out[name] = (len(part) - hidden, hidden)

@@ -482,34 +482,35 @@ def test_an_index_that_has_not_arrived_yet_says_it_is_loading():
         timeline.build_timeline(ready, _fake_analysis(), _fake_widgets()))
 
 
-def test_there_is_no_planet_toggle_without_nicfi_access():
-    """Planet NICFI comes with the Earth Engine account: an account without
-    access has no Planet collection, so the toolbar shows no Planet chip."""
-    state = _fake_state()
+def test_planet_without_access_is_listed_disabled_with_a_reason():
+    """Planet NICFI comes with the Earth Engine account: without access the row
+    stays in the menu, disabled and saying why, and nothing of Planet is drawn
+    even when the project has it on."""
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
+                                      (PL, "2026-05-01", float("nan"), "", "kP")]))
+    state.project.value.image_sources = [S2, PL]
     state.scene_manifest.set(_manifest(planet=scene_index.PlanetState(region="americas", access=False)))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    chips = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-pressed")]
-    assert [timeline.SRC_LABEL[PL] in _text(w) for w in chips] == [False, False]
+    planet = _menu_row(card, "Planet")
+    assert planet.attributes["disabled"] == "disabled" and planet.attributes["aria-disabled"] == "true"
+    assert "No access with this account" in _text(planet)
+    assert _count_stripes(card) == 1  # the S2 stripe only
 
 
-def test_the_planet_toggle_is_live_when_access_was_granted():
+def test_the_planet_row_is_live_when_access_was_granted():
     state = _fake_state()
     state.scene_manifest.set(_manifest(planet=scene_index.PlanetState(region="americas", access=True)))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    chips = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("aria-pressed")]
-    planet = next(w for w in chips if timeline.SRC_LABEL[PL] in _text(w))
-    assert "disabled" not in (planet.attributes or {})
+    planet = _menu_row(card, "Planet")
+    assert "disabled" not in planet.attributes
     assert timeline.t("analysis.timeline.no_cloud_filter") == planet.attributes.get("title")
 
 
-def test_turning_a_collection_off_takes_its_stripes_off_the_track():
+def test_turning_a_source_off_takes_its_stripes_off_the_track():
     state = _fake_state()
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     before = _count_stripes(card)
-    chip = next(w for w in _walk(card)
-                if (getattr(w, "attributes", None) or {}).get("aria-pressed") == "true"
-                and timeline.SRC_LABEL[LS] in _text(w))
-    chip.fire_event("click", None)
+    _tick(card, "Landsat")
     assert _count_stripes(card) < before
 
 
@@ -655,7 +656,8 @@ def test_the_legend_opens_in_a_popup_not_in_the_strip():
     """User report: the explanation, shown inline, pushed the timeline down by
     a paragraph. It is a menu's content now, opened by the browser."""
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
-    menu = next(w for w in _walk(card) if isinstance(w, timeline.v.Menu))
+    menu = next(w for w in _walk(card) if isinstance(w, timeline.v.Menu)
+                and "aria-controls" in w.v_slots[0]["children"].attributes)
     badge = menu.v_slots[0]["children"]
     assert badge.v_on == "menu.on"
     assert timeline.t("analysis.timeline.legend") in _text(menu)
@@ -690,7 +692,7 @@ def test_the_fold_buttons_name_themselves_in_a_tooltip():
 def test_the_legend_button_is_named_by_something_short():
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
     badge = next(w for w in _walk(card)
-                 if (getattr(w, "attributes", None) or {}).get("aria-expanded") is not None)
+                 if (getattr(w, "attributes", None) or {}).get("aria-controls") is not None)
     name = badge.attributes["aria-label"]
     assert name == timeline.t("analysis.timeline.legend_label")
     assert len(name) < 60 and name != timeline.t("analysis.timeline.legend")
@@ -732,7 +734,7 @@ def _fake_state(index="default", rows=None):
         scenes = _sel(rows or [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0)], max_cloud=None)
         scenes = scenes.assign(tile="W", key="k")[list(scene_index.SCENE_COLUMNS)]
         index = SceneTables(scenes=scenes, tiles=TILES)
-    return SimpleNamespace(
+    state = SimpleNamespace(
         project=solara.reactive(_project(), equals=lambda a, b: a is b),
         scene_index=solara.reactive(index, equals=lambda a, b: a is b),
         scene_manifest=solara.reactive(None, equals=lambda a, b: a is b),
@@ -741,6 +743,17 @@ def _fake_state(index="default", rows=None):
         scene_index_retry=solara.reactive(0),
         scene_window_request=solara.reactive(None),
     )
+
+    def update_project(name, fn):  # ``StateManager.update_project``, without the lock
+        live = state.project.value
+        if live is None or live.name != name:
+            return False
+        fn(live)
+        state.project.set(live.model_copy())
+        return True
+
+    state.update_project = update_project
+    return state
 
 
 def _fake_analysis():
@@ -1125,61 +1138,178 @@ def test_only_the_granules_that_cover_the_alert_are_handed_to_the_rebuild():
     assert analysis.before_info.value[2] == "8.00"
 
 
-# ------------------------------------------------- the chips (final fix wave)
+# ------------------------------------------------------ the Image sources menu
 
-def _chips(card) -> list:
-    """``[(label, pressed)]`` for the collection chips, in their order (no
-    Planet chip without NICFI access)."""
-    return [(_text(w).strip(), (w.attributes or {}).get("aria-pressed") == "true")
-            for w in _walk(card)
-            if (getattr(w, "attributes", None) or {}).get("aria-pressed") is not None]
+def _part(widget, cls):
+    """The text of the first widget under ``widget`` whose class names ``cls``, or None."""
+    hit = [w for w in _walk(widget) if cls in (getattr(w, "class_", None) or "")]
+    return _text(hit[0]).strip() if hit else None
 
 
-def _chip_click(card, label_start: str) -> None:
-    hit = [w for w in _walk(card)
-           if (getattr(w, "attributes", None) or {}).get("aria-pressed") is not None
-           and _text(w).strip().startswith(label_start)]
-    assert len(hit) == 1, f"{len(hit)} chips starting {label_start!r}"
-    hit[0].fire_event("click", None)
+def _menu_rows(card) -> list:
+    """``[(label, count, checked)]`` for the menu's rows, in their order."""
+    return [(_part(w, "defo-src-label"), _part(w, "defo-src-count"), w.attributes["aria-checked"] == "true")
+            for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("role") == "menuitemcheckbox"]
 
 
-def test_a_chip_counts_what_its_collection_holds_in_the_window():
-    """Spec §4.6's in-view count, which is the number that tells the reviewer
-    whether re-enabling a collection is worth it. Before the final fix the
-    source filter ran inside ``_selection()``, so every chip but the enabled
-    ones read 0 and the count said nothing at all."""
+def _menu_row(card, label):
+    hit = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("role") == "menuitemcheckbox"
+           and _part(w, "defo-src-label") == label]
+    assert len(hit) == 1, f"{len(hit)} rows named {label!r}"
+    return hit[0]
+
+
+def _tick(card, label) -> None:
+    _menu_row(card, label).fire_event("click", None)
+
+
+def _menu_button(card):
+    name = timeline.t("analysis.timeline.sources_button")
+    return next(w for w in _walk(card) if getattr(w, "tag", None) == "button"
+                and (getattr(w, "attributes", None) or {}).get("aria-label") == name)
+
+
+def _dots(card) -> list:
+    """The activator's dot colours, in order."""
+    return [w.style_.split("background: ", 1)[1].split(";")[0]
+            for w in _menu_button(card).children if "defo-src-dot" in (getattr(w, "class_", None) or "")]
+
+
+def test_the_menu_button_shows_one_dot_per_enabled_entry():
+    state = _fake_state()
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    button = _menu_button(card)
+    assert button.attributes["title"] == "Image sources" and button.v_on == "menu.on"
+    assert _dots(card) == [timeline.SRC_COLOR[S2], timeline.SRC_COLOR[LS]]
+
+    state = _fake_state()
+    state.project.value.image_sources = [S2, "Sentinel 1"]
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert _dots(card) == [timeline.SRC_COLOR[S2], timeline.SRC_COLOR[S1A]]
+
+
+def test_the_menu_button_says_whether_the_menu_is_open():
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    menu = next(w for w in _walk(card) if isinstance(w, timeline.v.Menu)
+                and w.v_slots[0]["children"] is _menu_button(card))
+    assert menu.close_on_content_click is False
+    assert _menu_button(card).attributes["aria-expanded"] == "false"
+    menu.v_model = True
+    assert _menu_button(card).attributes["aria-expanded"] == "true"
+
+
+def test_the_menu_groups_optical_and_radar():
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    groups = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("role") == "group"]
+    assert [_part(g, "defo-src-header") for g in groups] == ["Optical", "Radar"]
+    assert [label for label, _n, _on in _menu_rows(groups[0])] == ["Sentinel-2", "Landsat", "Planet"]
+    assert [label for label, _n, _on in _menu_rows(groups[1])] == ["Sentinel-1"]
+
+
+def test_a_row_counts_the_window_and_names_the_cloud_hidden_ones():
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
+                                      (S2, "2026-05-11", 7.0, "W", "kB"),
+                                      (S2, "2026-06-11", 77.0, "W", "kC"),
+                                      (LS, "2026-08-27", 3.0, "W", "kD")]))
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert _menu_rows(card)[:2] == [("Sentinel-2", "2", True), ("Landsat", "1", True)]
+    assert _part(_menu_row(card, "Sentinel-2"), "defo-src-note") == "1 over cloud limit"
+    assert _part(_menu_row(card, "Landsat"), "defo-src-note") is None
+
+
+def test_a_row_counts_what_its_source_holds_in_the_window_on_or_off():
+    """Spec §4.6's in-view count: the number that tells the reviewer whether
+    turning a source on is worth it, so an off row still counts."""
     state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
                                       (LS, "2026-08-27", 3.0, "W", "kB"),
                                       (LS, "2026-09-02", 2.0, "W", "kC"),
                                       (PL, "2026-05-01", float("nan"), "", "kP")]))
     state.scene_manifest.set(_manifest(planet=scene_index.PlanetState(region="americas", access=True)))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    assert _chips(card) == [("Planet 1", True), ("Sentinel-2 1", True), ("Landsat 2", True)]
+    assert _menu_rows(card)[:3] == [("Sentinel-2", "1", True), ("Landsat", "2", True), ("Planet", "1", False)]
 
-    _chip_click(card, "Landsat")
-    # the two Landsat scenes are no longer drawn, but the chip still says how
+    _tick(card, "Planet")
+    _tick(card, "Landsat")
+    # the two Landsat scenes are no longer drawn, but the row still says how
     # many of them turning it back on would bring back
-    assert _chips(card) == [("Planet 1", True), ("Sentinel-2 1", True), ("Landsat 2", False)]
-    # two drawn rows: the S2 stripe and the Planet bar
-    assert _count_stripes(card) == 2
+    assert _menu_rows(card)[:3] == [("Sentinel-2", "1", True), ("Landsat", "2", False), ("Planet", "1", True)]
+    assert _count_stripes(card) == 2  # the S2 stripe and the Planet bar
 
 
-def test_a_chip_still_splits_the_cloud_hidden_rows_while_its_collection_is_off():
+def test_a_row_still_names_the_cloud_hidden_rows_while_its_source_is_off():
     state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
                                       (S2, "2026-05-11", 77.0, "W", "kB")]))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    assert _chips(card)[0] == ("Sentinel-2 1 +1", True)  # one shown, one over the limit
-    _chip_click(card, "Sentinel-2")
-    assert _chips(card)[0] == ("Sentinel-2 1 +1", False)
+    _tick(card, "Sentinel-2")
+    assert _menu_rows(card)[0] == ("Sentinel-2", "1", False)
+    assert _part(_menu_row(card, "Sentinel-2"), "defo-src-note") == "1 over cloud limit"
 
 
-def test_with_every_collection_off_the_strip_says_so_rather_than_claiming_no_images():
+def test_ticking_an_entry_saves_it_on_the_project():
+    state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
+                                      (S1A, "2026-05-10", float("nan"), "W", "kR"),
+                                      (S1D, "2026-05-12", float("nan"), "W", "kS")]))
+    widgets = _fake_widgets()
+    card = timeline.build_timeline(state, _fake_analysis(), widgets)
+    assert _count_stripes(card) == 1
+    _tick(card, "Sentinel-1")
+    assert state.project.value.image_sources == ["Landsat", "Sentinel 1", "Sentinel 2"]
+    assert _count_stripes(card) == 3
+    assert {S1A, S1D} <= widgets.timeline_filter.value[0]
+    _tick(card, "Sentinel-1")
+    assert state.project.value.image_sources == ["Landsat", "Sentinel 2"]
+    assert _count_stripes(card) == 1
+
+
+def test_a_review_copy_toggles_for_the_session_without_saving():
+    from deforestation_alerts.project.models import ReviewCopy
+
+    state = _fake_state()
+    state.project.value.review_copy = ReviewCopy(
+        evaluator="Ana", evaluator_index=1, set_id="x", split_id="s", set_fingerprint="f",
+        origin_project="o", imported_at=datetime.now())
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    _tick(card, "Landsat")
+    assert state.project.value.image_sources is None
+    assert _menu_rows(card)[1] == ("Landsat", "1", False)
+    assert _count_stripes(card) == 1
+
+
+def test_radar_count_is_a_dash_until_radar_is_indexed():
+    state = _fake_state()
+    state.scene_manifest.set(_manifest())
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert _menu_rows(card)[3] == ("Sentinel-1", "–", False)
+    assert _menu_row(card, "Sentinel-1").attributes["title"] == timeline.t("analysis.timeline.radar_no_cloud")
+    indexed = _manifest()
+    indexed.radar = scene_index.Coverage(start=date(2026, 1, 1), end=date(2026, 12, 31))
+    state.scene_manifest.set(indexed)
+    assert _menu_rows(card)[3] == ("Sentinel-1", "0", False)
+
+
+def test_a_saved_radar_pick_turns_radar_on_and_waits_for_its_coverage():
+    state = _fake_state(index=_any_index(_FOUR))
+    state.scene_manifest.set(_covering())  # optical answered, radar not indexed yet
+    widgets = _fake_widgets(saved_after="Sentinel 1 ascending 2026-08-27 ")
+    card = timeline.build_timeline(state, _fake_analysis(), widgets)
+    assert "Sentinel 1" in state.project.value.image_sources
+    assert timeline.t("analysis.timeline.saved_missing") not in _text(widgets.map_title_after)
+
+    covered = _covering()
+    covered.radar = scene_index.Coverage(start=date(2026, 8, 1), end=date(2026, 8, 31))
+    state.scene_index.set(_any_index([*_FOUR, (S1A, "2026-08-27", float("nan"))]))
+    state.scene_manifest.set(covered)
+    strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
+    assert strip.after["id"] == "a20260827"
+
+
+def test_with_every_source_off_the_strip_says_so_rather_than_claiming_no_images():
     state = _fake_state(index=_index([(S2, "2026-04-24", 8.0, "W", "kA"),
                                       (LS, "2026-08-27", 3.0, "W", "kB")]))
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     for name in ("Sentinel-2", "Landsat"):
-        _chip_click(card, name)
-    assert _chips(card) == [("Sentinel-2 1", False), ("Landsat 1", False)]
+        _tick(card, name)
+    assert _menu_rows(card)[:2] == [("Sentinel-2", "1", False), ("Landsat", "1", False)]
     assert _count_stripes(card) == 0
     shown = _text(card)
     off = timeline.t("analysis.timeline.sources_off")
@@ -1197,7 +1327,7 @@ def test_an_index_with_no_rows_in_the_window_still_says_no_images():
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     assert timeline.t("analysis.timeline.no_images") in _text(card)
     assert timeline.t("analysis.timeline.sources_off") not in _text(card)
-    assert _chips(card) == [("Sentinel-2 0", True), ("Landsat 0", True)]
+    assert _menu_rows(card)[:2] == [("Sentinel-2", "0", True), ("Landsat", "0", True)]
 
 
 def _long_alert_card():
@@ -1287,7 +1417,7 @@ def test_a_collapsed_month_counts_only_the_collections_that_are_on():
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     june = [lab for lab in _month_labels(card) if lab.startswith("Jun 2026,")]
     assert june == [timeline.t("analysis.timeline.collapsed_month", month="Jun 2026", count=2)]
-    _chip_click(card, "Landsat")
+    _tick(card, "Landsat")
     june = [lab for lab in _month_labels(card) if lab.startswith("Jun 2026,")]
     assert june == [timeline.t("analysis.timeline.collapsed_month", month="Jun 2026", count=1)]
 
@@ -1357,7 +1487,7 @@ def test_a_collection_this_build_has_no_band_for_is_dropped_rather_than_raising(
                                       (LS, "2026-08-27", 3.0, "W", "kB")]))
     with caplog.at_level(logging.WARNING, logger="SEPALUI.deforestation_alerts"):
         card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
-    assert _chips(card) == [("Sentinel-2 1", True), ("Landsat 1", True)]
+    assert _menu_rows(card)[:2] == [("Sentinel-2", "1", True), ("Landsat", "1", True)]
     assert _count_stripes(card) == 2  # the two drawable rows
     dropped = [r for r in caplog.records if "no band for" in r.getMessage()]
     assert dropped and "Sentinel 3" in dropped[0].getMessage()
@@ -1415,15 +1545,12 @@ def test_a_saved_image_over_the_cloud_limit_is_restored():
     assert f"background: {timeline.BEFORE_COLOR}" in bar and "opacity" not in bar
 
 
-def test_a_saved_image_in_a_switched_off_collection_switches_it_back_on():
+def test_a_saved_image_in_a_switched_off_source_switches_it_back_on():
     state = _fake_state(index=_any_index(_FOUR))
     analysis = _fake_analysis()
     widgets = _fake_widgets()
     card = timeline.build_timeline(state, analysis, widgets)
-    chip = next(w for w in _walk(card)
-                if (getattr(w, "attributes", None) or {}).get("aria-pressed") == "true"
-                and timeline.SRC_LABEL[LS] in _text(w))
-    chip.fire_event("click", None)
+    _tick(card, "Landsat")
     assert LS not in widgets.timeline_filter.value[0]
 
     # the next alert: another id, because ``_ctx``'s token 1 is also what the
@@ -1434,6 +1561,7 @@ def test_a_saved_image_in_a_switched_off_collection_switches_it_back_on():
     widgets.imagery_ctx.set(nxt)
     assert analysis.after_info.value[3] == "Landsat 2026-10-01 "
     assert LS in widgets.timeline_filter.value[0]
+    assert LS in state.project.value.image_sources
 
 
 def test_a_saved_date_outside_the_view_widens_the_view_and_asks_for_it():
@@ -1579,11 +1707,11 @@ def test_a_pick_made_while_the_saved_one_waits_wins():
 def test_the_timeline_publishes_its_filter():
     widgets = _fake_widgets()
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), widgets)
-    assert widgets.timeline_filter.value == (frozenset({S2, LS, PL}), 40.0)
+    assert widgets.timeline_filter.value == (frozenset({S2, LS}), 40.0)
     slider = next(w for w in _walk(card) if (getattr(w, "label", None) or "").startswith(timeline.t(
         "analysis.timeline.max_cloud")))
     slider.fire_event("change", 10)
-    assert widgets.timeline_filter.value == (frozenset({S2, LS, PL}), 10.0)
+    assert widgets.timeline_filter.value == (frozenset({S2, LS}), 10.0)
 
 
 def test_a_hand_pick_after_a_fallback_takes_the_note_away():

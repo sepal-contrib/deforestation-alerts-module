@@ -32,10 +32,10 @@ import ipyvuetify as v
 import pandas as pd
 
 from deforestation_alerts.scripts import scene_query
-from deforestation_alerts.scripts.image_sources import SOURCES
+from deforestation_alerts.project.review_copy import read_only
+from deforestation_alerts.scripts.image_sources import MENU, S1, SOURCES, enabled_entries, entry_of
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from deforestation_alerts.scripts.scene_index import (
-    SOURCE_LANDSAT,
     SOURCE_PLANET,
     SOURCE_S2,
     SceneTables,
@@ -559,8 +559,9 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
     labels = labels if labels is not None else Labels()
     max_cloud = solara.reactive(40.0)
-    # shortcut: optical only until the sources menu (Task 5) owns this set
-    sources = solara.reactive(frozenset(n for n, s in SOURCES.items() if s.optical))
+    #: the menu keys switched on for a project that could not save them (a
+    #: review copy, or one closed meanwhile): ``(project name, keys)``
+    session_entries = solara.reactive(None)
     collapsed = solara.reactive(frozenset())
     extra = solara.reactive((0, 0))
     before_id = solara.reactive(None)
@@ -598,17 +599,33 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     track = v.Html(tag="div", style_=_TRACK_STYLE,
                    children=[strip, parent_bands, window_band, lane, lane_axis, blocks])
     message = v.Html(tag="div", style_=_MESSAGE_STYLE, children=[])
-    chips = v.Html(tag="div", style_="display: flex; flex: 0 0 auto; align-items: center; gap: 8px", children=[])
+    # The Image sources menu: a chip-sized button with one dot per source on,
+    # the same size however many sources exist. The browser opens it
+    # (``menu.on``), like the legend.
+    caret = v.Icon(small=True, style_=f"color: {MUTED}", children=["mdi-menu-down"])
+    sources_btn = v.Html(tag="button", v_on="menu.on",
+                         attributes={"type": "button", "aria-haspopup": "true", "aria-expanded": "false"},
+                         style_=("height: 28px; padding: 0 4px 0 10px; border-radius: 14px; display: inline-flex; "
+                                 "flex: 0 0 auto; align-items: center; gap: 4px; cursor: pointer; "
+                                 "background: var(--dat-chip); border: 1px solid var(--dat-edge)"),
+                         children=[caret])
+    sources_list = v.Card(attributes={"role": "menu"}, style_="padding: 4px 0; min-width: 260px", children=[])
+    sources_menu = v.Menu(v_model=False, top=True, offset_y=True, nudge_top=4, max_width=460,
+                          close_on_content_click=False,
+                          v_slots=[{"name": "activator", "variable": "menu", "children": sources_btn}],
+                          children=[sources_list])
+    sources_menu.observe(lambda change: setattr(sources_btn, "attributes", {
+        **sources_btn.attributes, "aria-expanded": "true" if change["new"] else "false"}), "v_model")
     status = v.Html(tag="div", style_=f"font-size: 11.5px; color: {MUTED}", children=[])
 
     def _in_window():
         """``(rows, window)`` for everything the view window holds, or
         ``(None, None)``.
 
-        Every collection, including the ones the reviewer has switched off.
-        This is what the chips count: spec §4.6 wants the in-view count, which
-        is the number that tells the reviewer whether re-enabling a collection
-        is worth it -- a chip reading 0 because its own toggle is off says
+        Every source, including the ones the reviewer has switched off.
+        This is what the sources menu counts: spec §4.6 wants the in-view
+        count, which is the number that tells the reviewer whether turning a
+        source on is worth it -- a row reading 0 because it is off says
         nothing. The cloud limit is applied here, as the ``hidden`` flag
         ``source_counts`` splits on, so "+2 over the cloud limit" survives the
         split too.
@@ -622,14 +639,33 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         return (scene_query.scenes_for(tables, ctx["bbox"], window[0], window[1],
                                        max_cloud=max_cloud.value), window)
 
+    def _entries() -> frozenset:
+        """The menu keys on: this session's for a project that could not save
+        them, else the project's own (``enabled_entries``)."""
+        project = app_state.project.value
+        name, keys = session_entries.value or (None, None)
+        if keys is not None and getattr(project, "name", None) == name:
+            return keys
+        return enabled_entries(project)
+
+    def _planet_access() -> bool:
+        planet = getattr(app_state.scene_manifest.value, "planet", None)
+        return bool(planet is not None and planet.access)
+
+    def _drawn() -> frozenset:
+        """The sources drawn: the members of the entries on, and Planet only
+        with access to it."""
+        on, access = _entries(), _planet_access()
+        return frozenset(m for e in MENU if e.key in on for m in e.members if m != SOURCE_PLANET or access)
+
     def _enabled(rows):
-        """``rows`` less the collections that are toggled off: what is drawn.
+        """``rows`` less the sources that are off: what is drawn.
 
         The lanes, the month counts, the blocks, the readout and the auto-pick
-        all take this frame -- a hidden collection must not reappear as a
+        all take this frame -- a source switched off must not reappear as a
         stripe or inflate a collapsed month's count.
         """
-        return rows[rows["source"].isin(sources.value)].reset_index(drop=True)
+        return rows[rows["source"].isin(_drawn())].reset_index(drop=True)
 
     def _selection():
         """``(rows, window)`` for what is on screen, or ``(None, None)``."""
@@ -736,7 +772,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
     def _render_lane(sel, segs):
         before, after = before_id.value, after_id.value
-        bands = lane_bands(sources.value)
+        bands = lane_bands(_drawn())
         a0, _ = alert_window(widgets.imagery_ctx.value, app_state.project.value)
         kids = []
         for _, row in sel.iterrows():
@@ -783,7 +819,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
     def _render_strip(sel, segs):
         cands = []
-        bands = lane_bands(sources.value)
+        bands = lane_bands(_drawn())
         for rid in _navigable(sel, segs):
             source, d = scene_query.parse_row_id(rid)
             top, height = bands[source]
@@ -949,57 +985,86 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     def _publish_filter():
         target = getattr(widgets, "timeline_filter", None)
         if target is not None:
-            target.set((frozenset(sources.value), float(max_cloud.value)))
+            target.set((_drawn(), float(max_cloud.value)))
 
-    def _toggle(name):
-        sources.set(sources.value ^ {name})
-        _publish_filter()
+    def _write_entries(keys):
+        """Save the menu keys on the project; a project that cannot take them
+        (a review copy, or one closed meanwhile) keeps them for the session."""
+        project, keys = app_state.project.value, frozenset(keys)
+        saved = (project is not None and not read_only(project)
+                 and app_state.update_project(project.name,
+                                              lambda live: setattr(live, "image_sources", sorted(keys))))
+        session_entries.set(None if saved else (getattr(project, "name", None), keys))
+
+    def _toggle(key):
+        _write_entries(_entries() ^ {key})
         render()
 
-    def _render_chips(rows):
-        # ``rows`` is the whole view window, not ``_enabled(rows)``: a chip
-        # counts what its collection holds here whether or not it is switched
-        # on, so a disabled chip tells the reviewer what they are hiding.
+    def _dot(color):
+        return v.Html(tag="span", class_="defo-src-dot",
+                      style_=f"width: 8px; height: 8px; border-radius: 4px; flex: 0 0 8px; background: {color};")
+
+    def _menu_row(entry, counts, on):
+        """One source's row: checkbox, dot, name over its note, and the count."""
+        shown = sum(counts.get(m, (0, 0))[0] for m in entry.members)
+        hidden = sum(counts.get(m, (0, 0))[1] for m in entry.members)
+        planet = entry.key == SOURCE_PLANET
+        disabled = planet and not _planet_access()
+        radar_waiting = entry.key == S1 and getattr(app_state.scene_manifest.value, "radar", None) is None
+        note = (t("analysis.timeline.planet_no_access") if disabled
+                else t("analysis.timeline.over_cloud", n=hidden) if hidden else None)
+        checked = entry.key in on
+        attrs = {"type": "button", "role": "menuitemcheckbox", "aria-checked": "true" if checked else "false"}
+        if planet:
+            attrs["title"] = t("analysis.timeline.no_cloud_filter")
+        elif entry.key == S1:
+            attrs["title"] = t("analysis.timeline.radar_no_cloud")
+        if disabled:
+            attrs.update({"disabled": "disabled", "aria-disabled": "true"})
+        name = [v.Html(tag="span", class_="defo-src-label", children=[entry.label])]
+        if note:
+            name.append(v.Html(tag="span", class_="defo-src-note",
+                               style_=f"display: block; font-size: 10.5px; color: {MUTED}", children=[note]))
+        row = v.Html(tag="button", attributes=attrs,
+                     style_=("display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 12px; "
+                             "background: none; border: 0; color: inherit; font-size: 12px; line-height: 16px; "
+                             f"text-align: left; cursor: {'default' if disabled else 'pointer'}"
+                             f"{'; opacity: 0.5' if disabled else ''}"),
+                     children=[
+                         v.Icon(small=True, color="primary" if checked else None,
+                                children=["mdi-checkbox-marked" if checked else "mdi-checkbox-blank-outline"]),
+                         _dot(SRC_COLOR[entry.members[0]]),
+                         v.Html(tag="span", style_="flex: 1 1 auto", children=name),
+                         v.Html(tag="span", class_="defo-src-count",
+                                style_="opacity: 0.7; font-variant-numeric: tabular-nums",
+                                children=["\u2013" if radar_waiting else str(shown)])])
+        if not disabled:
+            row.on_event("click", lambda *_a, key=entry.key: _toggle(key))
+        return row
+
+    def _render_menu(rows):
+        # ``rows`` is the whole view window, not ``_enabled(rows)``: a row
+        # counts what its source holds here whether or not it is on, so an
+        # off row tells the reviewer what they are hiding.
+        # every render: Planet access arrives with the manifest, after the click
+        _publish_filter()
         counts = scene_query.source_counts(rows) if rows is not None else {}
-        planet = getattr(app_state.scene_manifest.value, "planet", None)
-        # Planet NICFI comes with the Earth Engine account: without access to
-        # the AOI's basemaps there is no Planet collection, so no Planet chip.
-        names = (SOURCE_PLANET, SOURCE_S2, SOURCE_LANDSAT) if planet is not None and planet.access \
-            else (SOURCE_S2, SOURCE_LANDSAT)
-        kids = []
-        for name in names:
-            on = name in sources.value
-            shown, hidden = counts.get(name, (0, 0))
-            label = f"{SRC_LABEL[name]} {shown}" + (f" +{hidden}" if hidden else "")
-            attrs = {"type": "button", "aria-pressed": "true" if on else "false"}
-            if name == SOURCE_PLANET:
-                # Planet has no cloud property, so the slider never hides it.
-                title = t("analysis.timeline.no_cloud_filter")
-                attrs["title"] = title
-                attrs["aria-label"] = f"{label}. {title}"
-            # A toggle chip in the screen's type scale: the collection's
-            # colour as a dot (the colour of its stripes), its name, and the
-            # count dimmed. On, it is filled; off, an empty outline.
-            dot = v.Html(tag="span", style_=(f"width: 8px; height: 8px; border-radius: 4px; flex: 0 0 8px; "
-                                             f"background: {SRC_COLOR[name] if on else 'transparent'}; "
-                                             f"border: 1.5px solid {SRC_COLOR[name]};"))
-            count = f"{shown}" + (f" +{hidden}" if hidden else "")
-            chip = v.Html(tag="button", attributes=attrs,
-                          # one line, at its own width: a full toolbar squeezed
-                          # the chips until "Sentinel-2" and "17 +7" broke in two
-                          style_=(f"height: 28px; padding: 0 10px; border-radius: 14px; display: inline-flex; "
-                                  f"flex: 0 0 auto; white-space: nowrap; "
-                                  f"align-items: center; gap: 6px; font-size: 12px; line-height: 16px; "
-                                  f"cursor: pointer; color: var(--dat-ink); "
-                                  f"background: {'var(--dat-chip)' if on else 'transparent'}; "
-                                  f"border: 1px solid var(--dat-edge); "
-                                  f"opacity: {'1' if on else '0.6'}"),
-                          children=[dot, SRC_LABEL[name],
-                                    v.Html(tag="span", style_="opacity: 0.7; font-variant-numeric: tabular-nums;",
-                                           children=[count])])
-            chip.on_event("click", lambda w, e, d, name=name: _toggle(name))
-            kids.append(chip)
-        replace_children(chips, kids)
+        on, name = _entries(), t("analysis.timeline.sources_button")
+        sources_btn.attributes = {**sources_btn.attributes, "title": name, "aria-label": name}
+        sources_list.attributes = {**sources_list.attributes, "aria-label": name}
+        drawn = _drawn()
+        replace_children(sources_btn, [*(_dot(SRC_COLOR[e.members[0]]) for e in MENU
+                                         if e.key in on and e.members[0] in drawn), caret])
+        groups = []
+        for group in dict.fromkeys(e.group for e in MENU):
+            title = t("analysis.timeline.group_optical" if group == "optical" else "analysis.timeline.group_radar")
+            header = v.Html(tag="div", class_="defo-src-header", attributes={"aria-hidden": "true"},
+                            style_=(f"font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; "
+                                    f"color: {MUTED}; padding: 6px 12px 2px"),
+                            children=[title])
+            groups.append(v.Html(tag="div", attributes={"role": "group", "aria-label": title},
+                                 children=[header, *(_menu_row(e, counts, on) for e in MENU if e.group == group)]))
+        replace_children(sources_list, groups)
 
     def _render_titles(sel):
         """Name each side's image in its own map's title.
@@ -1141,26 +1206,28 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         """Switch on the collections and widen the view the saved picks need
         (spec D2), before the rows are read."""
         parsed = [scene_query.parse_row_id(rid) for rid in ids]
-        wanted = {source for source, _ in parsed}
-        if not wanted <= sources.value:
-            sources.set(sources.value | wanted)
-            _publish_filter()
+        wanted = {entry_of(source).key for source, _ in parsed}
+        if not wanted <= _entries():
+            _write_entries(_entries() | wanted)
         extra.set(extra_to_include(widgets.imagery_ctx.value, app_state.project.value,
                                    extra.value, [day for _, day in parsed]))
 
-    def _answered(day) -> bool:
-        """Whether the index has answered for ``day``, so a row it does not
-        hold is gone rather than not fetched yet (spec D4)."""
+    def _answered(day, source=SOURCE_S2) -> bool:
+        """Whether the index has answered for ``source`` on ``day``, so a row
+        it does not hold is gone rather than not fetched yet (spec D4). Radar
+        has its own span, ``None`` until the loader has fetched it."""
         if app_state.scene_index_error.value:
             return True
         manifest = app_state.scene_manifest.value
         if manifest is None or app_state.scene_index.value is None or app_state.scene_index_pending.value:
             return False
-        return manifest.covered.start <= day <= manifest.covered.end
+        span = manifest.covered if SOURCES[source].optical else manifest.radar
+        return span is not None and span.start <= day <= span.end
 
     def _settled(rid) -> bool:
-        """Whether the index has answered for ``rid``'s date."""
-        return _answered(scene_query.parse_row_id(rid)[1])
+        """Whether the index has answered for ``rid``'s source and date."""
+        source, day = scene_query.parse_row_id(rid)
+        return _answered(day, source)
 
     def _resolve_auto_waits(sel, a0, a1, window):
         """Give each side in ``auto_waiting`` its automatic pick once the index
@@ -1252,8 +1319,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             track.style_ = "display: none"
             # Two different facts, and they were one message until the final
             # review: "nothing was found here" is the index's answer, while
-            # "everything found here is in a collection you switched off" is
-            # the reviewer's own doing and is undone by one click on a chip.
+            # "everything found here is in a source you switched off" is the
+            # reviewer's own doing and is undone in the Image sources menu.
             # Saying the first when the second is true made the strip claim
             # the index was empty while it held rows.
             empty = rows is None or len(rows) == 0
@@ -1261,7 +1328,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                                   else "analysis.timeline.sources_off")]
             message.style_ = _MESSAGE_STYLE
             _clear_track()
-            _render_chips(rows)
+            _render_menu(rows)
             _render_titles(sel)
             _render_status()
             return
@@ -1299,7 +1366,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         _render_strip(sel, segs)
         _render_axis(segs)
         _render_blocks(segs, sel)
-        _render_chips(rows)
+        _render_menu(rows)
         _render_titles(sel)
         _render_status()
 
@@ -1466,7 +1533,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
     # The controls hold together on one line: the slider and the image area
     # shrink first, and only when even their minimums do not fit beside the
-    # chips does the whole group, not the image area alone, drop below them.
+    # sources menu does the whole group, not the image area alone, drop below them.
     controls = v.Html(tag="div", class_="defo-tl-controls",
                       style_="display: flex; flex: 1 1 0; min-width: min-content; align-items: center;"
                              " justify-content: flex-end; gap: 12px",
@@ -1477,7 +1544,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         # toolbar does not fit
         v.Html(tag="div", style_="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;"
                                  " padding: 8px 8px 6px",
-               children=[chips, legend_menu, controls, status]),
+               children=[sources_menu, legend_menu, controls, status]),
         # tall enough, even when it holds only a one-line message, for
         # pysepal's log button to sit under "+1 month" (the shell's
         # ``.pill-wrapper`` rule) without covering it
@@ -1491,7 +1558,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         reactive.subscribe(render)
     _publish_filter()
     render()
-    # a language switch redraws the strip: chips, lane, blocks, axis months,
+    # a language switch redraws the strip: the sources menu, lane, blocks, axis months,
     # status and both view titles. It re-picks only on a new alert identity,
     # and ``_resolve_restores`` leaves a pending restore pending while its row
     # is missing, so a switch is the same as any reactive tick.
