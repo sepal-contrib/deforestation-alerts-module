@@ -26,6 +26,9 @@ from gui.widget.handle_strip import HandleStrip
 from gui.tile.analysis import timeline
 
 S2, LS, PL = scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT, scene_index.SOURCE_PLANET
+S1A, S1D = scene_index.SOURCE_S1_ASC, scene_index.SOURCE_S1_DESC
+#: the three optical sources' bands: the layout the lane had before radar
+OPTICAL = timeline.lane_bands([S2, LS, PL])
 
 TILES = gpd.GeoDataFrame({"tile": ["W"]},
                          geometry=gpd.GeoSeries([box(0, 0, 2, 2)], crs=scene_index.WGS84),
@@ -175,12 +178,13 @@ def test_the_fixed_numbers_are_the_ones_the_spec_fixed():
     purpose: nothing below may be "adjusted" without this test saying so."""
     assert (timeline.TRACK_PX, timeline.LANE_H, timeline.AXIS_H) == (1120.0, 45, 27)
     assert timeline.VIEW_MONTHS == 2  # the default view is the alert window +/- 2 months
-    assert timeline.BAND == {"Sentinel 2": (0, 17), "Landsat": (19, 14), "Planet NICFI": (35, 10)}
+    assert OPTICAL == {"Sentinel 2": (0, 17), "Landsat": (19, 14), "Planet NICFI": (35, 10)}
     # theme variables: ``THEME_CSS`` holds both themes' values; the fallback
     # is the dark one
     assert timeline.SRC_COLOR == {"Sentinel 2": "var(--dat-s2, #7fa8e0)",
                                   "Landsat": "var(--dat-landsat, #c9a87c)",
-                                  "Planet NICFI": "var(--dat-planet, #9bd98a)"}
+                                  "Planet NICFI": "var(--dat-planet, #9bd98a)",
+                                  S1A: "var(--dat-s1, #d98ac0)", S1D: "var(--dat-s1, #d98ac0)"}
     assert timeline.SELECTED_COLOR == "#bf8f2d"  # the theme's primary_contrast
     # the two greys/ambers the strip reads in: MUTED for what is secondary,
     # WARN for the two things the reviewer has to notice rather than read (a
@@ -191,7 +195,8 @@ def test_the_fixed_numbers_are_the_ones_the_spec_fixed():
     assert scene_query.COLLAPSED_PX == 66.0  # a collapsed month is a fixed block
     # the display labels, which are UI-only: the keys above are the data strings
     assert timeline.SRC_LABEL == {"Sentinel 2": "Sentinel-2", "Landsat": "Landsat",
-                                  "Planet NICFI": "Planet"}
+                                  "Planet NICFI": "Planet", S1A: "Sentinel-1 asc",
+                                  S1D: "Sentinel-1 desc"}
 
 
 def test_a_stripes_percentage_is_its_own_share_of_the_view_not_a_pixel_count():
@@ -223,26 +228,45 @@ def test_a_collapsed_month_puts_every_one_of_its_dates_on_the_block():
         timeline.stripe_hit_style(expanded, date(2026, 5, 1), S2))
 
 
-def test_the_three_collections_get_three_bands_that_cannot_collide():
-    tops = {src: timeline.BAND[src] for src in (S2, LS, PL)}
-    assert tops == {S2: (0, 17), LS: (19, 14), PL: (35, 10)}
-    ordered = sorted(tops.values())
-    for (top, height), (next_top, _) in zip(ordered, ordered[1:]):
-        assert top + height <= next_top  # no overlap
-    assert ordered[-1][0] + ordered[-1][1] <= timeline.LANE_H
-    for src in (S2, LS, PL):
-        style = timeline.stripe_hit_style(
-            scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), timeline.TRACK_PX),
-            date(2026, 3, 11), src)
-        assert f"top: {timeline.BAND[src][0]}px" in style
-        assert f"height: {timeline.BAND[src][1]}px" in style
+def test_the_drawn_sources_share_the_lane_without_colliding():
+    for names in ([S2, LS], [S2, LS, PL, S1A, S1D], [S1A, S1D], [S1D, S1A, "Nope"]):
+        bands = timeline.lane_bands(names)
+        assert set(bands) == set(names) - {"Nope"}  # an unknown name is skipped
+        ordered = sorted(bands.items(), key=lambda kv: kv[1][0])
+        # top to bottom in rank order, whatever order they were given in
+        assert [n for n, _ in ordered] == sorted(bands, key=lambda n: timeline.SOURCES[n].rank)
+        assert ordered[0][1][0] >= 0 and ordered[-1][1][0] + ordered[-1][1][1] <= timeline.LANE_H
+        for (_, (top, height)), (_, (next_top, _h)) in zip(ordered, ordered[1:]):
+            assert top + height <= next_top  # no overlap
+        assert all(height >= 6 for _, height in bands.values()), names
+    segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), timeline.TRACK_PX)
+    bands = timeline.lane_bands([S2, S1A])
+    for src in (S2, S1A):
+        style = timeline.stripe_hit_style(segs, date(2026, 3, 11), src, bands=bands)
+        assert f"top: {bands[src][0]}px" in style and f"height: {bands[src][1]}px" in style
+
+
+def test_two_passes_on_one_day_are_two_rows_in_two_bands():
+    sel = _sel([(S1A, "2026-06-10", float("nan")), (S1D, "2026-06-10", float("nan"))])
+    assert sorted(sel["id"]) == ["a20260610", "d20260610"]
+    bands = timeline.lane_bands([S1A, S1D])
+    assert bands[S1A][0] != bands[S1D][0]
+    assert timeline.same_day_alternative(sel, "a20260610") == "d20260610"
+    assert timeline.same_day_alternative(sel, "d20260610") == "a20260610"
+
+
+def test_a_radar_and_an_optical_image_of_one_day_offer_each_other():
+    sel = _sel([(S2, "2026-06-10", 5.0), (S1A, "2026-06-10", float("nan"))])
+    assert timeline.same_day_alternative(sel, "s20260610") == "a20260610"
+    assert timeline.same_day_alternative(sel, "a20260610") == "s20260610"
 
 
 def test_each_collection_keeps_its_own_band_height_on_the_stripe():
     heights = {}
     for src, cloud in ((S2, 8.0), (LS, 8.0), (PL, float("nan"))):
         row = _sel([(src, "2026-04-24", cloud)]).iloc[0]
-        heights[src] = timeline.stripe_bar_style(row, selected=False).split("height: ")[1].split(";")[0]
+        heights[src] = timeline.stripe_bar_style(row, selected=False, bands=OPTICAL).split(
+            "height: ")[1].split(";")[0]
     assert heights == {S2: "17px", LS: "14px", PL: "10px"}
     assert len(set(heights.values())) == 3
 
@@ -250,7 +274,7 @@ def test_each_collection_keeps_its_own_band_height_on_the_stripe():
 def test_a_hidden_stripe_is_drawn_short_faint_and_not_clickable():
     row = _sel([(S2, "2026-04-24", 88.0)]).iloc[0]
     assert row["hidden"]
-    style = timeline.stripe_bar_style(row, selected=False)
+    style = timeline.stripe_bar_style(row, selected=False, bands=OPTICAL)
     assert "opacity: 0.3" in style and "height: 7.65px" in style  # 45% of the 17px band
     assert timeline.stripe_cursor(row) == "default"
     shown = _sel([(S2, "2026-04-24", 8.0)]).iloc[0]
@@ -278,7 +302,8 @@ def test_a_planet_row_is_a_bar_across_its_whole_month_not_a_stripe():
     assert width == pytest.approx(100 * 30 / 122, abs=0.5)
     assert left == pytest.approx(100 * 31 / 122, abs=0.5)
     # and the bar sits in the Planet band, not the Sentinel-2 one
-    assert f"top: {timeline.BAND[PL][0]}px" in bar
+    assert f"top: {timeline.lane_bands([S2, PL])[PL][0]}px" in timeline.month_bar_style(
+        segs, date(2026, 4, 1), bands=timeline.lane_bands([S2, PL]))
     # any day of the month addresses the same bar: the month is the unit
     assert timeline.month_bar_style(segs, date(2026, 4, 17)) == bar
 

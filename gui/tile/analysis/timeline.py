@@ -26,7 +26,7 @@ accurate.
 import calendar
 import logging
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Iterable, Optional
 
 import ipyvuetify as v
 import pandas as pd
@@ -56,20 +56,16 @@ RAIL_H = 28
 AXIS_H = 27
 VIEW_MONTHS = 2
 
-#: (top offset, height) of each collection's band inside a lane. The bands do
-#: not overlap, so two collections on one date never draw over each other and
-#: a stripe's row says which collection it is before its colour does.
-BAND = {SOURCE_S2: (0, 17), SOURCE_LANDSAT: (19, 14), SOURCE_PLANET: (35, 10)}
+BAND_GAP, MIN_BAND = 2, 6
 #: each collection's colour. CSS variables, like every colour on the strip and
 #: in the pane titles that has to follow the theme: ``THEME_CSS`` defines the
 #: light values on the stage and the dark ones on its ``analysis-stage--dark``
 #: marker. The fallback is the dark value.
-# only the drawn collections until the radar lanes land (BAND is theirs to extend)
-SRC_COLOR = {n: f"var({s.color_var}, {s.color_dark})" for n, s in SOURCES.items() if n in BAND}
+SRC_COLOR = {n: f"var({s.color_var}, {s.color_dark})" for n, s in SOURCES.items()}
 #: display labels only. ``SOURCE_S2`` -- "Sentinel 2" with a space -- is what
 #: the saved store, ``mosaics_helper`` and ``before_info[0]`` switch on; the
 #: hyphenated form must never reach a data structure.
-SRC_LABEL = {n: s.label for n, s in SOURCES.items() if n in BAND}
+SRC_LABEL = {n: s.label for n, s in SOURCES.items()}
 SELECTED_COLOR = "#bf8f2d"  # the theme's primary_contrast
 #: the before side's selection colour. A CSS variable because it is the one
 #: colour on the strip that has to follow the theme: bone on the dark stage, a
@@ -85,8 +81,8 @@ WARN = "var(--dat-warn, #d9ab4e)"
 #: On the stage, not the timeline card: the pane titles above the maps read
 #: ``MUTED``, ``WARN`` and ``SRC_COLOR`` too. The light values are darker so a
 #: label keeps 4.5:1 and a stripe 3:1 on the white surface.
-_VARS_LIGHT = " ".join(f"{v}: {c};" for v, c in {s.color_var: s.color_light for s in SOURCES.values()}.items())
-_VARS_DARK = " ".join(f"{v}: {c};" for v, c in {s.color_var: s.color_dark for s in SOURCES.values()}.items())
+_VARS_LIGHT = " ".join(f"{var}: {c};" for var, c in {s.color_var: s.color_light for s in SOURCES.values()}.items())
+_VARS_DARK = " ".join(f"{var}: {c};" for var, c in {s.color_var: s.color_dark for s in SOURCES.values()}.items())
 THEME_CSS = (
     f".analysis-stage {{ {_VARS_LIGHT} "
     "--dat-muted: #6b665e; --dat-warn: #9a6400; --dat-ink: #2a2724; --dat-chip: #f4f1ec; "
@@ -291,10 +287,30 @@ def pair_note(before_id, after_id) -> Optional[str]:
 # --------------------------------------------------------------- the geometry
 
 
+def lane_bands(names: Iterable[str]) -> dict[str, tuple[int, int]]:
+    """``(top, height)`` of each drawn source's band inside the lane.
+
+    The sources on share the fixed ``LANE_H``: stacked in rank order with a
+    ``BAND_GAP`` between them, each as tall as its ``band_weight``'s share
+    (floored, at least ``MIN_BAND``). The bands do not overlap, so two sources
+    on one date never draw over each other and a stripe's row says which
+    source it is before its colour does. Unknown names are skipped.
+    """
+    known = sorted({n for n in names if n in SOURCES}, key=lambda n: SOURCES[n].rank)
+    room = LANE_H - BAND_GAP * (len(known) - 1)
+    total = sum(SOURCES[n].band_weight for n in known)
+    bands, top = {}, 0
+    for n in known:
+        height = max(MIN_BAND, room * SOURCES[n].band_weight // total)
+        bands[n] = (top, height)
+        top += height + BAND_GAP
+    return bands
+
+
 def _only_sources_we_can_draw(tables: SceneTables) -> SceneTables:
     """``tables`` without rows whose ``source`` this module has no band for.
 
-    Every drawing helper indexes ``BAND``, ``SRC_COLOR`` and ``SRC_LABEL`` by
+    Every drawing helper indexes ``lane_bands``, ``SRC_COLOR`` and ``SRC_LABEL`` by
     the source string, and ``scene_query.row_id`` indexes ``SOURCE_CODE`` --
     so one row naming a fourth collection used to raise a ``KeyError`` out of
     the middle of ``render``, from where it travelled back through
@@ -310,7 +326,7 @@ def _only_sources_we_can_draw(tables: SceneTables) -> SceneTables:
     would cost the whole app for one unknown row. Dropping the row costs that
     collection's stripes and says so in the server log.
     """
-    known = tables.scenes["source"].isin(BAND)
+    known = tables.scenes["source"].isin(SOURCES)
     if known.all():
         return tables
     logger.warning("timeline: no band for %s, dropping those rows",
@@ -318,21 +334,21 @@ def _only_sources_we_can_draw(tables: SceneTables) -> SceneTables:
     return SceneTables(scenes=tables.scenes[known], tiles=tables.tiles)
 
 
-def stripe_hit_style(segments, d: date, source: str) -> str:
+def stripe_hit_style(segments, d: date, source: str, *, bands: Optional[dict] = None) -> str:
     """The clickable box: ``HIT_PX`` wide, centred on the date, band-tall.
 
     The hit area is wider than the stripe because a 2.5px target is not
     clickable; at the widest view Sentinel-2's stripes still sit ~13px apart,
     so an 11px box never covers its neighbour's date.
     """
-    top, height = BAND[source]
+    top, height = (bands or lane_bands(SOURCES))[source]
     x = scene_query.x_for(segments, d)
     return (f"position: absolute; left: calc({_pct(x):.3f}% - {HIT_PX / 2:g}px); "
             f"width: {HIT_PX}px; top: {top}px; height: {height}px")
 
 
-def month_bar_style(segments, d: date) -> str:
-    """A Planet row's hit area: the **whole month** it composites, not an instant.
+def month_bar_style(segments, d: date, *, bands: Optional[dict] = None) -> str:
+    """A monthly (Planet) row's hit area: the **whole month** it composites, not an instant.
 
     A NICFI basemap is a monthly mosaic, so a 2.5px stripe at one instant would
     claim a precision it does not have (spec §4.1). The bar spans its month's
@@ -344,15 +360,15 @@ def month_bar_style(segments, d: date) -> str:
         return "display: none"
     left = _pct(scene_query.x_for(segments, date(d.year, d.month, 1)))
     right = _pct(scene_query.x_for(segments, _month_end(d), end=True))
-    top, height = BAND[SOURCE_PLANET]
+    top, height = (bands or lane_bands(SOURCES))[next(n for n, s in SOURCES.items() if s.monthly)]
     return (f"position: absolute; left: {left:.3f}%; width: {max(right - left, 0.1):.3f}%; "
             f"top: {top}px; height: {height}px")
 
 
-def stripe_bar_style(row, *, selected: bool, side: str = "a") -> str:
+def stripe_bar_style(row, *, selected: bool, side: str = "a", bands: Optional[dict] = None) -> str:
     """The visible stripe inside the hit area. A selected one takes its side's
     colour: ``BEFORE_COLOR`` for the before image, the gold for the after."""
-    _, height = BAND[row["source"]]
+    _, height = (bands or lane_bands(SOURCES))[row["source"]]
     hidden = bool(row["hidden"]) and not selected
     h = height * HIDDEN_SCALE if hidden else height
     width = SELECTED_STRIPE_PX if selected else STRIPE_PX
@@ -386,7 +402,7 @@ def handle_x(segments, rid) -> Optional[float]:
     source, d = scene_query.parse_row_id(rid)
     if segments.get((d.year, d.month)) is None:
         return None
-    if source == SOURCE_PLANET:
+    if SOURCES[source].monthly:
         left = scene_query.x_for(segments, date(d.year, d.month, 1))
         right = scene_query.x_for(segments, _month_end(d), end=True)
         return (left + right) / 2
@@ -437,11 +453,12 @@ def reachable(sel, segments, side: str, *, before_id, after_id) -> list:
 
 
 def _same_day(rid, other) -> bool:
-    """Two scenes of one date. A Planet month has no date of its own."""
+    """Two scenes of one date, optical or radar, either pass. A monthly
+    (Planet) mosaic has no date of its own."""
     if not rid or not other:
         return False
     (src, d), (other_src, other_d) = scene_query.parse_row_id(rid), scene_query.parse_row_id(other)
-    return SOURCE_PLANET not in (src, other_src) and d == other_d
+    return not (SOURCES[src].monthly or SOURCES[other_src].monthly) and d == other_d
 
 
 def side_for_click(segments, rid, before_id, after_id, a0) -> Optional[str]:
@@ -542,7 +559,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
     labels = labels if labels is not None else Labels()
     max_cloud = solara.reactive(40.0)
-    sources = solara.reactive(frozenset(SRC_COLOR))
+    # shortcut: optical only until the sources menu (Task 5) owns this set
+    sources = solara.reactive(frozenset(n for n, s in SOURCES.items() if s.optical))
     collapsed = solara.reactive(frozenset())
     extra = solara.reactive((0, 0))
     before_id = solara.reactive(None)
@@ -718,6 +736,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
     def _render_lane(sel, segs):
         before, after = before_id.value, after_id.value
+        bands = lane_bands(sources.value)
         a0, _ = alert_window(widgets.imagery_ctx.value, app_state.project.value)
         kids = []
         for _, row in sel.iterrows():
@@ -747,28 +766,30 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             attrs = {"aria-label": label, "tabindex": "-1"}
             if side is not None:
                 attrs["aria-current"] = "true"
-            hit = (month_bar_style(segs, d) if row["source"] == SOURCE_PLANET
-                   else stripe_hit_style(segs, d, row["source"]))
+            hit = (month_bar_style(segs, d, bands=bands) if SOURCES[row["source"]].monthly
+                   else stripe_hit_style(segs, d, row["source"], bands=bands))
             kids.append(_button(
                 hit, attrs,
                 None if hidden else (lambda _w, _e, _d, rid=rid: _on_stripe(rid)),
-                stripe_bar_style(row, selected=side is not None, side=side or "a"), stripe_cursor(row)))
+                stripe_bar_style(row, selected=side is not None, side=side or "a", bands=bands),
+                stripe_cursor(row)))
         replace_children(lane, kids)
 
     def _flag(rid) -> str:
         """What a handle's flag says about ``rid``: the day and the collection."""
         source, d = scene_query.parse_row_id(rid)
-        when = format_date(d, "MMM y") if source == SOURCE_PLANET else format_date(d, "d MMM")
+        when = format_date(d, "MMM y") if SOURCES[source].monthly else format_date(d, "d MMM")
         return f"{when} · {SRC_LABEL[source]}"
 
     def _render_strip(sel, segs):
         cands = []
+        bands = lane_bands(sources.value)
         for rid in _navigable(sel, segs):
             source, d = scene_query.parse_row_id(rid)
-            top, height = BAND[source]
+            top, height = bands[source]
             cand = {"id": rid, "x": round(_pct(handle_x(segs, rid)), 3), "top": top, "h": height,
                     "flag": _flag(rid)}
-            if source == SOURCE_PLANET:
+            if SOURCES[source].monthly:
                 x0 = scene_query.x_for(segs, date(d.year, d.month, 1))
                 x1 = scene_query.x_for(segs, _month_end(d), end=True)
                 cand.update(x0=round(_pct(x0), 3), w=round(_pct(x1 - x0), 3))
