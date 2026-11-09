@@ -2053,7 +2053,7 @@ La barra de herramientas sobre la pista:
         -   Abre el menú de fuentes de imágenes, en dos grupos: **Ópticas** (Sentinel-2, Landsat, Planet) y **Radar** (Sentinel-1). El botón lleva un punto de color por cada fuente activada. Cada fila tiene una casilla, el punto y el nombre de la fuente y, a la derecha, el número de sus imágenes en la vista actual; una segunda línea ("3 por encima del límite de nubes") aparece cuando el límite de nubes oculta algunas. Planet aparece en gris, con "Sin acceso con esta cuenta", cuando tu cuenta de GEE no tiene acceso a NICFI. La elección se guarda con el proyecto (en una copia de revisión, solo dura la sesión), y al abrir una alerta cuya imagen guardada viene de una fuente desactivada, esa fuente se activa.
         -   Sentinel-2 y Landsat activadas; Planet y Sentinel-1 desactivadas.
     *   -   Botón **?**
-        -   Muestra u oculta una leyenda de la línea de tiempo.
+        -   Muestra u oculta una leyenda breve de la línea de tiempo. Esta sección la describe por completo.
         -   Oculta.
     *   -   **Contraer la ventana de alerta**
         -   Pliega los meses que quedan enteramente dentro de la ventana de alerta en bloques que indican su número de imágenes. Selecciona un bloque para desplegar su mes; selecciona el nombre de un mes en el eje para plegarlo. En una alerta larga, los meses plegados ocupan menos de la mitad de la pista, para que los meses antes y después de la ventana conserven su espacio. Cuando quedan demasiado estrechos para leerse, los meses plegados de cada semestre forman un solo bloque ("ene – jun 2024") con el año en el eje debajo; selecciónalo para dividirlo en un bloque por mes.

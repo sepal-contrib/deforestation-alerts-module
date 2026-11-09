@@ -2055,7 +2055,7 @@ La barre d'outils au-dessus de la piste :
         -   Ouvre le menu des sources d'images, en deux groupes : **Optique** (Sentinel-2, Landsat, Planet) et **Radar** (Sentinel-1). Le bouton porte un point de couleur pour chaque source activée. Chaque ligne a une case à cocher, le point et le nom de la source et, à droite, le nombre de ses images dans la vue actuelle ; une seconde ligne (« 3 au-dessus de la limite de nuages ») apparaît quand la limite de nuages en masque. Planet est grisée, avec « Pas d'accès avec ce compte », quand votre compte GEE n'a pas accès à NICFI. Le choix est enregistré avec le projet (sur une copie de révision, il ne dure que la session), et l'ouverture d'une alerte dont l'image enregistrée vient d'une source désactivée active cette source.
         -   Sentinel-2 et Landsat activées ; Planet et Sentinel-1 désactivées.
     *   -   Bouton **?**
-        -   Affiche ou masque une légende de la frise.
+        -   Affiche ou masque une courte légende de la frise. Cette section la décrit en entier.
         -   Masquée.
     *   -   **Replier la fenêtre d'alerte**
         -   Replie les mois entièrement compris dans la fenêtre de l'alerte en blocs qui indiquent leur nombre d'images. Sélectionnez un bloc pour déplier son mois ; sélectionnez le nom d'un mois sur l'axe pour le replier. Sur une longue alerte, les mois repliés occupent moins de la moitié de la piste, si bien que les mois d'avant et d'après la fenêtre gardent leur place. Quand ils deviennent trop étroits pour être lus, les mois repliés de chaque semestre forment un seul bloc (« janv. – juin 2024 ») avec l'année sur l'axe en dessous ; sélectionnez-le pour le scinder en un bloc par mois.

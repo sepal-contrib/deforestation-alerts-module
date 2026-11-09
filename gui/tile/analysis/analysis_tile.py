@@ -845,12 +845,13 @@ SCREEN_CSS = (
     ".analysis-panes-slot > *, .analysis-panes-slot .analysis-views { position: absolute; inset: 0; }\n"
     # The timeline spans the views' width: its edges line up with theirs.
     ".analysis-strip { flex: 0 0 auto; padding: 0 0 4px 0; }\n"
-    # The timeline's toolbar needs about 1240 px with its button labels (in
-    # Spanish, measured). Narrower, the two fold buttons drop to their icons,
-    # which name themselves in a tooltip; narrower still (~860 px) the row
-    # wraps, and the dividers, which would dangle at a line's end, go.
+    # The fold buttons keep their labels while the toolbar fits on one line:
+    # measured 2026-11-09 with the sources menu, it needs 755 px in Spanish
+    # (the longest), 800 px with all four source dots. Narrower, they drop to
+    # their icons, which name themselves in a tooltip. Below 950 px the
+    # dividers go, as they would dangle at a line's end if the row wrapped.
     ".defo-analysis-screen .analysis-timeline { container-type: inline-size; }\n"
-    "@container (max-width: 1250px) { .defo-analysis-screen .defo-tl-label { display: none; }"
+    "@container (max-width: 800px) { .defo-analysis-screen .defo-tl-label { display: none; }"
     " .defo-analysis-screen .defo-tl-fold .v-icon--left { margin-right: 0; } }\n"
     "@container (max-width: 950px) { .defo-analysis-screen .defo-tl-divider { display: none; } }\n"
     # Narrower still, the cloud slider's words give way to a cloud icon (its
@@ -871,7 +872,7 @@ SCREEN_CSS = (
     # 12 px labels and badges, sentence case for the words that are not
     # buttons. Its buttons are the rest of the app's (``gui.widget.buttons``):
     # small, in Vuetify's capitals. The timeline's toolbar keeps sentence
-    # case: it is short of width already (its labels give way below 1250 px),
+    # case: it is short of width already (its labels give way below 800 px),
     # and it is an instrument, like the views' Leaflet controls.
     ".defo-analysis-screen .defo-tl-btn { text-transform: none; letter-spacing: normal; }\n"
     ".defo-analysis-screen .v-chip { letter-spacing: normal; }\n"

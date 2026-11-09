@@ -2057,7 +2057,7 @@ A barra de ferramentas acima da trilha:
         -   Abre o menu de fontes de imagens, em dois grupos: **Ópticas** (Sentinel-2, Landsat, Planet) e **Radar** (Sentinel-1). O botão traz um ponto colorido para cada fonte ativada. Cada linha tem uma caixa de seleção, o ponto e o nome da fonte e, à direita, o número de suas imagens na vista atual; uma segunda linha ("3 acima do limite de nuvens") aparece quando o limite de nuvens esconde algumas. O Planet aparece em cinza, com "Sem acesso com esta conta", quando a sua conta do GEE não tem acesso ao NICFI. A escolha é salva com o projeto (numa cópia de revisão, vale só para a sessão), e abrir um alerta cuja imagem salva vem de uma fonte desativada ativa essa fonte.
         -   Sentinel-2 e Landsat ligadas; Planet e Sentinel-1 desligadas.
     *   -   Botão **?**
-        -   Mostra ou esconde uma legenda da linha do tempo.
+        -   Mostra ou esconde uma legenda curta da linha do tempo. Esta seção a descreve por completo.
         -   Oculta.
     *   -   **Recolher a janela do alerta**
         -   Recolhe os meses que ficam inteiramente dentro da janela do alerta em blocos que indicam o seu número de imagens. Selecione um bloco para expandir o mês; selecione o nome de um mês no eixo para recolhê-lo. Num alerta longo, os meses recolhidos ocupam menos da metade da trilha, para que os meses antes e depois da janela mantenham o seu espaço. Quando eles ficam estreitos demais para serem lidos, os meses recolhidos de cada semestre formam um único bloco ("Jan – Jun 2024"), com o ano no eixo logo abaixo; selecione-o para dividi-lo em um bloco por mês.

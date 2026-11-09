@@ -2113,7 +2113,7 @@ The toolbar above the track:
         -   Opens the menu of image sources, in two groups: **Optical** (Sentinel-2, Landsat, Planet) and **Radar** (Sentinel-1). The button carries one coloured dot for each source that is on. Each row has a checkbox, the source's dot and name and, on the right, the number of its images in the current view; a second line ("3 over cloud limit") appears when the cloud limit hides some. Planet is greyed out, with "No access with this account", when your GEE account has no NICFI access. The choice is saved with the project (on a review copy, it lasts only for the session), and opening an alert whose saved image comes from a source that is off turns that source on.
         -   Sentinel-2 and Landsat on; Planet and Sentinel-1 off.
     *   -   **?** button
-        -   Shows or hides a legend of the timeline.
+        -   Shows or hides a short legend of the timeline. This section describes the timeline in full.
         -   Hidden.
     *   -   **Collapse the alert window**
         -   Folds the months that lie wholly inside the alert window into blocks that give their number of images. Select a block to unfold its month; select a month's name on the axis to fold it. On a long alert, the folded months share less than half of the track, so that the months before and after the window keep their room. When they get too narrow to read, the folded months of each half-year form one block ("Jan – Jun 2024") with the year on the axis under it; select it to split it into one block per month.
