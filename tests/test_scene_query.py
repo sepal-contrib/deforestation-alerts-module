@@ -680,55 +680,20 @@ def test_the_auto_pick_never_lands_on_radar():
     assert scene_query.default_pick(both, A0, A1)[0] == scene_index.row_id(S2, date(2026, 4, 2))
 
 
-def test_an_optical_anchor_stands_in_for_a_radar_pick():
-    rows = _sel([(S2, "2026-06-01", 5.0), (A_ASC, "2026-06-05", float("nan")), (LS, "2026-06-09", 5.0)])
-    assert scene_query.optical_anchor(rows, "a20260605", "before") == "s20260601"
-    assert scene_query.optical_anchor(rows, "a20260605", "after") == "l20260609"
-    assert scene_query.optical_anchor(rows, "s20260601", "before") == "s20260601"
-    assert scene_query.optical_anchor(rows, "a20260605", "after") == "l20260609"
-    assert scene_query.optical_anchor(rows.iloc[0:0], "a20260605", "after") is None
-
-
 D_DESC = "Sentinel 1 descending"
 NAN = float("nan")
 
 
-def test_the_report_stand_in_is_the_least_cloudy_within_30_days_whatever_the_limit():
+def test_the_least_cloudy_near_a_day_within_30_days_whatever_the_limit():
     rows = _sel([(S2, "2026-05-01", 1.0), (S2, "2026-06-01", 95.0), (LS, "2026-06-03", 70.0),
                  (A_ASC, "2026-06-05", NAN), (S2, "2026-06-10", 85.0), (LS, "2026-06-20", 85.0)])
     # before: 06-03 (70 %) beats the cloudier 06-01 (95 %); the clear 05-01 is 35 days off
-    assert scene_query.report_optical(rows, "a20260605", "before") == "l20260603"
+    assert scene_query.least_cloudy_near(rows, date(2026, 6, 5), "before") == "l20260603"
     # after: a tie at 85 %, the closer one wins; both are over the 40 % limit
-    assert scene_query.report_optical(rows, "a20260605", "after") == "s20260610"
+    assert scene_query.least_cloudy_near(rows, date(2026, 6, 5), "after") == "s20260610"
     far = _sel([(S2, "2026-03-01", 99.0), (S2, "2026-03-20", 2.0), (A_ASC, "2026-06-05", NAN)])
-    assert scene_query.report_optical(far, "a20260605", "before") == "s20260320"  # none within 30: the nearest
-    assert scene_query.report_optical(far, "a20260605", "after") is None
-    assert scene_query.report_optical(far, "s20260320", "before") == "s20260320"  # an optical pick is kept
-
-
-def test_a_radar_partner_keeps_the_pass_within_30_days_else_takes_the_nearest_of_either():
-    rows = _sel([(S2, "2026-06-01", 5.0), (D_DESC, "2026-06-10", NAN), (A_ASC, "2026-06-20", NAN)])
-    # ascending 06-20 is 19 days after the pick: kept over the nearer descending 06-10
-    assert scene_query.radar_partner(rows, "s20260601", "after", A_ASC) == "a20260620"
-    assert scene_query.radar_partner(rows, "s20260601", "after", D_DESC) == "d20260610"
-    far = _sel([(S2, "2026-05-01", 5.0), (D_DESC, "2026-05-05", NAN), (A_ASC, "2026-07-15", NAN)])
-    # ascending 07-15 is 75 days after: the other pass stands in
-    assert scene_query.radar_partner(far, "s20260501", "after", A_ASC) == "d20260505"
-    # the before side looks on or before the pick only
-    assert scene_query.radar_partner(far, "s20260501", "before", A_ASC) is None
-
-
-def test_report_images_stand_in_optical_and_pair_radar():
-    rows = _sel([(D_DESC, "2026-05-25", NAN), (S2, "2026-06-01", 5.0), (A_ASC, "2026-06-05", NAN),
-                 (LS, "2026-07-09", 5.0), (A_ASC, "2026-07-10", NAN), (S2, "2026-07-20", 5.0)])
-    assert scene_query.report_images(rows, "s20260601", "l20260709") is None
-    # after is radar: nearest optical after it; the before radar is the other pass (no ascending before 06-01)
-    assert scene_query.report_images(rows, "s20260601", "a20260710") == {
-        "optical": ("s20260601", "s20260720"), "radar": ("d20260525", "a20260710")}
-    assert scene_query.report_images(rows, "a20260605", "l20260709") == {
-        "optical": ("s20260601", "l20260709"), "radar": ("a20260605", "a20260710")}
-    assert scene_query.report_images(rows, "a20260605", "a20260710") == {
-        "optical": ("s20260601", "s20260720"), "radar": ("a20260605", "a20260710")}
+    assert scene_query.least_cloudy_near(far, date(2026, 6, 5), "before") == "s20260320"  # none within 30: the nearest
+    assert scene_query.least_cloudy_near(far, date(2026, 6, 5), "after") is None
 
 
 def test_the_auto_pick_falls_back_over_the_limit():

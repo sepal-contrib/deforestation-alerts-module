@@ -35,6 +35,7 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
 from deforestation_alerts.scripts import local_files
+from deforestation_alerts.scripts.image_sources import is_radar
 from gui.i18n import t
 from tests._pane_helpers import make_panes, reviewer_edits
 from tests._review_helpers import stub_admin_lookups
@@ -924,20 +925,20 @@ def test_a_model_run_with_a_pane_still_loading_is_refused(
 
 
 @pytest.mark.parametrize("model", [1, 2])
-def test_the_cnn_refuses_a_radar_pick(edit_tools_card, monkeypatch, model):
+def test_the_gif_and_the_model_use_the_optical_pair_whatever_the_radar_picks(edit_tools_card, monkeypatch, model):
+    """The model runs on the optical pair: a radar pick beside it refuses nothing."""
     edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)
-    analysis.after_info.set(["Sentinel 1 descending", 1700000001, None, "S1_after", "_020224"])
+    analysis.after_radar_image.set(object())
+    analysis.after_radar_info.set(["Sentinel 1 descending", 1700000001, "N/A", "S1_after", "_020224"])
+    analysis.radar_pinned.set({"before": False, "after": True})
     ran = []
-    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: ran.append(1))
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: ran.append(k["alert"].after_info[0]))
 
     _dl_run_button(card, model).fire_event("click", None)
     feedback.join()
 
-    reason = t("analysis_tile.model_labels.dl_not_optical")
-    assert ran == []
-    assert feedback.task().error_message == reason
-    assert feedback.toasts() == [("warning", reason)]
+    assert ran == [analysis.after_info.value[0]] and not is_radar(ran[0])
 
 
 def test_both_model_runs_keep_their_predictions(edit_tools_card, monkeypatch):

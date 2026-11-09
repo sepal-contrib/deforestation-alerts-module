@@ -1,53 +1,64 @@
-"""The report's images when a pick is radar: the stand-ins planned at the click
-and the composites staged by the worker (Earth Engine replaced at its seams)."""
+"""The radar composite and captions of an alert's files: the radar pair on
+screen at the click (``state.capture``), pinned or following, staged as it is
+(Earth Engine replaced at ``stage_alert_image``)."""
 
 from types import SimpleNamespace
 
-from tests.test_alert_gif_job import BBOX, S2, _info, _tables
+import pytest
+
+from tests.test_alert_gif_job import _info
 from gui.tile.analysis import report_images
 
 S1A, S1D = "Sentinel 1 ascending", "Sentinel 1 descending"
-ROWS = [(S1D, "2026-03-25", None), (S2, "2026-04-01", 5.0), (S1A, "2026-04-05", None),
-        (S1A, "2026-09-05", None), (S2, "2026-09-20", 5.0)]
 
 
-def test_an_optical_pair_plans_nothing():
-    assert report_images.plan_report_images(_tables(ROWS), BBOX, _info(S2, "2026-04-01"),
-                                            _info(S2, "2026-09-20"), 40.0) is None
-
-
-def test_a_radar_after_pick_gets_an_optical_stand_in_and_a_radar_partner():
-    plan = report_images.plan_report_images(_tables(ROWS), BBOX, _info(S2, "2026-04-01"),
-                                            _info(S1A, "2026-09-05"), 40.0)
-    before, after = plan.optical
-    assert before.keys is None and before.mark == ""  # the reviewer's own pick
-    assert after.info[3] == f"{S2} 2026-09-20 " and after.keys == ("k4",) and after.mark.endswith("report_nearest_optical")
-    # no ascending image on or before 04-01: the descending one stands in, marked as the other pass
-    assert plan.radar[0].info[3] == f"{S1D} 2026-03-25 " and plan.radar[0].mark.endswith("report_nearest_radar_other")
-    assert plan.radar[1].keys is None
-    assert plan.radar_sides == ("after",)
-
-
-def test_staging_rebuilds_the_stand_ins_and_notes_a_missing_side(monkeypatch, tmp_path):
-    plan = report_images.plan_report_images(_tables(ROWS[2:]), BBOX, _info(S1A, "2026-04-05"),
-                                            _info(S1A, "2026-09-05"), 40.0)
-    assert plan.optical[0] is None  # nothing optical on or before 04-05 in these rows
-    rebuilt, staged = [], []
-    monkeypatch.setattr(report_images.imagery, "rebuild_image",
-                        lambda source, keys, grid: rebuilt.append((source, keys)) or f"img:{source}")
+@pytest.fixture()
+def staged(monkeypatch, tmp_path):
+    calls = []
     monkeypatch.setattr(report_images, "stage_alert_image",
-                        lambda folder, aid, b, a, ib, ia, grid, area: staged.append((b[3], a[3], ib, ia))
-                        or tmp_path / f"{len(staged)}.tif")
-    alert = SimpleNamespace(alert_id=3, grid="grid", before_image="pick_b", after_image="pick_a")
+                        lambda folder, aid, b, a, ib, ia, grid, area: calls.append((b[3], a[3], ib, ia, area))
+                        or tmp_path / "radar.tif")
+    return calls
 
-    optical, radar, missing, extra = report_images.stage_report_images(plan, alert, tmp_path)
 
-    assert rebuilt == [(S2, ["k2"])]  # keys renumber from ROWS[2:]
-    # the optical file holds the one after stand-in twice; the radar one the two picks
-    assert staged == [(f"{S2} 2026-09-20 ", f"{S2} 2026-09-20 ", f"img:{S2}", f"img:{S2}"),
-                      (f"{S1A} 2026-04-05 ", f"{S1A} 2026-09-05 ", "pick_b", "pick_a")]
-    assert optical is not None and radar is not None
-    assert set(missing) == {"[Placeholder for Image 1]", "[Placeholder for Image 4]"}
-    assert extra["after_img"] == f"{S2} 2026-09-20 (in place of the radar image, 5% cloud)" and "before_img" not in extra
-    assert extra["before_radar"] == f"{S1A} 2026-04-05" and extra["image_note"]
-    assert extra["radar_summary"] == f"Radar images: {S1A} 2026-04-05 (before) and {S1A} 2026-09-05 (after)."
+def _alert(before=None, after=None, pinned=(False, False), images=("img_b", "img_a")):
+    return SimpleNamespace(alert_id=3, grid="grid", before_radar_info=before, after_radar_info=after,
+                           before_radar_image=images[0], after_radar_image=images[1],
+                           radar_pinned={"before": pinned[0], "after": pinned[1]})
+
+
+def test_a_following_radar_pair_is_staged_and_captioned_as_nearest(staged, tmp_path):
+    alert = _alert(_info(S1D, "2026-03-25"), _info(S1A, "2026-09-05"), pinned=(False, True))
+    radar, missing, extra = report_images.stage_report_images(alert, tmp_path, "large")
+    assert radar == tmp_path / "radar.tif" and missing == {}
+    assert staged == [(f"{S1D} 2026-03-25 ", f"{S1A} 2026-09-05 ", "img_b", "img_a", "large")]
+    assert extra["before_radar"] == f"{S1D} 2026-03-25 (nearest radar image, other pass)"
+    assert extra["after_radar"] == f"{S1A} 2026-09-05"  # pinned
+    assert extra["image_note"] == ""
+    same = _alert(_info(S1A, "2026-03-25"), _info(S1A, "2026-09-05"))
+    _, _, extra = report_images.stage_report_images(same, tmp_path)
+    assert extra["before_radar"] == f"{S1A} 2026-03-25 (nearest radar image)"
+    assert extra["after_radar"] == f"{S1A} 2026-09-05 (nearest radar image)"
+    assert extra["radar_summary"] == (f"Radar images: {S1A} 2026-03-25 (nearest radar image) (before) and "
+                                      f"{S1A} 2026-09-05 (nearest radar image) (after).")
+
+
+def test_a_pinned_radar_pair_is_captioned_by_name_only(staged, tmp_path):
+    alert = _alert(_info(S1D, "2026-03-25"), _info(S1A, "2026-09-05"), pinned=(True, True))
+    _, _, extra = report_images.stage_report_images(alert, tmp_path)
+    assert (extra["before_radar"], extra["after_radar"]) == (f"{S1D} 2026-03-25", f"{S1A} 2026-09-05")
+
+
+def test_a_radar_side_with_no_image_gets_the_note(staged, tmp_path):
+    alert = _alert(None, _info(S1A, "2026-09-05"), pinned=(False, True), images=("stale", "img_a"))
+    radar, missing, extra = report_images.stage_report_images(alert, tmp_path)
+    # the side without info has no image (its stale ee.Image is not used): the after one fills the file
+    assert staged == [(f"{S1A} 2026-09-05 ", f"{S1A} 2026-09-05 ", "img_a", "img_a", "normal")]
+    assert radar is not None and set(missing) == {"[Placeholder for Radar 1]"}
+    assert extra["before_radar"] == "" and extra["after_radar"] == f"{S1A} 2026-09-05"
+
+
+def test_without_radar_infos_nothing_is_staged_even_with_stale_images(staged, tmp_path):
+    radar, missing, extra = report_images.stage_report_images(_alert(images=("stale_b", "stale_a")), tmp_path)
+    assert (radar, missing, staged) == (None, {}, [])
+    assert extra == {"image_note": ""}

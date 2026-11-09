@@ -129,7 +129,7 @@ from gui.i18n import format_number, t, tn
 from gui.scripts.notify_bridge import current_notifier, run_button_job, tile_progress_reporter
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
-from gui.tile.analysis.alert_files import images_picked, optical_pair
+from gui.tile.analysis.alert_files import images_picked
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.pane_layers import ALERT_TOP_Z, geojson_spec
 from gui.tile.analysis.paths import stage_alert_image
@@ -899,8 +899,6 @@ def build_edit_tools(
             # not read as "you moved on".
             if not images_picked(alert):
                 return t("analysis_tile.model_labels.dl_no_images")
-            if not optical_pair(alert):
-                return t("analysis_tile.model_labels.dl_not_optical")
             applied = False
             if analysis.is_current(token):
                 with writing(project):

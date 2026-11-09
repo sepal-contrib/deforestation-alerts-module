@@ -129,7 +129,6 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis import alert_files, review_save
 from gui.tile.analysis import gif as gif_mod
-from gui.tile.analysis import report_images
 from gui.tile.analysis.file_tile import BuildTile, FileTile
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.review_save import SaveRefused
@@ -146,13 +145,18 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     return review_save.save_review(alert, app_tile_model)
 
 
-def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None, gif=None,
-                   report=None):
+def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None, gif=None):
     """The build's body: ``alert_files.build_alert_files`` of ``alert``
     (``state.capture_alert``; taken here when not given) into the set folder."""
     alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
     return alert_files.build_alert_files(alert, app_tile_model.recipe_folder_path, aux_model.custom_report_template,
-                                         task=task, gif=gif, report=report)
+                                         task=task, gif=gif)
+
+
+def _radar_saved(analysis) -> dict:
+    """What a save would write into the radar columns for the radar pair on screen."""
+    return review_save.radar_updates(analysis.before_radar_info.value, analysis.after_radar_info.value,
+                                     analysis.radar_pinned.value)
 
 
 def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None, on_refused=None,
@@ -469,7 +473,7 @@ def build_export(
         alerts, alert_id = _row()
         return (alert_files.saved_status(alerts, alert_id) is not None
                 and alert_files.picks_are_saved(alerts, alert_id, analysis.before_info.value,
-                                                analysis.after_info.value))
+                                                analysis.after_info.value, _radar_saved(analysis)))
 
     def _invalidate_built_files(gif=True):
         """Stop offering what the last build left ready.
@@ -521,7 +525,8 @@ def build_export(
             return
         alerts, alert_id = _row()
         status = alert_files.saved_status(alerts, alert_id)
-        if alert_files.gif_allowed(alerts, alert_id, analysis.before_info.value, analysis.after_info.value):
+        if alert_files.gif_allowed(alerts, alert_id, analysis.before_info.value, analysis.after_info.value,
+                                   _radar_saved(analysis)):
             key = "analysis_tile.export_labels.tile_gif_detail"
         elif status is not None and status != CONFIRMED:
             key = "analysis_tile.export_labels.tile_gif_true_only"
@@ -616,6 +621,9 @@ def build_export(
     # because either side alone changes the composite.
     analysis.before_info.subscribe(_invalidate_and_draw)
     analysis.after_info.subscribe(_invalidate_and_draw)
+    # the radar pair too: its composite and captions are in the files
+    analysis.before_radar_info.subscribe(_invalidate_and_draw)
+    analysis.after_radar_info.subscribe(_invalidate_and_draw)
 
     # Unsaved work over the saved review holds the build (the files would
     # describe a review that is not the one on screen); a save that clears it
@@ -738,7 +746,9 @@ def build_export(
         # A capture that fails for any other reason costs the GIF too, never
         # the build: escaping here would leave the build button spinning with
         # no worker started.
-        if not alert_files.gif_allowed(alert.alerts, alert.alert_id, alert.before_info, alert.after_info):
+        if not alert_files.gif_allowed(alert.alerts, alert.alert_id, alert.before_info, alert.after_info,
+                                       review_save.radar_updates(alert.before_radar_info, alert.after_radar_info,
+                                                                 alert.radar_pinned)):
             gif_skipped = alert_files.saved_status(alert.alerts, alert.alert_id) == CONFIRMED
         else:
             try:
@@ -748,14 +758,6 @@ def build_export(
             except Exception:  # noqa: BLE001 - logged; the zip is built without the GIF
                 logger.exception("Analysis: the GIF for the zip could not be captured")
                 gif_skipped = True
-
-        # A radar pick: the report's optical stand-ins and radar pair, read now (UI thread) like the GIF.
-        # A failure here costs the stand-ins (the report notes them missing), never the build.
-        try:
-            report_job = report_images.capture_report_images(app_state, widgets, alert)
-        except Exception:  # noqa: BLE001 - logged; the build goes on with the picks alone
-            logger.exception("Analysis: the report's stand-in images could not be found")
-            report_job = report_images.plan_report_images(None, None, alert.before_info, alert.after_info, None)
 
         result = {}  # the built paths, for the GIF warning after the task
 
@@ -768,7 +770,7 @@ def build_export(
             with writing(writer_name(app_state)):
                 built_paths = _download_data(
                     widgets, analysis, app_state, aux_model, app_tile_model,
-                    task=task, alert=alert, gif=gif_job, report=report_job,
+                    task=task, alert=alert, gif=gif_job,
                 )
             if built_paths is None:
                 # Refused: nothing was written and no download button will be

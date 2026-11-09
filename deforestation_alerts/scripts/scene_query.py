@@ -486,17 +486,6 @@ def granule_keys(tables, bbox, source: str, day) -> list[str]:
     return sorted(same[same["tile"].isin(tiles) | (same["tile"] == "")]["key"])
 
 
-def optical_anchor(rows: pd.DataFrame, rid, side: str) -> Optional[str]:
-    """``rid`` if it is an optical row (a Planet pick stays a frame), else the
-    visible dated optical row nearest it on its ``side`` ("before": latest on
-    or before its date; "after": earliest on or after it), else ``None``."""
-    source, day = parse_row_id(rid)
-    if not is_radar(source):
-        return rid
-    return _nearest_on_side(rows[rows["source"].map(dated_optical).astype(bool) & ~rows["hidden"].astype(bool)],
-                            day, side)
-
-
 def _nearest_on_side(ok: pd.DataFrame, day, side: str) -> Optional[str]:
     """The id of the row of ``ok`` nearest ``day`` on ``side`` ("before": the
     latest on or before it; "after": the earliest on or after it), else ``None``."""
@@ -507,22 +496,10 @@ def _nearest_on_side(ok: pd.DataFrame, day, side: str) -> Optional[str]:
     return str(ok.loc[ok["date"].idxmin(), "id"]) if len(ok) else None
 
 
-#: a radar partner of the other pick's pass is preferred this close to the optical pick
+#: a following radar side keeps the other side's pass this close to its anchor
 SAME_PASS_DAYS = 30
-#: the report's optical stand-in is the least cloudy one this close to a radar pick
+#: the over-limit auto pick is the least cloudy optical image this close to its side
 STAND_IN_DAYS = 30
-
-
-def report_optical(rows: pd.DataFrame, rid, side: str) -> Optional[str]:
-    """``rid`` if it is optical, else the report's optical stand-in for the
-    radar pick ``rid`` on its ``side``, whatever the cloud limit (its cloud
-    cover is what made the reviewer use radar): the least cloudy dated optical
-    row on ``side`` within ``STAND_IN_DAYS`` (ties: the closest), else the
-    nearest one on ``side``, else ``None``."""
-    source, day = parse_row_id(rid)
-    if not is_radar(source):
-        return rid
-    return least_cloudy_near(rows, day, side)
 
 
 def least_cloudy_near(rows: pd.DataFrame, day: date, side: str) -> Optional[str]:
@@ -537,19 +514,6 @@ def least_cloudy_near(rows: pd.DataFrame, day: date, side: str) -> Optional[str]
     if len(near):
         return str(near.sort_values(["cloud", "_gap"], kind="stable", na_position="last").iloc[0]["id"])
     return _nearest_on_side(ok, day, side)
-
-
-def radar_partner(rows: pd.DataFrame, rid, side: str, pass_source: str) -> Optional[str]:
-    """The radar row the report pairs with the optical pick ``rid`` on its
-    ``side`` when the other pick is radar of ``pass_source``: the nearest of
-    that pass on ``side`` when within ``SAME_PASS_DAYS`` of the pick, else the
-    nearest of either pass on ``side``, else ``None``."""
-    day = parse_row_id(rid)[1]
-    radar = rows[rows["source"].map(is_radar).astype(bool)]
-    same = _nearest_on_side(radar[radar["source"] == pass_source], day, side)
-    if same is not None and abs((parse_row_id(same)[1] - day).days) <= SAME_PASS_DAYS:
-        return same
-    return _nearest_on_side(radar, day, side)
 
 
 def follow_radar(rows: pd.DataFrame, anchors: tuple, pinned: tuple) -> tuple:
@@ -586,24 +550,6 @@ def follow_radar(rows: pd.DataFrame, anchors: tuple, pinned: tuple) -> tuple:
             if pinned[i] is None:
                 out[i] = of_pass(parse_row_id(pinned[1 - i])[0], i) or near(radar, i)[0]
     return tuple(out)
-
-
-def report_images(rows: pd.DataFrame, before_id, after_id) -> Optional[dict]:
-    """The row ids a report shows when a pick is radar, ``None`` when neither is.
-
-    ``{"optical": (before, after), "radar": (before, after)}``: the optical
-    figures take each side's pick when optical, else its ``report_optical``;
-    the radar block takes each radar pick, and on an optical side the
-    ``radar_partner`` of the other pick's pass. ``None`` inside: nothing found.
-    """
-    picks = {"before": before_id, "after": after_id}
-    source = {side: parse_row_id(rid)[0] for side, rid in picks.items()}
-    if not any(is_radar(s) for s in source.values()):
-        return None
-    other = {"before": "after", "after": "before"}
-    radar = tuple(picks[s] if is_radar(source[s]) else radar_partner(rows, picks[s], s, source[other[s]])
-                  for s in ("before", "after"))
-    return {"optical": tuple(report_optical(rows, picks[s], s) for s in ("before", "after")), "radar": radar}
 
 
 def gif_frames(rows: pd.DataFrame, before_id, after_id, n: int = 2) -> pd.DataFrame:

@@ -5,6 +5,7 @@ widgets: ``export.build_export`` runs ``build_alert_files`` on a worker.
 """
 
 import logging
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -18,7 +19,6 @@ from deforestation_alerts.project.review_groups import group_record
 from deforestation_alerts.project.review_status import CONFIRMED, VERDICT_LABEL_KEYS, is_reviewed
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts import local_files
-from deforestation_alerts.scripts.image_sources import is_radar
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import add_files_to_zip
 from deforestation_alerts.scripts.report_builder import generate_deforestation_report_with_word_template
@@ -88,11 +88,6 @@ def images_picked(alert) -> bool:
                                        alert.before_image, alert.after_image))
 
 
-def optical_pair(alert) -> bool:
-    """Neither pick is a radar image (Planet counts as optical; the CNN takes it today)."""
-    return not any(is_radar(i[0]) for i in (alert.before_info, alert.after_info))
-
-
 def review_placeholders(question_list, row, status) -> dict:
     """``{verdict}`` and one ``{key}`` per question, as the report shows them
     (in the current language; a question the verdict does not ask is blank)."""
@@ -112,11 +107,20 @@ def saved_status(alerts, alert_id) -> Optional[str]:
     return value if isinstance(value, str) and is_reviewed(value) else None
 
 
-def picks_are_saved(alerts, alert_id, before_info, after_info) -> bool:
+def _empty(value) -> bool:
+    return value is None or value == "" or (isinstance(value, float) and math.isnan(value))
+
+
+def picks_are_saved(alerts, alert_id, before_info, after_info, radar_saved=None) -> bool:
     """Whether the pair on screen is the pair the alert's row was saved with
     (``before_img`` / ``after_img`` hold the picks' ``info[3]``). A GIF
     animates the reviewed pair only (spec D9): a new, unsaved pick is not it.
-    A missing column or value is no match."""
+    A missing column or value is no match.
+
+    ``radar_saved`` (``review_save.radar_updates`` of the radar pair on
+    screen) is what a save would write into the radar columns: each of its
+    names must be the row's (None, NaN and "" alike are empty). A side it
+    leaves out (no radar info) is not compared."""
     if before_info is None or after_info is None:
         return False
     if alerts is None or alert_id is None or not 0 <= alert_id < len(alerts):
@@ -125,18 +129,25 @@ def picks_are_saved(alerts, alert_id, before_info, after_info) -> bool:
     saved = [row.get("before_img"), row.get("after_img")]
     if not all(isinstance(value, str) for value in saved):
         return False
-    return [before_info[3], after_info[3]] == saved
+    if [before_info[3], after_info[3]] != saved:
+        return False
+    # the names only: a millis column may come back from the store as a float
+    for key, value in (radar_saved or {}).items():
+        stored = row.get(key)
+        if key.endswith("_img") and not (_empty(value) and _empty(stored) or value == stored):
+            return False
+    return True
 
 
-def gif_allowed(alerts, alert_id, before_info, after_info) -> bool:
+def gif_allowed(alerts, alert_id, before_info, after_info, radar_saved=None) -> bool:
     """A GIF is made for a true alert on its reviewed pair (spec D9): the
     row's stored status is Confirmed and both picks are the pair it was saved
     with. The Timelapse tile and the zip build share this rule."""
     return (saved_status(alerts, alert_id) == CONFIRMED
-            and picks_are_saved(alerts, alert_id, before_info, after_info))
+            and picks_are_saved(alerts, alert_id, before_info, after_info, radar_saved))
 
 
-def build_alert_files(alert, folder, template=None, *, task=None, gif=None, report=None):
+def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
     """Build one alert's files (the OLD ``download_data``; IO only, no widgets).
 
     Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
@@ -165,10 +176,9 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None, repo
     leaves the zip without it and says so in the result: ``"gif_path"`` when
     one was made, ``"gif_warning": True`` when one was asked for and failed.
 
-    ``report`` (``report_images.capture_report_images``, taken at the click)
-    is set when a pick is radar: the optical composite is then built from the
-    optical stand-ins, a radar composite joins it in the zip, and the report
-    gets its radar block (report radar spec).
+    The composite is the optical pair's. With a radar pair on screen at the
+    click (``alert``'s radar infos), its composite joins it in the zip and the
+    report gets its radar block (``report_images.stage_report_images``).
     """
     alertas_gdf = alert.alerts
     actual_alert_id = alert.alert_id
@@ -251,11 +261,8 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None, repo
         on_tiles = tile_progress_reporter(task) if task is not None else None
         area = getattr(alert, "image_area", "normal")
         with geedim_tile_progress(on_tiles):
-            if report is None:
-                image_local, radar_local, missing, image_text = (
-                    stage_alert_image(folder, actual_alert_id, *picked, alert.grid, area), None, {}, {})
-            else:
-                image_local, radar_local, missing, image_text = stage_report_images(report, alert, folder, area)
+            image_local = stage_alert_image(folder, actual_alert_id, *picked, alert.grid, area)
+            radar_local, missing, image_text = stage_report_images(alert, folder, area)
         if task is not None:
             task.set_progress(None)  # zip + report: back to indeterminate
 
@@ -284,7 +291,7 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None, repo
         # Word report: the project's template (a file of the user's, read
         # where it is) or the packaged default, resolved above.
         generate_deforestation_report_with_word_template(
-            None if image_local is None else str(image_local), str(gpkg_local), str(template), str(report_dest),
+            str(image_local), str(gpkg_local), str(template), str(report_dest),
             # The stored row is what the report describes: a build follows a save.
             extra={**review_placeholders(alert.questions or [], selected_element, selected_element.get("status")),
                    **image_text},

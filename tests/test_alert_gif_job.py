@@ -202,21 +202,17 @@ RADAR_ROWS = [(S2, "2026-03-05", 5.0), (S1A, "2026-04-05", None), (S2, "2026-04-
               (S2, "2026-09-20", 5.0), (S2, "2026-10-05", 5.0)]
 
 
-def test_a_gif_with_a_radar_pick_has_only_optical_frames():
-    frames = gif_mod.plan_frames(_tables(RADAR_ROWS), BBOX, _info(S1A, "2026-04-05"), _info(S2, "2026-09-20"),
-                                 frozenset(scene_index.SOURCE_CODE), 40.0)
-    assert frames and not any(f.source.startswith("Sentinel 1") for f in frames)
-    stand_in = next(f for f in frames if f.day == date(2026, 3, 5))  # the optical row before the radar pick
-    assert stand_in.role == ""
-    assert [f.role for f in frames].count("after") == 1
-
-
-def test_a_radar_pick_with_no_optical_neighbour_is_refused():
-    rows = [(S1A, "2026-04-05", None), (S1A, "2026-09-05", None)]
-    app_state, widgets, analysis = _ui(rows=rows, filt=(frozenset(scene_index.SOURCE_CODE), 40.0))
-    with pytest.raises(gif_mod.GifRefused) as err:
-        gif_mod.capture_gif(app_state, widgets, analysis, _alert(_info(S1A, "2026-04-05"), _info(S1A, "2026-09-05")))
-    assert err.value.key == "analysis_tile.export_labels.gif_no_optical"
+def test_the_gif_and_the_model_use_the_optical_pair_whatever_the_radar_picks():
+    """The radar picks are their own pair: the GIF animates the optical one,
+    and no radar row is ever a frame."""
+    app_state, widgets, analysis = _ui(rows=RADAR_ROWS, filt=(frozenset(scene_index.SOURCE_CODE), 40.0))
+    alert = _alert(_info(S2, "2026-04-20"), _info(S2, "2026-09-20"))
+    alert.before_radar_info, alert.after_radar_info = _info(S1A, "2026-04-05"), _info(S1A, "2026-09-05")
+    alert.radar_pinned = {"before": True, "after": True}
+    job = gif_mod.capture_gif(app_state, widgets, analysis, alert)
+    assert not any(f.source == S1A for f in job.frames)
+    assert [(f.day.isoformat(), f.role) for f in job.frames if f.role] == [("2026-04-20", "before"),
+                                                                          ("2026-09-20", "after")]
 
 
 def test_a_planet_pick_stays_a_frame_with_its_role():

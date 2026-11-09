@@ -1068,26 +1068,6 @@ def test_a_zip_build_with_nothing_to_animate_still_offers_the_files_and_says_so(
         "Pick a before and an after image on the timeline."]
 
 
-def test_a_radar_pick_with_no_optical_neighbour_says_why_in_the_zip_warning(tmp_path, monkeypatch):
-    from gui.tile.analysis import gif as gif_mod
-
-    notifier = _Toasts()
-    harness = _gif_harness(tmp_path, monkeypatch)
-    monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
-
-    def _refuse(*a, **k):
-        raise gif_mod.GifRefused(key="analysis_tile.export_labels.gif_no_optical")
-
-    monkeypatch.setattr(gif_mod, "capture_gif", _refuse)
-    monkeypatch.setattr(export_mod, "_download_data", lambda *a, **k: {
-        "zip_path": str(tmp_path / "alert_0.zip"), "report_path": str(tmp_path / "alert_0.docx")})
-    _status(harness, "Confirmed")
-    harness.save()
-    harness.build()
-    assert len(notifier.warnings) == 1
-    assert notifier.warnings[0].endswith("No optical images around the Sentinel-1 pick to animate.")
-
-
 def test_the_timelapse_row_follows_the_saved_pair(tmp_path, monkeypatch):
     """Spec D9: the GIF animates the reviewed pair only. Another pick after
     the Confirmed save means no GIF in the build; picking the saved pair back
@@ -1266,3 +1246,71 @@ def test_a_switch_while_a_build_runs_rewords_the_row_and_holds_it(tmp_path, monk
         assert harness.gif_tile.path is not None
     finally:
         set_locale("en")
+
+
+# ---------------------------------------------------------------------------
+# The radar pair (optical + radar picks spec): the files use both pairs as picked
+# ---------------------------------------------------------------------------
+_RADAR_B = ["Sentinel 1 ascending", 1700000000, "N/A", "Sentinel 1 ascending 2024-01-01 ", "_010124"]
+_RADAR_A = ["Sentinel 1 ascending", 1700000001, "N/A", "Sentinel 1 ascending 2024-02-02 ", "_020224"]
+_RADAR_TIF = "alert_0_a_010124_a_020224.tif"
+
+
+def _report_text(path):
+    from tests.test_report_builder import _report_text as text
+
+    return text(path)
+
+
+def test_with_radar_the_zip_has_both_tifs_and_the_report_its_radar_block(download_ctx):
+    ctx = download_ctx
+    ctx.analysis.before_radar_image.set(object())
+    ctx.analysis.after_radar_image.set(object())
+    ctx.analysis.before_radar_info.set(_RADAR_B)
+    ctx.analysis.after_radar_info.set(_RADAR_A)
+    ctx.analysis.radar_pinned.set({"before": True, "after": False})
+    _run(ctx)
+    assert sorted(zipfile.ZipFile(ctx.folder / "alert_0.zip").namelist()) == sorted(
+        [_TIF_NAME, _RADAR_TIF, "alert_0.gpkg"])
+    text = _report_text(ctx.folder / "alert_0.docx")
+    assert "Radar evidence" in text
+    assert "Sentinel 1 ascending 2024-02-02 (nearest radar image)" in text
+
+
+def test_without_radar_the_report_has_no_radar_block_and_the_zip_one_tif(download_ctx):
+    """The timeline unpublishes a radar side by its info and leaves its last
+    ee.Image behind: stale radar images with no radar info are no radar pair."""
+    ctx = download_ctx
+    ctx.analysis.before_radar_image.set(object())
+    ctx.analysis.after_radar_image.set(object())
+    _run(ctx)
+    assert sorted(zipfile.ZipFile(ctx.folder / "alert_0.zip").namelist()) == sorted([_TIF_NAME, "alert_0.gpkg"])
+    assert "Radar evidence" not in _report_text(ctx.folder / "alert_0.docx")
+
+
+def test_turning_radar_on_after_a_save_keeps_the_files_buildable(tmp_path, monkeypatch):
+    """Saved before the radar lane was shown: the row's radar columns are
+    empty, and a following radar pair is what a save would write there."""
+    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed")
+    harness.analysis.before_radar_info.set(_RADAR_B)
+    harness.analysis.after_radar_info.set(_RADAR_A)
+    assert not harness.build_tile.disabled
+    assert _gif_detail(harness) == "Animated GIF"
+    assert alert_files.picks_are_saved(harness.app_state.alerts_gdf.value, 0, _BEFORE_INFO, _AFTER_INFO,
+                                       {"before_radar_img": None, "after_radar_img": None})
+
+
+def test_an_unsaved_radar_pin_holds_the_build(tmp_path, monkeypatch):
+    harness = _gif_harness(tmp_path, monkeypatch, status="Confirmed")
+    harness.analysis.radar_pinned.set({"before": False, "after": True})
+    harness.analysis.after_radar_info.set(_RADAR_A)
+    assert harness.build_tile.disabled
+    assert _gif_detail(harness) != "Animated GIF"
+    gdf = harness.app_state.alerts_gdf.value
+    gdf["after_radar_img"] = _RADAR_A[3]  # what the save of that pin writes
+    harness.analysis.dirty.set(True)  # two redraws
+    harness.analysis.dirty.set(False)
+    assert not harness.build_tile.disabled
+    # ...and a row pin the screen does not show (following now) is unsaved too
+    assert not alert_files.picks_are_saved(gdf, 0, _BEFORE_INFO, _AFTER_INFO,
+                                           {"after_radar_img": None, "after_radar_img_info": None})

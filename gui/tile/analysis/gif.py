@@ -19,7 +19,7 @@ from shapely.geometry.base import BaseGeometry
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.review_groups import group_shape
 from deforestation_alerts.scripts import alert_gif, local_files, scene_query
-from deforestation_alerts.scripts.image_sources import dated_optical, is_radar
+from deforestation_alerts.scripts.image_sources import dated_optical
 from deforestation_alerts.scripts.scene_index import SOURCE_CODE
 from gui.i18n import t
 from gui.tile.analysis import imagery
@@ -69,16 +69,10 @@ def plan_frames(tables, bbox, before_info, after_info, sources, max_cloud, area_
     days = [scene_query.parse_row_id(rid)[1] for rid in (before_id, after_id)]
     rows = scene_query.scenes_for(tables, bbox, scene_query.shift_months(min(days), -_REACH_MONTHS),
                                   scene_query.shift_months(max(days), _REACH_MONTHS), max_cloud=max_cloud)
-    # a radar pick animates as its nearest optical neighbour (nothing radar is ever a frame)
-    anchors = [scene_query.optical_anchor(rows, rid, side) for rid, side in ((before_id, "before"), (after_id, "after"))]
-    if None in anchors:
-        return []
+    # the picks are the optical pair; nothing radar is ever a frame
     keep = rows["source"].isin(sources) & rows["source"].map(dated_optical).astype(bool)
-    rows = rows[keep | rows["id"].isin(anchors)]
-    chosen = scene_query.gif_frames(rows, *anchors)
-    for side, rid, anchor in (("before", before_id, anchors[0]), ("after", after_id, anchors[1])):
-        if rid != anchor:  # the stand-in is not the reviewer's pick
-            chosen.loc[chosen["role"] == side, "role"] = ""
+    rows = rows[keep | rows["id"].isin([before_id, after_id])]
+    chosen = scene_query.gif_frames(rows, before_id, after_id)
     return [Frame(row["source"], row["date"].date(),
                   tuple(scene_query.granule_keys(tables, area_bbox or bbox, row["source"], row["date"])),
                   row["role"])
@@ -114,8 +108,7 @@ def capture_gif(app_state, widgets, analysis, alert) -> GifJob:
     frames = plan_frames(app_state.scene_index.value, ctx.get("bbox"), alert.before_info, alert.after_info,
                          sources, max_cloud, area_bbox=ctx.get("area_bbox"))
     if len(frames) < 2:
-        radar = any(is_radar(scene_query.parse_row_id(r)[0]) for r in (before_id, after_id))
-        raise GifRefused(key="analysis_tile.export_labels.gif_no_optical") if radar else no_images
+        raise no_images
     detect = ctx.get("date_min") or scene_query.parse_row_id(after_id)[1]
     return GifJob(frames=tuple(frames), grid=alert.grid, outline=_outline_of(alert.alerts, alert.alert_id),
                   detect_date=detect, alert_id=alert.alert_id, before_info=list(alert.before_info),
