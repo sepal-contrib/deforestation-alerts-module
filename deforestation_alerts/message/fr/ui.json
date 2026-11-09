@@ -419,7 +419,7 @@
       "report_template_bad": "{path} n'est pas un fichier Word (.docx) de votre dossier SEPAL ; le modèle de rapport n'a pas été changé.",
       "report_template_missing": "Le modèle de rapport {path} a disparu. Choisissez-le à nouveau à l'étape Questionnaire, ou videz le champ pour utiliser le modèle par défaut.",
       "gif_no_images": "L'index d'images n'a pas d'image avant et d'image après pour cette alerte : il n'y a rien à animer. Choisissez une image avant et une image après sur la frise.",
-      "gif_no_optical": "Aucune image optique autour de l'image Sentinel-1 choisie à animer.",
+      "gif_no_optical": "Aucune image optique proche de l'image Sentinel-1 choisie pour créer l'animation.",
       "gif_same_image": "Les images avant et après sont la même image : le GIF ne montrerait aucun changement. Choisissez deux images différentes sur la frise.",
       "gif_too_few": "Moins de deux images ont pu être rendues pour cette alerte : aucun GIF n'a été créé.",
       "gif_hint": "Enregistrez-la comme alerte réelle, avec les images affichées, pour le créer",

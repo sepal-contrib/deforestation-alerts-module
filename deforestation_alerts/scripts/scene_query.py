@@ -475,11 +475,11 @@ def granule_keys(tables, bbox, source: str, day) -> list[str]:
 
 
 def optical_anchor(rows: pd.DataFrame, rid, side: str) -> Optional[str]:
-    """``rid`` if it is a dated optical row, else the visible dated optical row
-    nearest it on its ``side`` ("before": latest on or before its date;
-    "after": earliest on or after it), else ``None``."""
+    """``rid`` if it is an optical row (a Planet pick stays a frame), else the
+    visible dated optical row nearest it on its ``side`` ("before": latest on
+    or before its date; "after": earliest on or after it), else ``None``."""
     source, day = parse_row_id(rid)
-    if dated_optical(source):
+    if source in SOURCES and SOURCES[source].optical:
         return rid
     ok = rows[rows["source"].map(dated_optical).astype(bool) & ~rows["hidden"].astype(bool)]
     if side == "before":

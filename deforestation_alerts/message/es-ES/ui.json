@@ -419,7 +419,7 @@
       "report_template_bad": "{path} no es un archivo Word (.docx) de tu carpeta de SEPAL; no se cambió la plantilla de informe.",
       "report_template_missing": "La plantilla del informe {path} ya no existe. Vuelve a elegirla en el paso Cuestionario o vacía el campo para usar la plantilla por defecto.",
       "gif_no_images": "El índice de imágenes no tiene una imagen anterior y una posterior para esta alerta, así que no hay nada que animar. Elija una imagen anterior y una posterior en la línea de tiempo.",
-      "gif_no_optical": "No hay imágenes ópticas alrededor de la imagen de Sentinel-1 elegida para animar.",
+      "gif_no_optical": "No hay imágenes ópticas cerca de la imagen de Sentinel-1 elegida para crear la animación.",
       "gif_same_image": "Las imágenes anterior y posterior son la misma imagen, así que el GIF no mostraría ningún cambio. Elija dos imágenes distintas en la línea de tiempo.",
       "gif_too_few": "Se pudieron generar menos de dos imágenes para esta alerta, así que no se creó el GIF.",
       "gif_hint": "Guárdela como alerta verdadera, con las imágenes que se muestran, para crearlo",

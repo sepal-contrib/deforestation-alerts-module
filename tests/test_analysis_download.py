@@ -1063,7 +1063,29 @@ def test_a_zip_build_with_nothing_to_animate_still_offers_the_files_and_says_so(
     assert passed["gif"] is None
     assert not harness.download_btns[0].disabled and harness.gif_tile.path is None
     assert notifier.warnings == [
-        "The alert files are ready, but the GIF could not be made, so the zip has no GIF."]
+        "The alert files are ready, but the GIF could not be made, so the zip has no GIF. "
+        "The image index has no before and after image for this alert, so there is nothing to animate. "
+        "Pick a before and an after image on the timeline."]
+
+
+def test_a_radar_pick_with_no_optical_neighbour_says_why_in_the_zip_warning(tmp_path, monkeypatch):
+    from gui.tile.analysis import gif as gif_mod
+
+    notifier = _Toasts()
+    harness = _gif_harness(tmp_path, monkeypatch)
+    monkeypatch.setattr(export_mod, "current_notifier", lambda: notifier)
+
+    def _refuse(*a, **k):
+        raise gif_mod.GifRefused(key="analysis_tile.export_labels.gif_no_optical")
+
+    monkeypatch.setattr(gif_mod, "capture_gif", _refuse)
+    monkeypatch.setattr(export_mod, "_download_data", lambda *a, **k: {
+        "zip_path": str(tmp_path / "alert_0.zip"), "report_path": str(tmp_path / "alert_0.docx")})
+    _status(harness, "Confirmed")
+    harness.save()
+    harness.build()
+    assert len(notifier.warnings) == 1
+    assert notifier.warnings[0].endswith("No optical images around the Sentinel-1 pick to animate.")
 
 
 def test_the_timelapse_row_follows_the_saved_pair(tmp_path, monkeypatch):

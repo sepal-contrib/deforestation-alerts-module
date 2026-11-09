@@ -217,3 +217,9 @@ def test_a_radar_pick_with_no_optical_neighbour_is_refused():
     with pytest.raises(gif_mod.GifRefused) as err:
         gif_mod.capture_gif(app_state, widgets, analysis, _alert(_info(S1A, "2026-04-05"), _info(S1A, "2026-09-05")))
     assert err.value.key == "analysis_tile.export_labels.gif_no_optical"
+
+
+def test_a_planet_pick_stays_a_frame_with_its_role():
+    frames = gif_mod.plan_frames(_tables(ROWS), BBOX, _info(PL, "2026-10-01"), _info(S2, "2026-11-05"),
+                                 frozenset({S2, LS}), 40.0)
+    assert (PL, "before") in [(f.source, f.role) for f in frames]

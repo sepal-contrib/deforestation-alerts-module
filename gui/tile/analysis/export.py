@@ -732,7 +732,7 @@ def build_export(
         # saved pair. A Confirmed alert whose pair on screen is not the saved
         # one gets no GIF, and is told so after the build, like nothing to
         # animate.
-        gif_job, gif_skipped = None, False
+        gif_job, gif_skipped, gif_why = None, False, ""
         # A capture that fails for any other reason costs the GIF too, never
         # the build: escaping here would leave the build button spinning with
         # no worker started.
@@ -741,8 +741,8 @@ def build_export(
         else:
             try:
                 gif_job = gif_mod.capture_gif(app_state, widgets, analysis, alert)
-            except gif_mod.GifRefused:
-                gif_skipped = True
+            except gif_mod.GifRefused as exc:
+                gif_skipped, gif_why = True, " " + t(exc.key)  # say why, not only that
             except Exception:  # noqa: BLE001 - logged; the zip is built without the GIF
                 logger.exception("Analysis: the GIF for the zip could not be captured")
                 gif_skipped = True
@@ -796,7 +796,7 @@ def build_export(
         def _built(notifier):
             notifier.success(t("analysis_tile.export_labels.download_done"))
             if gif_skipped or result.get("gif_warning"):
-                notifier.warning(t("analysis_tile.export_labels.gif_zip_skipped"))
+                notifier.warning(t("analysis_tile.export_labels.gif_zip_skipped") + gif_why)
 
         def _release():
             building["on"] = False
