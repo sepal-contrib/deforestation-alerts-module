@@ -743,6 +743,7 @@ def _fake_state(index="default", rows=None):
         scene_index_retry=solara.reactive(0),
         scene_window_request=solara.reactive(None),
         session_sources=solara.reactive(None),
+        scene_radar_error=solara.reactive(None),
     )
 
     def update_project(name, fn):  # ``StateManager.update_project``, without the lock
@@ -1321,6 +1322,21 @@ def test_a_saved_radar_pick_turns_radar_on_and_waits_for_its_coverage():
     state.scene_manifest.set(covered)
     strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
     assert strip.after["id"] == "a20260827"
+
+
+def test_a_saved_radar_pick_stops_waiting_once_the_radar_fetch_failed():
+    """A failed radar backfill (``scene_radar_error``) answers for radar the
+    way a failed index answers for everything: the pick falls back."""
+    state = _fake_state(index=_any_index(_FOUR))
+    state.scene_manifest.set(_covering())  # optical answered, radar not indexed
+    widgets = _fake_widgets(saved_after="Sentinel 1 ascending 2026-08-27 ")
+    card = timeline.build_timeline(state, _fake_analysis(), widgets)
+    strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
+    assert strip.after is None  # waiting for radar
+
+    state.scene_radar_error.set("radar boom")
+    assert strip.after is not None and strip.after["id"] != "a20260827"
+    assert state.scene_index_error.value is None
 
 
 def test_with_every_source_off_the_strip_says_so_rather_than_claiming_no_images():

@@ -414,8 +414,9 @@ def SceneIndexLoader(app_state, gee_interface):
         """The Sentinel-1 rows ``covered`` holds no radar for, a chunk at a
         time from the radar edge (from the recent end when there is none).
 
-        A failure is logged and toasted but not written to
-        ``scene_index_error``: the optical index answers as it is.
+        A failure is logged, toasted and written to ``scene_radar_error``,
+        not ``scene_index_error``: the optical index answers as it is, and a
+        radar pick stops waiting. The next radar step that lands clears it.
         """
         if not radar_on or manifest is None:
             return
@@ -423,6 +424,7 @@ def SceneIndexLoader(app_state, gee_interface):
             for _ in range((manifest.covered.end - manifest.covered.start).days // 28 + 4):
                 side = scene_query.radar_backfill(manifest)
                 if side is None:
+                    _publish(app_state.scene_radar_error, None)
                     return
                 # with no radar yet ``covered`` is the anchor: ``_one_step``
                 # then cuts from the recent end, like a rebuild
@@ -432,13 +434,18 @@ def SceneIndexLoader(app_state, gee_interface):
                 manifest = await _fetch(window, "radar", optical=False)
                 if manifest is None:
                     return
+                _publish(app_state.scene_radar_error, None)
+            logger.info("Sentinel-1 rows of %s: backfill stopped at its bound", name)
         except Exception as exc:  # noqa: BLE001
             message = error_text(exc)
             logger.warning("Sentinel-1 rows of %s not fetched: %s", name, message, exc_info=True)
+            _publish(app_state.scene_radar_error, message)
             notifications.error(t("imagery.index_failed", error=message))
 
     # ---- the index on disk, then the foreground window
     async def _load():
+        # a radar failure belongs to the run that hit it (and its project)
+        _publish(app_state.scene_radar_error, None)
         if name is None or digest is None or fg is None:
             _publish(app_state.scene_index, None)
             _publish(app_state.scene_manifest, None)

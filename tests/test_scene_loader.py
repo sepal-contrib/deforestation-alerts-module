@@ -1315,3 +1315,70 @@ def test_a_review_copy_fetches_radar_from_the_session_choice(data_root, monkeypa
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_failed_radar_backfill_is_toasted_and_recorded_apart_from_the_index(
+        data_root, monkeypatch, no_planet, local_aoi):
+    """The optical index answers as it is (no ``scene_index_error``), but the
+    failure is recorded (``scene_radar_error``) so a saved Sentinel-1 pick
+    stops waiting; the next radar step that lands clears it."""
+    pdir = paths.project_dir("sl")
+    covered = (date(2026, 3, 1), date(2026, 10, 2))
+    scene_cache.store_chunk(pdir, scene_index.parse_scenes(RAW), covered, "d1",
+                            now=datetime.now(timezone.utc))
+    failing = [True]
+
+    def scene_request(aoi, s, e, **kwargs):
+        return "RADAR" if kwargs.get("radar") else "SCENES"
+
+    async def get_info_async(obj):
+        if obj == "RADAR" and failing[0]:
+            raise RuntimeError("radar boom")
+        return EMPTY_RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", scene_request)
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    state.load_project_state(_with_period(_p()).model_copy(update={"image_sources": ["Sentinel 1"]}))
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_radar_error.value is not None)
+            assert any("radar boom" in m for m in _toasts("error"))
+            assert state.scene_index_error.value is None
+            assert state.scene_index.value is not None
+
+            failing[0] = False
+            state.scene_index_retry.set(state.scene_index_retry.value + 1)
+            assert await _settle(lambda: state.scene_manifest.value.radar == _covered(*covered))
+            assert state.scene_radar_error.value is None
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_radar_backfill_that_hits_its_bound_says_so(data_root, monkeypatch, no_planet, local_aoi, caplog):
+    pdir = paths.project_dir("sl")
+    scene_cache.store_chunk(pdir, scene_index.parse_scenes(RAW), (date(2026, 3, 1), date(2026, 10, 2)), "d1",
+                            now=datetime.now(timezone.utc))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
+    monkeypatch.setattr(sl.scene_query, "radar_backfill", lambda manifest: (manifest.covered.start, manifest.covered.end))
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+
+    async def get_info_async(obj):
+        return EMPTY_RAW
+
+    state = AppState()
+    state.load_project_state(_with_period(_p()).model_copy(update={"image_sources": ["Sentinel 1"]}))
+    caplog.set_level(logging.INFO, logger=sl.logger.name)
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: "backfill stopped at its bound" in caplog.text)
+        finally:
+            rc.close()
+
+    asyncio.run(main())

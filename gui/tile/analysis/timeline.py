@@ -1217,7 +1217,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         """Whether the index has answered for ``source`` on ``day``, so a row
         it does not hold is gone rather than not fetched yet (spec D4). Radar
         has its own span, ``None`` until the loader has fetched it."""
-        if app_state.scene_index_error.value:
+        if app_state.scene_index_error.value or (app_state.scene_radar_error.value
+                                                  and not SOURCES[source].optical):
             return True
         manifest = app_state.scene_manifest.value
         if manifest is None or app_state.scene_index.value is None or app_state.scene_index_pending.value:
@@ -1555,7 +1556,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     ])
 
     for reactive in (app_state.scene_index, app_state.scene_manifest, app_state.scene_index_error,
-                     app_state.scene_index_pending, widgets.imagery_ctx, analysis.parent_windows):
+                     app_state.scene_radar_error, app_state.scene_index_pending, widgets.imagery_ctx, analysis.parent_windows):
         reactive.subscribe(render)
     _publish_filter()
     render()

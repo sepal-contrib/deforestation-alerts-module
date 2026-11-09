@@ -86,6 +86,9 @@ class AppState:
         self.scene_manifest = solara.reactive(None, equals=lambda a, b: a is b)
         self.scene_index_pending = solara.reactive(False)
         self.scene_index_error = solara.reactive(None)
+        # The Sentinel-1 backfill's failure, apart from ``scene_index_error``:
+        # the optical index still answers, but a radar pick stops waiting
+        self.scene_radar_error = solara.reactive(None)
         self.scene_index_retry = solara.reactive(0)  # the timeline's "Try again" bumps it
         # The window the strip is showing for the alert on screen, published by
         # its "+1 month" buttons and replaced -- not accumulated -- when
