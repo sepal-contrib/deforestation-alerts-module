@@ -358,3 +358,18 @@ def test_a_radar_chunk_widens_radar_coverage_only_with_radar(data_root):
     _, manifest = scene_cache.store_chunk(
         pdir, july, (date(2026, 7, 1), date(2026, 7, 31)), "d1", now=NOW, replace=True)
     assert manifest.radar is None
+
+
+def test_a_radar_only_chunk_keeps_the_optical_refresh_time(data_root):
+    """A radar-only backfill fetched no optical rows, so it must not make a
+    stale optical index look fresh (the 24 h tail refresh, "Index from")."""
+    pdir = paths.project_dir("p")
+    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+    later = NOW + timedelta(days=3)
+    radar_rows = _tables([])
+    _, manifest = scene_cache.store_chunk(
+        pdir, radar_rows, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=later, radar=True, optical=False)
+    assert manifest.refreshed == NOW
+    assert manifest.radar == scene_index.Coverage(start=date(2026, 5, 1), end=date(2026, 5, 31))
+    _, manifest = scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=later)
+    assert manifest.refreshed == later

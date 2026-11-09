@@ -145,6 +145,7 @@ def merge_tables(old: SceneTables, new: SceneTables) -> SceneTables:
 def store_chunk(
     pdir, new_tables: SceneTables, window: tuple[date, date], digest: str, *, now: datetime,
     planet: Optional[PlanetState] = None, replace: bool = False, radar: bool = False,
+    optical: bool = True,
 ) -> tuple[SceneTables, SceneManifest]:
     """Merge one fetched window into the index on disk and return the result.
 
@@ -164,6 +165,10 @@ def store_chunk(
     claim radar months nobody fetched, so a disjoint window leaves it as it
     was (the loader's backfill fetches the gap). Without ``radar`` it is kept;
     a rebuild drops it.
+
+    ``optical=False`` says the chunk fetched no optical rows (a radar-only
+    backfill): ``refreshed`` keeps its old time, so a stale optical index
+    still gets its tail refresh and still reads as old.
     """
     with _lock_for(pdir):
         old, old_manifest = read_index(pdir)
@@ -207,7 +212,8 @@ def store_chunk(
         elif radar and window[0] - kept_radar.end <= day and kept_radar.start - window[1] <= day:
             kept_radar = Coverage(start=min(kept_radar.start, window[0]), end=max(kept_radar.end, window[1]))
         manifest = SceneManifest(
-            aoi_digest=digest, refreshed=now, covered=covered, counts=counts,
+            aoi_digest=digest, covered=covered, counts=counts,
+            refreshed=now if optical or replace or old is None or stale else old_manifest.refreshed,
             planet=planet or kept or PlanetState(), radar=kept_radar,
         )
         write_index(pdir, tables, manifest)

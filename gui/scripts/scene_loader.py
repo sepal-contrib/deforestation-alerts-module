@@ -360,6 +360,7 @@ def SceneIndexLoader(app_state, gee_interface):
             merged, manifest = await to_thread_in_context(
                 scene_cache.store_chunk, pdir, tables, window, digest, planet=planet,
                 now=datetime.now(timezone.utc), replace=(mode == "rebuild"), radar=radar_on,
+                optical=optical,
             )
         if not _still_current():
             return None
