@@ -200,6 +200,7 @@
       "sources_button": "Image sources",
       "group_optical": "Optical",
       "group_radar": "Radar",
+      "follow_optical": "Follow optical",
       "over_cloud": "{n} over cloud limit",
       "planet_no_access": "No access with this account",
       "radar_no_cloud": "Radar sees through clouds and has no cloud figure, so the cloud limit never hides it.",

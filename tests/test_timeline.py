@@ -257,20 +257,23 @@ def test_two_passes_on_one_day_are_two_rows_in_two_bands():
     assert timeline.same_day_alternative(sel, "d20260610") == "a20260610"
 
 
-def test_a_radar_and_an_optical_image_of_one_day_offer_each_other():
-    sel = _sel([(S2, "2026-06-10", 5.0), (S1A, "2026-06-10", float("nan"))])
-    assert timeline.same_day_alternative(sel, "s20260610") == "a20260610"
-    assert timeline.same_day_alternative(sel, "a20260610") == "s20260610"
+def test_the_same_day_swap_stays_within_its_kind():
+    """An optical pick and a radar image of one day sit in two lanes now:
+    the swap never crosses between them, while the two passes still do."""
+    sel = _sel([(S2, "2026-06-10", 5.0), (S1A, "2026-06-10", float("nan")),
+                (S1D, "2026-06-10", float("nan"))])
+    assert timeline.same_day_alternative(sel, "s20260610") is None
+    assert timeline.same_day_alternative(sel, "a20260610") == "d20260610"
+    assert timeline.same_day_alternative(sel, "d20260610") == "a20260610"
 
 
 def test_three_images_of_one_day_cycle_in_rank_order():
-    """S2, both passes on one day: the map title walks every one of them in
-    turn, wrapping round, so the second pass is reachable too."""
-    sel = _sel([(S1D, "2026-06-10", float("nan")), (S2, "2026-06-10", 5.0),
-                (S1A, "2026-06-10", float("nan"))])
-    assert timeline.same_day_alternative(sel, "s20260610") == "a20260610"
-    assert timeline.same_day_alternative(sel, "a20260610") == "d20260610"
-    assert timeline.same_day_alternative(sel, "d20260610") == "s20260610"
+    """S2, Landsat and a pass on one day: the optical title walks S2 and
+    Landsat in turn, wrapping round; the radar image is not one of them."""
+    sel = _sel([(S1D, "2026-06-10", float("nan")), (LS, "2026-06-10", 5.0), (S2, "2026-06-10", 5.0)])
+    assert timeline.same_day_alternative(sel, "s20260610") == "l20260610"
+    assert timeline.same_day_alternative(sel, "l20260610") == "s20260610"
+    assert timeline.same_day_alternative(sel, "d20260610") is None
 
 
 def test_each_collection_keeps_its_own_band_height_on_the_stripe():
@@ -836,12 +839,18 @@ def _bar_width(row, *, selected: bool) -> float:
 
 
 def _count_stripes(card) -> int:
-    """The stripes in the lane: one per drawn row, whatever its label says."""
-    return sum(1 for w in _walk(_lane(card)) if getattr(w, "tag", None) == "button")
+    """The stripes in both lanes: one per drawn row, whatever its label says."""
+    lanes = [_lane(card), *_radar_lanes(card)]
+    return sum(1 for lane in lanes for w in _walk(lane) if getattr(w, "tag", None) == "button")
+
+
+def _radar_lanes(card) -> list:
+    """The radar lane, while it is shown: ``[]`` or ``[lane]``."""
+    return [w for w in _walk(card) if "defo-tl-radar-lane" in (getattr(w, "class_", None) or "")]
 
 
 def _lane(card):
-    """The one lane every stripe is drawn in."""
+    """The optical lane."""
     [lane] = [w for w in _walk(card)
               if (getattr(w, "style_", "") or "") == f"position: relative; height: {timeline.LANE_H}px"]
     return lane
@@ -1340,7 +1349,7 @@ def test_radar_count_stays_a_dash_while_radar_covers_only_part_of_the_view(monke
 def test_a_saved_radar_pick_turns_radar_on_and_waits_for_its_coverage():
     state = _fake_state(index=_any_index(_FOUR))
     state.scene_manifest.set(_covering())  # optical answered, radar not indexed yet
-    widgets = _fake_widgets(saved_after="Sentinel 1 ascending 2026-08-27 ")
+    widgets = _fake_widgets(saved_after_radar="Sentinel 1 ascending 2026-08-27 ")
     card = timeline.build_timeline(state, _fake_analysis(), widgets)
     assert "Sentinel 1" in state.project.value.image_sources
     assert timeline.t("analysis.timeline.saved_missing") not in _text(widgets.map_title_after)
@@ -1349,8 +1358,7 @@ def test_a_saved_radar_pick_turns_radar_on_and_waits_for_its_coverage():
     covered.radar = scene_index.Coverage(start=date(2026, 8, 1), end=date(2026, 8, 31))
     state.scene_index.set(_any_index([*_FOUR, (S1A, "2026-08-27", float("nan"))]))
     state.scene_manifest.set(covered)
-    strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
-    assert strip.after["id"] == "a20260827"
+    assert _strips(card)[1].after["id"] == "a20260827"
 
 
 def test_a_saved_radar_pick_stops_waiting_once_the_radar_fetch_failed():
@@ -1358,13 +1366,15 @@ def test_a_saved_radar_pick_stops_waiting_once_the_radar_fetch_failed():
     way a failed index answers for everything: the pick falls back."""
     state = _fake_state(index=_any_index(_FOUR))
     state.scene_manifest.set(_covering())  # optical answered, radar not indexed
-    widgets = _fake_widgets(saved_after="Sentinel 1 ascending 2026-08-27 ")
+    state.scene_index.set(_any_index([*_FOUR, (S1A, "2026-09-02", float("nan"))]))
+    widgets = _fake_widgets(saved_after_radar="Sentinel 1 ascending 2026-08-27 ")
     card = timeline.build_timeline(state, _fake_analysis(), widgets)
-    strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
+    strip = _strips(card)[1]
     assert strip.after is None  # waiting for radar
 
     state.scene_radar_error.set("radar boom")
-    assert strip.after is not None and strip.after["id"] != "a20260827"
+    # given up: the side follows the optical pick
+    assert strip.after is not None and strip.after["id"] == "a20260902"
     assert state.scene_index_error.value is None
 
 
@@ -1838,3 +1848,170 @@ def test_timeline_draws_parent_bands():
     assert bands()[0].style_.index("left:") >= 0
     analysis.parent_windows.set(())
     assert bands() == []
+
+
+# ------------------------------------------------------ the radar lane
+
+NAN = float("nan")
+#: optical picks s20260424 / l20260827 for the default alert window
+#: (2026-05-03 .. 2026-08-23); radar of both passes around them
+_MIX = [(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (S2, "2026-09-28", 5.0),
+        (S1A, "2026-04-08", NAN), (S1A, "2026-04-20", NAN), (S1D, "2026-04-22", NAN),
+        (S1A, "2026-08-30", NAN), (S1D, "2026-09-25", NAN), (S1A, "2026-10-05", NAN)]
+_WITH_S1 = ["Landsat", "Sentinel 1", "Sentinel 2"]
+
+
+def _strips(card) -> list:
+    """The optical HandleStrip, then the radar one while it is shown."""
+    return [w for w in _walk(card) if isinstance(w, HandleStrip)]
+
+
+def _pick(strip, side, rid):
+    strip._handle_event(None, {"event": "pick", "data": {"side": side, "id": rid}}, [])
+
+
+def _follow_btn(card):
+    label = timeline.t("analysis.timeline.follow_optical")
+    return next(w for w in _walk(card) if label in _text(w) and "click" in (getattr(w, "_events", None) or []))
+
+
+def _radar_build(rows=_MIX, sources=_WITH_S1, manifest=None, **ctx):
+    state = _fake_state(index=_any_index(rows))
+    if sources is not None:
+        state.project.value.image_sources = list(sources)
+    if manifest is not None:
+        state.scene_manifest.set(manifest)
+    analysis = _fake_analysis()
+    widgets = _fake_widgets(**ctx)
+    widgets.imagery_ctx.set({**widgets.imagery_ctx.value, "token": analysis.alert_token.value})
+    card = timeline.build_timeline(state, analysis, widgets)
+    return state, analysis, widgets, card
+
+
+def test_the_radar_lane_shows_only_while_sentinel_1_is_on():
+    _state, _analysis, _widgets, card = _radar_build(sources=None)
+    assert len(_strips(card)) == 1 and not _radar_lanes(card)
+    _tick(card, "Sentinel-1")
+    assert len(_strips(card)) == 2 and len(_radar_lanes(card)) == 1
+    _tick(card, "Sentinel-1")
+    assert len(_strips(card)) == 1 and not _radar_lanes(card)
+
+
+def test_radar_rows_are_drawn_in_the_radar_lane_only():
+    _state, _analysis, _widgets, card = _radar_build()
+    optical, radar = _strips(card)
+    assert not [c for c in optical.candidates if c["id"][0] in "ad"]
+    assert {c["id"][0] for c in radar.candidates} == {"a", "d"}
+    assert len(radar.candidates) == 6
+    stripes = [w for w in _walk(_lane(card)) if getattr(w, "tag", None) == "button"]
+    assert len(stripes) == 3
+    [radar_lane] = _radar_lanes(card)
+    assert len([w for w in _walk(radar_lane) if getattr(w, "tag", None) == "button"]) == 6
+
+
+def test_radar_handles_follow_the_optical_picks_and_are_hollow():
+    _state, analysis, _widgets, card = _radar_build()
+    radar = _strips(card)[1]
+    # both following: pass a has an image within 30 days on both sides
+    assert radar.before["id"] == "a20260420" and radar.after["id"] == "a20260830"
+    assert radar.hollow == ["b", "a"]
+    assert analysis.before_radar_info.value[3] == "Sentinel 1 ascending 2026-04-20 "
+    assert analysis.after_radar_info.value[3] == "Sentinel 1 ascending 2026-08-30 "
+    assert analysis.before_radar_keys.value and analysis.after_radar_keys.value
+    assert analysis.radar_pinned.value == {"before": False, "after": False}
+    # the optical pair is untouched
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
+    assert analysis.dirty.value is False
+
+
+def test_a_radar_pick_pins_its_side_and_marks_the_alert_unsaved():
+    _state, analysis, _widgets, card = _radar_build()
+    radar = _strips(card)[1]
+    _pick(radar, "b", "d20260422")
+    assert analysis.before_radar_info.value[3] == "Sentinel 1 descending 2026-04-22 "
+    assert analysis.radar_pinned.value == {"before": True, "after": False}
+    assert radar.hollow == ["a"]
+    # the following side takes the pinned pass, within 30 days
+    assert radar.after["id"] == "d20260925"
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert analysis.dirty.value is True
+
+
+def test_moving_the_optical_pick_leaves_a_pinned_radar_handle():
+    _state, analysis, _widgets, card = _radar_build()
+    optical, radar = _strips(card)
+    _pick(radar, "b", "a20260408")
+    _pick(optical, "a", "s20260928")
+    assert analysis.after_info.value[3] == "Sentinel 2 2026-09-28 "
+    assert radar.before["id"] == "a20260408"  # pinned: stays put
+    assert radar.after["id"] == "a20261005"  # following: moved with the optical pick
+    assert analysis.after_radar_info.value[3] == "Sentinel 1 ascending 2026-10-05 "
+
+
+def test_follow_optical_unpins_both_sides_and_marks_unsaved():
+    _state, analysis, _widgets, card = _radar_build()
+    assert _follow_btn(card).disabled is True
+    _pick(_strips(card)[1], "b", "a20260408")
+    assert _follow_btn(card).disabled is False
+    analysis.dirty.set(False)
+    _follow_btn(card).fire_event("click", None)
+    assert analysis.radar_pinned.value == {"before": False, "after": False}
+    assert _strips(card)[1].before["id"] == "a20260420"
+    assert _strips(card)[1].hollow == ["b", "a"]
+    assert analysis.dirty.value is True
+    assert _follow_btn(card).disabled is True
+
+
+def test_a_saved_radar_pick_restores_pinned_and_turns_sentinel_1_on():
+    state, analysis, _widgets, card = _radar_build(
+        sources=None, saved_before_radar="Sentinel 1 descending 2026-04-22 ")
+    assert "Sentinel 1" in state.project.value.image_sources
+    assert analysis.before_radar_info.value[3] == "Sentinel 1 descending 2026-04-22 "
+    assert analysis.radar_pinned.value == {"before": True, "after": False}
+    radar = _strips(card)[1]
+    assert radar.hollow == ["a"] and radar.after["id"] == "d20260925"
+    assert analysis.dirty.value is False
+
+
+def test_turning_sentinel_1_off_unpublishes_the_radar_pair_and_on_again_restores_it():
+    _state, analysis, _widgets, card = _radar_build()
+    _pick(_strips(card)[1], "b", "a20260408")
+    _tick(card, "Sentinel-1")
+    assert analysis.before_radar_info.value is None and analysis.after_radar_info.value is None
+    assert analysis.before_radar_keys.value == [] and analysis.after_radar_keys.value == []
+    assert analysis.radar_pinned.value == {"before": True, "after": False}
+    _tick(card, "Sentinel-1")
+    assert analysis.before_radar_info.value[3] == "Sentinel 1 ascending 2026-04-08 "
+    assert analysis.after_radar_info.value[3] == "Sentinel 1 ascending 2026-08-30 "
+    assert analysis.before_radar_keys.value
+    assert analysis.radar_pinned.value == {"before": True, "after": False}
+
+
+def test_a_pending_radar_restore_publishes_nothing():
+    rows = [r for r in _MIX if r[1] != "2026-08-30"]
+    state, analysis, _widgets, card = _radar_build(
+        rows=rows, sources=None, manifest=_covering(),  # radar not indexed yet
+        saved_after_radar="Sentinel 1 ascending 2026-08-30 ")
+    assert "Sentinel 1" in state.project.value.image_sources
+    radar = _strips(card)[1]
+    assert analysis.after_radar_info.value is None and analysis.after_radar_keys.value == []
+    assert radar.after is None and "a" not in radar.hollow
+    assert analysis.radar_pinned.value["after"] is False
+    # the other side follows, of the waiting pick's pass
+    assert radar.before["id"] == "a20260420"
+
+    covered = _covering()
+    covered.radar = scene_index.Coverage(start=date(2026, 1, 1), end=date(2026, 12, 31))
+    state.scene_index.set(_any_index(_MIX))
+    state.scene_manifest.set(covered)
+    assert analysis.after_radar_info.value[3] == "Sentinel 1 ascending 2026-08-30 "
+    assert analysis.radar_pinned.value == {"before": False, "after": True}
+    assert analysis.dirty.value is False
+
+
+def test_an_all_cloudy_side_gets_the_over_limit_auto_pick():
+    rows = [(S2, "2026-04-24", 80.0), (LS, "2026-08-27", 3.0)]
+    _state, analysis, _widgets, card = _radar_build(rows=rows, sources=None)
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+    assert _strips(card)[0].before["id"] == "s20260424"

@@ -41,6 +41,7 @@ _HANDLES_CSS = """
 .dah-before polygon { fill: var(--dah-before); }
 .dah-after polygon { fill: #bf8f2d; }
 .dah-h:focus-visible polygon { stroke: #d9ab4e; stroke-width: 1.5px; }
+.dah-h.dah-hollow polygon { fill: none; stroke: var(--dat-s1, #d98ac0); stroke-width: 2px; }
 .dah-flag { position: absolute; bottom: calc(100% + 2px); padding: 3px 6px; border-radius: 3px;
   font-size: 10.5px; line-height: 1; white-space: nowrap; font-weight: 500; pointer-events: none; }
 .dah-before .dah-flag { right: 0; background: var(--dah-before); color: var(--dah-before-ink);
@@ -87,6 +88,9 @@ class HandleStrip(v.VuetifyTemplate):
     #: the rail's height and the lane's below it, in px
     rail_h = traitlets.Int(28).tag(sync=True)
     lane_h = traitlets.Int(45).tag(sync=True)
+    #: the sides drawn hollow (``"b"``, ``"a"``): a radar handle that follows
+    #: the optical pick rather than one the reviewer pinned
+    hollow = traitlets.List([]).tag(sync=True)
 
     def __init__(self, on_pick, **kwargs):
         super().__init__(**kwargs)

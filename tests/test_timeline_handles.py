@@ -276,3 +276,23 @@ def _click_row(card, src, iso):
 def _swap(title):
     return [w for w in _walk(title)
             if getattr(w, "tag", None) == "button" and "click" in (getattr(w, "_events", None) or [])]
+
+
+# ------------------------------------------------------------ the radar strip
+
+def test_the_hollow_sides_are_a_synced_trait_the_template_draws():
+    strip = HandleStrip(on_pick=lambda side, rid: None, hollow=["b"])
+    assert strip.hollow == ["b"]
+    strip.hollow = ["b", "a"]
+    assert strip.hollow == ["b", "a"]
+    assert HandleStrip.class_traits()["hollow"].metadata.get("sync") is True
+    assert "hollow" in strip.template
+
+
+def test_a_pick_on_the_radar_strip_reaches_the_radar_before_lane():
+    from tests.test_timeline import _radar_build, _strips
+
+    _state, analysis, _widgets, card = _radar_build()
+    _pick(_strips(card)[1], "b", "d20260422")
+    assert analysis.before_radar_info.value[3] == "Sentinel 1 descending 2026-04-22 "
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "

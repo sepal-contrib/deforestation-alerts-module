@@ -5,9 +5,12 @@ step's content with ``v-if``, which destroys and rebuilds the DOM when the
 reviewer closes and reopens the step; a Solara-rendered subtree comes back
 blank, while a raw ipyvuetify tree is re-viewed from its widget model.
 
-One lane over one axis, with two handles above it: the before handle and the
-after handle, which can never pass each other. A handle is dragged (the drag
-runs in the browser, see ``gui/widget/handle_strip.py``) or walked with the arrow keys, and a
+Two lanes over one axis, each with two handles above it: the before handle
+and the after handle, which can never pass each other. The optical lane holds
+Sentinel-2, Landsat and Planet; the radar lane, shown while Sentinel-1 is on,
+holds both passes. A radar handle follows the optical pick of its side
+(``scene_query.follow_radar``, drawn hollow) until the reviewer pins it.
+A handle is dragged (the drag runs in the browser, see ``gui/widget/handle_strip.py``) or walked with the arrow keys, and a
 click on a stripe moves whichever handle ``side_for_click`` names.
 
 The geometry is addressed in **percentages of ``TRACK_PX``**, never in the
@@ -106,6 +109,9 @@ HIDDEN_SCALE, HIDDEN_OPACITY = 0.45, 0.3
 #: the order of two collections on one date: the one a drag or an arrow lands
 #: on first. The same order as the GIF's (``scene_query._RANK``).
 _RANK = {n: s.rank for n, s in SOURCES.items()}
+#: the lane keys: ``"b"``/``"a"`` are the optical handles, ``"rb"``/``"ra"`` the radar ones
+RADAR_LANE = {"b": "rb", "a": "ra"}
+LANE_SIDE = {"b": "before", "a": "after", "rb": "before", "ra": "after"}
 
 _LANE_STYLE = f"position: relative; height: {LANE_H}px"
 _LEGEND_ID = "analysis-timeline-legend"
@@ -499,14 +505,15 @@ def side_for_click(segments, rid, before_id, after_id, a0) -> Optional[str]:
 
 
 def same_day_alternative(sel, rid) -> Optional[str]:
-    """The next image of ``rid``'s day in rank order, wrapping round, or
-    ``None``: what the map title offers to switch to, so three images of one
-    day (S2, both passes) are each reachable. Never a hidden row (the cloud
-    limit hides it for a reason) and never a Planet month (it has no day)."""
+    """The next image of ``rid``'s day and kind in rank order, wrapping round,
+    or ``None``: what the map title offers to switch to (S2 and Landsat in the
+    optical lane, the two passes in the radar lane). Never a hidden row (the
+    cloud limit hides it for a reason) and never a Planet month (it has no day)."""
     if not rid or sel is None or len(sel) == 0:
         return None
+    radar = is_radar(scene_query.parse_row_id(rid)[0])
     day = [str(row["id"]) for _, row in sel.sort_values("source", key=lambda s: s.map(_RANK)).iterrows()
-           if not bool(row["hidden"]) and _same_day(rid, str(row["id"]))]
+           if not bool(row["hidden"]) and is_radar(row["source"]) == radar and _same_day(rid, str(row["id"]))]
     if rid in day:
         at = day.index(rid)
         day = day[at + 1:] + day[:at]
@@ -570,6 +577,15 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     extra = solara.reactive((0, 0))
     before_id = solara.reactive(None)
     after_id = solara.reactive(None)
+    #: the radar lane's picks. Kept while Sentinel-1 is off, and republished
+    #: when it comes back on; whether each is pinned is ``analysis.radar_pinned``.
+    radar_before_id = solara.reactive(None)
+    radar_after_id = solara.reactive(None)
+    ids = {"b": before_id, "a": after_id, "rb": radar_before_id, "ra": radar_after_id}
+    keys = {"b": analysis.before_keys, "a": analysis.after_keys,
+            "rb": analysis.before_radar_keys, "ra": analysis.after_radar_keys}
+    infos = {"b": analysis.before_info, "a": analysis.after_info,
+             "rb": analysis.before_radar_info, "ra": analysis.after_radar_info}
     #: the half-years (``scene_query.half_of``) the reviewer has unfolded into
     #: months; reset with the collapse set
     split = solara.reactive(frozenset())
@@ -592,7 +608,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     #: once a candidate arrives, given up once the index answers without one
     auto_waiting = solara.reactive(frozenset())
 
-    lane = v.Html(tag="div", style_=_LANE_STYLE)
+    # also ``optical_lane``: ``render`` has a ``lane`` loop variable of its own
+    lane = optical_lane = v.Html(tag="div", style_=_LANE_STYLE)
     lane_axis = v.Html(tag="div", style_=f"position: relative; height: {AXIS_H}px")
     blocks = v.Html(tag="div", style_=f"position: absolute; left: 0; right: 0; top: {RAIL_H}px; bottom: 0; "
                                       "pointer-events: none")
@@ -600,8 +617,25 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     #: the grey bands of the linked earlier alerts' dates (growth alerts, spec §6.5)
     parent_bands = v.Html(tag="div", style_="display: none", children=[])
     strip = HandleStrip(on_pick=lambda side, rid: _on_drop(side, rid), rail_h=RAIL_H, lane_h=LANE_H)
+    radar_lane = v.Html(tag="div", class_="defo-tl-radar-lane",
+                        style_=f"{_LANE_STYLE}; border-top: 1px dashed var(--dat-edge)")
+    radar_strip = HandleStrip(on_pick=lambda side, rid: _on_drop(RADAR_LANE[side], rid),
+                              rail_h=RAIL_H, lane_h=LANE_H)
+    # copies the toolbar's fold buttons (``defo-tl-btn``)
+    follow_btn = v.Btn(small=True, text=True, class_="defo-tl-btn",
+                       style_="text-transform: none; letter-spacing: normal", disabled=True,
+                       children=[t("analysis.timeline.follow_optical")])
+    follow_btn.on_event("click", lambda *_a: _follow_optical())
+    radar_name = v.Html(tag="span", style_=f"font-size: 10.5px; color: {MUTED}",
+                        children=[t("analysis.timeline.group_radar")])
+    radar_label = v.Html(tag="div", style_=("position: absolute; right: 0; top: 0; z-index: 5; display: flex; "
+                                            f"align-items: center; gap: 4px; height: {RAIL_H}px"),
+                         children=[radar_name, follow_btn])
+    #: the radar rail and lane, or nothing while Sentinel-1 is off. Its
+    #: children are set, never replaced (``replace_children`` would close them).
+    radar_box = v.Html(tag="div", style_="position: relative", children=[])
     track = v.Html(tag="div", style_=_TRACK_STYLE,
-                   children=[strip, parent_bands, window_band, lane, lane_axis, blocks])
+                   children=[strip, parent_bands, window_band, lane, radar_box, lane_axis, blocks])
     message = v.Html(tag="div", style_=_MESSAGE_STYLE, children=[])
     # The Image sources menu: a chip-sized button with one dot per source on,
     # the same size however many sources exist. The browser opens it
@@ -693,10 +727,10 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         sel, _window = _selection()
         if sel is None:
             return
-        for lane, rid in (("b", before_id.value), ("a", after_id.value)):
-            row = _row_of(sel, rid) if rid else None
+        for lane, chosen in ids.items():
+            row = _row_of(sel, chosen.value) if chosen.value else None
             if row is not None:
-                (analysis.before_keys if lane == "b" else analysis.after_keys).set(sorted(_keys_for(row, sel)))
+                keys[lane].set(sorted(_keys_for(row, sel)))
 
     widgets.timeline_rekey = _rekey
 
@@ -712,11 +746,15 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             # without that row -- there is no stale selection to explain.
             logger.info("timeline: %s is no longer selectable, ignoring the pick", rid)
             return
-        (before_id if lane == "b" else after_id).set(rid)
+        ids[lane].set(rid)
         # The granule keys go first: ``image_slider_map_callback`` reads them
         # when the info publish wakes it, so a half-set pair is never rebuilt.
-        (analysis.before_keys if lane == "b" else analysis.after_keys).set(sorted(_keys_for(row, sel)))
-        (analysis.before_info if lane == "b" else analysis.after_info).set(info_tuple(row))
+        keys[lane].set(sorted(_keys_for(row, sel)))
+        infos[lane].set(info_tuple(row))
+
+    def _unpublish(lane):
+        keys[lane].set([])
+        infos[lane].set(None)
 
     def _picked(lane, rid, sel):
         """Assign a pick the REVIEWER made, and record what it costs the review.
@@ -732,11 +770,24 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         # "saved image not available" note for that side (Review Focus #1).
         restoring.set({k: rid_ for k, rid_ in restoring.value.items() if k != lane})
         fell_back.set(fell_back.value - {lane})
-        chosen = before_id if lane == "b" else after_id
+        chosen = ids[lane]
         was = chosen.value
         _assign(lane, rid, sel)
-        if chosen.value != was:
+        changed = chosen.value != was
+        # a radar pick is the reviewer's: it pins its side, which a Save writes
+        side = LANE_SIDE[lane]
+        if lane in ("rb", "ra") and chosen.value == rid and not analysis.radar_pinned.value[side]:
+            analysis.radar_pinned.set({**analysis.radar_pinned.value, side: True})
+            changed = True
+        if changed:
             imagery_changed(analysis)
+
+    def _of_kind(sel, radar: bool):
+        """``sel``'s rows of one lane: radar or optical."""
+        return sel[sel["source"].map(is_radar).astype(bool) == radar]
+
+    def _pair(radar: bool):
+        return (radar_before_id.value, radar_after_id.value) if radar else (before_id.value, after_id.value)
 
     def _segments_now():
         """``(sel, segments)`` as the lane is currently drawn, or ``(None, None)``."""
@@ -754,7 +805,9 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         sel, segs = _segments_now()
         if sel is None:
             return
-        if rid not in reachable(sel, segs, lane_, before_id=before_id.value, after_id=after_id.value):
+        radar = lane_ in ("rb", "ra")
+        b, a = _pair(radar)
+        if rid not in reachable(_of_kind(sel, radar), segs, lane_[-1], before_id=b, after_id=a):
             logger.info("timeline: %s is not reachable for the %s handle, ignoring the pick", rid, lane_)
             render()  # put the browser's handle back where the state says
             return
@@ -769,13 +822,19 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         sel, segs = _segments_now()
         if sel is None:
             return
-        side = side_for_click(segs, rid, before_id.value, after_id.value, a0)
+        radar = is_radar(scene_query.parse_row_id(rid)[0])
+        side = side_for_click(segs, rid, *_pair(radar), a0)
         if side is not None:
-            _pick_if_reachable(side, rid)
+            _pick_if_reachable(RADAR_LANE[side] if radar else side, rid)
 
-    def _render_lane(sel, segs):
-        before, after = before_id.value, after_id.value
-        bands = lane_bands(_drawn())
+    def _bands(radar: bool):
+        return lane_bands(n for n in _drawn() if is_radar(n) == radar)
+
+    def _render_lane(host, sel, segs, radar=False):
+        """Draw ``sel``'s rows of one kind into ``host``, that lane."""
+        sel = _of_kind(sel, radar)
+        before, after = _pair(radar)
+        bands = _bands(radar)
         a0, _ = alert_window(widgets.imagery_ctx.value, app_state.project.value)
         kids = []
         for _, row in sel.iterrows():
@@ -812,7 +871,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                 None if hidden else (lambda _w, _e, _d, rid=rid: _on_stripe(rid)),
                 stripe_bar_style(row, selected=side is not None, side=side or "a", bands=bands),
                 stripe_cursor(row)))
-        replace_children(lane, kids)
+        replace_children(host, kids)
 
     def _flag(rid) -> str:
         """What a handle's flag says about ``rid``: the day and the collection."""
@@ -820,9 +879,11 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         when = format_date(d, "MMM y") if SOURCES[source].monthly else format_date(d, "d MMM")
         return f"{when} · {SRC_LABEL[source]}"
 
-    def _render_strip(sel, segs):
+    def _render_strip(strip, sel, segs, radar=False):
+        sel = _of_kind(sel, radar)
+        before_id, after_id = (radar_before_id, radar_after_id) if radar else (ids["b"], ids["a"])
         cands = []
-        bands = lane_bands(_drawn())
+        bands = _bands(radar)
         for rid in _navigable(sel, segs):
             source, d = scene_query.parse_row_id(rid)
             top, height = bands[source]
@@ -1205,6 +1266,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         strip.candidates = []
         strip.before = strip.after = None
         strip.gap = ""
+        radar_box.children = []
+        replace_children(radar_lane, [])
         window_band.style_ = "display: none"
         replace_children(parent_bands, [])
         parent_bands.style_ = "display: none"
@@ -1248,7 +1311,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             span = (window[0], a0) if lane == "b" else (a1, window[1])
             if chosen.value is None and auto[lane]:
                 chosen.set(auto[lane])
-                _assign(lane, auto[lane], sel)
+                _assign(lane, auto[lane], sel, restore=True)  # may be over the limit
             elif chosen.value is None and not all(_answered(d) for d in span):
                 continue
             auto_waiting.set(auto_waiting.value - {lane})
@@ -1274,15 +1337,21 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             restoring.set({k: rid_ for k, rid_ in restoring.value.items() if k != lane})
 
         for lane, rid in list(restoring.value.items()):
+            radar = lane in ("rb", "ra")
             if _row_of(sel, rid) is not None:
                 if not _still_waiting(lane, rid):
                     continue
                 _done(lane)
                 _assign(lane, rid, sel, restore=True)
+                if radar:  # a saved radar pick is a pinned one
+                    analysis.radar_pinned.set({**analysis.radar_pinned.value, LANE_SIDE[lane]: True})
             elif _settled(rid):
                 if not _still_waiting(lane, rid):
                     continue
                 _done(lane)
+                if radar:  # the following pick stands in (``_follow``)
+                    fell_back.set(fell_back.value | {lane})
+                    continue
                 if a0 is None or a1 is None:
                     continue
                 if auto is None:
@@ -1291,7 +1360,58 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                 # did: a side with no candidate is "not set", and says so.
                 if auto[lane]:
                     fell_back.set(fell_back.value | {lane})
-                    _assign(lane, auto[lane], sel)
+                    _assign(lane, auto[lane], sel, restore=True)  # may be over the limit
+
+    def _follow(sel, a0, a1):
+        """Place the following radar handles (``scene_query.follow_radar``)
+        and republish the pinned ones, without marking anything unsaved.
+
+        Anchored on the optical picks, else on the alert window's edges. A side
+        whose saved pick is still on its way publishes nothing -- a Save then
+        keeps the row's radar columns -- but its id already steers the other
+        side's pass."""
+        if S1 not in _entries():
+            return
+        day = {lane: scene_query.parse_row_id(ids[lane].value)[1] if ids[lane].value else None
+               for lane in ("b", "a")}
+        anchors = (day["b"] or a0, day["a"] or a1)
+        if None in anchors:
+            return
+        pins = analysis.radar_pinned.value
+        held = tuple(restoring.value.get(lane) or (ids[lane].value if pins[LANE_SIDE[lane]] else None)
+                     for lane in ("rb", "ra"))
+        derived = scene_query.follow_radar(_of_kind(sel, True), anchors, held)
+        for lane, rid in zip(("rb", "ra"), derived):
+            if lane in restoring.value:
+                continue
+            if pins[LANE_SIDE[lane]]:
+                rid = ids[lane].value
+            if rid is None:
+                ids[lane].set(None)
+                _unpublish(lane)
+            else:
+                _assign(lane, rid, sel, restore=True)
+
+    def _follow_optical():
+        """Unpin both radar handles: they follow the optical picks again."""
+        if not any(analysis.radar_pinned.value.values()):
+            return
+        analysis.radar_pinned.set({"before": False, "after": False})
+        imagery_changed(analysis)
+        render()
+
+    def _render_radar(sel, segs):
+        """The radar rail and lane, while Sentinel-1 is on."""
+        if S1 not in _entries():
+            radar_box.children = []
+            return
+        radar_box.children = [radar_strip, radar_label, radar_lane]
+        _render_lane(radar_lane, sel, segs, radar=True)
+        _render_strip(radar_strip, sel, segs, radar=True)
+        pins = analysis.radar_pinned.value
+        radar_strip.hollow = [side for side in ("b", "a")
+                              if ids[RADAR_LANE[side]].value and not pins[LANE_SIDE[side]]]
+        follow_btn.disabled = not any(pins.values())
 
     def render(*_):
         ctx = widgets.imagery_ctx.value
@@ -1311,7 +1431,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             # exactly the one the index has nothing for yet.
             asked_alert.set(identity)
             saved = {lane: scene_query.saved_pick_id((ctx or {}).get(key))
-                     for lane, key in (("b", "saved_before"), ("a", "saved_after"))}
+                     for lane, key in (("b", "saved_before"), ("a", "saved_after"),
+                                       ("rb", "saved_before_radar"), ("ra", "saved_after_radar"))}
             saved = {lane: rid for lane, rid in saved.items() if rid}
             restoring.set(saved)
             fell_back.set(frozenset())
@@ -1320,6 +1441,11 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             _ask_for_the_view()
         # every render: a press, another alert and the date all move it
         right_btn.disabled = not _later_allowed()
+        if S1 not in _entries():
+            # no radar pair while radar is off: a capture carries none and a
+            # Save keeps the row's radar columns. The ids and pins are kept.
+            _unpublish("rb")
+            _unpublish("ra")
         rows, window = _in_window()
         sel = None if rows is None or window is None else _enabled(rows)
         if sel is None or len(sel) == 0:
@@ -1349,6 +1475,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         if seen_alert.value != identity:
             seen_alert.set(identity)
             auto_waiting.set(frozenset())
+            radar_before_id.set(None)
+            radar_after_id.set(None)
             if a0 is not None and a1 is not None:
                 collapsed.set(frozenset(scene_query.auto_collapsed(window[0], window[1], a0, a1)))
                 split.set(frozenset())
@@ -1360,17 +1488,20 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                         continue
                     chosen.set(auto[lane])
                     if auto[lane]:
-                        _assign(lane, auto[lane], sel)
+                        # may be over the limit: a side with nothing under it
+                        _assign(lane, auto[lane], sel, restore=True)
                 auto_waiting.set(frozenset(lane for lane in ("b", "a")
                                            if not auto[lane] and lane not in restoring.value))
         _resolve_restores(sel, a0, a1)
         _resolve_auto_waits(sel, a0, a1, window)
+        _follow(sel, a0, a1)
 
         segs = scene_query.month_segments(window[0], window[1], collapsed.value, TRACK_PX)
         _render_band(segs, a0, a1)
         _render_parent_bands(segs)
-        _render_lane(sel, segs)
-        _render_strip(sel, segs)
+        _render_lane(optical_lane, sel, segs)
+        _render_strip(strip, sel, segs)
+        _render_radar(sel, segs)
         _render_axis(segs)
         _render_blocks(segs, sel)
         _render_menu(rows, window)
@@ -1529,6 +1660,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         area.attributes = {**area.attributes, "title": t("analysis.timeline.area_hint")}
         _label_side(left_btn, "left", "‹")
         _label_side(right_btn, "right", "›")
+        follow_btn.children = [t("analysis.timeline.follow_optical")]
+        radar_name.children = [t("analysis.timeline.group_radar")]
 
     labels.add(_label_toolbar)
 

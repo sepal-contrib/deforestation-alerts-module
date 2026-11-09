@@ -205,6 +205,7 @@
       "sources_button": "Fontes de imagens",
       "group_optical": "Ópticas",
       "group_radar": "Radar",
+      "follow_optical": "Seguir a óptica",
       "over_cloud": "{n} acima do limite de nuvens",
       "planet_no_access": "Sem acesso com esta conta",
       "radar_no_cloud": "O radar enxerga através das nuvens e não tem valor de nebulosidade, então o limite de nuvens nunca o oculta.",

@@ -11,7 +11,8 @@
       v-for="side in ['b', 'a']"
       :key="side"
       :class="['dah-h', side === 'b' ? 'dah-before' : 'dah-after',
-               { 'dah-unset': !chosen(side), 'dah-moving': isMoving(side) }]"
+               { 'dah-unset': !chosen(side), 'dah-moving': isMoving(side),
+                 'dah-hollow': hollow.includes(side) }]"
       :style="{ left: pos(side) + '%' }"
       tabindex="0"
       role="slider"
