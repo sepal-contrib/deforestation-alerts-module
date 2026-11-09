@@ -173,6 +173,8 @@
       "after": "After",
       "lane_before": "Before image handle. Drag it along the timeline, or use the left and right arrow keys to move along the dates and Enter to choose the image.",
       "lane_after": "After image handle. Drag it along the timeline, or use the left and right arrow keys to move along the dates and Enter to choose the image.",
+      "radar_before": "Radar before image handle. Drag it along the radar lane, or use the left and right arrow keys to move along the dates and Enter to choose the image.",
+      "radar_after": "Radar after image handle. Drag it along the radar lane, or use the left and right arrow keys to move along the dates and Enter to choose the image.",
       "unset": "not set",
       "max_cloud": "Max cloud",
       "one_more_month": "+1 month",

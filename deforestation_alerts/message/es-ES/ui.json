@@ -178,6 +178,8 @@
       "after": "Después",
       "lane_before": "Control de la imagen de antes. Arrástralo por la línea de tiempo, o usa las flechas izquierda y derecha para recorrer las fechas y Enter para elegir la imagen.",
       "lane_after": "Control de la imagen de después. Arrástralo por la línea de tiempo, o usa las flechas izquierda y derecha para recorrer las fechas y Enter para elegir la imagen.",
+      "radar_before": "Control de la imagen radar de antes. Arrástralo por la línea de radar, o usa las flechas izquierda y derecha para recorrer las fechas y Enter para elegir la imagen.",
+      "radar_after": "Control de la imagen radar de después. Arrástralo por la línea de radar, o usa las flechas izquierda y derecha para recorrer las fechas y Enter para elegir la imagen.",
       "unset": "sin definir",
       "max_cloud": "Nubes máx.",
       "one_more_month": "+1 mes",

@@ -1893,6 +1893,7 @@ def test_the_radar_lane_shows_only_while_sentinel_1_is_on():
     assert len(_strips(card)) == 1 and not _radar_lanes(card)
     _tick(card, "Sentinel-1")
     assert len(_strips(card)) == 2 and len(_radar_lanes(card)) == 1
+    assert _analysis.dirty.value is False  # the lane appearing is not an edit
     _tick(card, "Sentinel-1")
     assert len(_strips(card)) == 1 and not _radar_lanes(card)
 
@@ -2015,3 +2016,37 @@ def test_an_all_cloudy_side_gets_the_over_limit_auto_pick():
     _state, analysis, _widgets, card = _radar_build(rows=rows, sources=None)
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
     assert _strips(card)[0].before["id"] == "s20260424"
+
+
+def test_the_radar_handles_are_named_apart_from_the_optical_ones():
+    _state, _analysis, _widgets, card = _radar_build()
+    optical, radar = _strips(card)
+    assert radar.labels["b"] == timeline.t("analysis.timeline.radar_before")
+    assert radar.labels["a"] == timeline.t("analysis.timeline.radar_after")
+    assert {radar.labels["b"], radar.labels["a"]}.isdisjoint({optical.labels["b"], optical.labels["a"]})
+
+
+def test_a_new_image_area_publishes_no_radar_keys_while_sentinel_1_is_off():
+    _state, analysis, widgets, card = _radar_build()
+    assert analysis.before_radar_keys.value
+    _tick(card, "Sentinel-1")
+    widgets.timeline_rekey()
+    assert analysis.before_radar_keys.value == [] and analysis.after_radar_keys.value == []
+    assert analysis.before_keys.value  # the optical pair is rekeyed as before
+
+
+def test_follow_optical_drops_a_saved_radar_pick_still_on_its_way():
+    rows = [r for r in _MIX if r[1] != "2026-08-30"]
+    state, analysis, _widgets, card = _radar_build(
+        rows=rows, sources=None, manifest=_covering(),  # radar not indexed yet
+        saved_after_radar="Sentinel 1 ascending 2026-08-30 ")
+    _pick(_strips(card)[1], "b", "a20260408")
+    _follow_btn(card).fire_event("click", None)
+
+    covered = _covering()
+    covered.radar = scene_index.Coverage(start=date(2026, 1, 1), end=date(2026, 12, 31))
+    state.scene_index.set(_any_index(_MIX))
+    state.scene_manifest.set(covered)
+    # the saved pick does not land and re-pin: the side follows the optical one
+    assert analysis.radar_pinned.value == {"before": False, "after": False}
+    assert _strips(card)[1].hollow == ["b", "a"]

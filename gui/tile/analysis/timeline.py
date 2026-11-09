@@ -623,7 +623,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                               rail_h=RAIL_H, lane_h=LANE_H)
     # copies the toolbar's fold buttons (``defo-tl-btn``)
     follow_btn = v.Btn(small=True, text=True, class_="defo-tl-btn",
-                       style_="text-transform: none; letter-spacing: normal", disabled=True,
+                       disabled=True,
                        children=[t("analysis.timeline.follow_optical")])
     follow_btn.on_event("click", lambda *_a: _follow_optical())
     radar_name = v.Html(tag="span", style_=f"font-size: 10.5px; color: {MUTED}",
@@ -908,7 +908,9 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         strip.gap = (pair_note(before_id.value, after_id.value) or "") if both else ""
         strip.gap_warn = bool(before_id.value) and before_id.value == after_id.value
         strip.ticks = [round(_pct(seg.x), 3) for _, seg in sorted(segs.items())][1:]
-        strip.labels = {"b": t("analysis.timeline.lane_before"), "a": t("analysis.timeline.lane_after"),
+        names = ((t("analysis.timeline.radar_before"), t("analysis.timeline.radar_after")) if radar
+                 else (t("analysis.timeline.lane_before"), t("analysis.timeline.lane_after")))
+        strip.labels = {"b": names[0], "a": names[1],
                         "unset": t("analysis.timeline.unset")}
 
     def _expand(key):
@@ -1397,6 +1399,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         if not any(analysis.radar_pinned.value.values()):
             return
         analysis.radar_pinned.set({"before": False, "after": False})
+        # a saved radar pick still on its way must not land and re-pin a side
+        restoring.set({k: rid for k, rid in restoring.value.items() if k not in ("rb", "ra")})
         imagery_changed(analysis)
         render()
 
