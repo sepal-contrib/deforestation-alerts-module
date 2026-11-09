@@ -1198,6 +1198,25 @@ def test_the_menu_button_says_whether_the_menu_is_open():
     assert _menu_button(card).attributes["aria-expanded"] == "true"
 
 
+def test_the_open_menu_takes_the_stage_colours_in_both_themes():
+    """Vuetify moves the menu's content to the app root, outside the stage the
+    colour variables are defined on: its content class gets them too, light
+    by default and dark while the page holds a dark stage."""
+    import re
+
+    card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
+    menu = next(w for w in _walk(card) if isinstance(w, timeline.v.Menu)
+                and w.v_slots[0]["children"] is _menu_button(card))
+    assert menu.content_class == timeline.SOURCES_MENU_CLASS
+    light, dark = timeline.THEME_CSS.split(".analysis-stage.analysis-stage--dark")
+    names = set(re.findall(r"--dat-[a-z0-9-]+", light))
+    assert light.startswith(f".analysis-stage, .{timeline.SOURCES_MENU_CLASS} {{")
+    assert dark.startswith(f", body:has(.analysis-stage--dark) .{timeline.SOURCES_MENU_CLASS} {{")
+    assert names == set(re.findall(r"--dat-[a-z0-9-]+", dark))
+    # the content draws on the stage's surface and ink, not the overlay's theme
+    assert "var(--dat-chip)" in menu.children[0].style_ and "var(--dat-ink)" in menu.children[0].style_
+
+
 def test_the_menu_groups_optical_and_radar():
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), _fake_widgets())
     groups = [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("role") == "group"]

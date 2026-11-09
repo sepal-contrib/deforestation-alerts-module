@@ -83,11 +83,15 @@ WARN = "var(--dat-warn, #d9ab4e)"
 #: label keeps 4.5:1 and a stripe 3:1 on the white surface.
 _VARS_LIGHT = " ".join(f"{var}: {c};" for var, c in {s.color_var: s.color_light for s in SOURCES.values()}.items())
 _VARS_DARK = " ".join(f"{var}: {c};" for var, c in {s.color_var: s.color_dark for s in SOURCES.values()}.items())
+#: ``SOURCES_MENU_CLASS`` is the sources menu's content, which Vuetify moves to
+#: the app root, outside the stage: it takes the same values, the dark ones
+#: while the page holds a dark stage.
+SOURCES_MENU_CLASS = "analysis-sources-menu"
 THEME_CSS = (
-    f".analysis-stage {{ {_VARS_LIGHT} "
+    f".analysis-stage, .{SOURCES_MENU_CLASS} {{ {_VARS_LIGHT} "
     "--dat-muted: #6b665e; --dat-warn: #9a6400; --dat-ink: #2a2724; --dat-chip: #f4f1ec; "
     "--dat-fold-a: #ebe6de; --dat-fold-b: #f5f2ed; --dat-edge: rgba(0, 0, 0, 0.25); } "
-    f".analysis-stage.analysis-stage--dark {{ {_VARS_DARK} "
+    f".analysis-stage.analysis-stage--dark, body:has(.analysis-stage--dark) .{SOURCES_MENU_CLASS} {{ {_VARS_DARK} "
     "--dat-muted: #a8a39b; --dat-warn: #d9ab4e; --dat-ink: #f0ece6; "
     "--dat-chip: #24221f; --dat-fold-a: #24221f; --dat-fold-b: #1e1c1a; --dat-edge: #44403a; } "
 )
@@ -609,9 +613,13 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                                  "flex: 0 0 auto; align-items: center; gap: 4px; cursor: pointer; "
                                  "background: var(--dat-chip); border: 1px solid var(--dat-edge)"),
                          children=[caret])
-    sources_list = v.Card(attributes={"role": "menu"}, style_="padding: 4px 0; min-width: 260px", children=[])
+    # The stage's own surface and ink: the overlay's Vuetify theme class is
+    # not reliably the app's (``gui/widget/text_style.py``).
+    sources_list = v.Card(attributes={"role": "menu"},
+                          style_="padding: 4px 0; min-width: 260px; background: var(--dat-chip); color: var(--dat-ink)",
+                          children=[])
     sources_menu = v.Menu(v_model=False, top=True, offset_y=True, nudge_top=4, max_width=460,
-                          close_on_content_click=False,
+                          close_on_content_click=False, content_class=SOURCES_MENU_CLASS,
                           v_slots=[{"name": "activator", "variable": "menu", "children": sources_btn}],
                           children=[sources_list])
     sources_menu.observe(lambda change: setattr(sources_btn, "attributes", {

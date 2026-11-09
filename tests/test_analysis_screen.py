@@ -501,7 +501,9 @@ def test_every_screen_css_rule_is_scoped_to_the_analysis_screen():
     text-field one was) restyles every text field of the app."""
     for selector in _rules(SCREEN_CSS):
         for part in selector.split(","):
-            assert part.strip().startswith(".defo-analysis") or part.strip().startswith(
-                ".analysis-"
+            # the last form: the timeline's sources menu, which Vuetify moves
+            # outside the screen, dark while the page holds a dark stage
+            assert part.strip().startswith((".defo-analysis", ".analysis-",
+                                            "body:has(.analysis-stage--dark) .analysis-")
             ), f"unscoped selector {part.strip()!r}"
     assert ".defo-analysis-screen .v-text-field .v-input__control .v-input__slot" in _rules(SCREEN_CSS)
