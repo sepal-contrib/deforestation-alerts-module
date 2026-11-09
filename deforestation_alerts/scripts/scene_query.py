@@ -166,8 +166,8 @@ def scenes_for(tables, bbox, start: date, end: date, *, max_cloud: Optional[floa
     dropped, so the timeline can show the reviewer that an image exists there
     before they decide to raise the limit.
     """
-    scenes = tables.scenes
-    if scenes is None or len(scenes) == 0:
+    scenes = getattr(tables, "scenes", None)  # no index yet: no rows
+    if scenes is None or len(scenes) == 0 or bbox is None:
         return _EMPTY.copy()
 
     keep = overlapping_tiles(tables.tiles, bbox)
@@ -489,12 +489,53 @@ def optical_anchor(rows: pd.DataFrame, rid, side: str) -> Optional[str]:
     source, day = parse_row_id(rid)
     if not is_radar(source):
         return rid
-    ok = rows[rows["source"].map(dated_optical).astype(bool) & ~rows["hidden"].astype(bool)]
+    return _nearest_on_side(rows[rows["source"].map(dated_optical).astype(bool) & ~rows["hidden"].astype(bool)],
+                            day, side)
+
+
+def _nearest_on_side(ok: pd.DataFrame, day, side: str) -> Optional[str]:
+    """The id of the row of ``ok`` nearest ``day`` on ``side`` ("before": the
+    latest on or before it; "after": the earliest on or after it), else ``None``."""
     if side == "before":
         ok = ok[ok["date"] <= pd.Timestamp(day)]
         return str(ok.loc[ok["date"].idxmax(), "id"]) if len(ok) else None
     ok = ok[ok["date"] >= pd.Timestamp(day)]
     return str(ok.loc[ok["date"].idxmin(), "id"]) if len(ok) else None
+
+
+#: a radar partner of the other pick's pass is preferred this close to the optical pick
+SAME_PASS_DAYS = 30
+
+
+def radar_partner(rows: pd.DataFrame, rid, side: str, pass_source: str) -> Optional[str]:
+    """The radar row the report pairs with the optical pick ``rid`` on its
+    ``side`` when the other pick is radar of ``pass_source``: the nearest of
+    that pass on ``side`` when within ``SAME_PASS_DAYS`` of the pick, else the
+    nearest of either pass on ``side``, else ``None``."""
+    day = parse_row_id(rid)[1]
+    radar = rows[rows["source"].map(is_radar).astype(bool)]
+    same = _nearest_on_side(radar[radar["source"] == pass_source], day, side)
+    if same is not None and abs((parse_row_id(same)[1] - day).days) <= SAME_PASS_DAYS:
+        return same
+    return _nearest_on_side(radar, day, side)
+
+
+def report_images(rows: pd.DataFrame, before_id, after_id) -> Optional[dict]:
+    """The row ids a report shows when a pick is radar, ``None`` when neither is.
+
+    ``{"optical": (before, after), "radar": (before, after)}``: the optical
+    figures take each side's pick when optical, else its ``optical_anchor``;
+    the radar block takes each radar pick, and on an optical side the
+    ``radar_partner`` of the other pick's pass. ``None`` inside: nothing found.
+    """
+    picks = {"before": before_id, "after": after_id}
+    source = {side: parse_row_id(rid)[0] for side, rid in picks.items()}
+    if not any(is_radar(s) for s in source.values()):
+        return None
+    other = {"before": "after", "after": "before"}
+    radar = tuple(picks[s] if is_radar(source[s]) else radar_partner(rows, picks[s], s, source[other[s]])
+                  for s in ("before", "after"))
+    return {"optical": tuple(optical_anchor(rows, picks[s], s) for s in ("before", "after")), "radar": radar}
 
 
 def gif_frames(rows: pd.DataFrame, before_id, after_id, n: int = 2) -> pd.DataFrame:

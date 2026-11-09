@@ -129,6 +129,7 @@ from gui.scripts.solara_threads import spawn_in_context
 from gui.store.project_writers import writer_name, writing
 from gui.tile.analysis import alert_files, review_save
 from gui.tile.analysis import gif as gif_mod
+from gui.tile.analysis import report_images
 from gui.tile.analysis.file_tile import BuildTile, FileTile
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.review_save import SaveRefused
@@ -145,12 +146,13 @@ def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
     return review_save.save_review(alert, app_tile_model)
 
 
-def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None, gif=None):
+def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None, gif=None,
+                   report=None):
     """The build's body: ``alert_files.build_alert_files`` of ``alert``
     (``state.capture_alert``; taken here when not given) into the set folder."""
     alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
     return alert_files.build_alert_files(alert, app_tile_model.recipe_folder_path, aux_model.custom_report_template,
-                                         task=task, gif=gif)
+                                         task=task, gif=gif, report=report)
 
 
 def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=None, on_refused=None,
@@ -747,6 +749,14 @@ def build_export(
                 logger.exception("Analysis: the GIF for the zip could not be captured")
                 gif_skipped = True
 
+        # A radar pick: the report's optical stand-ins and radar pair, read now (UI thread) like the GIF.
+        # A failure here costs the stand-ins (the report notes them missing), never the build.
+        try:
+            report_job = report_images.capture_report_images(app_state, widgets, alert)
+        except Exception:  # noqa: BLE001 - logged; the build goes on with the picks alone
+            logger.exception("Analysis: the report's stand-in images could not be found")
+            report_job = report_images.plan_report_images(None, None, alert.before_info, alert.after_info, None)
+
         result = {}  # the built paths, for the GIF warning after the task
 
         # The report/zip build is one opaque long phase, but the composite
@@ -758,7 +768,7 @@ def build_export(
             with writing(writer_name(app_state)):
                 built_paths = _download_data(
                     widgets, analysis, app_state, aux_model, app_tile_model,
-                    task=task, alert=alert, gif=gif_job,
+                    task=task, alert=alert, gif=gif_job, report=report_job,
                 )
             if built_paths is None:
                 # Refused: nothing was written and no download button will be

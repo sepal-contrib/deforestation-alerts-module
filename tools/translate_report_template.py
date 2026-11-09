@@ -53,6 +53,10 @@ EN = [
     "After · false colour",
     "True colour: red, green, blue. False colour: near-infrared, red, green; forest shows dark red, "
     "cleared land and bare soil bright green or brown.",
+    "Radar evidence",
+    "Before · radar",
+    "After · radar",
+    "Radar (Sentinel-1): VV in red, VH in green, the VV/VH ratio in blue. Radar images are taken through clouds.",
     "Review and sign-off",
     "Field verification:   ☐ not needed     ☐ requested     ☐ done (date: ____________ )",
     "Reviewed by: ________________________________      Signature: ______________________",
@@ -108,6 +112,10 @@ TRANSLATIONS = {
         "Después · falso color",
         "Color verdadero: rojo, verde, azul. Falso color: infrarrojo cercano, rojo, verde; el bosque se ve rojo "
         "oscuro, la tierra desmontada y el suelo desnudo verde brillante o marrón.",
+        "Evidencia de radar",
+        "Antes · radar",
+        "Después · radar",
+        "Radar (Sentinel-1): VV en rojo, VH en verde, la relación VV/VH en azul. Las imágenes de radar se toman a través de las nubes.",
         "Revisión y firma",
         "Verificación en campo:   ☐ no necesaria     ☐ solicitada     ☐ realizada (fecha: ____________ )",
         f"Revisado por: {LINE}      Firma: ______________________",
@@ -155,6 +163,10 @@ TRANSLATIONS = {
         "Après · fausses couleurs",
         "Couleurs naturelles : rouge, vert, bleu. Fausses couleurs : proche infrarouge, rouge, vert ; la forêt "
         "apparaît rouge foncé, les terres défrichées et le sol nu vert vif ou brun.",
+        "Preuves radar",
+        "Avant · radar",
+        "Après · radar",
+        "Radar (Sentinel-1) : VV en rouge, VH en vert, le rapport VV/VH en bleu. Les images radar sont prises à travers les nuages.",
         "Révision et validation",
         "Vérification de terrain :   ☐ non nécessaire     ☐ demandée     ☐ faite (date : ____________ )",
         f"Révisé par : {LINE}      Signature : ______________________",
@@ -201,6 +213,10 @@ TRANSLATIONS = {
         "Depois · falsa cor",
         "Cor verdadeira: vermelho, verde, azul. Falsa cor: infravermelho próximo, vermelho, verde; a floresta "
         "aparece em vermelho-escuro, a terra desmatada e o solo exposto em verde-claro ou marrom.",
+        "Evidência de radar",
+        "Antes · radar",
+        "Depois · radar",
+        "Radar (Sentinel-1): VV em vermelho, VH em verde, a razão VV/VH em azul. As imagens de radar são obtidas através das nuvens.",
         "Revisão e assinatura",
         "Verificação em campo:   ☐ não necessária     ☐ solicitada     ☐ feita (data: ____________ )",
         f"Revisado por: {LINE}      Assinatura: ______________________",

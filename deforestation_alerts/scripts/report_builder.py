@@ -1,7 +1,10 @@
 import math
+import re
 
 from docx import Document
+from docx.oxml.ns import qn
 from docx.shared import Pt
+from docx.text.paragraph import Paragraph
 import pandas as pd
 import geopandas as gpd
 import rasterio
@@ -135,6 +138,10 @@ def row_attributes(gdf_row) -> dict:
         "group_size": str(int(gdf_row["group_size"])) if _present(gdf_row, "group_size") else "1",
         "group_alerts": str(gdf_row["group_alerts"]) if _present(gdf_row, "group_alerts") else "",
         **_centroid(gdf_row.get("geometry")),
+        # set by the build when a pick is radar (``extra``); empty otherwise
+        "before_radar": "",
+        "after_radar": "",
+        "image_note": "",
     }
 
 
@@ -219,15 +226,23 @@ def generate_deforestation_report_with_word_template(
     output_path,
     scale_bar_length=200,
     extra=None,
+    radar_path=None,
+    missing=None,
 ):
     """Render the Word report onto ``output_path`` and return that path.
 
     ``extra`` is ``{placeholder: value}`` for the placeholders beyond the
-    alert's own (the review's ``{verdict}`` and one ``{key}`` per question);
-    ``None`` values read as empty.
+    alert's own (the review's ``{verdict}`` and one ``{key}`` per question,
+    and the radar ones); ``None`` values read as empty, and a key of the
+    alert's own (``before_img``) is overridden.
+
+    ``image_path`` is the optical composite (``None``: none was built) and
+    ``radar_path`` the radar one: without it the template's radar block is
+    removed (``_drop_radar_block``). ``missing`` is ``{marker: note}`` for the
+    figure slots with no image: the note takes the picture's place.
 
     Path contract: all paths are local; the report is built in a private
-    scratch folder and copied onto ``output_path``. The six intermediate JPEGs
+    scratch folder and copied onto ``output_path``. The intermediate JPEGs
     and the ``.docx`` live in that per-call scratch folder (two concurrent
     reports never share an ``output_image1.jpg``), which is deleted before
     this function returns.
@@ -240,13 +255,26 @@ def generate_deforestation_report_with_word_template(
     attributes = row_attributes(geodataframe.iloc[0])
     attributes.update({k: "" if v is None else str(v) for k, v in (extra or {}).items()})
 
+    if not attributes["image_note"]:
+        _drop_paragraphs(doc, lambda text: text.strip() == "{image_note}")
+    if radar_path is None:
+        _drop_radar_block(doc)
+
     # Replace placeholders in the Word document
     _fill_placeholders(doc, attributes)
+
+    figures = {}
+    if image_path is not None:
+        figures.update({f"[Placeholder for Image {n}]": (image_path, *spec) for n, spec in _FIGURES.items()})
+    if radar_path is not None:
+        figures.update({f"{RADAR_MARKER} {n}]": (radar_path, *spec) for n, spec in _RADAR_FIGURES.items()})
+    for marker in missing or {}:
+        figures.pop(marker, None)
 
     with local_files.scratch_dir() as folder_temp:
         local_doc = folder_temp / "report.docx"
         _place_qr(doc, attributes, folder_temp)
-        _render_report(doc, geodataframe, image_path, folder_temp, local_doc)
+        _render_report(doc, geodataframe, figures, missing or {}, folder_temp, local_doc)
         local_files.copy_into(local_doc, output_path)
     return str(output_path)
 
@@ -262,18 +290,63 @@ _FIGURES = {
     6: ((7, 6, 5), True),   # after, true colour, alert outline
 }
 
+#: The radar figures (``[Placeholder for Radar N]``), one look each: the radar
+#: composite packs R = VV, G = VH, B = VV/VH ratio (``mosaics_helper.scaleS1``).
+RADAR_MARKER = "[Placeholder for Radar"
+_RADAR_FIGURES = {
+    1: ((3, 2, 1), False),  # before
+    2: ((7, 6, 5), False),  # after
+    3: ((7, 6, 5), True),   # after, alert outline
+}
 
-def _render_report(doc, geodataframe, image_path, folder_temp, local_doc):
-    """Plot the six figures into ``folder_temp``, place them in ``doc`` and
-    save it as ``local_doc``."""
+
+def _drop_paragraphs(doc, test):
+    """Remove the body and table-cell paragraphs whose text passes ``test``."""
+    for para in list(_paragraphs(doc)):
+        if test(para.text):
+            parent = para._element.getparent()
+            if parent.tag == qn("w:tc") and len(parent.findall(qn("w:p"))) == 1:
+                para.text = ""  # a table cell must keep one paragraph
+            else:
+                parent.remove(para._element)
+
+
+def _drop_radar_block(doc):
+    """A report without radar: the default templates' radar block goes -- the
+    table holding the radar markers, with the section heading just before it
+    and the caption line just after it (styled as those templates style them).
+    A radar marker anywhere else (a custom template) is just cleared."""
+    edges = ((lambda el: el.getprevious(), "Report Section"), (lambda el: el.getnext(), "Small Print"))
+    for table in list(doc.tables):
+        if not any(RADAR_MARKER in p.text for row in table.rows for cell in row.cells for p in cell.paragraphs):
+            continue
+        tbl = table._tbl
+        for neighbour, style in edges:
+            el = neighbour(tbl)
+            if el is not None and el.tag == qn("w:p") and Paragraph(el, table._parent).style.name == style:
+                el.getparent().remove(el)
+        tbl.getparent().remove(tbl)
+    for para in _paragraphs(doc):
+        if RADAR_MARKER in para.text or "{before_radar}" in para.text or "{after_radar}" in para.text:
+            para.text = re.sub(r"\[Placeholder for Radar \d\]|\{(before|after)_radar\}", "", para.text)
+
+
+def _render_report(doc, geodataframe, figures, missing, folder_temp, local_doc):
+    """Plot ``figures`` (``{marker: (tif, bands, outline)}``) into
+    ``folder_temp``, place each where the template has its marker, write the
+    ``missing`` notes in theirs, and save ``doc`` as ``local_doc``."""
     jpgs = {}
-    for n, (bands, outline) in _FIGURES.items():
-        jpgs[n] = Path(folder_temp) / f"output_image{n}.jpg"
-        plot_tiff_with_overlay(image_path, jpgs[n], bands=bands,
+    for i, (marker, (tif, bands, outline)) in enumerate(figures.items(), 1):
+        jpgs[marker] = Path(folder_temp) / f"output_image{i}.jpg"
+        plot_tiff_with_overlay(tif, jpgs[marker], bands=bands,
                                vector_overlay=geodataframe if outline else None, overlay_color="red")
     for para in _paragraphs(doc):
-        for n, jpg in jpgs.items():
-            if f"[Placeholder for Image {n}]" in para.text:
+        for marker, jpg in jpgs.items():
+            if marker in para.text:
                 _place_picture(para, jpg, IMAGE_WIDTH)
                 break
+        else:
+            for marker, note in missing.items():
+                if marker in para.text:
+                    para.text = para.text.replace(marker, note)
     doc.save(str(local_doc))

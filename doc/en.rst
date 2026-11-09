@@ -1572,7 +1572,7 @@ The report template
 
 In Analysis, each reviewed alert can be exported with a Word report (see `Export <defo-export_>`_). The report is built from a .docx template, where *placeholders* such as ``{area_loss}`` are replaced by the alert's values.
 
-.. shot: questionnaire-template | The Report template card expanded: "Report template · Default template" with its "default" chip, the "Report template (.docx)" file picker and its hint, and the placeholder chips under "Placeholders the template can use (click to copy):", the grey ones (ending with {group_alerts}, {centroid}, {centroid_lat} and {centroid_lon}) then the green {verdict}, {loss_driver} and the added question's key, with the note under them. Crop to the card.
+.. shot: questionnaire-template | The Report template card expanded: "Report template · Default template" with its "default" chip, the "Report template (.docx)" file picker and its hint, and the placeholder chips under "Placeholders the template can use (click to copy):", the grey ones (ending with {centroid_lat}, {centroid_lon}, {before_radar}, {after_radar} and {image_note}) then the green {verdict}, {loss_driver} and the added question's key, with the note under them. Crop to the card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/questionnaire-template.png
     :alt: The report template and its placeholders
@@ -1595,7 +1595,7 @@ The **Report template** line names the template in use, with a chip: **default**
     *   -   ``{confirmation_date}``
         -   The day the report is built.
     *   -   ``{before_img}``, ``{after_img}``
-        -   The names of the before and after images chosen in the review.
+        -   The names of the before and after images in the optical pictures: the ones chosen in the review, or for a Sentinel-1 pick the nearest optical image, marked "(nearest optical image)".
     *   -   ``{alert_system}``
         -   The sources that detected the alert.
     *   -   ``{area_loss}``
@@ -1604,6 +1604,10 @@ The **Report template** line names the template in use, with a chip: **default**
         -   The centre of the alert (of the group's outline, for a group) as latitude, longitude in decimal degrees ("-12.345678, -69.123456").
     *   -   ``{centroid_lat}``, ``{centroid_lon}``
         -   The same latitude and longitude, each on its own ("-12.345678", "-69.123456").
+    *   -   ``{before_radar}``, ``{after_radar}``
+        -   With a Sentinel-1 pick: the names of the before and after radar images. A radar image the app added is marked "(nearest radar image)". Empty otherwise.
+    *   -   ``{image_note}``
+        -   With a Sentinel-1 pick: one sentence saying which chosen image is radar and that the optical pictures show the nearest optical image. Empty otherwise; a paragraph holding only this placeholder is then removed.
     *   -   ``{group_size}``, ``{group_alerts}``
         -   For an alert reviewed in a group: the number of alerts in the group and their numbers ("12, 15, 16"). Otherwise "1" and the alert's own number.
     *   -   ``{verdict}`` (green)
@@ -1630,10 +1634,16 @@ The report also holds six pictures of the alert, cut from the before and after i
         -   The after image.
     *   -   ``[Placeholder for Image 3]``, ``[Placeholder for Image 6]``
         -   The after image with the alert's outline in red.
+    *   -   ``[Placeholder for Radar 1]``
+        -   The before radar image.
+    *   -   ``[Placeholder for Radar 2]``
+        -   The after radar image.
+    *   -   ``[Placeholder for Radar 3]``
+        -   The after radar image with the alert's outline in red.
     *   -   ``[Placeholder for Centroid QR]``
         -   A QR code that opens the alert's centroid in Google Maps (80 pt wide, or narrower to fit its table cell). Without a centroid, the marker is removed.
 
-Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). A Sentinel-1 image gives radar pictures, whatever the template calls them: in true colour, red, green and blue show VV, VH and the VV/VH ratio; in false colour, VV, VV and VH. The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. A template without these markers gets a report with no pictures.
+Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). Images 1–6 always show optical images: when a chosen image is Sentinel-1, the nearest optical image on its side stands in (the latest one before a before image, the earliest one after an after image, within 12 months and under the cloud limit). The radar pictures show VV, VH and the VV/VH ratio as red, green and blue. When only one side is Sentinel-1, the other side's radar picture is the nearest radar image of the same pass within 30 days, else the nearest of either pass. A picture with no image near enough is replaced by a short note. The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. Its *Radar evidence* row (before, after, after with the outline) is removed from a report without a Sentinel-1 image. A template without these markers gets a report with no pictures.
 
 .. tip::
 
@@ -2137,7 +2147,7 @@ Sentinel-1 radar images differ from the optical ones:
 -   Both passes are shown, one band per pass, labelled "Sentinel-1 asc" and "Sentinel-1 desc".
 -   They are shown raw, with no speckle filter, as VV, VH and the VV/VH ratio in red, green and blue. In the map pane, a radar image has a single "Radar" layer, with no true/false colour switch.
 -   Radar sees through clouds, so the cloud limit never hides these images, and the automatic pick never chooses them. Select one by hand.
--   With a Sentinel-1 image picked, the files and the report are built from the radar image (10 m). The model needs optical images on both sides, so it refuses and asks for a Sentinel-2, Landsat or Planet image instead. The GIF uses only the optical images around the radar pick (Planet picks still appear in GIFs); if there are none, the GIF is skipped and the warning under **Build files** gives the reason.
+-   With a Sentinel-1 image picked, the zip holds two composites: the optical one, built from the nearest optical image on the radar side, and a radar one. The report adds a *Radar evidence* row and marks the images the app added. The model needs optical images on both sides, so it refuses and asks for a Sentinel-2, Landsat or Planet image instead. The GIF uses only the optical images around the radar pick (Planet picks still appear in GIFs); if there are none, the GIF is skipped and the warning under **Build files** gives the reason.
 
 The images come from an index of the images over the project's area, kept on disk and refreshed after 24 hours. While it loads, the toolbar reads "Loading the image index…"; an index older than a day reads "Index from (date)". If a refresh fails, the index on screen keeps working, and **Try again** retries.
 

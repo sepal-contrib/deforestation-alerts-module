@@ -27,6 +27,7 @@ from gui.scripts import questions
 from gui.scripts.notify_bridge import tile_progress_reporter
 from gui.tile.analysis import gif as gif_mod
 from gui.tile.analysis.paths import alert_gif_name, stage_alert_image
+from gui.tile.analysis.report_images import stage_report_images
 
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
@@ -135,7 +136,7 @@ def gif_allowed(alerts, alert_id, before_info, after_info) -> bool:
             and picks_are_saved(alerts, alert_id, before_info, after_info))
 
 
-def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
+def build_alert_files(alert, folder, template=None, *, task=None, gif=None, report=None):
     """Build one alert's files (the OLD ``download_data``; IO only, no widgets).
 
     Builds the single-alert gpkg, the before/after GeoTIFF (if missing), the zip,
@@ -163,6 +164,11 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
     GIF to the zip when the row is saved Confirmed (spec D9); a GIF that fails
     leaves the zip without it and says so in the result: ``"gif_path"`` when
     one was made, ``"gif_warning": True`` when one was asked for and failed.
+
+    ``report`` (``report_images.capture_report_images``, taken at the click)
+    is set when a pick is radar: the optical composite is then built from the
+    optical stand-ins, a radar composite joins it in the zip, and the report
+    gets its radar block (report radar spec).
     """
     alertas_gdf = alert.alerts
     actual_alert_id = alert.alert_id
@@ -243,14 +249,13 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
         # folder). Built via the shared helper so it resolves to the same file
         # the CNN run (edit_tools) wrote.
         on_tiles = tile_progress_reporter(task) if task is not None else None
+        area = getattr(alert, "image_area", "normal")
         with geedim_tile_progress(on_tiles):
-            image_local = stage_alert_image(
-                folder,
-                actual_alert_id,
-                *picked,
-                alert.grid,
-                getattr(alert, "image_area", "normal"),
-            )
+            if report is None:
+                image_local, radar_local, missing, image_text = (
+                    stage_alert_image(folder, actual_alert_id, *picked, alert.grid, area), None, {}, {})
+            else:
+                image_local, radar_local, missing, image_text = stage_report_images(report, alert, folder, area)
         if task is not None:
             task.set_progress(None)  # zip + report: back to indeterminate
 
@@ -272,16 +277,18 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
 
         # Zip the image + gpkg.
         zip_local = stage / zip_dest.name
-        add_files_to_zip(str(zip_local), str(image_local), str(gpkg_local),
-                         *([str(gif_local)] if gif_local is not None else []))
+        add_files_to_zip(str(zip_local), str(gpkg_local),
+                         *(str(f) for f in (image_local, radar_local, gif_local) if f is not None))
         local_files.copy_into(zip_local, zip_dest)
 
         # Word report: the project's template (a file of the user's, read
         # where it is) or the packaged default, resolved above.
         generate_deforestation_report_with_word_template(
-            str(image_local), str(gpkg_local), str(template), str(report_dest),
+            None if image_local is None else str(image_local), str(gpkg_local), str(template), str(report_dest),
             # The stored row is what the report describes: a build follows a save.
-            extra=review_placeholders(alert.questions or [], selected_element, selected_element.get("status")),
+            extra={**review_placeholders(alert.questions or [], selected_element, selected_element.get("status")),
+                   **image_text},
+            radar_path=None if radar_local is None else str(radar_local), missing=missing,
         )
 
     result = {"zip_path": str(zip_dest), "report_path": str(report_dest)}

@@ -229,3 +229,76 @@ def test_get_unique_alerts_lists_the_sources_in_digit_order():
     assert get_unique_alerts([1011], _FIXED) == ["GLAD-L", "RADD", "CCDC"]
     assert get_unique_alerts([21, 10000], {**_FIXED, 4: "Mine"}) == ["GLAD-L", "RADD", "Mine"]
     assert get_unique_alerts([12], digit_map={1: "B", 0: "A"}) == ["A", "B"]
+
+
+# ---------------------------------------------------------------------------
+# Radar picks (report radar spec): a radar block, notes for missing images.
+# ---------------------------------------------------------------------------
+
+
+def _report_text(path):
+    from docx import Document
+
+    from deforestation_alerts.scripts.report_builder import _paragraphs
+
+    return "\n".join(p.text for p in _paragraphs(Document(path)))
+
+
+def _pictures(path):
+    from docx import Document
+
+    return len(Document(path).inline_shapes)
+
+
+def test_a_report_without_radar_drops_the_radar_block(data_root, tmp_path, scratch_root, stub_plots):
+    from deforestation_alerts.scripts.report_builder import generate_deforestation_report_with_word_template
+    from gui.tile.analysis.alert_files import DEFAULT_REPORT_TEMPLATE
+
+    out = generate_deforestation_report_with_word_template(
+        str(tmp_path / "unused.tif"), _alert_gpkg(tmp_path), DEFAULT_REPORT_TEMPLATE, str(tmp_path / "r.docx"))
+
+    text = _report_text(out)
+    for gone in ("Radar evidence", "Before · radar", "Radar (Sentinel-1)", "Placeholder", "_radar}", "{image_note}"):
+        assert gone not in text
+    assert "Satellite evidence" in text and "True colour:" in text
+    assert len(stub_plots) == 6 and _pictures(out) == 6 + 2  # and the centroid QR, twice in its merged cell
+
+
+def test_a_radar_report_draws_both_blocks_and_notes_a_missing_side(data_root, tmp_path, scratch_root, stub_plots):
+    from deforestation_alerts.scripts.report_builder import generate_deforestation_report_with_word_template
+    from gui.tile.analysis.alert_files import DEFAULT_REPORT_TEMPLATE
+
+    gone = "No optical image near this date."
+    out = generate_deforestation_report_with_word_template(
+        str(tmp_path / "optical.tif"), _alert_gpkg(tmp_path), DEFAULT_REPORT_TEMPLATE, str(tmp_path / "r.docx"),
+        extra={"before_radar": "Sentinel 1 ascending 2026-05-02", "after_radar": "Sentinel 1 ascending 2026-07-01",
+               "image_note": "The after image is radar.", "after_img": "Sentinel 2 2026-07-04 (nearest optical image)"},
+        radar_path=str(tmp_path / "radar.tif"),
+        missing={"[Placeholder for Image 1]": gone, "[Placeholder for Image 4]": gone})
+
+    text = _report_text(out)
+    assert "Radar evidence" in text and "Sentinel 1 ascending 2026-07-01" in text
+    assert "The after image is radar." in text and "(nearest optical image)" in text
+    assert text.count(gone) == 2 and "Placeholder" not in text
+    assert _pictures(out) == 4 + 3 + 2  # the after optical figures, the radar ones, the QR
+    assert sum(p.name.startswith("output_image") for p in stub_plots) == 7
+
+
+def test_a_custom_template_without_radar_markers_is_filled_as_before(data_root, tmp_path, scratch_root,
+                                                                       stub_plots):
+    from docx import Document
+
+    from deforestation_alerts.scripts.report_builder import generate_deforestation_report_with_word_template
+
+    template = tmp_path / "custom.docx"
+    doc = Document()
+    doc.add_paragraph("Before: {before_img}")
+    doc.add_paragraph("[Placeholder for Image 4]")
+    doc.add_paragraph("Notes")
+    doc.save(template)
+
+    out = generate_deforestation_report_with_word_template(
+        str(tmp_path / "optical.tif"), _alert_gpkg(tmp_path), str(template), str(tmp_path / "r.docx"))
+
+    assert _report_text(out) == "Before: S2_before\n\nNotes"
+    assert _pictures(out) == 1

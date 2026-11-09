@@ -19,7 +19,7 @@ SEP = ", "
 REPORT_PLACEHOLDERS = ("admin1", "admin2", "admin3", "detection_date1", "detection_date2",
                        "confirmation_date", "before_img", "after_img", "alert_system", "area_loss",
                        "group_size", "group_alerts", "centroid",
-                       "centroid_lat", "centroid_lon")
+                       "centroid_lat", "centroid_lon", "before_radar", "after_radar", "image_note")
 
 #: Every name a question key may not take: the review's own placeholder, the
 #: report's, and the alert store's columns (``evaluator``: the split's, spec §3).
