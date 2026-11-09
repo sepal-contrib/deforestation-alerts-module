@@ -442,15 +442,10 @@ def test_a_scene_on_the_window_end_date_is_a_legal_after():
     assert scene_query.default_pick(sel, A0, A1)[1] == scene_index.row_id(S2, date(2026, 8, 23))
 
 
-def test_a_side_whose_every_candidate_is_over_the_limit_is_left_unselected():
-    # The spec's rule (§3): *before* is the latest scene **with cloud at or
-    # under the limit**. With none, that side stays empty and the readout
-    # points at the slider — auto-picking an 88%-cloud image instead would
-    # make the one message that tells the reviewer to raise the limit
-    # unreachable, and would look like a considered choice.
+def test_a_side_whose_every_candidate_is_over_the_limit_falls_back_to_the_least_cloudy():
     sel = _sel([(S2, "2026-04-24", 88.0), (S2, "2026-04-02", 90.0), (S2, "2026-08-27", 4.0)])
     before, after = scene_query.default_pick(sel, A0, A1)
-    assert before is None
+    assert before == scene_index.row_id(S2, date(2026, 4, 24))
     assert after == scene_index.row_id(S2, date(2026, 8, 27))
 
 
@@ -734,3 +729,36 @@ def test_report_images_stand_in_optical_and_pair_radar():
         "optical": ("s20260601", "l20260709"), "radar": ("a20260605", "a20260710")}
     assert scene_query.report_images(rows, "a20260605", "a20260710") == {
         "optical": ("s20260601", "s20260720"), "radar": ("a20260605", "a20260710")}
+
+
+def test_the_auto_pick_falls_back_over_the_limit():
+    sel = _sel([(S2, "2026-04-01", 95.0), (S2, "2026-04-20", 60.0), (S2, "2026-08-27", 4.0)])
+    # nothing under 40 % before A0: the least cloudy within 30 days, drawn although hidden
+    assert scene_query.default_pick(sel, A0, A1) == ("s20260420", "s20260827")
+
+
+def test_the_auto_pick_keeps_a_clear_side():  # unchanged behaviour
+    sel = _sel([(S2, "2026-04-02", 6.0), (S2, "2026-04-20", 60.0), (S2, "2026-08-27", 4.0)])
+    assert scene_query.default_pick(sel, A0, A1)[0] == "s20260402"
+
+
+def test_both_following_radar_handles_share_the_pass_found_on_both_sides():
+    rows = _sel([(D_DESC, "2026-05-20", NAN), (A_ASC, "2026-05-25", NAN),
+                 (D_DESC, "2026-09-05", NAN), (A_ASC, "2026-10-20", NAN)])
+    # ascending is nearer before but has nothing within 30 days after 09-01
+    assert scene_query.follow_radar(rows, (date(2026, 5, 28), date(2026, 9, 1)), (None, None)) == (
+        "d20260520", "d20260905")
+
+
+def test_a_following_radar_handle_keeps_a_pins_pass_within_30_days():
+    rows = _sel([(D_DESC, "2026-05-26", NAN), (A_ASC, "2026-05-10", NAN), (A_ASC, "2026-09-10", NAN)])
+    assert scene_query.follow_radar(rows, (date(2026, 5, 28), date(2026, 9, 1)), (None, "a20260910")) == (
+        "a20260510", "a20260910")
+
+
+def test_a_following_radar_handle_falls_back_to_either_pass_and_may_find_none():
+    rows = _sel([(D_DESC, "2026-03-01", NAN), (A_ASC, "2026-09-10", NAN)])
+    assert scene_query.follow_radar(rows, (date(2026, 5, 28), date(2026, 9, 1)), (None, "a20260910")) == (
+        "d20260301", "a20260910")
+    assert scene_query.follow_radar(rows.iloc[0:0], (date(2026, 5, 28), date(2026, 9, 1)), (None, None)) == (
+        None, None)

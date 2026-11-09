@@ -394,10 +394,9 @@ def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], 
     """The pair to mark when an alert opens: ``(before_id, after_id)``.
 
     Nearest first, among the rows the cloud limit does not hide. A side whose
-    every candidate is over the limit is left unselected (spec §3): that is
-    what makes the readout's "raise the limit" guidance reachable. The rows
-    are still drawn, faded, so the reviewer can see that images exist there
-    before deciding.
+    every candidate is over the limit falls back to ``least_cloudy_near``: the
+    least cloudy image within ``STAND_IN_DAYS`` (hidden or not), else the
+    nearest one. The rows over the limit are still drawn, faded.
 
     Nothing inside ``[a0, a1]`` is ever picked, because an image taken while
     the alert was accumulating shows partial clearing and would understate
@@ -431,7 +430,12 @@ def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], 
         row = pool.loc[pool["date"].idxmax() if newest else pool["date"].idxmin()]
         return str(row["id"])
 
-    return (_nearest(before_all, newest=True), _nearest(after_all, newest=False))
+    # a single-day window keeps "before" strictly earlier, in the fallback too
+    before_day = a0 - timedelta(days=1) if a0 == a1 else a0
+    return (
+        _nearest(before_all, newest=True) or least_cloudy_near(sel, before_day, "before"),
+        _nearest(after_all, newest=False) or least_cloudy_near(sel, a1, "after"),
+    )
 
 
 # ------------------------------------------------- saved picks and the GIF
@@ -518,6 +522,14 @@ def report_optical(rows: pd.DataFrame, rid, side: str) -> Optional[str]:
     source, day = parse_row_id(rid)
     if not is_radar(source):
         return rid
+    return least_cloudy_near(rows, day, side)
+
+
+def least_cloudy_near(rows: pd.DataFrame, day: date, side: str) -> Optional[str]:
+    """The least cloudy dated optical row (hidden ones included) on ``side`` of
+    ``day`` (before: on or before; after: on or after) within ``STAND_IN_DAYS``
+    (NaN cloud last; ties: the closest), else the nearest one on ``side``,
+    else ``None``."""
     ok = rows[rows["source"].map(dated_optical).astype(bool)]
     ok = ok[ok["date"] <= pd.Timestamp(day)] if side == "before" else ok[ok["date"] >= pd.Timestamp(day)]
     gap = (ok["date"] - pd.Timestamp(day)).abs().dt.days
@@ -538,6 +550,42 @@ def radar_partner(rows: pd.DataFrame, rid, side: str, pass_source: str) -> Optio
     if same is not None and abs((parse_row_id(same)[1] - day).days) <= SAME_PASS_DAYS:
         return same
     return _nearest_on_side(radar, day, side)
+
+
+def follow_radar(rows: pd.DataFrame, anchors: tuple, pinned: tuple) -> tuple:
+    """The radar pair ``(before_id, after_id)``: a pinned side keeps its pin; a
+    following side takes the nearest radar row on its side of its anchor date.
+    With the other side pinned that is of the pin's pass when within
+    ``SAME_PASS_DAYS``, else of either pass. With both following it is of the
+    pass that has a row within ``SAME_PASS_DAYS`` on both sides (the smaller
+    sum of gaps if two do), else each side takes either pass."""
+    radar = rows[rows["source"].map(is_radar).astype(bool)]
+    sides = ("before", "after")
+
+    def near(frame, i):
+        rid = _nearest_on_side(frame, anchors[i], sides[i])
+        return rid, (abs((parse_row_id(rid)[1] - anchors[i]).days) if rid else None)
+
+    def of_pass(src, i):
+        rid, gap = near(radar[radar["source"] == src], i)
+        return rid if gap is not None and gap <= SAME_PASS_DAYS else None
+
+    out = list(pinned)
+    if pinned[0] is None and pinned[1] is None:
+        best = None
+        for src in radar["source"].unique():
+            ids = [of_pass(src, i) for i in (0, 1)]
+            if None in ids:
+                continue
+            total = sum(abs((parse_row_id(r)[1] - anchors[i]).days) for i, r in enumerate(ids))
+            if best is None or total < best[0]:
+                best = (total, ids)
+        out = best[1] if best else [near(radar, i)[0] for i in (0, 1)]
+    else:
+        for i in (0, 1):
+            if pinned[i] is None:
+                out[i] = of_pass(parse_row_id(pinned[1 - i])[0], i) or near(radar, i)[0]
+    return tuple(out)
 
 
 def report_images(rows: pd.DataFrame, before_id, after_id) -> Optional[dict]:
