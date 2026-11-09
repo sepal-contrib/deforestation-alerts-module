@@ -195,3 +195,25 @@ def test_the_gif_is_named_after_the_composite():
     name = paths.alert_gif_name("/set", 3, _info(S2, "2026-04-05"), _info(LS, "2026-09-05"))
     assert name == "/set/alert_3_s_050426_l_050926.gif"
     assert name[:-4] == paths.alert_image_name("/set", 3, _info(S2, "2026-04-05"), _info(LS, "2026-09-05"))[:-4]
+
+
+S1A = "Sentinel 1 ascending"
+RADAR_ROWS = [(S2, "2026-03-05", 5.0), (S1A, "2026-04-05", None), (S2, "2026-04-20", 5.0), (S1A, "2026-09-05", None),
+              (S2, "2026-09-20", 5.0), (S2, "2026-10-05", 5.0)]
+
+
+def test_a_gif_with_a_radar_pick_has_only_optical_frames():
+    frames = gif_mod.plan_frames(_tables(RADAR_ROWS), BBOX, _info(S1A, "2026-04-05"), _info(S2, "2026-09-20"),
+                                 frozenset(scene_index.SOURCE_CODE), 40.0)
+    assert frames and not any(f.source.startswith("Sentinel 1") for f in frames)
+    stand_in = next(f for f in frames if f.day == date(2026, 3, 5))  # the optical row before the radar pick
+    assert stand_in.role == ""
+    assert [f.role for f in frames].count("after") == 1
+
+
+def test_a_radar_pick_with_no_optical_neighbour_is_refused():
+    rows = [(S1A, "2026-04-05", None), (S1A, "2026-09-05", None)]
+    app_state, widgets, analysis = _ui(rows=rows, filt=(frozenset(scene_index.SOURCE_CODE), 40.0))
+    with pytest.raises(gif_mod.GifRefused) as err:
+        gif_mod.capture_gif(app_state, widgets, analysis, _alert(_info(S1A, "2026-04-05"), _info(S1A, "2026-09-05")))
+    assert err.value.key == "analysis_tile.export_labels.gif_no_optical"

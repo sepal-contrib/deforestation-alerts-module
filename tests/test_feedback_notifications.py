@@ -923,6 +923,23 @@ def test_a_model_run_with_a_pane_still_loading_is_refused(
     assert feedback.toasts() == [("warning", reason)]
 
 
+@pytest.mark.parametrize("model", [1, 2])
+def test_the_cnn_refuses_a_radar_pick(edit_tools_card, monkeypatch, model):
+    edit_tools, card, analysis = edit_tools_card
+    feedback = _record_feedback(monkeypatch, edit_tools)
+    analysis.after_info.set(["Sentinel 1 descending", 1700000001, None, "S1_after", "_020224"])
+    ran = []
+    monkeypatch.setattr(edit_tools, "_run_cnn_model", lambda *a, **k: ran.append(1))
+
+    _dl_run_button(card, model).fire_event("click", None)
+    feedback.join()
+
+    reason = t("analysis_tile.model_labels.dl_not_optical")
+    assert ran == []
+    assert feedback.task().error_message == reason
+    assert feedback.toasts() == [("warning", reason)]
+
+
 def test_both_model_runs_keep_their_predictions(edit_tools_card, monkeypatch):
     """Each run records its raster by model number without dropping the
     other's: ``prediction_files`` is replaced, never mutated in place."""
@@ -1745,8 +1762,8 @@ def _alert_a_then_b(app_state, analysis, widgets, polygon=True):
     app_state.actual_alert_id.value = 0
     if polygon:
         analysis.defo_layer.set("polygon of A")
-    analysis.before_info.set(["S2", 1, 0, "before of A"])
-    analysis.after_info.set(["S2", 2, 0, "after of A"])
+    analysis.before_info.set(["Sentinel 2", 1, 0, "before of A"])
+    analysis.after_info.set(["Sentinel 2", 2, 0, "after of A"])
     analysis.before_image.set(object())  # drawn by its pane: a run needs both
     analysis.after_image.set(object())
     widgets.actual_alert_grid = "grid of A"
@@ -1757,8 +1774,8 @@ def _alert_a_then_b(app_state, analysis, widgets, polygon=True):
         analysis.reset_alert()
         if polygon:
             analysis.defo_layer.set("polygon of B")
-        analysis.before_info.set(["S2", 3, 0, "before of B"])
-        analysis.after_info.set(["S2", 4, 0, "after of B"])
+        analysis.before_info.set(["Sentinel 2", 3, 0, "before of B"])
+        analysis.after_info.set(["Sentinel 2", 4, 0, "after of B"])
         analysis.before_image.set(object())
         analysis.after_image.set(object())
         widgets.actual_alert_grid = "grid of B"

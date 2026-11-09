@@ -378,7 +378,8 @@
       "dl_step_run": "Baixando imagens e executando o modelo…",
       "dl_done": "Predição do modelo pronta.",
       "dl_stale": "O modelo terminou depois que você passou para outro alerta: a predição não foi adicionada.",
-      "dl_no_images": "As imagens de antes e depois deste alerta não estão ambas prontas, então o modelo não tem sobre o que ser executado. Escolha uma imagem de antes e uma de depois e espere os dois painéis terminarem de exibi-las."
+      "dl_no_images": "As imagens de antes e depois deste alerta não estão ambas prontas, então o modelo não tem sobre o que ser executado. Escolha uma imagem de antes e uma de depois e espere os dois painéis terminarem de exibi-las.",
+      "dl_not_optical": "O modelo precisa de imagens ópticas dos dois lados: escolha uma imagem do Sentinel-2, Landsat ou Planet no lugar da do Sentinel-1."
     },
     "export_labels": {
       "save_btn": "Salvar",
@@ -418,6 +419,7 @@
       "report_template_bad": "{path} não é um arquivo Word (.docx) na sua pasta do SEPAL; o modelo de relatório não foi alterado.",
       "report_template_missing": "O modelo de relatório {path} não existe mais. Escolha-o novamente na etapa Questionário, ou limpe o campo para usar o modelo padrão.",
       "gif_no_images": "O índice de imagens não tem uma imagem de antes e uma de depois para este alerta, então não há nada para animar. Escolha uma imagem de antes e uma de depois na linha do tempo.",
+      "gif_no_optical": "Não há imagens ópticas ao redor da imagem do Sentinel-1 escolhida para animar.",
       "gif_same_image": "As imagens de antes e depois são a mesma imagem, então o GIF não mostraria nenhuma mudança. Escolha duas imagens diferentes na linha do tempo.",
       "gif_too_few": "Menos de duas imagens puderam ser renderizadas para este alerta, então nenhum GIF foi criado.",
       "gif_hint": "Salve-o como alerta verdadeiro, com as imagens na tela, para criá-lo",

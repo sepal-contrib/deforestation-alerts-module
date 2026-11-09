@@ -15,12 +15,11 @@ from typing import Iterable, NamedTuple, Optional
 
 import pandas as pd
 
-from deforestation_alerts.scripts.image_sources import SOURCES
+from deforestation_alerts.scripts.image_sources import SOURCES, dated_optical
 
 from deforestation_alerts.scripts.scene_index import (
     INDEX_VERSION,
     SOURCE_CODE,
-    SOURCE_PLANET,
     row_id,
 )
 
@@ -405,11 +404,12 @@ def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], 
     fired -- and *before* is taken from strictly earlier dates.
 
     A Planet NICFI basemap is a whole month's mosaic, not a scene that
-    witnesses one date, so it is never offered as either side's default.
+    witnesses one date, and radar is not optical, so neither is ever offered
+    as either side's default.
     """
     if sel is None or len(sel) == 0:
         return (None, None)
-    usable = sel[sel["source"] != SOURCE_PLANET]
+    usable = sel[sel["source"].map(dated_optical).astype(bool)]
     if a0 == a1:
         before_all = usable[usable["date"] < pd.Timestamp(a0)]
     else:
@@ -474,13 +474,28 @@ def granule_keys(tables, bbox, source: str, day) -> list[str]:
     return sorted(same[same["tile"].isin(tiles) | (same["tile"] == "")]["key"])
 
 
+def optical_anchor(rows: pd.DataFrame, rid, side: str) -> Optional[str]:
+    """``rid`` if it is a dated optical row, else the visible dated optical row
+    nearest it on its ``side`` ("before": latest on or before its date;
+    "after": earliest on or after it), else ``None``."""
+    source, day = parse_row_id(rid)
+    if dated_optical(source):
+        return rid
+    ok = rows[rows["source"].map(dated_optical).astype(bool) & ~rows["hidden"].astype(bool)]
+    if side == "before":
+        ok = ok[ok["date"] <= pd.Timestamp(day)]
+        return str(ok.loc[ok["date"].idxmax(), "id"]) if len(ok) else None
+    ok = ok[ok["date"] >= pd.Timestamp(day)]
+    return str(ok.loc[ok["date"].idxmin(), "id"]) if len(ok) else None
+
+
 def gif_frames(rows: pd.DataFrame, before_id, after_id, n: int = 2) -> pd.DataFrame:
     """The GIF's rows, oldest first, with a ``role`` column (spec D6).
 
     The two picks (``role`` "before" / "after"), every row between them, plus
     up to ``n`` rows before the earlier pick and ``n`` after the later one.
     Any frame but a pick is never hidden by the cloud limit and never a Planet
-    basemap (a monthly mosaic is not a dated look, the rule ``default_pick``
+    basemap or radar (not a dated optical look, the rule ``default_pick``
     follows). The picks themselves are frames whatever they are. On one date
     Sentinel-2 comes before Landsat. Empty when either pick is not in ``rows``.
     """
@@ -492,7 +507,7 @@ def gif_frames(rows: pd.DataFrame, before_id, after_id, n: int = 2) -> pd.DataFr
                .sort_values(["date", "_rank"], kind="stable").reset_index(drop=True))
     where = {rid: i for i, rid in enumerate(ordered["id"])}
     lo, hi = sorted((where[before_id], where[after_id]))
-    pool = (~ordered["hidden"].astype(bool)) & (ordered["source"] != SOURCE_PLANET)
+    pool = (~ordered["hidden"].astype(bool)) & ordered["source"].map(dated_optical).astype(bool)
     earlier = [i for i in range(lo) if pool[i]][-n:] if n else []
     later = [i for i in range(hi + 1, len(ordered)) if pool[i]][:n]
     between = [i for i in range(lo + 1, hi) if pool[i]]

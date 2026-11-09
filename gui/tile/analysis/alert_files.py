@@ -18,6 +18,7 @@ from deforestation_alerts.project.review_groups import group_record
 from deforestation_alerts.project.review_status import CONFIRMED, VERDICT_LABEL_KEYS, is_reviewed
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts import local_files
+from deforestation_alerts.scripts.image_sources import SOURCES
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import add_files_to_zip
 from deforestation_alerts.scripts.report_builder import generate_deforestation_report_with_word_template
@@ -84,6 +85,13 @@ def images_picked(alert) -> bool:
     """
     return all(v is not None for v in (alert.before_info, alert.after_info,
                                        alert.before_image, alert.after_image))
+
+
+def optical_pair(alert) -> bool:
+    """Both picks are optical images (Planet counts; the CNN takes it today).
+    An unknown source name counts as not optical."""
+    return all(SOURCES[i[0]].optical if i[0] in SOURCES else False
+               for i in (alert.before_info, alert.after_info))
 
 
 def review_placeholders(question_list, row, status) -> dict:

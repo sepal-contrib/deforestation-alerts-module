@@ -659,3 +659,22 @@ def test_radar_backfill_fills_only_the_sides_radar_has_not_covered():
     assert scene_query.radar_backfill(m) == (date(2026, 3, 1), date(2026, 5, 1))
     m.radar = scene_index.Coverage(start=date(2026, 3, 1), end=date(2026, 8, 31))
     assert scene_query.radar_backfill(m) is None
+
+
+A_ASC = "Sentinel 1 ascending"
+
+
+def test_the_auto_pick_never_lands_on_radar():
+    only_radar = _sel([(A_ASC, "2026-04-24", float("nan")), (S2, "2026-08-27", 4.0)])
+    assert scene_query.default_pick(only_radar, A0, A1)[0] is None
+    both = _sel([(A_ASC, "2026-04-24", float("nan")), (S2, "2026-04-02", 6.0), (S2, "2026-08-27", 4.0)])
+    assert scene_query.default_pick(both, A0, A1)[0] == scene_index.row_id(S2, date(2026, 4, 2))
+
+
+def test_an_optical_anchor_stands_in_for_a_radar_pick():
+    rows = _sel([(S2, "2026-06-01", 5.0), (A_ASC, "2026-06-05", float("nan")), (LS, "2026-06-09", 5.0)])
+    assert scene_query.optical_anchor(rows, "a20260605", "before") == "s20260601"
+    assert scene_query.optical_anchor(rows, "a20260605", "after") == "l20260609"
+    assert scene_query.optical_anchor(rows, "s20260601", "before") == "s20260601"
+    assert scene_query.optical_anchor(rows, "a20260605", "after") == "l20260609"
+    assert scene_query.optical_anchor(rows.iloc[0:0], "a20260605", "after") is None
