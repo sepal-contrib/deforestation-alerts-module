@@ -5,11 +5,11 @@ widgets: ``export.build_export`` runs ``build_alert_files`` on a worker.
 """
 
 import logging
-import math
 from pathlib import Path
 from typing import Optional
 
 import geopandas as gpd
+import pandas as pd
 from pysepal.i18n import current_locale
 
 from deforestation_alerts.errors import KeyedError
@@ -88,6 +88,15 @@ def images_picked(alert) -> bool:
                                        alert.before_image, alert.after_image))
 
 
+def radar_images_ready(alert) -> bool:
+    """Each radar side on screen (its info set) has its ee.Image rebuilt: the
+    files' rule for the radar pair, as ``images_picked`` is for the optical
+    one. Not in ``images_picked``: the CNN runs on the optical pair alone."""
+    return all(info is None or image is not None
+               for info, image in ((alert.before_radar_info, alert.before_radar_image),
+                                   (alert.after_radar_info, alert.after_radar_image)))
+
+
 def review_placeholders(question_list, row, status) -> dict:
     """``{verdict}`` and one ``{key}`` per question, as the report shows them
     (in the current language; a question the verdict does not ask is blank)."""
@@ -108,7 +117,7 @@ def saved_status(alerts, alert_id) -> Optional[str]:
 
 
 def _empty(value) -> bool:
-    return value is None or value == "" or (isinstance(value, float) and math.isnan(value))
+    return value is None or (isinstance(value, str) and value == "") or pd.isna(value)
 
 
 def picks_are_saved(alerts, alert_id, before_info, after_info, radar_saved=None) -> bool:
@@ -199,7 +208,7 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
     # are None until an image is picked for this alert, which nothing does by
     # itself. Refused here, before any file is written: the TypeError this
     # raised further down used to leave a partial alert_<id>.gpkg behind.
-    if not images_picked(alert):
+    if not images_picked(alert) or not radar_images_ready(alert):
         return None
     picked = (alert.before_info, alert.after_info, alert.before_image, alert.after_image)
 

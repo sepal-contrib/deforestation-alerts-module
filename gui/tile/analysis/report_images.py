@@ -4,6 +4,7 @@ pinned or following, and the report's radar captions. The optical files come
 from the optical pair, as they always did. Runs on the build's worker.
 """
 
+from pathlib import Path
 from typing import Optional
 
 from gui.i18n import t
@@ -26,11 +27,13 @@ def _caption(info, other, pinned) -> str:
     return f"{name} ({t(mark)})"
 
 
-def stage_report_images(alert, folder, area="normal") -> tuple[Optional[object], dict, dict]:
+def stage_report_images(alert, folder, area="normal") -> tuple[Optional[Path], dict, dict]:
     """Download the radar composite of ``alert``'s radar pair (worker thread).
 
     Returns ``(radar_tif, missing, extra)``. ``radar_tif`` is ``None`` when
-    neither side has a radar image (the lane was not shown). A side exists
+    both radar infos are ``None`` (the lane was not shown); a side whose image
+    is still loading never gets here (``alert_files.radar_images_ready``
+    holds the build). A side exists
     only with its info: the timeline unpublishes a side by its info and leaves
     its last ee.Image behind. A side with no image takes the other side's
     place in the file, and ``missing`` gives its figures a note instead;

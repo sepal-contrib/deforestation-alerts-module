@@ -202,7 +202,7 @@ RADAR_ROWS = [(S2, "2026-03-05", 5.0), (S1A, "2026-04-05", None), (S2, "2026-04-
               (S2, "2026-09-20", 5.0), (S2, "2026-10-05", 5.0)]
 
 
-def test_the_gif_and_the_model_use_the_optical_pair_whatever_the_radar_picks():
+def test_the_gif_uses_the_optical_pair_whatever_the_radar_picks():
     """The radar picks are their own pair: the GIF animates the optical one,
     and no radar row is ever a frame."""
     app_state, widgets, analysis = _ui(rows=RADAR_ROWS, filt=(frozenset(scene_index.SOURCE_CODE), 40.0))

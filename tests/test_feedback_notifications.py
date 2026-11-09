@@ -925,7 +925,7 @@ def test_a_model_run_with_a_pane_still_loading_is_refused(
 
 
 @pytest.mark.parametrize("model", [1, 2])
-def test_the_gif_and_the_model_use_the_optical_pair_whatever_the_radar_picks(edit_tools_card, monkeypatch, model):
+def test_the_model_uses_the_optical_pair_whatever_the_radar_picks(edit_tools_card, monkeypatch, model):
     """The model runs on the optical pair: a radar pick beside it refuses nothing."""
     edit_tools, card, analysis = edit_tools_card
     feedback = _record_feedback(monkeypatch, edit_tools)

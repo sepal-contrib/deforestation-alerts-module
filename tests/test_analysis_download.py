@@ -1314,3 +1314,22 @@ def test_an_unsaved_radar_pin_holds_the_build(tmp_path, monkeypatch):
     # ...and a row pin the screen does not show (following now) is unsaved too
     assert not alert_files.picks_are_saved(gdf, 0, _BEFORE_INFO, _AFTER_INFO,
                                            {"after_radar_img": None, "after_radar_img_info": None})
+
+
+def test_a_radar_image_still_loading_holds_the_build_until_it_lands(download_ctx):
+    """A radar side on screen whose ee.Image is rebuilding is loading, not
+    missing: the build is refused as for an optical pane, then builds."""
+    ctx = download_ctx
+    ctx.analysis.before_radar_info.set(_RADAR_B)  # its image is still None
+    assert _run(ctx) is None
+    assert ctx.downloads == [] and list(ctx.folder.iterdir()) == []
+    ctx.analysis.before_radar_image.set(object())  # the rebuild lands
+    assert _run(ctx) is not None
+    assert "alert_0_a_010124_a_010124.tif" in zipfile.ZipFile(ctx.folder / "alert_0.zip").namelist()
+
+
+def test_an_na_radar_column_counts_as_empty():
+    gdf = _alerts_gdf()
+    gdf["before_img"], gdf["after_img"] = _BEFORE_INFO[3], _AFTER_INFO[3]
+    gdf["after_radar_img"] = pd.array([pd.NA] * len(gdf), dtype="string")
+    assert alert_files.picks_are_saved(gdf, 0, _BEFORE_INFO, _AFTER_INFO, {"after_radar_img": None})
