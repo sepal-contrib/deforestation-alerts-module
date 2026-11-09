@@ -1589,7 +1589,7 @@ Le rapport contient aussi six vues de l'alerte, découpées dans les images d'av
     *   -   ``[Placeholder for Centroid QR]``
         -   Un code QR qui ouvre le centroïde de l'alerte dans Google Maps (80 pt de large, ou moins pour tenir dans sa cellule de tableau). Sans centroïde, le marqueur est supprimé.
 
-Les images 1 à 3 sont en fausses couleurs (proche infrarouge, rouge, vert) et les images 4 à 6 en couleurs naturelles (rouge, vert, bleu). Elles gardent la résolution de la plus fine des deux images (Sentinel-2 10 m, Landsat 15 m, Planet 4,77 m). Le modèle par défaut les dispose en une grille de trois colonnes (avant, après, après avec le contour) et deux lignes (couleurs naturelles, fausses couleurs), et place le code QR à côté des détails de l'alerte. Un modèle sans ces marqueurs donne un rapport sans images.
+Les images 1 à 3 sont en fausses couleurs (proche infrarouge, rouge, vert) et les images 4 à 6 en couleurs naturelles (rouge, vert, bleu). Elles gardent la résolution de la plus fine des deux images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). Le modèle par défaut les dispose en une grille de trois colonnes (avant, après, après avec le contour) et deux lignes (couleurs naturelles, fausses couleurs), et place le code QR à côté des détails de l'alerte. Un modèle sans ces marqueurs donne un rapport sans images.
 
 .. tip::
 
@@ -2019,11 +2019,12 @@ Choisir les images : la frise chronologique
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/analysis-timeline.png
     :alt: La frise chronologique des images
 
-La frise montre toutes les images qui couvrent l'alerte, d'environ deux mois avant sa première détection à deux mois après sa dernière détection. Chaque collection a sa propre bande :
+La frise montre toutes les images qui couvrent l'alerte, d'environ deux mois avant sa première détection à deux mois après sa dernière détection. Chaque source d'images activée dans le menu **Sources d'images** (voir plus bas) a sa propre bande :
 
 -   les traits *Sentinel-2* en haut ;
--   *Landsat* au milieu ; et
--   *Planet* (la mosaïque mensuelle NICFI), sous forme de barre couvrant son mois, en bas, seulement quand votre compte GEE a accès à NICFI.
+-   *Landsat* au milieu ;
+-   *Planet* (la mosaïque mensuelle NICFI), sous forme de barre couvrant son mois, seulement quand votre compte GEE a accès à NICFI et que vous l'avez activée ; et
+-   le radar *Sentinel-1*, seulement quand vous l'avez activé, avec une bande par passage (*Sentinel-1 asc* et *Sentinel-1 desc*).
 
 Un trait estompé, à mi-hauteur, est une image au-dessus de la limite de nuages. La bande dorée est la *fenêtre de l'alerte* : les dates sur lesquelles l'alerte a été détectée. Sur une `alerte d'extension <defo-integrate-growth_>`_, une bande grise derrière elle marque les dates de détection de chaque alerte antérieure à laquelle elle est liée : choisissez une image d'avant prise après le défrichement antérieur pour ne voir que la nouvelle perte.
 
@@ -2035,7 +2036,7 @@ Pour déplacer une poignée, utilisez l'une de ces méthodes :
 -   Cliquez sur un trait : la poignée appropriée la plus proche s'y place. Les images au-dessus de la limite de nuages ne peuvent pas être sélectionnées.
 -   Au clavier : appuyez sur **Tab** pour atteindre une poignée, parcourez les dates avec les flèches gauche et droite, sautez à la première ou à la dernière image avec **Début** et **Fin**, et choisissez avec **Entrée**.
 
-À l'ouverture d'une alerte, l'application choisit l'image la plus proche *avant* la fenêtre de l'alerte et l'image la plus proche *après*, parmi les images sous la limite de nuages. Elle ne choisit jamais une image située dans la fenêtre de l'alerte (elle ne montrerait qu'une partie de la coupe) ni une mosaïque Planet, mais les deux peuvent être choisies à la main. Un côté sans image sous la limite de nuages reste « non défini ». Une alerte examinée s'ouvre sur les images avec lesquelles elle a été enregistrée. Si l'une d'elles n'est plus disponible, le titre de sa carte indique « Image enregistrée indisponible ; choisie automatiquement ».
+À l'ouverture d'une alerte, l'application choisit l'image la plus proche *avant* la fenêtre de l'alerte et l'image la plus proche *après*, parmi les images sous la limite de nuages. Elle ne choisit jamais une image située dans la fenêtre de l'alerte (elle ne montrerait qu'une partie de la coupe), une mosaïque Planet ni une image radar Sentinel-1, mais toutes peuvent être choisies à la main. Un côté sans image sous la limite de nuages reste « non défini ». Une alerte examinée s'ouvre sur les images avec lesquelles elle a été enregistrée. Si l'une d'elles n'est plus disponible, le titre de sa carte indique « Image enregistrée indisponible ; choisie automatiquement ».
 
 Le titre de chaque carte nomme son image : « Image précédente · Sentinel-2 2026-07-28 · 3% » (collection, date, couverture nuageuse). Quand l'autre collection a une image du même jour, un bouton dans le titre (« ⇄ Landsat ») permet de basculer vers elle.
 
@@ -2050,9 +2051,9 @@ La barre d'outils au-dessus de la piste :
     *   -   Commande
         -   Description
         -   Par défaut
-    *   -   Pastilles *Planet*, *Sentinel-2*, *Landsat*
-        -   Affichent ou masquent une collection. Chaque pastille compte les images de la collection dans la vue, puis (« +7 ») celles au-dessus de la limite de nuages. La pastille Planet ne s'affiche que quand votre compte GEE a accès à NICFI.
-        -   Toutes activées.
+    *   -   Bouton **Sources d'images**
+        -   Ouvre le menu des sources d'images, en deux groupes : **Optique** (Sentinel-2, Landsat, Planet) et **Radar** (Sentinel-1). Le bouton porte un point de couleur pour chaque source activée. Chaque ligne a une case à cocher, le point et le nom de la source et, à droite, le nombre de ses images dans la vue actuelle ; une seconde ligne (« 3 au-dessus de la limite de nuages ») apparaît quand la limite de nuages en masque. Planet est grisée, avec « Pas d'accès avec ce compte », quand votre compte GEE n'a pas accès à NICFI. Le choix est enregistré avec le projet, et l'ouverture d'une alerte dont l'image enregistrée vient d'une source désactivée active cette source.
+        -   Sentinel-2 et Landsat activées ; Planet et Sentinel-1 désactivées.
     *   -   Bouton **?**
         -   Affiche ou masque une légende de la frise.
         -   Masquée.
@@ -2063,7 +2064,7 @@ La barre d'outils au-dessus de la piste :
         -   Déplie tous les mois.
         -
     *   -   **Nuages max.**
-        -   La limite de nuages, de 0 à 100 % par pas de 5. Les images au-dessus sont estompées et jamais choisies automatiquement. Les mosaïques Planet n'ont pas de couverture nuageuse : la limite ne les masque donc jamais.
+        -   La limite de nuages, de 0 à 100 % par pas de 5. Les images au-dessus sont estompées et jamais choisies automatiquement. Les mosaïques Planet et les images radar Sentinel-1 n'ont pas de couverture nuageuse : la limite ne les masque donc jamais.
         -   40 %.
     *   -   **Zone d'image**
         -   Jusqu'où les images s'étendent autour de l'alerte : **Normale**, **Grande** ou **Très grande** (100 m, 1 km ou 2,5 km autour d'elle). Les zones plus grandes sont plus longues à charger et à exporter. Enregistrer la revue enregistre la zone : l'alerte s'ouvre de nouveau sur elle, et ses fichiers et son GIF sont faits avec elle. Une alerte jamais enregistrée s'ouvre sur **Normale**.
@@ -2071,6 +2072,14 @@ La barre d'outils au-dessus de la piste :
     *   -   **+1 mois** (à gauche et à droite de la piste)
         -   Ajoute un mois avant ou après la vue. Celui de droite s'arrête au mois en cours.
         -
+
+Les images radar Sentinel-1 sont traitées autrement que les images optiques :
+
+-   Elles ne sont récupérées qu'une fois Sentinel-1 activé pour le projet : tant que ses images ne sont pas listées, son compte indique « – ».
+-   Les deux passages sont affichés, une bande par passage, étiquetées « Sentinel-1 asc » et « Sentinel-1 desc ».
+-   Elles sont affichées brutes, sans filtre de chatoiement (speckle), sous la forme de VV, VH et du rapport VV/VH en rouge, vert et bleu. Dans le volet de la carte, une image radar a une seule couche « Radar », sans bascule entre couleurs naturelles et fausses couleurs.
+-   Le radar voit à travers les nuages : la limite de nuages ne masque jamais ces images, et le choix automatique ne les retient jamais. Sélectionnez-en une à la main.
+-   Avec une image Sentinel-1 choisie, les fichiers et le rapport sont construits à partir de l'image radar (10 m). Le modèle a besoin d'images optiques des deux côtés : il la refuse et demande une image Sentinel-2, Landsat ou Planet à la place. Le GIF n'utilise que les images optiques autour de l'image radar choisie (les images Planet choisies apparaissent toujours dans les GIF) ; s'il n'y en a aucune, le GIF est omis et l'avertissement sous **Générer les fichiers** en donne la raison.
 
 Les images proviennent d'un index des images de la zone du projet, conservé sur le disque et rafraîchi au bout de 24 heures. Pendant son chargement, la barre d'outils indique « Chargement de l'index des images… » ; un index de plus d'un jour affiche « Index du (date) ». Si un rafraîchissement échoue, l'index affiché continue de fonctionner, et **Réessayer** relance la tentative.
 

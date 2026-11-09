@@ -1633,7 +1633,7 @@ The report also holds six pictures of the alert, cut from the before and after i
     *   -   ``[Placeholder for Centroid QR]``
         -   A QR code that opens the alert's centroid in Google Maps (80 pt wide, or narrower to fit its table cell). Without a centroid, the marker is removed.
 
-Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. A template without these markers gets a report with no pictures.
+Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. A template without these markers gets a report with no pictures.
 
 .. tip::
 
@@ -2072,16 +2072,17 @@ A map displays "Imagery failed to load" when the tiles of its image do not load.
 Choose the images: the timeline
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: analysis-timeline | The timeline strip of the demo alert at full width: the chips Sentinel-2 17 +23 (no Planet chip: the build account has no NICFI access), Landsat 8 +13, the "?" button, Collapse the alert window / Expand every month, the Max cloud 40% slider, Image area = Normal; the track with "‹ +1 month" and "+1 month ›", the gold alert-window band with two collapsed month blocks in it, Sentinel-2 stripes on top, Landsat under them, a few faded half-height stripes over the cloud limit, the before handle left of the band and the after handle right of it with the "122 days apart" bracket between them; the month names on the axis. Crop to the timeline card.
+.. shot: analysis-timeline | The timeline strip of the demo alert at full width: the "Image sources" button with a blue and an orange dot (Sentinel-2 and Landsat on; no Planet, no Sentinel-1), the "?" button, Collapse the alert window / Expand every month, the Max cloud 40% slider, Image area = Normal; the track with "‹ +1 month" and "+1 month ›", the gold alert-window band with two collapsed month blocks in it, Sentinel-2 stripes on top, Landsat under them, a few faded half-height stripes over the cloud limit, the before handle left of the band and the after handle right of it with the "122 days apart" bracket between them; the month names on the axis. Crop to the timeline card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-timeline.png
     :alt: The image timeline
 
-The timeline shows every image that covers the alert, from about two months before the alert was first detected to two months after it was last detected. Each collection has its own band:
+The timeline shows every image that covers the alert, from about two months before the alert was first detected to two months after it was last detected. Each image source that is switched on in the **Image sources** menu (see below) has its own band:
 
 -   *Sentinel-2* stripes on top;
--   *Landsat* in the middle; and
--   *Planet* (the NICFI monthly mosaic) as a bar across its month at the bottom, only when your GEE account has NICFI access.
+-   *Landsat* in the middle;
+-   *Planet* (the NICFI monthly mosaic) as a bar across its month, only when your GEE account has NICFI access and you switched it on; and
+-   *Sentinel-1* radar, only when you switched it on, with one band per pass (*Sentinel-1 asc* and *Sentinel-1 desc*).
 
 A faded, half-height stripe is an image over the cloud limit. The gold band is the *alert window*: the dates over which the alert was detected. On a `growth alert <defo-integrate-growth_>`_, a grey band behind it marks the detection dates of each earlier alert it is linked to: choose a before image taken after the earlier clearing to see only the new loss.
 
@@ -2093,7 +2094,7 @@ To move a handle, use one of these methods:
 -   Click on a stripe: the nearest suitable handle moves to it. Images over the cloud limit cannot be selected.
 -   With the keyboard: press **Tab** to reach a handle, move along the dates with the left and right arrow keys, jump to the first or last image with **Home** and **End**, and choose with **Enter**.
 
-When an alert opens, the app chooses the image nearest *before* the alert window and the image nearest *after* it, among the images under the cloud limit. It never chooses an image inside the alert window (it would show only part of the clearing) nor a Planet mosaic, but both can be chosen by hand. A side with no image under the cloud limit is left "not set". A reviewed alert opens on the images it was saved with. If one of them is no longer available, its map title reads "Saved image not available; picked automatically".
+When an alert opens, the app chooses the image nearest *before* the alert window and the image nearest *after* it, among the images under the cloud limit. It never chooses an image inside the alert window (it would show only part of the clearing), a Planet mosaic or a Sentinel-1 radar image, but all of them can be chosen by hand. A side with no image under the cloud limit is left "not set". A reviewed alert opens on the images it was saved with. If one of them is no longer available, its map title reads "Saved image not available; picked automatically".
 
 Each map's title names its image: "Before image · Sentinel-2 2026-07-28 · 3%" (collection, date, cloud cover). When the other collection has an image of the same day, a button in the title ("⇄ Landsat") switches to it.
 
@@ -2108,9 +2109,9 @@ The toolbar above the track:
     *   -   Control
         -   Description
         -   Default
-    *   -   *Planet*, *Sentinel-2*, *Landsat* chips
-        -   Show or hide a collection. Each chip counts the collection's images in view, then ("+7") those over the cloud limit. The Planet chip shows only when your GEE account has NICFI access.
-        -   All on.
+    *   -   **Image sources** button
+        -   Opens the menu of image sources, in two groups: **Optical** (Sentinel-2, Landsat, Planet) and **Radar** (Sentinel-1). The button carries one coloured dot for each source that is on. Each row has a checkbox, the source's dot and name and, on the right, the number of its images in the current view; a second line ("3 over cloud limit") appears when the cloud limit hides some. Planet is greyed out, with "No access with this account", when your GEE account has no NICFI access. The choice is saved with the project, and opening an alert whose saved image comes from a source that is off turns that source on.
+        -   Sentinel-2 and Landsat on; Planet and Sentinel-1 off.
     *   -   **?** button
         -   Shows or hides a legend of the timeline.
         -   Hidden.
@@ -2121,7 +2122,7 @@ The toolbar above the track:
         -   Unfolds every month.
         -
     *   -   **Max cloud**
-        -   The cloud limit, from 0 to 100 % in steps of 5. Images over it are faded and never chosen automatically. Planet mosaics have no cloud figure, so the limit never hides them.
+        -   The cloud limit, from 0 to 100 % in steps of 5. Images over it are faded and never chosen automatically. Planet mosaics and Sentinel-1 radar images have no cloud figure, so the limit never hides them.
         -   40 %.
     *   -   **Image area**
         -   How far around the alert the images reach: **Normal**, **Large** or **Extra large** (100 m, 1 km or 2.5 km around it). Larger areas take longer to load and export. Saving the review saves the area: the alert opens on it again, and its files and GIF are made on it. An alert never saved opens on **Normal**.
@@ -2129,6 +2130,14 @@ The toolbar above the track:
     *   -   **+1 month** (left and right of the track)
         -   Adds a month before or after the view. The right one stops at the current month.
         -
+
+Sentinel-1 radar images differ from the optical ones:
+
+-   They are fetched only once you turn Sentinel-1 on for the project: until its images are listed, its count reads "–".
+-   Both passes are shown, one band per pass, labelled "Sentinel-1 asc" and "Sentinel-1 desc".
+-   They are shown raw, with no speckle filter, as VV, VH and the VV/VH ratio in red, green and blue. In the map pane, a radar image has a single "Radar" layer, with no true/false colour switch.
+-   Radar sees through clouds, so the cloud limit never hides these images, and the automatic pick never chooses them. Select one by hand.
+-   With a Sentinel-1 image picked, the files and the report are built from the radar image (10 m). The model needs optical images on both sides, so it refuses and asks for a Sentinel-2, Landsat or Planet image instead. The GIF uses only the optical images around the radar pick (Planet picks still appear in GIFs); if there are none, the GIF is skipped and the warning under **Build files** gives the reason.
 
 The images come from an index of the images over the project's area, kept on disk and refreshed after 24 hours. While it loads, the toolbar reads "Loading the image index…"; an index older than a day reads "Index from (date)". If a refresh fails, the index on screen keeps working, and **Try again** retries.
 

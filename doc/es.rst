@@ -1587,7 +1587,7 @@ El informe también contiene seis imágenes de la alerta, recortadas de las imá
     *   -   ``[Placeholder for Centroid QR]``
         -   Un código QR que abre el centroide de la alerta en Google Maps (de 80 pt de ancho, o menos para caber en su celda de tabla). Sin centroide, la marca se elimina.
 
-Las imágenes 1 a 3 están en falso color (infrarrojo cercano, rojo, verde) y las imágenes 4 a 6 en color verdadero (rojo, verde, azul). Conservan la resolución de la más fina de las dos imágenes (Sentinel-2 10 m, Landsat 15 m, Planet 4,77 m). La plantilla predeterminada las organiza en una cuadrícula de tres columnas (antes, después, después con el contorno) y dos filas (color verdadero, falso color), y coloca el código QR junto a los detalles de la alerta. Una plantilla sin estas marcas genera un informe sin imágenes.
+Las imágenes 1 a 3 están en falso color (infrarrojo cercano, rojo, verde) y las imágenes 4 a 6 en color verdadero (rojo, verde, azul). Conservan la resolución de la más fina de las dos imágenes (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). La plantilla predeterminada las organiza en una cuadrícula de tres columnas (antes, después, después con el contorno) y dos filas (color verdadero, falso color), y coloca el código QR junto a los detalles de la alerta. Una plantilla sin estas marcas genera un informe sin imágenes.
 
 .. tip::
 
@@ -2017,11 +2017,12 @@ Elegir las imágenes: la línea de tiempo
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/es/img/analysis-timeline.png
     :alt: La línea de tiempo de imágenes
 
-La línea de tiempo muestra todas las imágenes que cubren la alerta, desde unos dos meses antes de la primera detección de la alerta hasta dos meses después de la última. Cada colección tiene su propia banda:
+La línea de tiempo muestra todas las imágenes que cubren la alerta, desde unos dos meses antes de la primera detección de la alerta hasta dos meses después de la última. Cada fuente de imágenes activada en el menú **Fuentes de imágenes** (véase abajo) tiene su propia banda:
 
 -   las franjas de *Sentinel-2* arriba;
--   *Landsat* en el medio; y
--   *Planet* (el mosaico mensual de NICFI) como una barra a lo largo de su mes, abajo, solo cuando tu cuenta de GEE tiene acceso a NICFI.
+-   *Landsat* en el medio;
+-   *Planet* (el mosaico mensual de NICFI) como una barra a lo largo de su mes, solo cuando tu cuenta de GEE tiene acceso a NICFI y lo activaste; y
+-   el radar *Sentinel-1*, solo cuando lo activaste, con una banda por pasada (*Sentinel-1 asc* y *Sentinel-1 desc*).
 
 Una franja atenuada de media altura es una imagen que supera el límite de nubes. La banda dorada es la *ventana de alerta*: las fechas en las que se detectó la alerta. En una `alerta de crecimiento <defo-integrate-growth_>`_, una banda gris detrás de ella marca las fechas de detección de cada alerta anterior a la que está vinculada: elige una imagen de antes tomada después del desmonte anterior para ver solo la pérdida nueva.
 
@@ -2033,7 +2034,7 @@ Para mover un control, usa uno de estos métodos:
 -   Haz clic en una franja: el control adecuado más cercano se mueve a ella. Las imágenes que superan el límite de nubes no se pueden seleccionar.
 -   Con el teclado: pulsa **Tab** para llegar a un control, recorre las fechas con las flechas izquierda y derecha, salta a la primera o la última imagen con **Inicio** y **Fin**, y elige con **Intro**.
 
-Cuando se abre una alerta, la aplicación elige la imagen más cercana *antes* de la ventana de alerta y la imagen más cercana *después* de ella, entre las imágenes por debajo del límite de nubes. Nunca elige una imagen dentro de la ventana de alerta (solo mostraría parte del desmonte) ni un mosaico de Planet, pero ambos se pueden elegir a mano. Un lado sin ninguna imagen por debajo del límite de nubes queda "sin definir". Una alerta revisada se abre con las imágenes con las que se guardó. Si una de ellas ya no está disponible, el título de su mapa indica "La imagen guardada no está disponible; se eligió automáticamente".
+Cuando se abre una alerta, la aplicación elige la imagen más cercana *antes* de la ventana de alerta y la imagen más cercana *después* de ella, entre las imágenes por debajo del límite de nubes. Nunca elige una imagen dentro de la ventana de alerta (solo mostraría parte del desmonte), un mosaico de Planet ni una imagen de radar Sentinel-1, pero todos se pueden elegir a mano. Un lado sin ninguna imagen por debajo del límite de nubes queda "sin definir". Una alerta revisada se abre con las imágenes con las que se guardó. Si una de ellas ya no está disponible, el título de su mapa indica "La imagen guardada no está disponible; se eligió automáticamente".
 
 El título de cada mapa nombra su imagen: "Imagen Anterior · Sentinel-2 2026-07-28 · 3%" (colección, fecha y nubosidad). Cuando la otra colección tiene una imagen del mismo día, un botón en el título ("⇄ Landsat") cambia a ella.
 
@@ -2048,9 +2049,9 @@ La barra de herramientas sobre la pista:
     *   -   Control
         -   Descripción
         -   Valor predeterminado
-    *   -   Etiquetas *Planet*, *Sentinel-2* y *Landsat*
-        -   Muestran u ocultan una colección. Cada etiqueta cuenta las imágenes de la colección que están a la vista y luego ("+7") las que superan el límite de nubes. La etiqueta de Planet solo aparece cuando tu cuenta de GEE tiene acceso a NICFI.
-        -   Todas activadas.
+    *   -   Botón **Fuentes de imágenes**
+        -   Abre el menú de fuentes de imágenes, en dos grupos: **Ópticas** (Sentinel-2, Landsat, Planet) y **Radar** (Sentinel-1). El botón lleva un punto de color por cada fuente activada. Cada fila tiene una casilla, el punto y el nombre de la fuente y, a la derecha, el número de sus imágenes en la vista actual; una segunda línea ("3 por encima del límite de nubes") aparece cuando el límite de nubes oculta algunas. Planet aparece en gris, con "Sin acceso con esta cuenta", cuando tu cuenta de GEE no tiene acceso a NICFI. La elección se guarda con el proyecto, y al abrir una alerta cuya imagen guardada viene de una fuente desactivada, esa fuente se activa.
+        -   Sentinel-2 y Landsat activadas; Planet y Sentinel-1 desactivadas.
     *   -   Botón **?**
         -   Muestra u oculta una leyenda de la línea de tiempo.
         -   Oculta.
@@ -2061,7 +2062,7 @@ La barra de herramientas sobre la pista:
         -   Despliega todos los meses.
         -
     *   -   **Nubes máx.**
-        -   El límite de nubes, de 0 a 100 % en pasos de 5. Las imágenes que lo superan aparecen atenuadas y nunca se eligen automáticamente. Los mosaicos de Planet no tienen cifra de nubes, así que el límite nunca los oculta.
+        -   El límite de nubes, de 0 a 100 % en pasos de 5. Las imágenes que lo superan aparecen atenuadas y nunca se eligen automáticamente. Los mosaicos de Planet y las imágenes de radar Sentinel-1 no tienen cifra de nubes, así que el límite nunca los oculta.
         -   40 %.
     *   -   **Área de imagen**
         -   Hasta dónde llegan las imágenes alrededor de la alerta: **Estándar**, **Grande** o **Muy grande** (100 m, 1 km o 2,5 km a su alrededor). Las áreas más grandes tardan más en cargarse y exportarse. Guardar la revisión guarda el área: la alerta vuelve a abrirse con ella, y sus archivos y su GIF se hacen con ella. Una alerta nunca guardada se abre en **Estándar**.
@@ -2069,6 +2070,14 @@ La barra de herramientas sobre la pista:
     *   -   **+1 mes** (a la izquierda y a la derecha de la pista)
         -   Añade un mes antes o después de la vista. El de la derecha se detiene en el mes actual.
         -
+
+Las imágenes de radar Sentinel-1 se tratan de otra manera que las ópticas:
+
+-   Solo se obtienen cuando activas Sentinel-1 para el proyecto: hasta que se listan sus imágenes, su cuenta indica "–".
+-   Se muestran las dos pasadas, una banda por pasada, rotuladas "Sentinel-1 asc" y "Sentinel-1 desc".
+-   Se muestran sin procesar, sin filtro de moteado (speckle), como VV, VH y la razón VV/VH en rojo, verde y azul. En el panel del mapa, una imagen de radar tiene una sola capa "Radar", sin conmutador de color verdadero y falso color.
+-   El radar ve a través de las nubes, así que el límite de nubes nunca oculta estas imágenes, y la elección automática nunca las elige. Selecciona una a mano.
+-   Con una imagen Sentinel-1 elegida, los archivos y el informe se generan a partir de la imagen de radar (10 m). El modelo necesita imágenes ópticas en ambos lados, así que la rechaza y pide una imagen de Sentinel-2, Landsat o Planet. El GIF usa solo las imágenes ópticas alrededor de la imagen de radar elegida (las imágenes de Planet elegidas sí aparecen en los GIF); si no hay ninguna, el GIF se omite y la advertencia bajo **Generar archivos** indica el motivo.
 
 Las imágenes provienen de un índice de las imágenes sobre el área del proyecto, guardado en disco y actualizado pasadas 24 horas. Mientras se carga, la barra de herramientas indica "Cargando el índice de imágenes…"; un índice de más de un día indica "Índice del (fecha)". Si una actualización falla, el índice en pantalla sigue funcionando, y **Intentar de nuevo** vuelve a intentarlo.
 

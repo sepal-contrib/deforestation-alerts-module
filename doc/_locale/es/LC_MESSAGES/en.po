@@ -3031,17 +3031,20 @@ msgstr "Elegir las imágenes: la línea de tiempo"
 msgid "The image timeline"
 msgstr "La línea de tiempo de imágenes"
 
-msgid "The timeline shows every image that covers the alert, from about two months before the alert was first detected to two months after it was last detected. Each collection has its own band:"
-msgstr "La línea de tiempo muestra todas las imágenes que cubren la alerta, desde unos dos meses antes de la primera detección de la alerta hasta dos meses después de la última. Cada colección tiene su propia banda:"
+msgid "The timeline shows every image that covers the alert, from about two months before the alert was first detected to two months after it was last detected. Each image source that is switched on in the **Image sources** menu (see below) has its own band:"
+msgstr "La línea de tiempo muestra todas las imágenes que cubren la alerta, desde unos dos meses antes de la primera detección de la alerta hasta dos meses después de la última. Cada fuente de imágenes activada en el menú **Fuentes de imágenes** (véase abajo) tiene su propia banda:"
 
 msgid "*Sentinel-2* stripes on top;"
 msgstr "las franjas de *Sentinel-2* arriba;"
 
-msgid "*Landsat* in the middle; and"
-msgstr "*Landsat* en el medio; y"
+msgid "*Landsat* in the middle;"
+msgstr "*Landsat* en el medio;"
 
-msgid "*Planet* (the NICFI monthly mosaic) as a bar across its month at the bottom, only when your GEE account has NICFI access."
-msgstr "*Planet* (el mosaico mensual de NICFI) como una barra a lo largo de su mes, abajo, solo cuando tu cuenta de GEE tiene acceso a NICFI."
+msgid "*Planet* (the NICFI monthly mosaic) as a bar across its month, only when your GEE account has NICFI access and you switched it on; and"
+msgstr "*Planet* (el mosaico mensual de NICFI) como una barra a lo largo de su mes, solo cuando tu cuenta de GEE tiene acceso a NICFI y lo activaste; y"
+
+msgid "*Sentinel-1* radar, only when you switched it on, with one band per pass (*Sentinel-1 asc* and *Sentinel-1 desc*)."
+msgstr "el radar *Sentinel-1*, solo cuando lo activaste, con una banda por pasada (*Sentinel-1 asc* y *Sentinel-1 desc*)."
 
 msgid "A faded, half-height stripe is an image over the cloud limit. The gold band is the *alert window*: the dates over which the alert was detected. On a `growth alert <defo-integrate-growth_>`_, a grey band behind it marks the detection dates of each earlier alert it is linked to: choose a before image taken after the earlier clearing to see only the new loss."
 msgstr "Una franja atenuada de media altura es una imagen que supera el límite de nubes. La banda dorada es la *ventana de alerta*: las fechas en las que se detectó la alerta. En una `alerta de crecimiento <defo-integrate-growth_>`_, una banda gris detrás de ella marca las fechas de detección de cada alerta anterior a la que está vinculada: elige una imagen de antes tomada después del desmonte anterior para ver solo la pérdida nueva."
@@ -3061,8 +3064,8 @@ msgstr "Haz clic en una franja: el control adecuado más cercano se mueve a ella
 msgid "With the keyboard: press **Tab** to reach a handle, move along the dates with the left and right arrow keys, jump to the first or last image with **Home** and **End**, and choose with **Enter**."
 msgstr "Con el teclado: pulsa **Tab** para llegar a un control, recorre las fechas con las flechas izquierda y derecha, salta a la primera o la última imagen con **Inicio** y **Fin**, y elige con **Intro**."
 
-msgid "When an alert opens, the app chooses the image nearest *before* the alert window and the image nearest *after* it, among the images under the cloud limit. It never chooses an image inside the alert window (it would show only part of the clearing) nor a Planet mosaic, but both can be chosen by hand. A side with no image under the cloud limit is left \"not set\". A reviewed alert opens on the images it was saved with. If one of them is no longer available, its map title reads \"Saved image not available; picked automatically\"."
-msgstr "Cuando se abre una alerta, la aplicación elige la imagen más cercana *antes* de la ventana de alerta y la imagen más cercana *después* de ella, entre las imágenes por debajo del límite de nubes. Nunca elige una imagen dentro de la ventana de alerta (solo mostraría parte del desmonte) ni un mosaico de Planet, pero ambos se pueden elegir a mano. Un lado sin ninguna imagen por debajo del límite de nubes queda \"sin definir\". Una alerta revisada se abre con las imágenes con las que se guardó. Si una de ellas ya no está disponible, el título de su mapa indica \"La imagen guardada no está disponible; se eligió automáticamente\"."
+msgid "When an alert opens, the app chooses the image nearest *before* the alert window and the image nearest *after* it, among the images under the cloud limit. It never chooses an image inside the alert window (it would show only part of the clearing), a Planet mosaic or a Sentinel-1 radar image, but all of them can be chosen by hand. A side with no image under the cloud limit is left \"not set\". A reviewed alert opens on the images it was saved with. If one of them is no longer available, its map title reads \"Saved image not available; picked automatically\"."
+msgstr "Cuando se abre una alerta, la aplicación elige la imagen más cercana *antes* de la ventana de alerta y la imagen más cercana *después* de ella, entre las imágenes por debajo del límite de nubes. Nunca elige una imagen dentro de la ventana de alerta (solo mostraría parte del desmonte), un mosaico de Planet ni una imagen de radar Sentinel-1, pero todos se pueden elegir a mano. Un lado sin ninguna imagen por debajo del límite de nubes queda \"sin definir\". Una alerta revisada se abre con las imágenes con las que se guardó. Si una de ellas ya no está disponible, el título de su mapa indica \"La imagen guardada no está disponible; se eligió automáticamente\"."
 
 msgid "Each map's title names its image: \"Before image · Sentinel-2 2026-07-28 · 3%\" (collection, date, cloud cover). When the other collection has an image of the same day, a button in the title (\"⇄ Landsat\") switches to it."
 msgstr "El título de cada mapa nombra su imagen: \"Imagen Anterior · Sentinel-2 2026-07-28 · 3%\" (colección, fecha y nubosidad). Cuando la otra colección tiene una imagen del mismo día, un botón en el título (\"⇄ Landsat\") cambia a ella."
@@ -3073,14 +3076,14 @@ msgstr "La barra de herramientas sobre la pista:"
 msgid "Default"
 msgstr "Valor predeterminado"
 
-msgid "*Planet*, *Sentinel-2*, *Landsat* chips"
-msgstr "Etiquetas *Planet*, *Sentinel-2* y *Landsat*"
+msgid "**Image sources** button"
+msgstr "Botón **Fuentes de imágenes**"
 
-msgid "Show or hide a collection. Each chip counts the collection's images in view, then (\"+7\") those over the cloud limit. The Planet chip shows only when your GEE account has NICFI access."
-msgstr "Muestran u ocultan una colección. Cada etiqueta cuenta las imágenes de la colección que están a la vista y luego (\"+7\") las que superan el límite de nubes. La etiqueta de Planet solo aparece cuando tu cuenta de GEE tiene acceso a NICFI."
+msgid "Opens the menu of image sources, in two groups: **Optical** (Sentinel-2, Landsat, Planet) and **Radar** (Sentinel-1). The button carries one coloured dot for each source that is on. Each row has a checkbox, the source's dot and name and, on the right, the number of its images in the current view; a second line (\"3 over cloud limit\") appears when the cloud limit hides some. Planet is greyed out, with \"No access with this account\", when your GEE account has no NICFI access. The choice is saved with the project, and opening an alert whose saved image comes from a source that is off turns that source on."
+msgstr "Abre el menú de fuentes de imágenes, en dos grupos: **Ópticas** (Sentinel-2, Landsat, Planet) y **Radar** (Sentinel-1). El botón lleva un punto de color por cada fuente activada. Cada fila tiene una casilla, el punto y el nombre de la fuente y, a la derecha, el número de sus imágenes en la vista actual; una segunda línea (\"3 por encima del límite de nubes\") aparece cuando el límite de nubes oculta algunas. Planet aparece en gris, con \"Sin acceso con esta cuenta\", cuando tu cuenta de GEE no tiene acceso a NICFI. La elección se guarda con el proyecto, y al abrir una alerta cuya imagen guardada viene de una fuente desactivada, esa fuente se activa."
 
-msgid "All on."
-msgstr "Todas activadas."
+msgid "Sentinel-2 and Landsat on; Planet and Sentinel-1 off."
+msgstr "Sentinel-2 y Landsat activadas; Planet y Sentinel-1 desactivadas."
 
 msgid "**?** button"
 msgstr "Botón **?**"
@@ -3109,8 +3112,8 @@ msgstr "Despliega todos los meses."
 msgid "**Max cloud**"
 msgstr "**Nubes máx.**"
 
-msgid "The cloud limit, from 0 to 100 % in steps of 5. Images over it are faded and never chosen automatically. Planet mosaics have no cloud figure, so the limit never hides them."
-msgstr "El límite de nubes, de 0 a 100 % en pasos de 5. Las imágenes que lo superan aparecen atenuadas y nunca se eligen automáticamente. Los mosaicos de Planet no tienen cifra de nubes, así que el límite nunca los oculta."
+msgid "The cloud limit, from 0 to 100 % in steps of 5. Images over it are faded and never chosen automatically. Planet mosaics and Sentinel-1 radar images have no cloud figure, so the limit never hides them."
+msgstr "El límite de nubes, de 0 a 100 % en pasos de 5. Las imágenes que lo superan aparecen atenuadas y nunca se eligen automáticamente. Los mosaicos de Planet y las imágenes de radar Sentinel-1 no tienen cifra de nubes, así que el límite nunca los oculta."
 
 msgid "40 %."
 msgstr "40 %."
@@ -3129,6 +3132,24 @@ msgstr "**+1 mes** (a la izquierda y a la derecha de la pista)"
 
 msgid "Adds a month before or after the view. The right one stops at the current month."
 msgstr "Añade un mes antes o después de la vista. El de la derecha se detiene en el mes actual."
+
+msgid "Sentinel-1 radar images differ from the optical ones:"
+msgstr "Las imágenes de radar Sentinel-1 se tratan de otra manera que las ópticas:"
+
+msgid "They are fetched only once you turn Sentinel-1 on for the project: until its images are listed, its count reads \"–\"."
+msgstr "Solo se obtienen cuando activas Sentinel-1 para el proyecto: hasta que se listan sus imágenes, su cuenta indica \"–\"."
+
+msgid "Both passes are shown, one band per pass, labelled \"Sentinel-1 asc\" and \"Sentinel-1 desc\"."
+msgstr "Se muestran las dos pasadas, una banda por pasada, rotuladas \"Sentinel-1 asc\" y \"Sentinel-1 desc\"."
+
+msgid "They are shown raw, with no speckle filter, as VV, VH and the VV/VH ratio in red, green and blue. In the map pane, a radar image has a single \"Radar\" layer, with no true/false colour switch."
+msgstr "Se muestran sin procesar, sin filtro de moteado (speckle), como VV, VH y la razón VV/VH en rojo, verde y azul. En el panel del mapa, una imagen de radar tiene una sola capa \"Radar\", sin conmutador de color verdadero y falso color."
+
+msgid "Radar sees through clouds, so the cloud limit never hides these images, and the automatic pick never chooses them. Select one by hand."
+msgstr "El radar ve a través de las nubes, así que el límite de nubes nunca oculta estas imágenes, y la elección automática nunca las elige. Selecciona una a mano."
+
+msgid "With a Sentinel-1 image picked, the files and the report are built from the radar image (10 m). The model needs optical images on both sides, so it refuses and asks for a Sentinel-2, Landsat or Planet image instead. The GIF uses only the optical images around the radar pick (Planet picks still appear in GIFs); if there are none, the GIF is skipped and the warning under **Build files** gives the reason."
+msgstr "Con una imagen Sentinel-1 elegida, los archivos y el informe se generan a partir de la imagen de radar (10 m). El modelo necesita imágenes ópticas en ambos lados, así que la rechaza y pide una imagen de Sentinel-2, Landsat o Planet. El GIF usa solo las imágenes ópticas alrededor de la imagen de radar elegida (las imágenes de Planet elegidas sí aparecen en los GIF); si no hay ninguna, el GIF se omite y la advertencia bajo **Generar archivos** indica el motivo."
 
 msgid "The images come from an index of the images over the project's area, kept on disk and refreshed after 24 hours. While it loads, the toolbar reads \"Loading the image index…\"; an index older than a day reads \"Index from (date)\". If a refresh fails, the index on screen keeps working, and **Try again** retries."
 msgstr "Las imágenes provienen de un índice de las imágenes sobre el área del proyecto, guardado en disco y actualizado pasadas 24 horas. Mientras se carga, la barra de herramientas indica \"Cargando el índice de imágenes…\"; un índice de más de un día indica \"Índice del (fecha)\". Si una actualización falla, el índice en pantalla sigue funcionando, y **Intentar de nuevo** vuelve a intentarlo."
