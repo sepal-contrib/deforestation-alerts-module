@@ -79,7 +79,7 @@ SAME_IN = {
               "steps.layers.ramp_magma", "steps.layers.ramp_viridis", "steps.layers.role_nir",
               "steps.layers.role_swir",
               # "radar" is the same word in Spanish
-              "analysis.timeline.group_radar"},
+              "analysis.timeline.group_radar", "analysis.timeline.chip_radar"},
     "fr": {
         # "images", "source", "verdict", "question" and "option(s)" are the same words in French.
         "analysis.timeline.images", "analysis_tile.facts.source",
@@ -111,13 +111,13 @@ SAME_IN = {
         # "distance" is the same word in French.
         "evaluators.group_radius_label",
         # "radar" is the same word in French.
-        "analysis.timeline.group_radar",
+        "analysis.timeline.group_radar", "analysis.timeline.chip_radar",
     },
     "pt-BR": {
         # "item", "status", "total", "normal", "raster" and "download" are the same
         # words in Brazilian Portuguese; ramp names, band acronyms and R/G/B too.
         # So is "radar".
-        "analysis.timeline.group_radar",
+        "analysis.timeline.group_radar", "analysis.timeline.chip_radar",
         "common._test.one", "analysis.timeline.area_normal", "analysis_tile.facts.status",
         "overview_tile.table_status", "overview_tile.table_total", "steps.integrate.attr_col_raster",
         "overview_tile.tab_status", "overview_tile.tab_pixels",

@@ -203,6 +203,8 @@
       "group_optical": "Optical",
       "group_radar": "Radar",
       "follow_optical": "Follow optical",
+      "chip_optical": "Optical",
+      "chip_radar": "Radar",
       "over_cloud": "{n} over cloud limit",
       "planet_no_access": "No access with this account",
       "radar_no_cloud": "Radar sees through clouds and has no cloud figure, so the cloud limit never hides it.",

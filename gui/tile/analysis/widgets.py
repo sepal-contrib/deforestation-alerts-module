@@ -176,7 +176,8 @@ class AnalysisWidgets:
         # View titles, one header cell per view.
         # ------------------------------------------------------------------
         # The titles are the timeline's to fill (``build_timeline``): each one
-        # names its view's chosen image, offers the same day's other
+        # names its view's chosen images as Optical / Radar chips (the pressed
+        # one is what the view draws), offers the same day's other
         # collection, and says when a saved image was not found. They start
         # as the bare view name until the timeline has a pick.
         self.map_title_before = v.CardTitle(

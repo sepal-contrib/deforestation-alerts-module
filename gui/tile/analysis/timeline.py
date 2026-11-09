@@ -36,7 +36,7 @@ import pandas as pd
 
 from deforestation_alerts.scripts import scene_query
 from deforestation_alerts.project.review_copy import read_only
-from deforestation_alerts.scripts.image_sources import MENU, S1, SOURCES, entry_of, is_radar
+from deforestation_alerts.scripts.image_sources import MENU, S1, S1_ASC, SOURCES, entry_of, is_radar
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from deforestation_alerts.scripts.scene_index import (
     SOURCE_PLANET,
@@ -1137,22 +1137,32 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         replace_children(sources_list, groups)
 
     def _render_titles(sel):
-        """Name each side's image in its own map's title.
+        """Name each side's images in its own map's title.
 
-        The title also carries the two things about that image the reviewer
-        acts on: the other collection's image of the same day, as a button
-        that switches to it, and the note that a saved image was not found
-        and the automatic pick stood in (amber, like every warning here).
-        The bracket on the strip says how far apart the two are.
+        The pane name, then a chip per kind: **Optical** with the optical
+        pick, and **Radar** with the radar pick while the radar lane shows and
+        that side has one. The pressed chip is what the map draws
+        (``AnalysisState.radar_drawn``); a click switches it and is not an
+        edit. The title also carries, for the shown kind, the two things the
+        reviewer acts on: the other collection's image of the same day, as a
+        button that switches to it, and the note that a saved image was not
+        found (amber, like every warning here).
         """
-        for lane_, head, rid in (("b", t("analysis_tile.img_selection.prev_image_title"), before_id.value),
-                                 ("a", t("analysis_tile.img_selection.post_image_title"), after_id.value)):
+        radar_on = S1 in _entries()
+        for lane_, head in (("b", t("analysis_tile.img_selection.prev_image_title")),
+                            ("a", t("analysis_tile.img_selection.post_image_title"))):
             title = getattr(widgets, "map_title_before" if lane_ == "b" else "map_title_after", None)
             if title is None:
                 continue
+            side = LANE_SIDE[lane_]
+            has_radar = radar_on and ids[RADAR_LANE[lane_]].value is not None
+            radar_shown = has_radar and analysis.shown_kind.value.get(side) == "radar"
             kids = [v.Html(tag="span", children=[head]),
-                    v.Html(tag="span", style_=f"font-size: 12.5px; font-weight: 400; color: {MUTED}",
-                           children=[readout(sel, rid)])]
+                    _chip(side, "optical", not radar_shown, sel, ids[lane_].value)]
+            if has_radar:
+                kids.append(_chip(side, "radar", radar_shown, sel, ids[RADAR_LANE[lane_]].value))
+            shown_lane = RADAR_LANE[lane_] if radar_shown else lane_
+            rid = ids[shown_lane].value
             alt = same_day_alternative(sel, rid) if _row_of(sel, rid) is not None else None
             if alt is not None:
                 src = SRC_LABEL[scene_query.parse_row_id(alt)[0]]
@@ -1163,15 +1173,37 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                                       f"border-radius: 3px; border: 1px solid var(--dat-edge); cursor: pointer; "
                                       f"color: {SRC_COLOR[scene_query.parse_row_id(alt)[0]]}"),
                               children=[f"\u21c4 {src}"])
-                swap.on_event("click", lambda *_a, lane_=lane_, alt=alt: _pick_if_reachable(lane_, alt))
+                swap.on_event("click", lambda *_a, lane_=shown_lane, alt=alt: _pick_if_reachable(lane_, alt))
                 kids.append(swap)
-            if lane_ in fell_back.value:
+            if shown_lane in fell_back.value:
                 kids.append(v.Html(tag="span", style_=f"font-size: 12px; font-weight: 400; color: {WARN}",
                                    children=[t("analysis.timeline.saved_missing")]))
             # the title is a wrapping flex row: the gap is what keeps the pane
             # name and the image name two words
             title.style_ = "column-gap: 10px; row-gap: 2px"
             replace_children(title, kids)
+
+    def _chip(side, kind, pressed, sel, rid):
+        """One kind's chip in a map title: a toggle button, the swap button's
+        look, in the kind's colour (S2 for optical, S1 for radar)."""
+        radar = kind == "radar"
+        color = SRC_COLOR[S1_ASC if radar else SOURCE_S2]
+        name = t("analysis.timeline.chip_radar" if radar else "analysis.timeline.chip_optical")
+        chip = v.Html(tag="button",
+                      attributes={"type": "button", "aria-pressed": "true" if pressed else "false"},
+                      style_=("font-size: 12.5px; line-height: 18px; padding: 0 6px; border-radius: 3px; "
+                              "cursor: pointer; "
+                              + (f"font-weight: 600; color: {color}; border: 1px solid {color}" if pressed
+                                 else f"font-weight: 400; color: {MUTED}; border: 1px solid var(--dat-edge)")),
+                      children=[f"{name} \u00b7 {readout(sel, rid)}"])
+
+        def _show(*_a):
+            # a view switch, not an edit: no ``imagery_changed``
+            analysis.shown_kind.set({**analysis.shown_kind.value, side: kind})
+            render()
+
+        chip.on_event("click", _show)
+        return chip
 
     def _render_status():
         """The index's age and the refresh's outcome, which are two facts.

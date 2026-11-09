@@ -229,6 +229,13 @@ class AnalysisState:
         current alert's. ``None`` means "not tied to an alert": always current."""
         return token is None or token == self.alert_token.value
 
+    def radar_drawn(self, side: str) -> bool:
+        """Whether ``side``'s map draws its radar pick: radar is the shown
+        kind and that side has one. Otherwise it draws the optical pick, and
+        ``shown_kind`` is kept, so radar shows again when a radar pick returns."""
+        info = self.before_radar_info if side == "before" else self.after_radar_info
+        return self.shown_kind.value.get(side) == "radar" and info.value is not None
+
     def capture(self, read=dict) -> SimpleNamespace:
         """The current alert's token and per-alert values, read together under
         the lock ``reset_alert`` takes, plus what ``read()`` returns (the alert

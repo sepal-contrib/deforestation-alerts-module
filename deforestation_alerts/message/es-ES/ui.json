@@ -208,6 +208,8 @@
       "group_optical": "Ópticas",
       "group_radar": "Radar",
       "follow_optical": "Seguir la óptica",
+      "chip_optical": "Óptica",
+      "chip_radar": "Radar",
       "over_cloud": "{n} por encima del límite de nubes",
       "planet_no_access": "Sin acceso con esta cuenta",
       "radar_no_cloud": "El radar ve a través de las nubes y no tiene dato de nubosidad, por lo que el límite de nubes nunca lo oculta.",

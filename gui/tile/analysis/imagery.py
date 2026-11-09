@@ -273,7 +273,7 @@ IMAGE_LAYERS = frozenset({"True Color", "False Color", "Radar"})
 
 def image_slider_map_callback(
     selected_item, map_element, model_att, widgets, analysis, selected_alerts_model,
-    token=None, fresh=None,
+    token=None, fresh=None, shown=None,
 ):
     """Draw the chosen image's True/False-colour + All alerts layers.
 
@@ -290,6 +290,10 @@ def image_slider_map_callback(
     has been picked again, nothing is stored or drawn (``_wanted``). Blocking
     throughout (the rebuild's ``getMapId``, the tile server), so it belongs on
     a worker -- ``wire_panes`` puts it there.
+
+    A radar source is stored in the radar image of that pane. ``shown`` asks
+    whether this kind is the one the pane draws (``AnalysisState.radar_drawn``):
+    when it says no, the image is stored but not drawn. ``None`` draws.
     """
     if not _wanted(analysis, token, fresh):
         return
@@ -302,7 +306,9 @@ def image_slider_map_callback(
         # the publish and this call. Nothing to draw, and nothing to say.
         return
 
-    target = {0: analysis.before_image, 1: analysis.after_image}.get(model_att)
+    images = ((analysis.before_radar_image, analysis.after_radar_image) if is_radar(img_source)
+              else (analysis.before_image, analysis.after_image))
+    target = images[model_att] if model_att in (0, 1) else None
     stored = []
 
     def _store():
@@ -324,6 +330,10 @@ def image_slider_map_callback(
         # ``wire_panes`` logs at ERROR and toasts.
         logger.info("Analysis imagery: dropped an image the pane no longer waits for")
         return
+    if shown is not None:
+        if not shown():
+            return  # the other kind is on the map
+        fresh = (lambda own=fresh: (own is None or own()) and shown())
 
     # Each add blocks (getMapId, the tile server) and then lands only while
     # this alert is still current: an alert change meanwhile has cleared the
@@ -359,6 +369,10 @@ def image_slider_map_callback(
 def wire_panes(widgets, analysis, selected_alerts_model):
     """Redraw a pane whenever the timeline publishes a pick for its lane.
 
+    Each pane has an optical and a radar pick. Every publish rebuilds its
+    kind's image; only the kind the pane shows (``AnalysisState.radar_drawn``,
+    the title's chips) is drawn, and a chip switch redraws the other one.
+
     One subscription per lane, registered once per session by
     ``build_analysis_layout``. The info list is the trigger, not the keys:
     ``timeline._assign`` sets the granule keys *first* and the info list
@@ -381,24 +395,40 @@ def wire_panes(widgets, analysis, selected_alerts_model):
     as long as the kernel (the house pattern; see ``vis_sync.wire``).
     """
 
-    def _wire(pane, info_reactive, keys_reactive, map_element):
-        # This lane's request generation: bumped here, on the publishing
+    def _wire(pane, map_element):
+        side = _SIDE[pane]
+        # per kind (False optical, True radar): the info, keys and image
+        lanes = {
+            False: ((analysis.before_info, analysis.before_keys, analysis.before_image),
+                    (analysis.after_info, analysis.after_keys, analysis.after_image))[pane],
+            True: ((analysis.before_radar_info, analysis.before_radar_keys, analysis.before_radar_image),
+                   (analysis.after_radar_info, analysis.after_radar_keys, analysis.after_radar_image))[pane],
+        }
+        # Each kind's request generation: bumped here, on the publishing
         # thread, for every pick. The alert token cannot stand in for it --
         # two picks in the same lane for the same alert share it (``_wanted``).
-        picks = {"n": 0}
-        image_reactive = {0: analysis.before_image, 1: analysis.after_image}[pane]
+        picks = {False: 0, True: 0}
+        #: the kind the pane last drew, so a chip switch redraws only on a change
+        drawn = {"radar": None}
 
-        def _on_pick(*_):
+        def _on_pick(radar):
+            info_reactive, keys_reactive, image_reactive = lanes[radar]
             info = info_reactive.value
             if not info:
                 return  # an alert change: ``reset_alert`` clears the info
             item = {"source": info[0], "keys": list(keys_reactive.value or ())}
             token = analysis.alert_token.value
-            picks["n"] += 1
-            mine = picks["n"]
+            picks[radar] += 1
+            mine = picks[radar]
 
             def fresh():
-                return picks["n"] == mine
+                return picks[radar] == mine
+
+            def shown():
+                return analysis.radar_drawn(side) == radar
+
+            if shown():
+                drawn["radar"] = radar
 
             # The lane is pending from here until its rebuild lands: the info
             # above is already this pick's, so leaving the previous pick's
@@ -422,7 +452,7 @@ def wire_panes(widgets, analysis, selected_alerts_model):
                 # failed visualization layer.
                 try:
                     image_slider_map_callback(item, map_element, pane, widgets, analysis,
-                                              selected_alerts_model, token, fresh=fresh)
+                                              selected_alerts_model, token, fresh=fresh, shown=shown)
                 except Exception as exc:  # noqa: BLE001 - a dead pane must not be silent
                     logger.exception("Analysis imagery: the %s image could not be drawn",
                                      _SIDE[pane])
@@ -430,17 +460,34 @@ def wire_panes(widgets, analysis, selected_alerts_model):
 
             spawn_in_context(_work)
 
-        # A new image area (``set_image_area``) redraws the same pick over it.
-        off_pick = info_reactive.subscribe(_on_pick)
-        off_area = analysis.area_rev.subscribe(_on_pick)
+        def _on_shown(*_):
+            # a chip switch, or the radar pick coming or going: draw the
+            # kind now shown, unless the pane already shows it
+            radar = analysis.radar_drawn(side)
+            if drawn["radar"] != radar:
+                _on_pick(radar)
+
+        def _on_radar(*_):
+            _on_pick(True)
+            _on_shown()
+
+        def _on_area(*_):
+            # A new image area (``set_image_area``) rebuilds both picks over it.
+            _on_pick(False)
+            _on_pick(True)
+
+        offs = (lanes[False][0].subscribe(lambda *_: _on_pick(False)),
+                lanes[True][0].subscribe(_on_radar),
+                analysis.shown_kind.subscribe(_on_shown),
+                analysis.area_rev.subscribe(_on_area))
 
         def _off():
-            off_pick()
-            off_area()
+            for off in offs:
+                off()
 
         return _off
 
     return (
-        _wire(0, analysis.before_info, analysis.before_keys, widgets.pane_before),
-        _wire(1, analysis.after_info, analysis.after_keys, widgets.pane_after),
+        _wire(0, widgets.pane_before),
+        _wire(1, widgets.pane_after),
     )

@@ -274,8 +274,14 @@ def _click_row(card, src, iso):
 
 
 def _swap(title):
+    """The swap button: a clickable button that is not one of the chips."""
     return [w for w in _walk(title)
-            if getattr(w, "tag", None) == "button" and "click" in (getattr(w, "_events", None) or [])]
+            if getattr(w, "tag", None) == "button" and "click" in (getattr(w, "_events", None) or [])
+            and "aria-pressed" not in (getattr(w, "attributes", None) or {})]
+
+
+def _chips(title):
+    return [w for w in _walk(title) if "aria-pressed" in (getattr(w, "attributes", None) or {})]
 
 
 # ------------------------------------------------------------ the radar strip
@@ -296,3 +302,57 @@ def test_a_pick_on_the_radar_strip_reaches_the_radar_before_lane():
     _pick(_strips(card)[1], "b", "d20260422")
     assert analysis.before_radar_info.value[3] == "Sentinel 1 descending 2026-04-22 "
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+
+
+def test_the_titles_carry_the_chips_and_the_swap_of_the_shown_kind():
+    from tests.test_timeline import S1A, _MIX, _radar_build, _strips
+
+    # two radar passes on 2026-04-22: the radar lane has a same-day swap
+    _state, analysis, widgets, card = _radar_build(rows=[*_MIX, (S1A, "2026-04-22", float("nan"))])
+    _pick(_strips(card)[1], "b", "d20260422")
+    analysis.dirty.set(False)
+    title = widgets.map_title_before
+    optical, radar = _chips(title)
+    assert _text(optical).startswith(timeline.t("analysis.timeline.chip_optical"))
+    assert "Sentinel-2 2026-04-24" in _text(optical)
+    assert _text(radar).startswith(timeline.t("analysis.timeline.chip_radar"))
+    assert "Sentinel-1 desc 2026-04-22" in _text(radar)
+    assert optical.attributes["aria-pressed"] == "true" and radar.attributes["aria-pressed"] == "false"
+    assert optical.tag == "button" and radar.tag == "button"
+    # the swap is the optical lane's while optical is shown: none on 2026-04-24
+    assert not _swap(title)
+
+    radar.fire_event("click", None)
+    assert analysis.shown_kind.value["before"] == "radar"
+    assert analysis.dirty.value is False  # a chip switch is not an edit
+    optical, radar = _chips(title)
+    assert radar.attributes["aria-pressed"] == "true" and optical.attributes["aria-pressed"] == "false"
+    [swap] = _swap(title)
+    assert "Sentinel-1 asc" in _text(swap)
+    swap.fire_event("click", None)
+    assert analysis.before_radar_info.value[0] == S1A
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+
+    _chips(title)[0].fire_event("click", None)
+    assert analysis.shown_kind.value["before"] == "optical"
+    assert _chips(widgets.map_title_after)[0].attributes["aria-pressed"] == "true"
+
+
+def test_the_saved_missing_note_follows_the_shown_kind():
+    """A saved radar pick that was not found (``fell_back`` "rb") is noted
+    under the radar chip, not under the optical one."""
+    from tests.test_timeline import _FOUR, S1A, _any_index, _covering, _fake_analysis, _fake_state, _strips
+
+    state = _fake_state(index=_any_index(_FOUR))
+    state.scene_manifest.set(_covering())
+    state.scene_index.set(_any_index([*_FOUR, (S1A, "2026-04-20", float("nan"))]))
+    analysis = _fake_analysis()
+    widgets = _fake_widgets(saved_before_radar="Sentinel 1 ascending 2026-04-02 ",
+                            token=analysis.alert_token.value)
+    card = timeline.build_timeline(state, analysis, widgets)
+    state.scene_radar_error.set("radar boom")  # given up: the side follows
+    assert _strips(card)[1].before is not None
+    note = timeline.t("analysis.timeline.saved_missing")
+    assert note not in _text(widgets.map_title_before)  # optical shown
+    _chips(widgets.map_title_before)[1].fire_event("click", None)
+    assert note in _text(widgets.map_title_before)

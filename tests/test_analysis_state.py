@@ -326,7 +326,7 @@ def test_a_replaced_pick_in_the_same_lane_draws_nothing(monkeypatch):
     held, drawn = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
 
-    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None):
+    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None, shown=None):
         """``image_slider_map_callback``'s signature, with the lane's own
         freshness gate: ``spawn_in_context`` forwards positional args only."""
         if analysis_.is_current(token) and (fresh is None or fresh()):
@@ -404,7 +404,7 @@ def test_a_pick_published_for_a_previous_alert_rebuilds_nothing(monkeypatch):
     held, rebuilt = [], []
     monkeypatch.setattr(imagery, "spawn_in_context", lambda fn, args=(): held.append((fn, args)))
 
-    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None):
+    def _rebuild(item, map_, pane, widgets_, analysis_, ctx_, token=None, fresh=None, shown=None):
         """``image_slider_map_callback``'s own signature, so the token is read
         from the position ``wire_panes`` actually passes it in --
         ``spawn_in_context`` forwards positional args only."""
@@ -752,3 +752,119 @@ def test_a_store_without_radar_columns_loads_and_saves():
     row = pd.Series({"before_img": "Sentinel 2 2026-09-01 ", "after_img": float("nan")})
     assert _saved_picks(row) == {"saved_before": "Sentinel 2 2026-09-01 ", "saved_after": None,
                                  "saved_before_radar": None, "saved_after_radar": None}
+
+
+# ------------------------------------------- the panes draw the shown kind
+
+_OPTICAL = [SOURCE_S2, 1757030400000, "5", "Sentinel 2 2025-09-05 ", "_050925"]
+
+
+def _wired_panes(monkeypatch):
+    """``wire_panes`` on real panes, its workers run inline, and a rebuild
+    that names its source (``rebuilt`` counts them)."""
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    panes = make_panes()
+    rebuilt = []
+
+    def _rebuild(source, keys, geom):
+        rebuilt.append(source)
+        return f"img:{source}"
+
+    monkeypatch.setattr(imagery, "rebuild_image", _rebuild)
+    monkeypatch.setattr(panes, "tile_url", lambda img, vis: URL)
+    monkeypatch.setattr(imagery, "spawn_in_context", lambda target, *a, **k: target(*a))
+    widgets = _fake_imagery_widgets()
+    widgets.actual_alert_grid = None
+    widgets.pane_before = panes.target("before", group="alert")
+    widgets.pane_after = panes.target("after", group="alert")
+    imagery.wire_panes(widgets, s, None)
+    return s, panes, rebuilt
+
+
+def _before_ids(panes):
+    return {i for i in panes.ids() if i.startswith("before:")}
+
+
+def test_a_pane_draws_the_shown_kind_and_switches_without_marking_unsaved(monkeypatch):
+    """Extends ``test_switching_between_optical_and_radar_leaves_no_stale_image_layer``:
+    the chip (``shown_kind``) is what swaps the before pane's layers now."""
+    s, panes, _rebuilt = _wired_panes(monkeypatch)
+    s.before_info.set(_OPTICAL)
+    s.before_radar_info.set(_RADAR)
+    assert _before_ids(panes) == {"before:True Color", "before:False Color"}
+    s.shown_kind.set({"before": "radar", "after": "optical"})
+    assert _before_ids(panes) == {"before:Radar"}
+    s.shown_kind.set({"before": "optical", "after": "optical"})
+    assert _before_ids(panes) == {"before:True Color", "before:False Color"}
+    assert s.dirty.value is False
+
+
+def test_both_kinds_are_rebuilt_but_only_the_shown_one_is_drawn(monkeypatch):
+    s, panes, rebuilt = _wired_panes(monkeypatch)
+    s.before_info.set(_OPTICAL)
+    s.before_radar_info.set(_RADAR)
+    assert s.before_image.value == f"img:{SOURCE_S2}"
+    assert s.before_radar_image.value == "img:Sentinel 1 ascending"
+    assert _before_ids(panes) == {"before:True Color", "before:False Color"}
+    # a new image area rebuilds both, and still draws only the shown one
+    rebuilt.clear()
+    s.area_rev.set(s.area_rev.value + 1)
+    assert sorted(rebuilt) == sorted([SOURCE_S2, "Sentinel 1 ascending"])
+    assert _before_ids(panes) == {"before:True Color", "before:False Color"}
+    # a radar pick while optical is shown is rebuilt, not drawn
+    rebuilt.clear()
+    s.before_radar_info.set([*_RADAR[:3], "Sentinel 1 ascending 2025-09-17 ", "_170925"])
+    assert rebuilt == ["Sentinel 1 ascending"]
+    assert _before_ids(panes) == {"before:True Color", "before:False Color"}
+
+
+def test_a_side_without_radar_draws_optical_and_shows_one_chip(monkeypatch):
+    s, panes, _rebuilt = _wired_panes(monkeypatch)
+    s.shown_kind.set({"before": "radar", "after": "optical"})
+    s.before_info.set(_OPTICAL)
+    assert _before_ids(panes) == {"before:True Color", "before:False Color"}
+    s.before_radar_info.set(_RADAR)
+    assert _before_ids(panes) == {"before:Radar"}
+    s.before_radar_info.set(None)  # the radar lane went away
+    assert _before_ids(panes) == {"before:True Color", "before:False Color"}
+    assert s.shown_kind.value["before"] == "radar"  # kept: radar shows again when it returns
+
+    # the title: one chip, Optical, pressed
+    from gui.tile.analysis import timeline
+    from tests.test_timeline import _MIX, _any_index, _fake_state, _fake_widgets
+
+    analysis = AnalysisState()
+    analysis.shown_kind.set({"before": "radar", "after": "radar"})
+    widgets = _fake_widgets(token=analysis.alert_token.value)
+    timeline.build_timeline(_fake_state(index=_any_index(_MIX)), analysis, widgets)  # Sentinel-1 off
+    chips = _chips(widgets.map_title_before)
+    assert len(chips) == 1
+    assert timeline.t("analysis.timeline.chip_optical") in _chip_text(chips[0])
+    assert chips[0].attributes["aria-pressed"] == "true"
+
+
+def test_the_shown_kind_survives_an_alert_change(monkeypatch):
+    s, panes, _rebuilt = _wired_panes(monkeypatch)
+    s.shown_kind.set({"before": "radar", "after": "optical"})
+    s.before_info.set(_OPTICAL)
+    s.before_radar_info.set(_RADAR)
+    assert _before_ids(panes) == {"before:Radar"}
+    s.reset_alert()
+    s.before_info.set(_OPTICAL)
+    assert _before_ids(panes) >= {"before:True Color"}
+    s.before_radar_info.set(_RADAR)
+    assert _before_ids(panes) == {"before:Radar"}
+
+
+def _chips(title):
+    from tests.test_timeline import _walk
+
+    return [w for w in _walk(title) if "aria-pressed" in (getattr(w, "attributes", None) or {})]
+
+
+def _chip_text(w):
+    from tests.test_timeline import _text
+
+    return _text(w)
