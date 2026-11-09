@@ -136,7 +136,7 @@ def test_empty_tables_are_usable_without_a_fetch():
 
 #: the Earth-Engine-facing functions. Pinned so a rename cannot quietly empty
 #: the assertion below, and so adding a seventh is a deliberate edit here.
-EE_FUNCTIONS = ("_window", "_row", "_s2_rows", "_landsat_rows", "scene_request", "planet_request")
+EE_FUNCTIONS = ("_window", "_row", "_s2_rows", "_landsat_rows", "_s1_rows", "scene_request", "planet_request")
 
 
 def test_scene_index_imports_earth_engine_only_inside_its_functions():
@@ -178,3 +178,12 @@ def test_scene_index_imports_earth_engine_only_inside_its_functions():
     for name, node in users.items():
         assert any(isinstance(n, ast.Import) and any(a.name == "ee" for a in n.names)
                    for n in ast.walk(node)), f"{name} uses ee with no function-local import"
+
+
+def test_radar_rows_have_no_cloud_figure():
+    raw = {"scenes": {"source": ["Sentinel 1 ascending"], "millis": [1775174400000], "cloud": [-1],
+                      "tile": ["S1A_IW_GRDH_X"], "key": ["COPERNICUS/S1_GRD/S1A_IW_GRDH_X"]},
+           "tiles": {"tile": [], "coords": [], "gtype": []}}
+    row = scene_index.parse_scenes(raw).scenes.iloc[0]
+    assert row["source"] == scene_index.SOURCE_S1_ASC
+    assert pd.isna(row["cloud"])

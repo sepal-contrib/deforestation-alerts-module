@@ -91,6 +91,9 @@ class SceneManifest(BaseModel):
     covered: Coverage
     counts: dict[str, int] = Field(default_factory=dict)
     planet: PlanetState = Field(default_factory=PlanetState)
+    #: The span whose Sentinel-1 rows are in the index, always inside
+    #: ``covered``; ``None`` until a project turns radar on.
+    radar: Optional[Coverage] = None
 
 
 SCENE_COLUMNS = ("source", "date", "cloud", "tile", "key")
@@ -129,7 +132,8 @@ def _scene_frame(arrays: Mapping[str, list[Any]]) -> pd.DataFrame:
             "date": pd.to_datetime(pd.Series(arrays["millis"], dtype="float64"), unit="ms", utc=True)
             .dt.tz_localize(None)
             .dt.normalize(),
-            "cloud": pd.Series(arrays["cloud"], dtype="float64"),
+            # negative is the "no cloud figure" sentinel (``scene_request``)
+            "cloud": pd.Series(arrays["cloud"], dtype="float64").mask(lambda c: c < 0),
             "tile": pd.Series(arrays["tile"], dtype="string").astype(object),
             "key": pd.Series(arrays["key"], dtype="string").astype(object),
         },
@@ -194,6 +198,7 @@ def empty_tables() -> SceneTables:
 # ------------------------------------------------------------ the one request
 S2_COLLECTION = "COPERNICUS/S2_HARMONIZED"
 LANDSAT_COLLECTIONS = ("LANDSAT/LC08/C02/T1_L2", "LANDSAT/LC09/C02/T1_L2")
+S1_COLLECTION = "COPERNICUS/S1_GRD"
 
 #: The property every row's ``key`` comes from, per source. Sentinel-2 and
 #: Planet keys are asset ids, so the chosen image is rebuilt with
@@ -286,8 +291,35 @@ def _landsat_rows(aoi, start: date, end: date):
     return coll.map(row)
 
 
-def scene_request(aoi, start: date, end: date):
-    """Every Sentinel-2 granule and Landsat scene over ``aoi`` in one request.
+def _s1_rows(aoi, start: date, end: date):
+    """Every dual-polarised (VV+VH) IW Sentinel-1 granule over ``aoi``, its
+    pass in ``source``, its ``system:index`` as its own tile (as for S2)."""
+    import ee
+
+    d0, d1 = _window(start, end)
+    coll = (ee.ImageCollection(S1_COLLECTION).filterBounds(aoi).filterDate(d0, d1)
+            .filter(ee.Filter.eq("instrumentMode", "IW"))
+            .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
+            .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH")))
+
+    def row(img):
+        img = ee.Image(img)
+        ascending = ee.Algorithms.IsEqual(img.get("orbitProperties_pass"), "ASCENDING")
+        return ee.Feature(img.geometry(), {
+            "source": ee.Algorithms.If(ascending, SOURCE_S1_ASC, SOURCE_S1_DESC),
+            "millis": img.date().millis(),
+            "cloud": -1,
+            "tile": img.get("system:index"),
+            "key": img.get("system:id"),
+        })
+
+    return coll.map(row)
+
+
+def scene_request(aoi, start: date, end: date, *, optical: bool = True, radar: bool = False):
+    """Every Sentinel-2 granule and Landsat scene over ``aoi`` in one request,
+    plus the Sentinel-1 granules when ``radar`` (``optical=False`` asks for
+    those alone: the radar backfill).
 
     The reply is a dictionary of parallel scalar arrays rather than a list of
     records, because ``aggregate_array`` over a server-side collection is what
@@ -304,10 +336,16 @@ def scene_request(aoi, start: date, end: date):
     are the ones the retired ``imagery_service`` applied, kept so the candidate set
     does not change (spec §5.1). The slider's top stop therefore means
     "everything the index holds", not literally 100%.
+
+    A radar row sends ``cloud`` as ``-1``, not null: ``aggregate_array`` drops
+    nulls and would misalign the arrays; ``_scene_frame`` reads it as NaN.
     """
     import ee
 
-    rows = ee.FeatureCollection(_s2_rows(aoi, start, end).merge(_landsat_rows(aoi, start, end)))
+    parts = ((_s2_rows, _landsat_rows) if optical else ()) + ((_s1_rows,) if radar else ())
+    rows = ee.FeatureCollection([])
+    for part in parts:
+        rows = rows.merge(part(aoi, start, end))
     tiles = rows.distinct("tile").map(
         lambda f: ee.Feature(f).set({
             "coords": ee.Feature(f).geometry().coordinates(),

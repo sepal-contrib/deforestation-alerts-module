@@ -46,7 +46,7 @@ import solara.lab
 from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.project import paths
-from deforestation_alerts.scripts import scene_cache, scene_index, scene_query
+from deforestation_alerts.scripts import image_sources, scene_cache, scene_index, scene_query
 from gui.i18n import t
 from gui.scripts import aoi_io, remote_facts, vis_layers
 from gui.scripts.error_text import ee_no_access, error_text
@@ -216,6 +216,8 @@ def SceneIndexLoader(app_state, gee_interface):
     fg = widest(wanted_window(p, today, FOREGROUND_MONTHS), requested)
     bg = widest(wanted_window(p, today, BACKGROUND_MONTHS), requested)
     retry = app_state.scene_index_retry.value
+    # Sentinel-1 rows are fetched only while the project shows them.
+    radar_on = p is not None and image_sources.S1 in image_sources.enabled_entries(p)
 
     def _still_current() -> bool:
         """The project and AOI this fetch was started for are still the open
@@ -318,8 +320,10 @@ def SceneIndexLoader(app_state, gee_interface):
             scene_index.PlanetState(region=chunk[0], access=True),
         )
 
-    async def _fetch(window: Window, mode: str):
+    async def _fetch(window: Window, mode: str, *, optical: bool = True):
         """One request, merged into the cache on disk, published.
+
+        ``optical=False`` is a radar-only backfill chunk: no Planet either.
 
         Returns the manifest that landed, or ``None`` when another project took
         over while the request was in flight.
@@ -328,8 +332,10 @@ def SceneIndexLoader(app_state, gee_interface):
         aoi = (aoi_io.ee_aoi(app_state.aoi_result.value, None) if origin == "result"
                else aoi_io.ee_aoi(None, pdir))
         raw = await gee_interface.get_info_async(
-            scene_index.scene_request(aoi, window[0], window[1]))
-        tables, planet = await _with_planet(scene_index.parse_scenes(raw), window)
+            scene_index.scene_request(aoi, window[0], window[1], optical=optical, radar=radar_on))
+        tables, planet = scene_index.parse_scenes(raw), None
+        if optical:
+            tables, planet = await _with_planet(tables, window)
 
         # ``store_chunk`` takes the project's lock and re-reads the index
         # inside it, so no lock is held here and no pre-read snapshot is
@@ -352,7 +358,7 @@ def SceneIndexLoader(app_state, gee_interface):
                 return None
             merged, manifest = await to_thread_in_context(
                 scene_cache.store_chunk, pdir, tables, window, digest, planet=planet,
-                now=datetime.now(timezone.utc), replace=(mode == "rebuild"),
+                now=datetime.now(timezone.utc), replace=(mode == "rebuild"), radar=radar_on,
             )
         if not _still_current():
             return None
@@ -403,6 +409,33 @@ def SceneIndexLoader(app_state, gee_interface):
         logger.info("scene index of %s: chunked fetch stopped at its bound", name)
         return manifest
 
+    async def _backfill_radar(manifest) -> None:
+        """The Sentinel-1 rows ``covered`` holds no radar for, a chunk at a
+        time from the radar edge (from the recent end when there is none).
+
+        A failure is logged and toasted but not written to
+        ``scene_index_error``: the optical index answers as it is.
+        """
+        if not radar_on or manifest is None:
+            return
+        try:
+            for _ in range((manifest.covered.end - manifest.covered.start).days // 28 + 4):
+                side = scene_query.radar_backfill(manifest)
+                if side is None:
+                    return
+                # with no radar yet ``covered`` is the anchor: ``_one_step``
+                # then cuts from the recent end, like a rebuild
+                window = _one_step(manifest.radar or manifest.covered, side, CHUNK_MONTHS)
+                if window[1] <= window[0]:
+                    return
+                manifest = await _fetch(window, "radar", optical=False)
+                if manifest is None:
+                    return
+        except Exception as exc:  # noqa: BLE001
+            message = error_text(exc)
+            logger.warning("Sentinel-1 rows of %s not fetched: %s", name, message, exc_info=True)
+            notifications.error(t("imagery.index_failed", error=message))
+
     # ---- the index on disk, then the foreground window
     async def _load():
         if name is None or digest is None or fg is None:
@@ -452,7 +485,7 @@ def SceneIndexLoader(app_state, gee_interface):
             return
         _publish(app_state.scene_index_pending, True)
         try:
-            await _fill(manifest, fg)
+            manifest = await _fill(manifest, fg)
             _publish(app_state.scene_index_error, None)
         except Exception as exc:  # noqa: BLE001
             # Whatever was published above stays published: a refresh that
@@ -464,6 +497,7 @@ def SceneIndexLoader(app_state, gee_interface):
             logger.warning("scene index of %s not refreshed: %s", name, message, exc_info=True)
             _publish(app_state.scene_index_error, message)
             notifications.error(t("imagery.index_failed", error=message))
+            return
         finally:
             # Known, deferred: a dependency change cancels this task at its
             # next await, and this ``finally`` can run *after* the replacement
@@ -472,6 +506,7 @@ def SceneIndexLoader(app_state, gee_interface):
             # the newest run may lower the flag) and it belongs with the task
             # that renders the flag, not here.
             _publish(app_state.scene_index_pending, False)
+        await _backfill_radar(manifest)
 
     # ``fg`` moves in a worker's render: opening a project publishes its first
     # alert from the active-set loader's worker, and the timeline asks there
@@ -479,7 +514,7 @@ def SceneIndexLoader(app_state, gee_interface):
     # needs. A task started in that render raises "no running event loop" and
     # takes the app down, so the dependencies wait for the loop, as the
     # widener's below do.
-    load = solara.lab.use_task(_load, dependencies=use_loop_dependencies([name, digest, fg, origin, retry]),
+    load = solara.lab.use_task(_load, dependencies=use_loop_dependencies([name, digest, fg, origin, retry, radar_on]),
                                prefer_threaded=False, raise_error=False)
 
     # ---- the ±BACKGROUND_MONTHS buffer, one month at a time, once the
@@ -499,19 +534,23 @@ def SceneIndexLoader(app_state, gee_interface):
             # ask Earth Engine for it twice. The months the reviewer is looking
             # at come first; the buffer waits for the next render.
             return
-        if scene_query.needs_refresh(manifest, bg, digest=digest, now=now) != "widen":
+        mode = scene_query.needs_refresh(manifest, bg, digest=digest, now=now)
+        if mode not in ("", "widen"):
             # Only a widen belongs to the buffer. A "tail" or a "rebuild" is
             # the foreground's work, and the guard above has already returned
             # for either of those.
             return
-        try:
-            await _fill(manifest, bg)
-        except Exception as exc:  # noqa: BLE001
-            # The foreground months still answer, so this is not reported to
-            # the reviewer: the only visible effect is that "one more month"
-            # has to fetch when they press it. It is logged at WARNING so the
-            # server log carries the reason.
-            logger.warning("scene index of %s not widened: %s", name, error_text(exc), exc_info=True)
+        if mode == "widen":
+            try:
+                manifest = await _fill(manifest, bg)
+            except Exception as exc:  # noqa: BLE001
+                # The foreground months still answer, so this is not reported to
+                # the reviewer: the only visible effect is that "one more month"
+                # has to fetch when they press it. It is logged at WARNING so the
+                # server log carries the reason.
+                logger.warning("scene index of %s not widened: %s", name, error_text(exc), exc_info=True)
+                return
+        await _backfill_radar(manifest)
 
     # ``load.pending``/``load.finished`` are ``use_task`` status flags, not
     # worker publishes: they move once per ``_load`` run, so ``_widen`` is
@@ -520,6 +559,6 @@ def SceneIndexLoader(app_state, gee_interface):
     # The status moves on the loop, but a worker's publish (the active-set
     # loader's alerts) can render this leaf in the worker thread while it
     # does; there the task cannot start, so the dependencies wait for the loop.
-    solara.lab.use_task(_widen, dependencies=use_loop_dependencies([name, digest, fg, bg, origin, retry,
+    solara.lab.use_task(_widen, dependencies=use_loop_dependencies([name, digest, fg, bg, origin, retry, radar_on,
                                                                     load.pending, load.finished]),
                         prefer_threaded=False, raise_error=False)

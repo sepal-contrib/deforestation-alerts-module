@@ -86,6 +86,24 @@ def refresh_window(manifest, want: Window, mode: str) -> Window:
     raise ValueError(f"nothing to fetch for mode {mode!r}")
 
 
+def radar_backfill(manifest) -> Optional[Window]:
+    """The next span whose Sentinel-1 rows the index lacks, or ``None``.
+
+    All of ``covered`` when no radar was ever fetched; otherwise the later gap
+    first, as ``refresh_window`` widens, then the earlier one.
+    """
+    if manifest is None:
+        return None
+    covered, radar = manifest.covered, manifest.radar
+    if radar is None:
+        return (covered.start, covered.end)
+    if radar.end < covered.end:
+        return (radar.end, covered.end)
+    if radar.start > covered.start:
+        return (covered.start, radar.start)
+    return None
+
+
 # -------------------------------------------------------------- scenes_for
 
 SELECTION_COLUMNS = ("id", "source", "date", "cloud", "n", "hidden")

@@ -228,7 +228,7 @@ def test_an_empty_project_fetches_the_index_and_caches_it(data_root, monkeypatch
         asked.append(obj)
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: ("SCENES", s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: ("SCENES", s, e))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)  # no widening to wait on
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -317,7 +317,7 @@ def test_a_failed_tail_refresh_keeps_the_stale_index_and_reports_the_failure(
     async def get_info_async(obj):
         raise RuntimeError("Earth Engine unavailable")
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -360,7 +360,7 @@ def test_the_retry_counter_refreshes_again_and_clears_the_error(data_root, monke
             raise RuntimeError("Earth Engine unavailable")
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -392,7 +392,7 @@ def test_an_unreadable_index_is_rebuilt_and_the_user_is_told(data_root, monkeypa
     async def get_info_async(obj):
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -426,7 +426,7 @@ def test_a_widen_request_beyond_the_coverage_is_fetched_in_the_foreground(
         asked.append(obj)
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -468,7 +468,7 @@ def test_a_widen_request_published_from_a_worker_is_fetched_on_the_loop(
         asked.append(obj)
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -513,7 +513,7 @@ def test_an_earth_engine_aoi_waits_for_the_picker_instead_of_failing(
             raise RuntimeError("no AOI geometry available")
         return "AOI"
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl.aoi_io, "ee_aoi", ee_aoi)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
@@ -544,7 +544,7 @@ def test_the_widener_extends_the_coverage_a_month_at_a_time(data_root, monkeypat
         windows.append(obj)
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl, "FOREGROUND_MONTHS", 2)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 4)
     state = AppState()
@@ -595,7 +595,7 @@ def test_every_stored_window_touches_the_coverage_it_merges_into(
         return RAW
 
     monkeypatch.setattr(sl.scene_cache, "store_chunk", spy)
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl, "FOREGROUND_MONTHS", 2)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 6)
     state = AppState()
@@ -655,7 +655,7 @@ def test_a_widen_window_pushed_off_the_coverage_edge_is_snapped_back(
 
     monkeypatch.setattr(sl.scene_query, "refresh_window", off_edge)
     monkeypatch.setattr(sl.scene_cache, "store_chunk", spy)
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl, "FOREGROUND_MONTHS", 2)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 6)
     state = AppState()
@@ -708,7 +708,7 @@ def test_the_pending_flag_is_raised_only_while_the_foreground_fetch_runs(
             await widening.wait()
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl, "FOREGROUND_MONTHS", 2)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 4)
     state = AppState()
@@ -744,7 +744,7 @@ def test_a_changed_aoi_rebuilds_the_index_rather_than_merging_into_it(
     async def get_info_async(obj):
         return EMPTY_RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
     state.load_project_state(_with_period(_p(digest="d1")))
@@ -768,7 +768,7 @@ def test_a_changed_aoi_rebuilds_the_index_rather_than_merging_into_it(
 # ------------------------------------------------------------- Planet NICFI
 def test_the_planet_basemaps_join_the_index_and_their_access_is_recorded(
         data_root, monkeypatch, local_aoi):
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl.scene_index, "planet_request", lambda cid, s, e: ("PLANET", cid))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
 
@@ -807,7 +807,7 @@ def test_no_planet_licence_costs_nothing_but_the_planet_rows(
         "(does not exist or caller does not have access).")
     assert ee_no_access(refusal) is True  # this is the branch under test
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl.scene_index, "planet_request", lambda cid, s, e: ("PLANET", cid))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
 
@@ -857,7 +857,7 @@ def test_an_earth_engine_failure_that_is_not_a_refusal_records_no_access_state(
             raise outage
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl.scene_index, "planet_request", lambda cid, s, e: ("PLANET", cid))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
@@ -897,7 +897,7 @@ def test_a_planet_request_that_cannot_even_be_built_costs_nothing(data_root, mon
     async def get_info_async(obj):
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl, "_planet_chunk", boom)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
@@ -930,7 +930,7 @@ def test_a_planet_answer_that_cannot_be_parsed_is_a_defect_not_a_licence_refusal
     async def get_info_async(obj):
         return PLANET_RAW if obj[0] == "PLANET" else RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl.scene_index, "planet_request", lambda cid, s, e: ("PLANET", cid))
     monkeypatch.setattr(sl.scene_index, "parse_planet", boom)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
@@ -976,7 +976,7 @@ def test_a_widening_chunk_does_not_erase_what_planet_already_answered(
     async def get_info_async(obj):
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl, "FOREGROUND_MONTHS", 2)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 4)
     state = AppState()
@@ -1056,7 +1056,7 @@ def test_a_reply_for_a_replaced_aoi_is_neither_stored_nor_published(
         await asyncio.Event().wait()  # the new AOI's run: in flight until the test ends
 
     monkeypatch.setattr(sl.scene_cache, "store_chunk", spy)
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)  # no widening to wait on
     state = AppState()
     state.load_project_state(_with_period(_p(digest="d1")))
@@ -1102,7 +1102,7 @@ def test_a_chunk_that_fails_part_way_leaves_the_chunks_that_landed(
             raise RuntimeError("Request payload size exceeds the limit")
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)  # no widening to wait on
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -1139,7 +1139,7 @@ def test_a_drawing_failure_is_not_reported_as_a_failed_index_refresh(
     async def get_info_async(obj):
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -1178,7 +1178,7 @@ def test_a_fetch_failure_is_still_reported_as_a_failed_index_refresh(
     async def get_info_async(obj):
         raise RuntimeError("Earth Engine is unreachable")
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: "SCENES")
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
     state.load_project_state(_with_period(_p()))
@@ -1210,7 +1210,7 @@ def test_waiting_for_the_aoi_clears_an_error_left_by_the_run_before(
     async def get_info_async(obj):
         return RAW
 
-    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e: (s, e))
+    monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: (s, e))
     monkeypatch.setattr(sl.aoi_io, "ee_aoi", ee_aoi)
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
     state = AppState()
@@ -1224,6 +1224,47 @@ def test_waiting_for_the_aoi_clears_an_error_left_by_the_run_before(
         try:
             assert await _settle(lambda: state.scene_index_error.value is None)
             assert state.scene_index.value is None  # still waiting, not fetched
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+# ------------------------------------------------------------- Sentinel-1
+def test_radar_is_fetched_only_while_the_project_has_it_on(data_root, monkeypatch, no_planet, local_aoi):
+    pdir = paths.project_dir("sl")
+    covered = (date(2026, 3, 1), date(2026, 10, 2))
+    scene_cache.store_chunk(pdir, scene_index.parse_scenes(RAW), covered, "d1",
+                            now=datetime.now(timezone.utc))
+    asked = []
+
+    def scene_request(aoi, s, e, **kwargs):
+        asked.append((s, e, kwargs))
+        return "SCENES"
+
+    async def get_info_async(obj):
+        return EMPTY_RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", scene_request)
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    p = _with_period(_p())
+    state.load_project_state(p)
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_index.value is not None)
+            await asyncio.sleep(0.2)
+            assert not any(k.get("radar") for _, _, k in asked)
+
+            state.project.set(p.model_copy(update={"image_sources": ["Sentinel 1"]}))
+            assert await _settle(lambda: state.scene_manifest.value is not None
+                                 and state.scene_manifest.value.radar == _covered(*covered))
+            radar = [(s, e, k) for s, e, k in asked if k.get("radar")]
+            assert radar and all(k == {"optical": False, "radar": True} for _, _, k in radar)
+            assert radar[0][1] == covered[1]  # from the recent end, like a rebuild
+            assert min(s for s, _, _ in radar) == covered[0]
         finally:
             rc.close()
 

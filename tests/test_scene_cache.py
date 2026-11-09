@@ -326,3 +326,35 @@ def test_a_manifest_with_the_retired_chunks_record_still_reads(data_root):
     later = _tables([(S2, pd.Timestamp("2026-06-04"), 8.0, "W", "k3")])
     scene_cache.store_chunk(pdir, later, (date(2026, 5, 31), date(2026, 6, 30)), "d1", now=NOW)
     assert "chunks" not in json.loads(manifest_path.read_text())
+
+
+def test_an_index_written_before_radar_still_answers(data_root):
+    pdir = paths.project_dir("p")
+    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+    path = paths.scene_manifest_path(pdir)
+    old = json.loads(path.read_text())
+    old.pop("radar")
+    path.write_text(json.dumps(old))
+    _, manifest = scene_cache.read_index(pdir)
+    assert manifest is not None and manifest.radar is None and manifest.version == 2
+
+
+def test_a_radar_chunk_widens_radar_coverage_only_with_radar(data_root):
+    pdir = paths.project_dir("p")
+    scene_cache.store_chunk(pdir, CHUNK, (date(2026, 5, 1), date(2026, 5, 31)), "d1", now=NOW)
+    june = _tables([(S2, pd.Timestamp("2026-06-04"), 8.0, "W", "k3")])
+    _, manifest = scene_cache.store_chunk(
+        pdir, june, (date(2026, 6, 1), date(2026, 6, 30)), "d1", now=NOW, radar=True)
+    assert manifest.radar == scene_index.Coverage(start=date(2026, 6, 1), end=date(2026, 6, 30))
+    assert manifest.covered == scene_index.Coverage(start=date(2026, 5, 1), end=date(2026, 6, 30))
+    july = _tables([(S2, pd.Timestamp("2026-07-04"), 8.0, "W", "k4")])
+    _, manifest = scene_cache.store_chunk(pdir, july, (date(2026, 7, 1), date(2026, 7, 31)), "d1", now=NOW)
+    assert manifest.radar == scene_index.Coverage(start=date(2026, 6, 1), end=date(2026, 6, 30))
+    # a radar chunk off the radar edge would claim July's radar: radar stays as it was
+    _, manifest = scene_cache.store_chunk(
+        pdir, july, (date(2026, 8, 1), date(2026, 8, 31)), "d1", now=NOW, radar=True)
+    assert manifest.radar == scene_index.Coverage(start=date(2026, 6, 1), end=date(2026, 6, 30))
+    # a rebuild drops what the old radar coverage claimed
+    _, manifest = scene_cache.store_chunk(
+        pdir, july, (date(2026, 7, 1), date(2026, 7, 31)), "d1", now=NOW, replace=True)
+    assert manifest.radar is None

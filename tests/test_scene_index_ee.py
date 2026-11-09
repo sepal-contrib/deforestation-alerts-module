@@ -200,3 +200,13 @@ def test_planet_months_come_back_as_one_row_each(gee):
     assert len(df) == 3  # June, July, August
     assert (df["source"] == scene_index.SOURCE_PLANET).all()
     assert df["date"].dt.day.eq(1).all()
+
+
+def test_sentinel_1_rows_come_back_per_pass(tiny_aoi):
+    raw = scene_index.scene_request(tiny_aoi, date(2025, 7, 1), date(2025, 7, 31),
+                                    optical=False, radar=True).getInfo()
+    scenes = scene_index.parse_scenes(raw).scenes
+    assert len(scenes) > 0
+    assert set(scenes["source"]) <= {scene_index.SOURCE_S1_ASC, scene_index.SOURCE_S1_DESC}
+    assert scenes["cloud"].isna().all()
+    assert (scenes["key"].str.len() > 0).all()

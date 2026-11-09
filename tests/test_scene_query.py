@@ -646,3 +646,15 @@ def test_a_pick_the_rows_do_not_hold_gives_no_frames():
     rows = _rows([(S2, "2026-04-05", False)])
     assert scene_query.gif_frames(rows, _rid(S2, "2026-04-05"), _rid(S2, "2026-09-05")).empty
     assert scene_query.gif_frames(rows, None, _rid(S2, "2026-04-05")).empty
+
+
+def test_radar_backfill_fills_only_the_sides_radar_has_not_covered():
+    m = _manifest(date(2026, 3, 1), date(2026, 8, 31))
+    assert scene_query.radar_backfill(None) is None
+    assert scene_query.radar_backfill(m) == (date(2026, 3, 1), date(2026, 8, 31))
+    m.radar = scene_index.Coverage(start=date(2026, 5, 1), end=date(2026, 6, 30))
+    assert scene_query.radar_backfill(m) == (date(2026, 6, 30), date(2026, 8, 31))
+    m.radar = scene_index.Coverage(start=date(2026, 5, 1), end=date(2026, 8, 31))
+    assert scene_query.radar_backfill(m) == (date(2026, 3, 1), date(2026, 5, 1))
+    m.radar = scene_index.Coverage(start=date(2026, 3, 1), end=date(2026, 8, 31))
+    assert scene_query.radar_backfill(m) is None

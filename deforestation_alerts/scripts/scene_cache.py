@@ -12,7 +12,7 @@ trip at all.
 
 import logging
 import threading
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -144,7 +144,7 @@ def merge_tables(old: SceneTables, new: SceneTables) -> SceneTables:
 
 def store_chunk(
     pdir, new_tables: SceneTables, window: tuple[date, date], digest: str, *, now: datetime,
-    planet: Optional[PlanetState] = None, replace: bool = False,
+    planet: Optional[PlanetState] = None, replace: bool = False, radar: bool = False,
 ) -> tuple[SceneTables, SceneManifest]:
     """Merge one fetched window into the index on disk and return the result.
 
@@ -158,6 +158,12 @@ def store_chunk(
     ``planet`` is the NICFI access state this fetch observed. ``None`` keeps
     whatever the manifest already recorded, so a widening chunk that did not
     ask Planet anything does not erase the answer the first build got.
+
+    ``radar`` says the chunk carries Sentinel-1 rows: ``manifest.radar`` then
+    grows by ``window``, as long as the two touch -- a union over a gap would
+    claim radar months nobody fetched, so a disjoint window leaves it as it
+    was (the loader's backfill fetches the gap). Without ``radar`` it is kept;
+    a rebuild drops it.
     """
     with _lock_for(pdir):
         old, old_manifest = read_index(pdir)
@@ -194,9 +200,15 @@ def store_chunk(
             )
         counts = {str(k): int(v) for k, v in tables.scenes["source"].value_counts().items()}
         kept = old_manifest.planet if (old_manifest is not None and not stale) else None
+        kept_radar = old_manifest.radar if not (replace or old is None or stale) else None
+        day = timedelta(days=1)
+        if radar and kept_radar is None:
+            kept_radar = Coverage(start=window[0], end=window[1])
+        elif radar and window[0] - kept_radar.end <= day and kept_radar.start - window[1] <= day:
+            kept_radar = Coverage(start=min(kept_radar.start, window[0]), end=max(kept_radar.end, window[1]))
         manifest = SceneManifest(
             aoi_digest=digest, refreshed=now, covered=covered, counts=counts,
-            planet=planet or kept or PlanetState(),
+            planet=planet or kept or PlanetState(), radar=kept_radar,
         )
         write_index(pdir, tables, manifest)
         logger.info("scene index of %s: %d rows, %s..%s",
