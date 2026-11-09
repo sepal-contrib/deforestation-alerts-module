@@ -5,6 +5,7 @@ from deforestation_alerts.scripts.image_sources import (
     MENU,
     SOURCES,
     dated_optical,
+    is_radar,
     enabled_entries,
     enabled_sources,
     entry_of,
@@ -45,6 +46,12 @@ def test_only_dated_optical_sources_feed_the_auto_pick():
     assert dated_optical("Sentinel 2") and dated_optical("Landsat")
     for n in ("Planet NICFI", "Sentinel 1 ascending", "Sentinel 1 descending", "MODIS"):
         assert not dated_optical(n)
+
+
+def test_only_sentinel_1_is_radar_and_an_unknown_name_is_not():
+    assert is_radar("Sentinel 1 ascending") and is_radar("Sentinel 1 descending")
+    for n in ("Sentinel 2", "Landsat", "Planet NICFI", "MODIS"):
+        assert not is_radar(n)
 
 
 def test_a_project_round_trips_its_image_sources():

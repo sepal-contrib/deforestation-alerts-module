@@ -1263,7 +1263,9 @@ def test_radar_is_fetched_only_while_the_project_has_it_on(data_root, monkeypatc
                                  and state.scene_manifest.value.radar == _covered(*covered))
             radar = [(s, e, k) for s, e, k in asked if k.get("radar")]
             assert radar and all(k == {"optical": False, "radar": True} for _, _, k in radar)
-            assert radar[0][1] == covered[1]  # from the recent end, like a rebuild
+            # the alert's own months first: the foreground window's recent end
+            fg = sl.wanted_window(p, sl._today(), sl.FOREGROUND_MONTHS)
+            assert fg[0] <= radar[0][0] and radar[0][1] == min(fg[1], covered[1])
             assert min(s for s, _, _ in radar) == covered[0]
         finally:
             rc.close()
@@ -1364,7 +1366,7 @@ def test_a_radar_backfill_that_hits_its_bound_says_so(data_root, monkeypatch, no
     scene_cache.store_chunk(pdir, scene_index.parse_scenes(RAW), (date(2026, 3, 1), date(2026, 10, 2)), "d1",
                             now=datetime.now(timezone.utc))
     monkeypatch.setattr(sl.scene_index, "scene_request", lambda aoi, s, e, **k: "SCENES")
-    monkeypatch.setattr(sl.scene_query, "radar_backfill", lambda manifest: (manifest.covered.start, manifest.covered.end))
+    monkeypatch.setattr(sl.scene_query, "radar_backfill", lambda manifest, want=None: (manifest.covered.start, manifest.covered.end))
     monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
 
     async def get_info_async(obj):

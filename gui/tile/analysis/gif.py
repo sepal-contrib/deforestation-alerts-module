@@ -19,7 +19,7 @@ from shapely.geometry.base import BaseGeometry
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.review_groups import group_shape
 from deforestation_alerts.scripts import alert_gif, local_files, scene_query
-from deforestation_alerts.scripts.image_sources import SOURCES, dated_optical
+from deforestation_alerts.scripts.image_sources import dated_optical, is_radar
 from deforestation_alerts.scripts.scene_index import SOURCE_CODE
 from gui.i18n import t
 from gui.tile.analysis import imagery
@@ -114,7 +114,7 @@ def capture_gif(app_state, widgets, analysis, alert) -> GifJob:
     frames = plan_frames(app_state.scene_index.value, ctx.get("bbox"), alert.before_info, alert.after_info,
                          sources, max_cloud, area_bbox=ctx.get("area_bbox"))
     if len(frames) < 2:
-        radar = not all(getattr(SOURCES.get(scene_query.parse_row_id(r)[0]), "optical", False) for r in (before_id, after_id))
+        radar = any(is_radar(scene_query.parse_row_id(r)[0]) for r in (before_id, after_id))
         raise GifRefused(key="analysis_tile.export_labels.gif_no_optical") if radar else no_images
     detect = ctx.get("date_min") or scene_query.parse_row_id(after_id)[1]
     return GifJob(frames=tuple(frames), grid=alert.grid, outline=_outline_of(alert.alerts, alert.alert_id),

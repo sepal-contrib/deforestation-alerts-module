@@ -62,8 +62,15 @@ MENU: tuple[MenuEntry, ...] = (
 )
 
 
+def is_radar(name: str) -> bool:
+    """Whether ``name`` is a radar source. An unknown name is not: it keeps
+    the optical handling every source had before radar existed."""
+    s = SOURCES.get(name)
+    return bool(s and not s.optical)
+
+
 def dated_optical(name: str) -> bool:
-    """Whether the auto pick, the GIF and the CNN may use this source."""
+    """Whether the auto pick and the GIF may use this source."""
     s = SOURCES.get(name)
     return bool(s and s.optical and not s.monthly)
 

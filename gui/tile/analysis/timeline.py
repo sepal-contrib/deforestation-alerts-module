@@ -33,7 +33,7 @@ import pandas as pd
 
 from deforestation_alerts.scripts import scene_query
 from deforestation_alerts.project.review_copy import read_only
-from deforestation_alerts.scripts.image_sources import MENU, S1, SOURCES, entry_of
+from deforestation_alerts.scripts.image_sources import MENU, S1, SOURCES, entry_of, is_radar
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from deforestation_alerts.scripts.scene_index import (
     SOURCE_PLANET,
@@ -109,7 +109,8 @@ _RANK = {n: s.rank for n, s in SOURCES.items()}
 
 _LANE_STYLE = f"position: relative; height: {LANE_H}px"
 _LEGEND_ID = "analysis-timeline-legend"
-_LEGEND_STYLE = "padding: 12px 14px; font-size: 12.5px; line-height: 1.5"
+#: ``pre-line``: the legend is a few short lines, one fact each
+_LEGEND_STYLE = "padding: 12px 14px; font-size: 12.5px; line-height: 1.5; white-space: pre-line"
 _MESSAGE_STYLE = f"padding: 14px 0; color: {MUTED}; font-size: 12.5px"
 _TRACK_STYLE = "position: relative; flex: 1 1 auto; min-width: 0"
 
@@ -339,20 +340,20 @@ def _only_sources_we_can_draw(tables: SceneTables) -> SceneTables:
     return SceneTables(scenes=tables.scenes[known], tiles=tables.tiles)
 
 
-def stripe_hit_style(segments, d: date, source: str, *, bands: Optional[dict] = None) -> str:
+def stripe_hit_style(segments, d: date, source: str, *, bands: dict) -> str:
     """The clickable box: ``HIT_PX`` wide, centred on the date, band-tall.
 
     The hit area is wider than the stripe because a 2.5px target is not
     clickable; at the widest view Sentinel-2's stripes still sit ~13px apart,
     so an 11px box never covers its neighbour's date.
     """
-    top, height = (bands or lane_bands(SOURCES))[source]
+    top, height = bands[source]
     x = scene_query.x_for(segments, d)
     return (f"position: absolute; left: calc({_pct(x):.3f}% - {HIT_PX / 2:g}px); "
             f"width: {HIT_PX}px; top: {top}px; height: {height}px")
 
 
-def month_bar_style(segments, d: date, *, bands: Optional[dict] = None) -> str:
+def month_bar_style(segments, d: date, *, bands: dict) -> str:
     """A monthly (Planet) row's hit area: the **whole month** it composites, not an instant.
 
     A NICFI basemap is a monthly mosaic, so a 2.5px stripe at one instant would
@@ -365,15 +366,15 @@ def month_bar_style(segments, d: date, *, bands: Optional[dict] = None) -> str:
         return "display: none"
     left = _pct(scene_query.x_for(segments, date(d.year, d.month, 1)))
     right = _pct(scene_query.x_for(segments, _month_end(d), end=True))
-    top, height = (bands or lane_bands(SOURCES))[next(n for n, s in SOURCES.items() if s.monthly)]
+    top, height = bands[next(n for n, s in SOURCES.items() if s.monthly)]
     return (f"position: absolute; left: {left:.3f}%; width: {max(right - left, 0.1):.3f}%; "
             f"top: {top}px; height: {height}px")
 
 
-def stripe_bar_style(row, *, selected: bool, side: str = "a", bands: Optional[dict] = None) -> str:
+def stripe_bar_style(row, *, selected: bool, bands: dict, side: str = "a") -> str:
     """The visible stripe inside the hit area. A selected one takes its side's
     colour: ``BEFORE_COLOR`` for the before image, the gold for the after."""
-    _, height = (bands or lane_bands(SOURCES))[row["source"]]
+    _, height = bands[row["source"]]
     hidden = bool(row["hidden"]) and not selected
     h = height * HIDDEN_SCALE if hidden else height
     width = SELECTED_STRIPE_PX if selected else STRIPE_PX
@@ -1223,13 +1224,12 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         """Whether the index has answered for ``source`` on ``day``, so a row
         it does not hold is gone rather than not fetched yet (spec D4). Radar
         has its own span, ``None`` until the loader has fetched it."""
-        if app_state.scene_index_error.value or (app_state.scene_radar_error.value
-                                                  and not SOURCES[source].optical):
+        if app_state.scene_index_error.value or (app_state.scene_radar_error.value and is_radar(source)):
             return True
         manifest = app_state.scene_manifest.value
         if manifest is None or app_state.scene_index.value is None or app_state.scene_index_pending.value:
             return False
-        span = manifest.covered if SOURCES[source].optical else manifest.radar
+        span = manifest.radar if is_radar(source) else manifest.covered
         return span is not None and span.start <= day <= span.end
 
     def _settled(rid) -> bool:

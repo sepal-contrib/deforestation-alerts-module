@@ -43,7 +43,7 @@ import math
 import ee
 from shapely.geometry import box
 
-from deforestation_alerts.scripts.image_sources import SOURCES
+from deforestation_alerts.scripts.image_sources import SOURCES, is_radar
 from deforestation_alerts.scripts.mosaics_helper import (
     RADAR_VIS,
     SFIM_pan_sharpen,
@@ -75,7 +75,7 @@ _SR_BANDS = ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7"]
 #: Per source, the (true colour, false colour) visualizations. Planet's bands
 #: are named by colour; the harmonized S2/Landsat ones by number.
 _VIS = {
-    **{n: (RADAR_VIS, RADAR_VIS) for n, s in SOURCES.items() if not s.optical},
+    **{n: (RADAR_VIS, RADAR_VIS) for n in SOURCES if is_radar(n)},
     SOURCE_PLANET: (
         {"min": 0, "max": 1600, "bands": ["R", "G", "B"]},
         {"min": 0, "max": [6500, 1600, 1600], "bands": ["N", "R", "G"]},
@@ -165,7 +165,7 @@ def rebuild_image(source, keys, geom):
         return None
     if source == SOURCE_LANDSAT:
         return _landsat_pair(keys, geom)
-    if source in SOURCES and not SOURCES[source].optical:
+    if is_radar(source):
         # Raw radar: the granules of the date mosaicked, as VV, VH and VV - VH.
         mosaic = ee.ImageCollection([ee.Image(k) for k in keys]).mosaic()
         vv_vh = mosaic.select(["VV", "VH"])
@@ -330,7 +330,7 @@ def image_slider_map_callback(
     # views for the next one (``PaneLayers.clear("alert")``, after
     # ``reset_alert``), which must not get this alert's layers.
     with _gated(map_element, analysis, token, fresh):
-        optical = img_source not in SOURCES or SOURCES[img_source].optical
+        optical = not is_radar(img_source)
         drawn = ("True Color", "False Color") if optical else ("Radar",)
         map_element.addLayer(img, vis1, drawn[0], True)
         if optical:

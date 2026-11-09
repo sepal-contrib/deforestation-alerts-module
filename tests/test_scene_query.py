@@ -661,6 +661,20 @@ def test_radar_backfill_fills_only_the_sides_radar_has_not_covered():
     assert scene_query.radar_backfill(m) is None
 
 
+def test_radar_backfill_serves_the_wanted_window_first():
+    """The alert's months come before the rest of ``covered``, and every gap
+    starts at the radar edge so ``radar`` stays contiguous."""
+    m = _manifest(date(2025, 3, 1), date(2026, 8, 31))
+    want = (date(2025, 4, 1), date(2025, 7, 31))
+    assert scene_query.radar_backfill(m, want) == want
+    m.radar = scene_index.Coverage(start=date(2025, 7, 1), end=date(2025, 7, 31))
+    assert scene_query.radar_backfill(m, want) == (date(2025, 4, 1), date(2025, 7, 1))
+    m.radar = scene_index.Coverage(start=date(2025, 4, 1), end=date(2025, 7, 31))
+    assert scene_query.radar_backfill(m, want) is None
+    assert scene_query.radar_backfill(m) == (date(2025, 7, 31), date(2026, 8, 31))
+    assert scene_query.radar_backfill(m, (date(2027, 1, 1), date(2027, 2, 1))) is None  # past covered
+
+
 A_ASC = "Sentinel 1 ascending"
 
 

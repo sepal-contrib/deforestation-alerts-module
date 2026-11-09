@@ -29,6 +29,8 @@ S2, LS, PL = scene_index.SOURCE_S2, scene_index.SOURCE_LANDSAT, scene_index.SOUR
 S1A, S1D = scene_index.SOURCE_S1_ASC, scene_index.SOURCE_S1_DESC
 #: the three optical sources' bands: the layout the lane had before radar
 OPTICAL = timeline.lane_bands([S2, LS, PL])
+#: every source on
+ALL_BANDS = timeline.lane_bands([S2, LS, PL, S1A, S1D])
 
 TILES = gpd.GeoDataFrame({"tile": ["W"]},
                          geometry=gpd.GeoSeries([box(0, 0, 2, 2)], crs=scene_index.WGS84),
@@ -205,15 +207,15 @@ def test_a_stripes_percentage_is_its_own_share_of_the_view_not_a_pixel_count():
     pixels, or divided by the wrong total, lands elsewhere."""
     segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 4, 30), set(), timeline.TRACK_PX)
     for day, offset in ((date(2026, 3, 1), 0), (date(2026, 3, 11), 10), (date(2026, 4, 30), 60)):
-        got = _left_pct(timeline.stripe_hit_style(segs, day, S2))
+        got = _left_pct(timeline.stripe_hit_style(segs, day, S2, bands=ALL_BANDS))
         assert got == pytest.approx(100 * offset / 61, abs=0.01), day
     # and in pixels the two neighbours of a five-day revisit stay ~13px apart,
     # which is why an 11px hit area never covers its neighbour's date.
-    step = (_left_pct(timeline.stripe_hit_style(segs, date(2026, 3, 11), S2))
-            - _left_pct(timeline.stripe_hit_style(segs, date(2026, 3, 6), S2)))
+    step = (_left_pct(timeline.stripe_hit_style(segs, date(2026, 3, 11), S2, bands=ALL_BANDS))
+            - _left_pct(timeline.stripe_hit_style(segs, date(2026, 3, 6), S2, bands=ALL_BANDS)))
     assert step / 100 * timeline.TRACK_PX == pytest.approx(5 * timeline.TRACK_PX / 61, abs=0.1)
     assert step / 100 * timeline.TRACK_PX > timeline.HIT_PX
-    assert "width: 11px" in timeline.stripe_hit_style(segs, date(2026, 3, 11), S2)
+    assert "width: 11px" in timeline.stripe_hit_style(segs, date(2026, 3, 11), S2, bands=ALL_BANDS)
 
 
 def test_a_collapsed_month_puts_every_one_of_its_dates_on_the_block():
@@ -221,11 +223,11 @@ def test_a_collapsed_month_puts_every_one_of_its_dates_on_the_block():
     origin and the months after it shift left by what the block saved."""
     expanded = scene_query.month_segments(date(2026, 3, 1), date(2026, 6, 30), set(), timeline.TRACK_PX)
     folded = scene_query.month_segments(date(2026, 3, 1), date(2026, 6, 30), {(2026, 4)}, timeline.TRACK_PX)
-    first = _left_pct(timeline.stripe_hit_style(folded, date(2026, 4, 2), S2))
-    last = _left_pct(timeline.stripe_hit_style(folded, date(2026, 4, 29), S2))
+    first = _left_pct(timeline.stripe_hit_style(folded, date(2026, 4, 2), S2, bands=ALL_BANDS))
+    last = _left_pct(timeline.stripe_hit_style(folded, date(2026, 4, 29), S2, bands=ALL_BANDS))
     assert first == pytest.approx(last, abs=0.001)
-    assert _left_pct(timeline.stripe_hit_style(folded, date(2026, 5, 1), S2)) < _left_pct(
-        timeline.stripe_hit_style(expanded, date(2026, 5, 1), S2))
+    assert _left_pct(timeline.stripe_hit_style(folded, date(2026, 5, 1), S2, bands=ALL_BANDS)) < _left_pct(
+        timeline.stripe_hit_style(expanded, date(2026, 5, 1), S2, bands=ALL_BANDS))
 
 
 def test_the_drawn_sources_share_the_lane_without_colliding():
@@ -288,15 +290,15 @@ def test_a_hidden_stripe_is_drawn_short_faint_and_not_clickable():
     assert "opacity: 0.3" in style and "height: 7.65px" in style  # 45% of the 17px band
     assert timeline.stripe_cursor(row) == "default"
     shown = _sel([(S2, "2026-04-24", 8.0)]).iloc[0]
-    assert "opacity" not in timeline.stripe_bar_style(shown, selected=False)
+    assert "opacity" not in timeline.stripe_bar_style(shown, selected=False, bands=ALL_BANDS)
     assert timeline.stripe_cursor(shown) == "pointer"
 
 
 def test_a_selected_stripe_is_wider_and_takes_the_selection_colour():
     row = _sel([(S2, "2026-04-24", 8.0)]).iloc[0]
-    assert "width: 4px" in timeline.stripe_bar_style(row, selected=True)
-    assert timeline.SELECTED_COLOR in timeline.stripe_bar_style(row, selected=True)
-    plain = timeline.stripe_bar_style(row, selected=False)
+    assert "width: 4px" in timeline.stripe_bar_style(row, selected=True, bands=ALL_BANDS)
+    assert timeline.SELECTED_COLOR in timeline.stripe_bar_style(row, selected=True, bands=ALL_BANDS)
+    plain = timeline.stripe_bar_style(row, selected=False, bands=ALL_BANDS)
     assert "width: 2.5px" in plain and timeline.SRC_COLOR[S2] in plain
     assert _bar_width(row, selected=True) > _bar_width(row, selected=False)
 
@@ -305,7 +307,7 @@ def test_a_planet_row_is_a_bar_across_its_whole_month_not_a_stripe():
     """A NICFI basemap composites a month; a 2.5px stripe would claim an
     instant it does not have (spec §4.1)."""
     segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 6, 30), set(), timeline.TRACK_PX)
-    bar = timeline.month_bar_style(segs, date(2026, 4, 1))
+    bar = timeline.month_bar_style(segs, date(2026, 4, 1), bands=ALL_BANDS)
     width = float(bar.split("width: ")[1].split("%")[0])
     left = float(bar.split("left: ")[1].split("%")[0])
     # April is 30 of the 122 days on an all-expanded four-month axis.
@@ -315,19 +317,19 @@ def test_a_planet_row_is_a_bar_across_its_whole_month_not_a_stripe():
     assert f"top: {timeline.lane_bands([S2, PL])[PL][0]}px" in timeline.month_bar_style(
         segs, date(2026, 4, 1), bands=timeline.lane_bands([S2, PL]))
     # any day of the month addresses the same bar: the month is the unit
-    assert timeline.month_bar_style(segs, date(2026, 4, 17)) == bar
+    assert timeline.month_bar_style(segs, date(2026, 4, 17), bands=ALL_BANDS) == bar
 
 
 def test_a_planet_bar_in_a_collapsed_month_is_the_block_width():
     segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 6, 30), {(2026, 4)}, timeline.TRACK_PX)
-    bar = timeline.month_bar_style(segs, date(2026, 4, 1))
+    bar = timeline.month_bar_style(segs, date(2026, 4, 1), bands=ALL_BANDS)
     width = float(bar.split("width: ")[1].split("%")[0])
     assert width == pytest.approx(100 * scene_query.COLLAPSED_PX / timeline.TRACK_PX, abs=0.5)
 
 
 def test_a_planet_bar_outside_the_view_is_not_drawn():
     segs = scene_query.month_segments(date(2026, 3, 1), date(2026, 6, 30), set(), timeline.TRACK_PX)
-    assert timeline.month_bar_style(segs, date(2025, 1, 1)) == "display: none"
+    assert timeline.month_bar_style(segs, date(2025, 1, 1), bands=ALL_BANDS) == "display: none"
 
 
 # --------------------------------------------------------------- the locales
@@ -829,7 +831,7 @@ def _left_pct(style: str) -> float:
 
 
 def _bar_width(row, *, selected: bool) -> float:
-    return float(timeline.stripe_bar_style(row, selected=selected).split(
+    return float(timeline.stripe_bar_style(row, selected=selected, bands=ALL_BANDS).split(
         "width: ")[1].split("px")[0])
 
 

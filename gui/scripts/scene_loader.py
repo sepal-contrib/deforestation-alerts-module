@@ -411,9 +411,12 @@ def SceneIndexLoader(app_state, gee_interface):
         logger.info("scene index of %s: chunked fetch stopped at its bound", name)
         return manifest
 
-    async def _backfill_radar(manifest) -> None:
-        """The Sentinel-1 rows ``covered`` holds no radar for, a chunk at a
-        time from the radar edge (from the recent end when there is none).
+    async def _backfill_radar(manifest, *, whole: bool) -> None:
+        """The Sentinel-1 rows the index holds no radar for, a chunk at a time
+        from the radar edge: the foreground window's first, so the alert on
+        screen is not kept waiting behind the rest of the history, then, with
+        ``whole``, the rest of ``covered``. ``_load`` fills only the window, so
+        ``load.pending`` drops as soon as it is shown; ``_widen`` does the rest.
 
         A failure is logged, toasted and written to ``scene_radar_error``,
         not ``scene_index_error``: the optical index answers as it is, and a
@@ -423,12 +426,13 @@ def SceneIndexLoader(app_state, gee_interface):
             return
         try:
             for _ in range((manifest.covered.end - manifest.covered.start).days // 28 + 4):
-                side = scene_query.radar_backfill(manifest)
+                side = scene_query.radar_backfill(manifest, fg) or (
+                    scene_query.radar_backfill(manifest) if whole else None)
                 if side is None:
                     _publish(app_state.scene_radar_error, None)
                     return
                 # with no radar yet ``covered`` is the anchor: ``_one_step``
-                # then cuts from the recent end, like a rebuild
+                # then cuts from the side's recent end, like a rebuild
                 window = _one_step(manifest.radar or manifest.covered, side, CHUNK_MONTHS)
                 if window[1] <= window[0]:
                     return
@@ -515,7 +519,7 @@ def SceneIndexLoader(app_state, gee_interface):
             # the newest run may lower the flag) and it belongs with the task
             # that renders the flag, not here.
             _publish(app_state.scene_index_pending, False)
-        await _backfill_radar(manifest)
+        await _backfill_radar(manifest, whole=False)
 
     # ``fg`` moves in a worker's render: opening a project publishes its first
     # alert from the active-set loader's worker, and the timeline asks there
@@ -559,7 +563,7 @@ def SceneIndexLoader(app_state, gee_interface):
                 # server log carries the reason.
                 logger.warning("scene index of %s not widened: %s", name, error_text(exc), exc_info=True)
                 return
-        await _backfill_radar(manifest)
+        await _backfill_radar(manifest, whole=True)
 
     # ``load.pending``/``load.finished`` are ``use_task`` status flags, not
     # worker publishes: they move once per ``_load`` run, so ``_widen`` is

@@ -15,7 +15,7 @@ from typing import Iterable, NamedTuple, Optional
 
 import pandas as pd
 
-from deforestation_alerts.scripts.image_sources import SOURCES, dated_optical
+from deforestation_alerts.scripts.image_sources import SOURCES, dated_optical, is_radar
 
 from deforestation_alerts.scripts.scene_index import (
     INDEX_VERSION,
@@ -85,21 +85,29 @@ def refresh_window(manifest, want: Window, mode: str) -> Window:
     raise ValueError(f"nothing to fetch for mode {mode!r}")
 
 
-def radar_backfill(manifest) -> Optional[Window]:
-    """The next span whose Sentinel-1 rows the index lacks, or ``None``.
+def radar_backfill(manifest, want: Optional[Window] = None) -> Optional[Window]:
+    """The next span of ``want`` (all of ``covered`` by default, and never
+    past it) whose Sentinel-1 rows the index lacks, or ``None``.
 
-    All of ``covered`` when no radar was ever fetched; otherwise the later gap
-    first, as ``refresh_window`` widens, then the earlier one.
+    All of it when no radar was ever fetched; otherwise the later gap first,
+    as ``refresh_window`` widens, then the earlier one. A gap always starts at
+    the radar edge, so it may run outside ``want`` to keep ``radar``
+    contiguous.
     """
     if manifest is None:
         return None
-    covered, radar = manifest.covered, manifest.radar
+    lo, hi = manifest.covered.start, manifest.covered.end
+    if want is not None:
+        lo, hi = max(lo, want[0]), min(hi, want[1])
+        if lo >= hi:
+            return None
+    radar = manifest.radar
     if radar is None:
-        return (covered.start, covered.end)
-    if radar.end < covered.end:
-        return (radar.end, covered.end)
-    if radar.start > covered.start:
-        return (covered.start, radar.start)
+        return (lo, hi)
+    if radar.end < hi:
+        return (radar.end, hi)
+    if radar.start > lo:
+        return (lo, radar.start)
     return None
 
 
@@ -479,7 +487,7 @@ def optical_anchor(rows: pd.DataFrame, rid, side: str) -> Optional[str]:
     visible dated optical row nearest it on its ``side`` ("before": latest on
     or before its date; "after": earliest on or after it), else ``None``."""
     source, day = parse_row_id(rid)
-    if source in SOURCES and SOURCES[source].optical:
+    if not is_radar(source):
         return rid
     ok = rows[rows["source"].map(dated_optical).astype(bool) & ~rows["hidden"].astype(bool)]
     if side == "before":
