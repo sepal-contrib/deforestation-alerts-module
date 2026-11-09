@@ -3601,8 +3601,8 @@ msgstr "Añade meses con **+1 mes**, o sube **Nubes máx.**."
 msgid "\"The images in this window are all in collections you have switched off.\""
 msgstr "\"Todas las imágenes de esta ventana están en colecciones que has desactivado.\""
 
-msgid "Turn a collection chip back on."
-msgstr "Vuelve a activar la etiqueta de una colección."
+msgid "Switch the source back on in the **Image sources** menu."
+msgstr "Vuelve a activar la fuente en el menú **Fuentes de imágenes**."
 
 msgid "\"Could not draw the before image: …\" or \"Could not draw the after image: …\""
 msgstr "\"No se pudo mostrar la imagen de antes: …\" o \"No se pudo mostrar la imagen de después: …\""
@@ -4162,8 +4162,8 @@ msgstr "Los grupos que quedan por encima del tope se conservan como no analizabl
 msgid "With the alert set built, **Set up review** unlocks. To judge alerts against a recent image, the coordinator adds one `additional layer <defo-layers_>`_: an **Earth Engine** Sentinel-2 image of 27 September 2026 (tile 19LDF, east of Puerto Maldonado), drawn as an **RGB composite** in **True colour** (B4, B3, B2), **Min** 0 and **Max** 3000, named ``Sentinel-2 2026-09-27``, and **Show in Analysis** selected."
 msgstr "Con el conjunto de alertas creado, **Preparar la revisión** se desbloquea. Para evaluar las alertas frente a una imagen reciente, la coordinadora añade una `capa adicional <defo-layers_>`_: una imagen Sentinel-2 de **Earth Engine** del 27 de septiembre de 2026 (tesela 19LDF, al este de Puerto Maldonado), dibujada como **Compuesto RGB** en **Color verdadero** (B4, B3, B2), **Mín** 0 y **Máx** 3000, llamada ``Sentinel-2 2026-09-27``, y con **Mostrar en Análisis** marcado."
 
-msgid "Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why the Analysis timeline in the screenshots below has no *Planet* chip."
-msgstr "Los mosaicos mensuales de Planet NICFI cubrirían todo el departamento, pero la cuenta usada para este artículo no tiene acceso a NICFI. Por eso la línea de tiempo de Análisis de las capturas siguientes no tiene etiqueta *Planet*."
+msgid "Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why Planet is greyed out in the **Image sources** menu of the Analysis timeline in the screenshots below."
+msgstr "Los mosaicos mensuales de Planet NICFI cubrirían todo el departamento, pero la cuenta usada para este artículo no tiene acceso a NICFI. Por eso Planet aparece en gris en el menú **Fuentes de imágenes** de la línea de tiempo de Análisis de las capturas siguientes."
 
 msgid "Review alone, then together"
 msgstr "Revisar en solitario y luego en equipo"

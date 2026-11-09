@@ -2430,7 +2430,7 @@ Common messages
     Add months with **+1 month**, or raise **Max cloud**.
 
 "The images in this window are all in collections you have switched off."
-    Turn a collection chip back on.
+    Switch the source back on in the **Image sources** menu.
 
 "Could not draw the before image: …" or "Could not draw the after image: …"
     Choose the image again, or another one.
@@ -2843,7 +2843,7 @@ With the alert set built, **Set up review** unlocks. To judge alerts against a r
 
 .. note::
 
-    Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why the Analysis timeline in the screenshots below has no *Planet* chip.
+    Planet NICFI monthly mosaics would cover the whole department, but the account used for this article has no NICFI access. This is why Planet is greyed out in the **Image sources** menu of the Analysis timeline in the screenshots below.
 
 Review alone, then together
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -2362,7 +2362,7 @@ Mensajes frecuentes
     Añade meses con **+1 mes**, o sube **Nubes máx.**.
 
 "Todas las imágenes de esta ventana están en colecciones que has desactivado."
-    Vuelve a activar la etiqueta de una colección.
+    Vuelve a activar la fuente en el menú **Fuentes de imágenes**.
 
 "No se pudo mostrar la imagen de antes: …" o "No se pudo mostrar la imagen de después: …"
     Vuelve a elegir la imagen, u otra.
@@ -2767,7 +2767,7 @@ Con el conjunto de alertas creado, **Preparar la revisión** se desbloquea. Para
 
 .. note::
 
-    Los mosaicos mensuales de Planet NICFI cubrirían todo el departamento, pero la cuenta usada para este artículo no tiene acceso a NICFI. Por eso la línea de tiempo de Análisis de las capturas siguientes no tiene etiqueta *Planet*.
+    Los mosaicos mensuales de Planet NICFI cubrirían todo el departamento, pero la cuenta usada para este artículo no tiene acceso a NICFI. Por eso Planet aparece en gris en el menú **Fuentes de imágenes** de la línea de tiempo de Análisis de las capturas siguientes.
 
 Revisar en solitario y luego en equipo
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

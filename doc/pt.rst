@@ -2366,7 +2366,7 @@ Mensagens comuns
     Acrescente meses com **+1 mês** ou aumente **Nuvens máx.**
 
 "Todas as imagens desta janela estão em coleções que você desativou."
-    Ligue de novo a etiqueta de uma coleção.
+    Ligue de novo a fonte no menu **Fontes de imagens**.
 
 "Não foi possível exibir a imagem de antes: …" ou "Não foi possível exibir a imagem de depois: …"
     Escolha a imagem de novo, ou outra.
@@ -2771,7 +2771,7 @@ Com o conjunto de alertas gerado, **Preparar a revisão** é liberado. Para aval
 
 .. note::
 
-    Um mosaico mensal Planet NICFI cobriria o departamento inteiro, mas a conta usada neste artigo não tem acesso ao NICFI. É por isso que a linha do tempo da Análise nas capturas de tela abaixo não tem a etiqueta *Planet*.
+    Um mosaico mensal Planet NICFI cobriria o departamento inteiro, mas a conta usada neste artigo não tem acesso ao NICFI. É por isso que o Planet aparece em cinza no menu **Fontes de imagens** da linha do tempo da Análise nas capturas de tela abaixo.
 
 Revisar sozinha e depois em equipe
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

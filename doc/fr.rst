@@ -2364,7 +2364,7 @@ Messages fréquents
     Ajoutez des mois avec **+1 mois**, ou relevez **Nuages max.**
 
 « Toutes les images de cette fenêtre se trouvent dans des collections que vous avez désactivées. »
-    Réactivez une pastille de collection.
+    Réactivez la source dans le menu **Sources d'images**.
 
 « Impossible d'afficher l'image avant : … » ou « Impossible d'afficher l'image après : … »
     Choisissez à nouveau l'image, ou une autre.
@@ -2769,7 +2769,7 @@ Une fois le jeu d'alertes construit, **Configurer la revue** se déverrouille. P
 
 .. note::
 
-    Les mosaïques mensuelles Planet NICFI couvriraient tout le département, mais le compte utilisé pour cet article n'a pas accès à NICFI. C'est pourquoi la frise d'Analyse des captures d'écran ci-dessous n'a pas de pastille *Planet*.
+    Les mosaïques mensuelles Planet NICFI couvriraient tout le département, mais le compte utilisé pour cet article n'a pas accès à NICFI. C'est pourquoi Planet est grisée dans le menu **Sources d'images** de la frise d'Analyse des captures d'écran ci-dessous.
 
 Examiner seule, puis à plusieurs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
