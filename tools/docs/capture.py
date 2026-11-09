@@ -504,7 +504,8 @@ def launch(page):
     w.open_app(page, RUN.port)
     if RUN.lang != "en":
         set_language(page, RUN.lang)
-    assert_language(page, RUN.lang)
+    # no assert_language here: with no project open the header reads only "AOI", the same in
+    # every language; save() checks every shot
 
 
 def ensure_open(page, name=PROJECT):
