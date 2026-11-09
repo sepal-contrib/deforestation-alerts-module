@@ -267,6 +267,10 @@ def _gated(map_element, analysis, token, fresh=None):
     return gated(_add_if_wanted)
 
 
+#: every name a pane's image is drawn under (optical, then radar)
+IMAGE_LAYERS = frozenset({"True Color", "False Color", "Radar"})
+
+
 def image_slider_map_callback(
     selected_item, map_element, model_att, widgets, analysis, selected_alerts_model,
     token=None, fresh=None,
@@ -327,9 +331,14 @@ def image_slider_map_callback(
     # ``reset_alert``), which must not get this alert's layers.
     with _gated(map_element, analysis, token, fresh):
         optical = img_source not in SOURCES or SOURCES[img_source].optical
-        map_element.addLayer(img, vis1, "True Color" if optical else "Radar", True)
+        drawn = ("True Color", "False Color") if optical else ("Radar",)
+        map_element.addLayer(img, vis1, drawn[0], True)
         if optical:
             map_element.addLayer(img, vis2, "False Color", False)
+        # ``addLayer`` replaces only a layer of the same name: the other
+        # kind's image layers, from the pick before, go
+        for stale in IMAGE_LAYERS.difference(drawn):
+            map_element.remove_layer(stale, none_ok=True)
         # "All alerts": the set's combined raster, band 3 (display), through
         # localtileserver (spec §10): every alert of the set, where the
         # "Original alert" outlines show the one on screen. Starting the tile

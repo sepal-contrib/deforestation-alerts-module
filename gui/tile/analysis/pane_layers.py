@@ -355,4 +355,8 @@ class PaneTarget:
             if none_ok:
                 return
             raise ValueError(f"no layer {layer_id!r} on the analysis views")
-        self.panes.remove(layer_id)
+        gate = getattr(self._gate, "fn", None)  # inside ``gated``, removes are gated like adds
+        if gate is None:
+            self.panes.remove(layer_id)
+        else:
+            gate(lambda: self.panes.remove(layer_id))

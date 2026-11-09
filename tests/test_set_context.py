@@ -528,6 +528,9 @@ class _Map:
     def addLayer(self, image, vis, name, shown=True, opacity=1.0):  # noqa: N802 - SepalMap's name
         self.ee_layers.append(name)
 
+    def remove_layer(self, key, none_ok=False):
+        pass
+
 
 def _pick_image(ctx, monkeypatch, add_raster_layer):
     import ee

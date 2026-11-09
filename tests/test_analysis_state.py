@@ -668,3 +668,35 @@ def test_the_image_area_is_per_alert_and_ignores_a_stale_context(monkeypatch):
     assert analysis.image_area.value == "normal"
     imagery.set_image_area(widgets, analysis)  # the context is the previous alert's
     assert rekeyed == [] and widgets.actual_alert_grid is None
+
+
+def test_switching_between_optical_and_radar_leaves_no_stale_image_layer(monkeypatch):
+    """Walk bug B1: ``add_ee_layer`` replaces only a layer of the same name, so
+    a radar pick kept the optical "True Color"/"False Color" layers (and an
+    optical pick a stale "Radar"). Each redraw drops the image layers it does
+    not add again, and leaves the other pane alone."""
+    from gui.tile.analysis import imagery
+
+    s = AnalysisState()
+    token = s.alert_token.value
+    panes = make_panes()
+    before = panes.target("before", group="alert")
+    after = panes.target("after", group="alert")
+    monkeypatch.setattr(imagery, "rebuild_image", lambda source, keys, geom: "img")
+    monkeypatch.setattr(panes, "tile_url", lambda img, vis: URL)
+    widgets = _fake_imagery_widgets()
+    widgets.actual_alert_grid = None
+    optical = {"source": SOURCE_S2, "keys": ["k"]}
+    radar = {"source": "Sentinel 1 ascending", "keys": ["k"]}
+
+    imagery.image_slider_map_callback(optical, after, 1, widgets, s, None, token=token)
+    imagery.image_slider_map_callback(optical, before, 0, widgets, s, None, token=token)
+    assert set(panes.ids()) == {"before:True Color", "before:False Color",
+                                "after:True Color", "after:False Color"}
+
+    imagery.image_slider_map_callback(radar, before, 0, widgets, s, None, token=token)
+    assert set(panes.ids()) == {"before:Radar", "after:True Color", "after:False Color"}
+
+    imagery.image_slider_map_callback(optical, before, 0, widgets, s, None, token=token)
+    assert set(panes.ids()) == {"before:True Color", "before:False Color",
+                                "after:True Color", "after:False Color"}
