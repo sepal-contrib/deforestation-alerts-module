@@ -1551,7 +1551,7 @@ La ligne **Modèle de rapport** nomme le modèle utilisé, avec une pastille : *
     *   -   ``{confirmation_date}``
         -   Le jour où le rapport est généré.
     *   -   ``{before_img}``, ``{after_img}``
-        -   Les noms des images d'avant et d'après des vues optiques : celles choisies pendant l'examen ou, pour une image Sentinel-1, l'image optique la moins nuageuse proche de sa date, marquée avec sa couverture nuageuse, par exemple « (à la place de l'image radar, 87 % de nuages) ».
+        -   Les noms des images d'avant et d'après des vues optiques, telles que choisies pendant l'examen.
     *   -   ``{alert_system}``
         -   Les sources qui ont détecté l'alerte.
     *   -   ``{area_loss}``
@@ -1561,11 +1561,11 @@ La ligne **Modèle de rapport** nomme le modèle utilisé, avec une pastille : *
     *   -   ``{centroid_lat}``, ``{centroid_lon}``
         -   La même latitude et la même longitude, chacune seule (« -12.345678 », « -69.123456 »).
     *   -   ``{before_radar}``, ``{after_radar}``
-        -   Avec une image Sentinel-1 choisie : les noms des images radar d'avant et d'après. Une image radar ajoutée par l'application est marquée « (image radar la plus proche) ». Vide sinon.
+        -   Avec Sentinel-1 activé et une paire radar : les noms des images radar d'avant et d'après. Une image radar qui suit le choix optique (non placée à la main) est marquée « (image radar la plus proche) », ou « (image radar la plus proche, autre orbite) » si elle vient de l'autre orbite. Vide sinon.
     *   -   ``{radar_summary}``
-        -   Avec une image Sentinel-1 choisie : « Images radar : … (avant) et … (après). », les noms des deux images radar, pour le résumé. Vide sinon.
+        -   Avec une paire radar : « Images radar : … (avant) et … (après). », les noms des deux images radar, pour le résumé. Vide sinon.
     *   -   ``{image_note}``
-        -   Avec une image Sentinel-1 choisie : une phrase qui dit quelle image choisie est radar et que les vues optiques montrent l'image optique la moins nuageuse proche de sa date. Vide sinon ; un paragraphe qui ne contient que cette étiquette est alors supprimé.
+        -   Toujours vide désormais (elle expliquait une image optique de remplacement). Conservée pour que les anciens modèles fonctionnent ; un paragraphe qui ne contient que cette étiquette est supprimé.
     *   -   ``{group_size}``, ``{group_alerts}``
         -   Pour une alerte examinée en groupe : le nombre d'alertes du groupe et leurs numéros (« 12, 15, 16 »). Sinon « 1 » et le numéro de l'alerte elle-même.
     *   -   ``{verdict}`` (en vert)
@@ -1601,7 +1601,7 @@ Le rapport contient aussi six vues de l'alerte, découpées dans les images d'av
     *   -   ``[Placeholder for Centroid QR]``
         -   Un code QR qui ouvre le centroïde de l'alerte dans Google Maps (80 pt de large, ou moins pour tenir dans sa cellule de tableau). Sans centroïde, le marqueur est supprimé.
 
-Les images 1 à 3 sont en fausses couleurs (proche infrarouge, rouge, vert) et les images 4 à 6 en couleurs naturelles (rouge, vert, bleu). Les images 1 à 6 montrent toujours des images optiques : quand une image choisie est Sentinel-1, l'image optique la moins nuageuse de son côté la remplace (avant une image d'avant, après une image d'après), quelle que soit la limite de nuages : la moins nuageuse dans les 30 jours, sinon la plus proche sur 12 mois. Sa légende donne sa couverture nuageuse, qui montre pourquoi le radar a été utilisé. Les vues radar montrent VV, VH et le rapport VV/VH en rouge, vert et bleu. Quand un seul côté est Sentinel-1, la vue radar de l'autre côté est l'image radar la plus proche du même passage dans les 30 jours, sinon la plus proche des deux passages. Une vue sans image assez proche est remplacée par une courte note. Elles gardent la résolution de la plus fine des deux images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). Le modèle par défaut les dispose en une grille de trois colonnes (avant, après, après avec le contour) et deux lignes (couleurs naturelles, fausses couleurs), et place le code QR à côté des détails de l'alerte. Sa ligne *Preuves radar* (avant, après, après avec le contour) est retirée d'un rapport sans image Sentinel-1. Un modèle sans ces marqueurs donne un rapport sans images.
+Les images 1 à 3 sont en fausses couleurs (proche infrarouge, rouge, vert) et les images 4 à 6 en couleurs naturelles (rouge, vert, bleu). Les images 1 à 6 montrent la paire optique telle que choisie. Les vues radar montrent la paire radar choisie sur la frise (une poignée qui suit le choix optique donne l'image radar la plus proche de sa date), sous la forme de VV, VH et du rapport VV/VH en rouge, vert et bleu. Une vue sans image est remplacée par une courte note. Elles gardent la résolution de la plus fine des deux images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). Le modèle par défaut les dispose en une grille de trois colonnes (avant, après, après avec le contour) et deux lignes (couleurs naturelles, fausses couleurs), et place le code QR à côté des détails de l'alerte. Sa ligne *Preuves radar* (avant, après, après avec le contour) est retirée d'un rapport sans paire radar. Un modèle sans ces marqueurs donne un rapport sans images.
 
 .. tip::
 
@@ -2048,9 +2048,11 @@ Pour déplacer une poignée, utilisez l'une de ces méthodes :
 -   Cliquez sur un trait : la poignée appropriée la plus proche s'y place. Les images au-dessus de la limite de nuages ne peuvent pas être sélectionnées.
 -   Au clavier : appuyez sur **Tab** pour atteindre une poignée, parcourez les dates avec les flèches gauche et droite, sautez à la première ou à la dernière image avec **Début** et **Fin**, et choisissez avec **Entrée**.
 
-À l'ouverture d'une alerte, l'application choisit l'image la plus proche *avant* la fenêtre de l'alerte et l'image la plus proche *après*, parmi les images sous la limite de nuages. Elle ne choisit jamais une image située dans la fenêtre de l'alerte (elle ne montrerait qu'une partie de la coupe), une mosaïque Planet ni une image radar Sentinel-1, mais toutes peuvent être choisies à la main. Un côté sans image sous la limite de nuages reste « non défini ». Une alerte examinée s'ouvre sur les images avec lesquelles elle a été enregistrée. Si l'une d'elles n'est plus disponible, le titre de sa carte indique « Image enregistrée indisponible ; choisie automatiquement ».
+À l'ouverture d'une alerte, l'application choisit l'image la plus proche *avant* la fenêtre de l'alerte et l'image la plus proche *après*, parmi les images sous la limite de nuages. Elle ne choisit jamais une image située dans la fenêtre de l'alerte (elle ne montrerait qu'une partie de la coupe) ni une mosaïque Planet, mais les deux peuvent être choisies à la main. Un côté sans image sous la limite de nuages reçoit la meilleure image au-dessus ; un côté sans aucune image reste « non défini ». Une alerte examinée s'ouvre sur les images avec lesquelles elle a été enregistrée. Si l'une d'elles n'est plus disponible, le titre de sa carte indique « Image enregistrée indisponible ; choisie automatiquement ».
 
-Le titre de chaque carte nomme son image : « Image précédente · Sentinel-2 2026-07-28 · 3% » (collection, date, couverture nuageuse). Quand l'autre collection a une image du même jour, un bouton dans le titre (« ⇄ Landsat ») permet de basculer vers elle.
+Le titre de chaque carte nomme son image dans une pastille **Optique** : « Image précédente · Optique · Sentinel-2 2026-07-28 · 3% » (collection, date, couverture nuageuse). Quand l'autre collection a une image du même jour, un bouton dans le titre (« ⇄ Landsat ») permet de basculer vers elle.
+
+Quand Sentinel-1 est activé, une seconde piste sous la piste optique contient ses images, avec ses propres deux poignées. Elles sont creuses tant qu'elles suivent les choix optiques : chacune se place sur l'image radar la plus proche de la date de sa poignée optique et la suit. Faites-en glisser une, ou cliquez sur une bande radar, et elle se remplit : elle est à vous et reste où vous l'avez mise, et l'enregistrement de l'alerte la conserve. **Suivre l'optique** (à droite de la piste radar) rend les deux poignées aux choix optiques. Une carte dont le côté a une image radar reçoit dans son titre une pastille **Radar** à côté de la pastille **Optique** : cliquez sur une pastille pour choisir ce que montre cette carte.
 
 La barre d'outils au-dessus de la piste :
 
@@ -2090,8 +2092,8 @@ Les images radar Sentinel-1 sont traitées autrement que les images optiques :
 -   Elles ne sont récupérées qu'une fois Sentinel-1 activé pour le projet : tant que ses images ne sont pas listées, son compte indique « – ».
 -   Les deux passages sont affichés, une bande par passage, étiquetées « Sentinel-1 asc » et « Sentinel-1 desc ».
 -   Elles sont affichées brutes, sans filtre de chatoiement (speckle), sous la forme de VV, VH et du rapport VV/VH en rouge, vert et bleu. Dans le volet de la carte, une image radar a une seule couche « Radar », sans bascule entre couleurs naturelles et fausses couleurs.
--   Le radar voit à travers les nuages : la limite de nuages ne masque jamais ces images, et le choix automatique ne les retient jamais. Sélectionnez-en une à la main.
--   Avec une image Sentinel-1 choisie, le zip contient deux composites : l'optique, construit avec l'image optique la moins nuageuse proche de la date radar, et un radar. Le rapport ajoute une ligne *Preuves radar* et marque les images ajoutées par l'application. Le modèle a besoin d'images optiques des deux côtés : il la refuse et demande une image Sentinel-2, Landsat ou Planet à la place. Le GIF n'utilise que les images optiques autour de l'image radar choisie (les images Planet choisies apparaissent toujours dans les GIF) ; s'il n'y en a aucune, le GIF est omis et l'avertissement sous **Générer les fichiers** en donne la raison.
+-   Le radar voit à travers les nuages : la limite de nuages ne masque jamais ces images. Elles ont leur propre piste et leurs poignées (voir ci-dessus) : les poignées radar suivent les choix optiques jusqu'à ce que vous les déplaciez.
+-   Les deux paires sont utilisées telles que choisies. Avec Sentinel-1 activé, le zip contient deux composites, l'optique et le radar, et le rapport ajoute une ligne *Preuves radar* ; les images radar non placées à la main sont marquées dans le rapport. Le modèle et le GIF utilisent la paire optique, quoi que montrent les poignées radar. **Générer les fichiers** attend que les images radar soient dessinées et que toute poignée radar déplacée soit enregistrée.
 
 Les images proviennent d'un index des images de la zone du projet, conservé sur le disque et rafraîchi au bout de 24 heures. Pendant son chargement, la barre d'outils indique « Chargement de l'index des images… » ; un index de plus d'un jour affiche « Index du (date) ». Si un rafraîchissement échoue, l'index affiché continue de fonctionner, et **Réessayer** relance la tentative.
 
@@ -2588,7 +2590,7 @@ La section **Exporter cette alerte** se trouve en haut du dock du panneau d'exam
     *   -   **Générer les fichiers**
         -   Génère les données et le rapport de l'alerte à partir de la révision enregistrée (« Génère les fichiers ci-dessus à partir de la révision enregistrée »). Elle reste désactivée tant que la révision affichée n'est pas enregistrée : elle indique alors « Enregistrez d'abord cette alerte », ou « Enregistrez d'abord vos modifications » s'il y a des modifications non enregistrées. Une alerte examinée, ouverte sur les images avec lesquelles elle a été enregistrée, est prête aussitôt. Elle s'exécute dans la liste des tâches (« Génération des fichiers… ») et prend un moment : elle télécharge les images d'avant et d'après.
     *   -   **Données de l'alerte**
-        -   Télécharge un fichier .zip : le GeoPackage de l'alerte, ses images d'avant et d'après réunies dans un seul GeoTIFF (deux avec une image Sentinel-1 : optique et radar) et, pour une alerte réelle, son GIF.
+        -   Télécharge un fichier .zip : le GeoPackage de l'alerte, ses images d'avant et d'après réunies dans un seul GeoTIFF (deux avec Sentinel-1 activé : optique et radar) et, pour une alerte réelle, son GIF.
     *   -   **Rapport de l'alerte**
         -   Télécharge le rapport Word de l'alerte.
     *   -   **Régénérer les fichiers**
@@ -2607,7 +2609,7 @@ Les fichiers sont nommés d'après la ligne de l'alerte dans le jeu (le numéro 
     *   -   ``alert_<n>.gpkg``
         -   L'alerte sous forme d'une entité unique, avec ses attributs et ses réponses (les réponses dans la langue actuelle de l'application). Sa géométrie est le polygone dessiné dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut le rectangle englobant de l'alerte.
     *   -   ``alert_<n>_<before>_<after>.tif``
-        -   Les images d'avant et d'après, découpées selon la **Zone d'image**. Les deux parties de date indiquent la collection de chaque image (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendant/descendant) et sa date. Avec une image Sentinel-1 choisie, il y en a deux : la paire optique (l'image optique la moins nuageuse proche de la date radar remplace l'image radar) et la paire radar.
+        -   Les images d'avant et d'après, découpées selon la **Zone d'image**. Les deux parties de date indiquent la collection de chaque image (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendant/descendant) et sa date. Avec Sentinel-1 activé, il y en a deux : la paire optique et la paire radar, chacune telle que choisie.
     *   -   ``alert_<n>_<before>_<after>.gif``
         -   Le timelapse, s'il a été créé, nommé comme le GeoTIFF.
     *   -   ``alert_<n>.zip``
@@ -2622,7 +2624,7 @@ Les liens des tuiles valent pour la révision affichée. Choisir d'autres images
 Le rapport
 """"""""""
 
-Le rapport est construit à partir du modèle Word du projet, choisi à l'étape `Questionnaire <defo-questionnaire-template_>`_, ou à partir du modèle par défaut de l'application quand le projet n'en a pas. Les balises du modèle sont remplies avec les attributs de l'alerte, ses réponses et ses images. Avec une image Sentinel-1 choisie, les vues optiques montrent à la place l'image optique la moins nuageuse proche de sa date, une ligne *Preuves radar* montre la paire radar et le résumé nomme à la fois les images optiques et radar. La liste figure dans `Le modèle de rapport <defo-questionnaire-template_>`_.
+Le rapport est construit à partir du modèle Word du projet, choisi à l'étape `Questionnaire <defo-questionnaire-template_>`_, ou à partir du modèle par défaut de l'application quand le projet n'en a pas. Les balises du modèle sont remplies avec les attributs de l'alerte, ses réponses et ses images. Avec Sentinel-1 activé, les vues montrent la paire optique telle que choisie, une ligne *Preuves radar* montre la paire radar et le résumé nomme à la fois les images optiques et radar. La liste figure dans `Le modèle de rapport <defo-questionnaire-template_>`_.
 
 Le timelapse
 """"""""""""

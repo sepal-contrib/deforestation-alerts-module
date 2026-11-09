@@ -1595,7 +1595,7 @@ The **Report template** line names the template in use, with a chip: **default**
     *   -   ``{confirmation_date}``
         -   The day the report is built.
     *   -   ``{before_img}``, ``{after_img}``
-        -   The names of the before and after images in the optical pictures: the ones chosen in the review, or for a Sentinel-1 pick the least cloudy optical image near its date, marked with its cloud cover, e.g. "(in place of the radar image, 87% cloud)".
+        -   The names of the before and after images in the optical pictures, as picked in the review.
     *   -   ``{alert_system}``
         -   The sources that detected the alert.
     *   -   ``{area_loss}``
@@ -1605,11 +1605,11 @@ The **Report template** line names the template in use, with a chip: **default**
     *   -   ``{centroid_lat}``, ``{centroid_lon}``
         -   The same latitude and longitude, each on its own ("-12.345678", "-69.123456").
     *   -   ``{before_radar}``, ``{after_radar}``
-        -   With a Sentinel-1 pick: the names of the before and after radar images. A radar image the app added is marked "(nearest radar image)". Empty otherwise.
+        -   With Sentinel-1 on and a radar pair: the names of the before and after radar images. A radar image that follows the optical pick (not placed by hand) is marked "(nearest radar image)", or "(nearest radar image, other pass)" when it comes from the other pass. Empty otherwise.
     *   -   ``{radar_summary}``
-        -   With a Sentinel-1 pick: "Radar images: … (before) and … (after).", the two radar image names, for the summary. Empty otherwise.
+        -   With a radar pair: "Radar images: … (before) and … (after).", the two radar image names, for the summary. Empty otherwise.
     *   -   ``{image_note}``
-        -   With a Sentinel-1 pick: one sentence saying which chosen image is radar and that the optical pictures show the least cloudy optical image near its date. Empty otherwise; a paragraph holding only this placeholder is then removed.
+        -   Always empty now (it used to explain a stand-in optical image). Kept so that older templates still work; a paragraph holding only this placeholder is removed.
     *   -   ``{group_size}``, ``{group_alerts}``
         -   For an alert reviewed in a group: the number of alerts in the group and their numbers ("12, 15, 16"). Otherwise "1" and the alert's own number.
     *   -   ``{verdict}`` (green)
@@ -1645,7 +1645,7 @@ The report also holds six pictures of the alert, cut from the before and after i
     *   -   ``[Placeholder for Centroid QR]``
         -   A QR code that opens the alert's centroid in Google Maps (80 pt wide, or narrower to fit its table cell). Without a centroid, the marker is removed.
 
-Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). Images 1–6 always show optical images: when a chosen image is Sentinel-1, the least cloudy optical image on its side stands in (before a before image, after an after image), whatever the cloud limit: the least cloudy one within 30 days, else the nearest one within 12 months. Its caption gives its cloud cover, which shows why radar was used. The radar pictures show VV, VH and the VV/VH ratio as red, green and blue. When only one side is Sentinel-1, the other side's radar picture is the nearest radar image of the same pass within 30 days, else the nearest of either pass. A picture with no image near enough is replaced by a short note. The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. Its *Radar evidence* row (before, after, after with the outline) is removed from a report without a Sentinel-1 image. A template without these markers gets a report with no pictures.
+Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). Images 1–6 show the optical pair as picked. The radar pictures show the radar pair as picked on the timeline (a handle that follows the optical pick gives the nearest radar image to its date), as VV, VH and the VV/VH ratio in red, green and blue. A picture with no image is replaced by a short note. The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. Its *Radar evidence* row (before, after, after with the outline) is removed from a report without a radar pair. A template without these markers gets a report with no pictures.
 
 .. tip::
 
@@ -1957,7 +1957,7 @@ It needs an alert set: until `Integrate & vectorize <defo-integrate_>`_ has made
 The screen
 ^^^^^^^^^^
 
-.. shot: analysis-screen | The whole Analysis screen of the demo project at 1440×900, on an unreviewed alert in the middle of the set: the top bar (Workflow, "Analysis · <project>", the funnel, the Alert set selector, the tally "12 reviewed · 36 left" over its bar, the help icon, Previous · 13 / 48 · Next and the next-unreviewed icon); the two maps with "Before image · Sentinel-2 2026-05-28 · 27%" and "After image · Sentinel-2 2026-09-27 · 18%" titles, the Original alert outlines, the layers icon at the top right of each map, the basemap thumbnail and the scale bar at the bottom left; the timeline under the maps with both handles placed; the right panel with Source / Detected / Status, the Verdict buttons, the Questions section open with the loss driver and the added "Access road nearby?" question, the Refine polygon section closed, and the dock (Export this alert "available after save", Save filled, Next, the next-unreviewed icon). No crop.
+.. shot: analysis-screen | The whole Analysis screen of the demo project at 1440×900, on an unreviewed alert in the middle of the set: the top bar (Workflow, "Analysis · <project>", the funnel, the Alert set selector, the tally "12 reviewed · 36 left" over its bar, the help icon, Previous · 13 / 48 · Next and the next-unreviewed icon); the two maps with titles "Before image" and "After image" each followed by an "Optical · Sentinel-2 2026-05-28 · 27%" / "Optical · Sentinel-2 2026-09-27 · 18%" chip and a "Radar" chip, the Original alert outlines, the layers icon at the top right of each map, the basemap thumbnail and the scale bar at the bottom left; the timeline under the maps with the optical and radar lanes, all handles placed; the right panel with Source / Detected / Status, the Verdict buttons, the Questions section open with the loss driver and the added "Access road nearby?" question, the Refine polygon section closed, and the dock (Export this alert "available after save", Save filled, Next, the next-unreviewed icon). No crop.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-screen.png
     :alt: The Analysis screen
@@ -2084,7 +2084,7 @@ A map displays "Imagery failed to load" when the tiles of its image do not load.
 Choose the images: the timeline
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: analysis-timeline | The timeline strip of the demo alert at full width: the "Image sources" button with a blue and an orange dot (Sentinel-2 and Landsat on; no Planet, no Sentinel-1), the "?" button, Collapse the alert window / Expand every month, the Max cloud 40% slider, Image area = Normal; the track with "‹ +1 month" and "+1 month ›", the gold alert-window band with two collapsed month blocks in it, Sentinel-2 stripes on top, Landsat under them, a few faded half-height stripes over the cloud limit, the before handle left of the band and the after handle right of it with the "122 days apart" bracket between them; the month names on the axis. Crop to the timeline card.
+.. shot: analysis-timeline | The timeline strip of the demo alert at full width: the "Image sources" button with a blue, an orange and a pink dot (Sentinel-2, Landsat and Sentinel-1 on; no Planet), the "?" button, Collapse the alert window / Expand every month, the Max cloud 40% slider, Image area = Normal; the track with "‹ +1 month" and "+1 month ›", the gold alert-window band with two collapsed month blocks in it, Sentinel-2 stripes on top, Landsat under them, a few faded half-height stripes over the cloud limit, the before handle left of the band and the after handle right of it with the "122 days apart" bracket between them; under that optical lane the radar lane, with the Sentinel-1 stripes, its own two hollow handles (following the optical picks) and the "Follow optical" button at its right; the month names on the axis. Crop to the timeline card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-timeline.png
     :alt: The image timeline
@@ -2106,9 +2106,11 @@ To move a handle, use one of these methods:
 -   Click on a stripe: the nearest suitable handle moves to it. Images over the cloud limit cannot be selected.
 -   With the keyboard: press **Tab** to reach a handle, move along the dates with the left and right arrow keys, jump to the first or last image with **Home** and **End**, and choose with **Enter**.
 
-When an alert opens, the app chooses the image nearest *before* the alert window and the image nearest *after* it, among the images under the cloud limit. It never chooses an image inside the alert window (it would show only part of the clearing), a Planet mosaic or a Sentinel-1 radar image, but all of them can be chosen by hand. A side with no image under the cloud limit is left "not set". A reviewed alert opens on the images it was saved with. If one of them is no longer available, its map title reads "Saved image not available; picked automatically".
+When an alert opens, the app chooses the image nearest *before* the alert window and the image nearest *after* it, among the images under the cloud limit. It never chooses an image inside the alert window (it would show only part of the clearing) or a Planet mosaic, but both can be chosen by hand. A side with no image under the cloud limit gets the best image over it instead; a side with no image at all is left "not set". A reviewed alert opens on the images it was saved with. If one of them is no longer available, its map title reads "Saved image not available; picked automatically".
 
-Each map's title names its image: "Before image · Sentinel-2 2026-07-28 · 3%" (collection, date, cloud cover). When the other collection has an image of the same day, a button in the title ("⇄ Landsat") switches to it.
+Each map's title names its image in an **Optical** chip: "Before image · Optical · Sentinel-2 2026-07-28 · 3%" (collection, date, cloud cover). When the other collection has an image of the same day, a button in the title ("⇄ Landsat") switches to it.
+
+When Sentinel-1 is on, a second lane under the optical one holds its images, with its own two handles. They are hollow while they follow the optical picks: each sits on the radar image nearest to the date of its optical handle and moves with it. Drag one, or click a radar stripe, and it becomes filled: it is yours and stays where you put it, and saving the alert saves it. **Follow optical** (at the right of the radar lane) hands both handles back to the optical picks. A map whose side has a radar image gets a **Radar** chip next to the **Optical** one in its title: click a chip to choose what that map shows.
 
 The toolbar above the track:
 
@@ -2148,8 +2150,8 @@ Sentinel-1 radar images differ from the optical ones:
 -   They are fetched only once you turn Sentinel-1 on for the project: until its images are listed, its count reads "–".
 -   Both passes are shown, one band per pass, labelled "Sentinel-1 asc" and "Sentinel-1 desc".
 -   They are shown raw, with no speckle filter, as VV, VH and the VV/VH ratio in red, green and blue. In the map pane, a radar image has a single "Radar" layer, with no true/false colour switch.
--   Radar sees through clouds, so the cloud limit never hides these images, and the automatic pick never chooses them. Select one by hand.
--   With a Sentinel-1 image picked, the zip holds two composites: the optical one, built from the least cloudy optical image near the radar date, and a radar one. The report adds a *Radar evidence* row and marks the images the app added. The model needs optical images on both sides, so it refuses and asks for a Sentinel-2, Landsat or Planet image instead. The GIF uses only the optical images around the radar pick (Planet picks still appear in GIFs); if there are none, the GIF is skipped and the warning under **Build files** gives the reason.
+-   Radar sees through clouds, so the cloud limit never hides these images. They have their own lane and handles (see above): the radar handles follow the optical picks until you move them.
+-   Both pairs are used as picked. With Sentinel-1 on, the zip holds two composites, the optical one and the radar one, and the report adds a *Radar evidence* row; the radar images that were not placed by hand are marked in the report. The model and the GIF use the optical pair, whatever the radar handles show. **Build files** waits until the radar images are drawn and any radar handle you moved is saved.
 
 The images come from an index of the images over the project's area, kept on disk and refreshed after 24 hours. While it loads, the toolbar reads "Loading the image index…"; an index older than a day reads "Index from (date)". If a refresh fails, the index on screen keeps working, and **Try again** retries.
 
@@ -2660,7 +2662,7 @@ The **Export this alert** section sits at the top of the dock of the `Analysis <
     *   -   **Build files**
         -   Builds the alert's data and report from the saved review ("Makes the files above from the saved review"). It is disabled until the review on screen is saved: it then reads "Save this alert first", or "Save your changes first" when there are unsaved changes. A reviewed alert opened on the images it was saved with is ready at once. It runs in the task list ("Building files…") and takes a while: it downloads the before and after images.
     *   -   **Alert data**
-        -   Downloads a .zip file: the alert's GeoPackage, its before and after images as one GeoTIFF (two with a Sentinel-1 image: optical and radar) and, for a true alert, its GIF.
+        -   Downloads a .zip file: the alert's GeoPackage, its before and after images as one GeoTIFF (two with Sentinel-1 on: optical and radar) and, for a true alert, its GIF.
     *   -   **Alert report**
         -   Downloads the alert's Word report.
     *   -   **Rebuild files**
@@ -2679,7 +2681,7 @@ The files are named after the alert's row in the set (the counter's number minus
     *   -   ``alert_<n>.gpkg``
         -   The alert as one feature with its attributes and answers (the answers in the app's current language). Its geometry is the polygon drawn in `Refine the polygon <defo-analysis-refine_>`_, or else the alert's bounding box.
     *   -   ``alert_<n>_<before>_<after>.tif``
-        -   The before and after images, cut to the **Image area**. The two date parts name each image's collection (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascending/descending) and date. With a Sentinel-1 image chosen there are two: the optical pair (the least cloudy optical image near the radar date standing in for the radar one) and the radar pair.
+        -   The before and after images, cut to the **Image area**. The two date parts name each image's collection (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascending/descending) and date. With Sentinel-1 on there are two: the optical pair and the radar pair, each as picked.
     *   -   ``alert_<n>_<before>_<after>.gif``
         -   The timelapse, when made, named like the GeoTIFF.
     *   -   ``alert_<n>.zip``
@@ -2694,7 +2696,7 @@ The links of the tiles are for the review on screen. Choosing other images, savi
 The report
 """"""""""
 
-The report is built from the project's Word template, chosen in the `Questionnaire <defo-questionnaire-template_>`_ step, or from the app's default template when the project has none. The template's placeholders are filled with the alert's attributes, its answers and its images. With a Sentinel-1 image chosen, the optical pictures show the least cloudy optical image near its date instead, a *Radar evidence* row shows the radar pair, and the summary names both the optical and the radar images. See `The report template <defo-questionnaire-template_>`_ for the list.
+The report is built from the project's Word template, chosen in the `Questionnaire <defo-questionnaire-template_>`_ step, or from the app's default template when the project has none. The template's placeholders are filled with the alert's attributes, its answers and its images. With Sentinel-1 on, the pictures show the optical pair as picked, a *Radar evidence* row shows the radar pair, and the summary names both the optical and the radar images. See `The report template <defo-questionnaire-template_>`_ for the list.
 
 The timelapse
 """""""""""""
