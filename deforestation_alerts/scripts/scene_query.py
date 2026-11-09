@@ -505,6 +505,26 @@ def _nearest_on_side(ok: pd.DataFrame, day, side: str) -> Optional[str]:
 
 #: a radar partner of the other pick's pass is preferred this close to the optical pick
 SAME_PASS_DAYS = 30
+#: the report's optical stand-in is the least cloudy one this close to a radar pick
+STAND_IN_DAYS = 30
+
+
+def report_optical(rows: pd.DataFrame, rid, side: str) -> Optional[str]:
+    """``rid`` if it is optical, else the report's optical stand-in for the
+    radar pick ``rid`` on its ``side``, whatever the cloud limit (its cloud
+    cover is what made the reviewer use radar): the least cloudy dated optical
+    row on ``side`` within ``STAND_IN_DAYS`` (ties: the closest), else the
+    nearest one on ``side``, else ``None``."""
+    source, day = parse_row_id(rid)
+    if not is_radar(source):
+        return rid
+    ok = rows[rows["source"].map(dated_optical).astype(bool)]
+    ok = ok[ok["date"] <= pd.Timestamp(day)] if side == "before" else ok[ok["date"] >= pd.Timestamp(day)]
+    gap = (ok["date"] - pd.Timestamp(day)).abs().dt.days
+    near = ok.assign(_gap=gap)[gap <= STAND_IN_DAYS]
+    if len(near):
+        return str(near.sort_values(["cloud", "_gap"], kind="stable", na_position="last").iloc[0]["id"])
+    return _nearest_on_side(ok, day, side)
 
 
 def radar_partner(rows: pd.DataFrame, rid, side: str, pass_source: str) -> Optional[str]:
@@ -524,7 +544,7 @@ def report_images(rows: pd.DataFrame, before_id, after_id) -> Optional[dict]:
     """The row ids a report shows when a pick is radar, ``None`` when neither is.
 
     ``{"optical": (before, after), "radar": (before, after)}``: the optical
-    figures take each side's pick when optical, else its ``optical_anchor``;
+    figures take each side's pick when optical, else its ``report_optical``;
     the radar block takes each radar pick, and on an optical side the
     ``radar_partner`` of the other pick's pass. ``None`` inside: nothing found.
     """
@@ -535,7 +555,7 @@ def report_images(rows: pd.DataFrame, before_id, after_id) -> Optional[dict]:
     other = {"before": "after", "after": "before"}
     radar = tuple(picks[s] if is_radar(source[s]) else radar_partner(rows, picks[s], s, source[other[s]])
                   for s in ("before", "after"))
-    return {"optical": tuple(optical_anchor(rows, picks[s], s) for s in ("before", "after")), "radar": radar}
+    return {"optical": tuple(report_optical(rows, picks[s], s) for s in ("before", "after")), "radar": radar}
 
 
 def gif_frames(rows: pd.DataFrame, before_id, after_id, n: int = 2) -> pd.DataFrame:

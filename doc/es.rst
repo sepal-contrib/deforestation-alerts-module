@@ -1549,7 +1549,7 @@ La línea **Plantilla del informe** indica la plantilla en uso, con una etiqueta
     *   -   ``{confirmation_date}``
         -   El día en que se genera el informe.
     *   -   ``{before_img}``, ``{after_img}``
-        -   Los nombres de las imágenes de antes y después de las imágenes ópticas: las elegidas en la revisión o, para una imagen Sentinel-1, la imagen óptica más cercana, marcada "(imagen óptica más cercana)".
+        -   Los nombres de las imágenes de antes y después de las imágenes ópticas: las elegidas en la revisión o, para una imagen Sentinel-1, la imagen óptica menos nublada cercana a su fecha, marcada con su nubosidad, p. ej. "(en lugar de la imagen de radar, 87% de nubes)".
     *   -   ``{alert_system}``
         -   Las fuentes que detectaron la alerta.
     *   -   ``{area_loss}``
@@ -1563,7 +1563,7 @@ La línea **Plantilla del informe** indica la plantilla en uso, con una etiqueta
     *   -   ``{radar_summary}``
         -   Con una imagen Sentinel-1 elegida: "Imágenes de radar: … (antes) y … (después).", los nombres de las dos imágenes de radar, para el resumen. Vacío en otro caso.
     *   -   ``{image_note}``
-        -   Con una imagen Sentinel-1 elegida: una frase que dice qué imagen elegida es de radar y que las imágenes ópticas muestran la imagen óptica más cercana. Vacío en otro caso; un párrafo que solo contiene esta etiqueta se elimina entonces.
+        -   Con una imagen Sentinel-1 elegida: una frase que dice qué imagen elegida es de radar y que las imágenes ópticas muestran la imagen óptica menos nublada cercana a su fecha. Vacío en otro caso; un párrafo que solo contiene esta etiqueta se elimina entonces.
     *   -   ``{group_size}``, ``{group_alerts}``
         -   Para una alerta revisada en un grupo: el número de alertas del grupo y sus números ("12, 15, 16"). En los demás casos, "1" y el número de la propia alerta.
     *   -   ``{verdict}`` (verde)
@@ -1599,7 +1599,7 @@ El informe también contiene seis imágenes de la alerta, recortadas de las imá
     *   -   ``[Placeholder for Centroid QR]``
         -   Un código QR que abre el centroide de la alerta en Google Maps (de 80 pt de ancho, o menos para caber en su celda de tabla). Sin centroide, la marca se elimina.
 
-Las imágenes 1 a 3 están en falso color (infrarrojo cercano, rojo, verde) y las imágenes 4 a 6 en color verdadero (rojo, verde, azul). Las imágenes 1 a 6 muestran siempre imágenes ópticas: cuando una imagen elegida es Sentinel-1, la sustituye la imagen óptica más cercana de su lado (la última antes de una imagen de antes, la primera después de una imagen de después, en 12 meses y por debajo del límite de nubes). Las imágenes de radar muestran VV, VH y la razón VV/VH en rojo, verde y azul. Cuando solo un lado es Sentinel-1, la imagen de radar del otro lado es la imagen de radar más cercana de la misma órbita en 30 días o, si no hay, la más cercana de cualquier órbita. Una imagen sin ninguna imagen lo bastante cercana se sustituye por una nota breve. Conservan la resolución de la más fina de las dos imágenes (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). La plantilla predeterminada las organiza en una cuadrícula de tres columnas (antes, después, después con el contorno) y dos filas (color verdadero, falso color), y coloca el código QR junto a los detalles de la alerta. Su fila *Evidencia de radar* (antes, después, después con el contorno) se elimina de un informe sin imagen Sentinel-1. Una plantilla sin estas marcas genera un informe sin imágenes.
+Las imágenes 1 a 3 están en falso color (infrarrojo cercano, rojo, verde) y las imágenes 4 a 6 en color verdadero (rojo, verde, azul). Las imágenes 1 a 6 muestran siempre imágenes ópticas: cuando una imagen elegida es Sentinel-1, la sustituye la imagen óptica menos nublada de su lado (antes de una imagen de antes, después de una imagen de después), sin tener en cuenta el límite de nubes: la menos nublada en 30 días o, si no hay, la más cercana en 12 meses. Su leyenda indica su nubosidad, que muestra por qué se usó el radar. Las imágenes de radar muestran VV, VH y la razón VV/VH en rojo, verde y azul. Cuando solo un lado es Sentinel-1, la imagen de radar del otro lado es la imagen de radar más cercana de la misma órbita en 30 días o, si no hay, la más cercana de cualquier órbita. Una imagen sin ninguna imagen lo bastante cercana se sustituye por una nota breve. Conservan la resolución de la más fina de las dos imágenes (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). La plantilla predeterminada las organiza en una cuadrícula de tres columnas (antes, después, después con el contorno) y dos filas (color verdadero, falso color), y coloca el código QR junto a los detalles de la alerta. Su fila *Evidencia de radar* (antes, después, después con el contorno) se elimina de un informe sin imagen Sentinel-1. Una plantilla sin estas marcas genera un informe sin imágenes.
 
 .. tip::
 
@@ -2089,7 +2089,7 @@ Las imágenes de radar Sentinel-1 se tratan de otra manera que las ópticas:
 -   Se muestran las dos pasadas, una banda por pasada, rotuladas "Sentinel-1 asc" y "Sentinel-1 desc".
 -   Se muestran sin procesar, sin filtro de moteado (speckle), como VV, VH y la razón VV/VH en rojo, verde y azul. En el panel del mapa, una imagen de radar tiene una sola capa "Radar", sin conmutador de color verdadero y falso color.
 -   El radar ve a través de las nubes, así que el límite de nubes nunca oculta estas imágenes, y la elección automática nunca las elige. Selecciona una a mano.
--   Con una imagen Sentinel-1 elegida, el zip contiene dos composiciones: la óptica, generada con la imagen óptica más cercana del lado del radar, y una de radar. El informe añade una fila *Evidencia de radar* y marca las imágenes añadidas por la aplicación. El modelo necesita imágenes ópticas en ambos lados, así que la rechaza y pide una imagen de Sentinel-2, Landsat o Planet. El GIF usa solo las imágenes ópticas alrededor de la imagen de radar elegida (las imágenes de Planet elegidas sí aparecen en los GIF); si no hay ninguna, el GIF se omite y la advertencia bajo **Generar archivos** indica el motivo.
+-   Con una imagen Sentinel-1 elegida, el zip contiene dos composiciones: la óptica, generada con la imagen óptica menos nublada cercana a la fecha del radar, y una de radar. El informe añade una fila *Evidencia de radar* y marca las imágenes añadidas por la aplicación. El modelo necesita imágenes ópticas en ambos lados, así que la rechaza y pide una imagen de Sentinel-2, Landsat o Planet. El GIF usa solo las imágenes ópticas alrededor de la imagen de radar elegida (las imágenes de Planet elegidas sí aparecen en los GIF); si no hay ninguna, el GIF se omite y la advertencia bajo **Generar archivos** indica el motivo.
 
 Las imágenes provienen de un índice de las imágenes sobre el área del proyecto, guardado en disco y actualizado pasadas 24 horas. Mientras se carga, la barra de herramientas indica "Cargando el índice de imágenes…"; un índice de más de un día indica "Índice del (fecha)". Si una actualización falla, el índice en pantalla sigue funcionando, y **Intentar de nuevo** vuelve a intentarlo.
 
@@ -2605,7 +2605,7 @@ Los archivos llevan el nombre de la fila de la alerta en el conjunto (el número
     *   -   ``alert_<n>.gpkg``
         -   La alerta como una entidad con sus atributos y respuestas (las respuestas en el idioma actual de la aplicación). Su geometría es el polígono dibujado en `Precisar el polígono <defo-analysis-refine_>`_ o, si no lo hay, el recuadro que delimita la alerta.
     *   -   ``alert_<n>_<before>_<after>.tif``
-        -   Las imágenes de antes y de después, recortadas al **Área de imagen**. Las dos partes de fecha indican la colección de cada imagen (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendente/descendente) y su fecha. Con una imagen Sentinel-1 elegida hay dos: el par óptico (la imagen óptica más cercana sustituye a la de radar) y el par de radar.
+        -   Las imágenes de antes y de después, recortadas al **Área de imagen**. Las dos partes de fecha indican la colección de cada imagen (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendente/descendente) y su fecha. Con una imagen Sentinel-1 elegida hay dos: el par óptico (la imagen óptica menos nublada cercana a la fecha del radar sustituye a la de radar) y el par de radar.
     *   -   ``alert_<n>_<before>_<after>.gif``
         -   La secuencia temporal, si se creó, con un nombre como el del GeoTIFF.
     *   -   ``alert_<n>.zip``
@@ -2620,7 +2620,7 @@ Los enlaces de los mosaicos corresponden a la revisión en pantalla. Elegir otra
 El informe
 """"""""""
 
-El informe se genera a partir de la plantilla de Word del proyecto, elegida en el paso `Cuestionario <defo-questionnaire-template_>`_, o a partir de la plantilla predeterminada de la aplicación cuando el proyecto no tiene ninguna. Los marcadores de la plantilla se rellenan con los atributos de la alerta, sus respuestas y sus imágenes. Con una imagen Sentinel-1 elegida, las imágenes ópticas muestran en su lugar la imagen óptica más cercana, una fila *Evidencia de radar* muestra el par de radar y el resumen nombra tanto las imágenes ópticas como las de radar. Consulta la lista en `La plantilla del informe <defo-questionnaire-template_>`_.
+El informe se genera a partir de la plantilla de Word del proyecto, elegida en el paso `Cuestionario <defo-questionnaire-template_>`_, o a partir de la plantilla predeterminada de la aplicación cuando el proyecto no tiene ninguna. Los marcadores de la plantilla se rellenan con los atributos de la alerta, sus respuestas y sus imágenes. Con una imagen Sentinel-1 elegida, las imágenes ópticas muestran en su lugar la imagen óptica menos nublada cercana a su fecha, una fila *Evidencia de radar* muestra el par de radar y el resumen nombra tanto las imágenes ópticas como las de radar. Consulta la lista en `La plantilla del informe <defo-questionnaire-template_>`_.
 
 La secuencia temporal
 """""""""""""""""""""

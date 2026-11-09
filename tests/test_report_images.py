@@ -48,6 +48,6 @@ def test_staging_rebuilds_the_stand_ins_and_notes_a_missing_side(monkeypatch, tm
                       (f"{S1A} 2026-04-05 ", f"{S1A} 2026-09-05 ", "pick_b", "pick_a")]
     assert optical is not None and radar is not None
     assert set(missing) == {"[Placeholder for Image 1]", "[Placeholder for Image 4]"}
-    assert extra["after_img"].startswith(f"{S2} 2026-09-20 (") and "before_img" not in extra
+    assert extra["after_img"] == f"{S2} 2026-09-20 (in place of the radar image, 5% cloud)" and "before_img" not in extra
     assert extra["before_radar"] == f"{S1A} 2026-04-05" and extra["image_note"]
     assert extra["radar_summary"] == f"Radar images: {S1A} 2026-04-05 (before) and {S1A} 2026-09-05 (after)."

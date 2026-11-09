@@ -698,6 +698,19 @@ D_DESC = "Sentinel 1 descending"
 NAN = float("nan")
 
 
+def test_the_report_stand_in_is_the_least_cloudy_within_30_days_whatever_the_limit():
+    rows = _sel([(S2, "2026-05-01", 1.0), (S2, "2026-06-01", 95.0), (LS, "2026-06-03", 70.0),
+                 (A_ASC, "2026-06-05", NAN), (S2, "2026-06-10", 85.0), (LS, "2026-06-20", 85.0)])
+    # before: 06-03 (70 %) beats the cloudier 06-01 (95 %); the clear 05-01 is 35 days off
+    assert scene_query.report_optical(rows, "a20260605", "before") == "l20260603"
+    # after: a tie at 85 %, the closer one wins; both are over the 40 % limit
+    assert scene_query.report_optical(rows, "a20260605", "after") == "s20260610"
+    far = _sel([(S2, "2026-03-01", 99.0), (S2, "2026-03-20", 2.0), (A_ASC, "2026-06-05", NAN)])
+    assert scene_query.report_optical(far, "a20260605", "before") == "s20260320"  # none within 30: the nearest
+    assert scene_query.report_optical(far, "a20260605", "after") is None
+    assert scene_query.report_optical(far, "s20260320", "before") == "s20260320"  # an optical pick is kept
+
+
 def test_a_radar_partner_keeps_the_pass_within_30_days_else_takes_the_nearest_of_either():
     rows = _sel([(S2, "2026-06-01", 5.0), (D_DESC, "2026-06-10", NAN), (A_ASC, "2026-06-20", NAN)])
     # ascending 06-20 is 19 days after the pick: kept over the nearer descending 06-10

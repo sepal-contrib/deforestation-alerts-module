@@ -41,7 +41,7 @@ class ReportImages(NamedTuple):
 def plan_report_images(tables, bbox, before_info, after_info, max_cloud, area_bbox=None) -> Optional[ReportImages]:
     """What the report shows for these picks, or ``None`` when neither is radar
     (the files are built from the picks, as they always were). Stand-ins come
-    from the index within the GIF's reach of the picks, under ``max_cloud``,
+    from the index within the GIF's reach of the picks (the optical one over ``max_cloud`` too),
     whatever sources the timeline shows; their granules fill ``area_bbox``
     (a larger image area) else ``bbox``."""
     infos = (before_info, after_info)
@@ -91,7 +91,13 @@ def _caption(shown: Optional[Shown]) -> str:
     if shown is None:
         return ""
     name = shown.info[3].strip()
-    return f"{name} ({t(shown.mark)})" if shown.mark else name
+    if not shown.mark:
+        return name
+    if shown.mark == _NEAREST_OPTICAL:  # its cloud cover says why the reviewer used radar
+        cloud = shown.info[2]  # ``info_tuple``'s "12.34" or "N/A"
+        cloud = "?" if cloud == "N/A" else f"{float(cloud):.0f}"
+        return f"{name} ({t(_NEAREST_OPTICAL, cloud=cloud)})"
+    return f"{name} ({t(shown.mark)})"
 
 
 def _stage(folder, alert, pair, area):
