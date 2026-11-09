@@ -63,7 +63,8 @@ def test_convert_names_a_custom_source_by_its_digit():
 
 def test_convert_adds_empty_review_columns():
     gdf = convert_to_geopandas(_vectorized_gdf(), _DIGITS)
-    for col in ("status", "before_img", "after_img", "alert_polygon",
+    for col in ("status", "before_img", "after_img", "before_radar_img", "before_radar_img_info",
+                "after_radar_img", "after_radar_img_info", "alert_polygon",
                 "description", "admin1", "admin2", "admin3"):
         assert col in gdf.columns
     assert (gdf["status"] == "Not reviewed").all()

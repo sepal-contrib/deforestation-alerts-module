@@ -75,6 +75,8 @@ from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_groups import REMOVE
 from deforestation_alerts.project.review_status import LOSS_VERDICTS, is_reviewed
 from deforestation_alerts.project.store_schema import GROWS_FROM, GROWS_FROM_AUTO, IMAGE_AREA
+from deforestation_alerts.scripts import scene_query
+from deforestation_alerts.scripts.image_sources import is_radar
 from deforestation_alerts.scripts.mosaics_helper import (
     convert_julian_to_date,
     multipolygon_to_geodataframe,
@@ -146,6 +148,24 @@ def _saved_pick(value):
     """A stored ``before_img`` / ``after_img`` as text, or ``None`` (NaN, a
     missing column): the timeline parses it (``scene_query.saved_pick_id``)."""
     return value if isinstance(value, str) and value.strip() else None
+
+
+def _saved_picks(alerta) -> dict:
+    """The saved optical and radar picks of both sides, for the imagery ctx.
+    A legacy ``before_img`` / ``after_img`` holding a radar pick (saved before
+    the radar side had its own columns) moves to the radar side, unless that
+    side already has a pick, and leaves the optical side empty."""
+    picks = {}
+    for side in ("before", "after"):
+        optical = _saved_pick(alerta.get(f"{side}_img"))
+        radar = _saved_pick(alerta.get(f"{side}_radar_img"))
+        rid = scene_query.saved_pick_id(optical)
+        if rid is not None and is_radar(scene_query.parse_row_id(rid)[0]):
+            radar = radar or optical
+            optical = None
+        picks[f"saved_{side}"] = optical
+        picks[f"saved_{side}_radar"] = radar
+    return picks
 
 
 def _invalidate_alert_view(widgets, analysis) -> None:
@@ -363,10 +383,10 @@ def view_actual_alert(
             # strings ``fecha1``/``fecha2`` the info card shows
             "date_min": _as_date(alerta["alert_date_min"]),
             "date_max": _as_date(alerta["alert_date_max"]),
-            # the pair this alert was last saved with (spec D1): the timeline
-            # restores it instead of picking, and falls back when it is gone
-            "saved_before": _saved_pick(alerta.get("before_img")),
-            "saved_after": _saved_pick(alerta.get("after_img")),
+            # the pairs this alert was last saved with (spec D1), optical
+            # and radar: the timeline restores them instead of picking, and
+            # falls back when they are gone
+            **_saved_picks(alerta),
         }
         # ...and the image area it was saved with: ``set_image_area`` follows
         # it now that the context above is this alert's

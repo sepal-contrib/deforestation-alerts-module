@@ -700,3 +700,55 @@ def test_switching_between_optical_and_radar_leaves_no_stale_image_layer(monkeyp
     imagery.image_slider_map_callback(optical, before, 0, widgets, s, None, token=token)
     assert set(panes.ids()) == {"before:True Color", "before:False Color",
                                 "after:True Color", "after:False Color"}
+
+
+_RADAR = ["Sentinel 1 ascending", 1757030400000, "N/A", "Sentinel 1 ascending 2025-09-05 ", "_050925"]
+
+
+def test_reset_alert_clears_radar_picks_but_keeps_the_shown_kind():
+    s = AnalysisState()
+    s.before_radar_image.set(object())
+    s.after_radar_info.set(_RADAR)
+    s.before_radar_keys.set(["k"])
+    s.radar_pinned.set({"before": True, "after": True})
+    s.shown_kind.set({"before": "radar", "after": "optical"})
+    s.reset_alert()
+    assert s.before_radar_image.value is None and s.after_radar_info.value is None
+    assert s.before_radar_keys.value == [] and s.after_radar_keys.value == []
+    assert s.radar_pinned.value == {"before": False, "after": False}
+    assert s.shown_kind.value == {"before": "radar", "after": "optical"}
+
+
+def test_capture_carries_the_radar_pair_and_pins():
+    s = AnalysisState()
+    s.before_radar_info.set(_RADAR)
+    s.radar_pinned.set({"before": True, "after": False})
+    c = s.capture()
+    assert c.before_radar_info == _RADAR and c.after_radar_info is None
+    assert c.before_radar_image is None and c.after_radar_image is None
+    assert c.radar_pinned == {"before": True, "after": False}
+    s.radar_pinned.value["after"] = True  # a copy: a later in-place change is not in the capture
+    assert c.radar_pinned["after"] is False
+
+
+def test_saved_picks_move_a_legacy_radar_before_img_to_the_radar_side():
+    from gui.tile.analysis.analysis_tile import _saved_picks
+
+    picks = _saved_picks({"before_img": "Sentinel 1 ascending 2026-09-05 ", "after_img": "Sentinel 2 2026-10-01 "})
+    assert picks == {"saved_before": None, "saved_after": "Sentinel 2 2026-10-01 ",
+                     "saved_before_radar": "Sentinel 1 ascending 2026-09-05 ", "saved_after_radar": None}
+    # a radar column already set wins over the legacy value, which is dropped
+    picks = _saved_picks({"before_img": "Sentinel 1 ascending 2026-09-05 ",
+                          "before_radar_img": "Sentinel 1 descending 2026-09-07 "})
+    assert picks["saved_before"] is None
+    assert picks["saved_before_radar"] == "Sentinel 1 descending 2026-09-07 "
+
+
+def test_a_store_without_radar_columns_loads_and_saves():
+    import pandas as pd
+
+    from gui.tile.analysis.analysis_tile import _saved_picks
+
+    row = pd.Series({"before_img": "Sentinel 2 2026-09-01 ", "after_img": float("nan")})
+    assert _saved_picks(row) == {"saved_before": "Sentinel 2 2026-09-01 ", "saved_after": None,
+                                 "saved_before_radar": None, "saved_after_radar": None}

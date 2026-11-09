@@ -11,6 +11,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 from shapely.geometry import box
 
@@ -267,3 +268,45 @@ def test_a_save_that_wrote_publishes_every_field_to_the_live_row(tmp_path, monke
     [staged] = written
     assert staged.at[0, "status"] == "Confirmed"
     assert staged.at[0, "description"] == "mining"
+
+
+_S1_INFO = ["Sentinel 1 ascending", 1757030400000, "N/A", "Sentinel 1 ascending 2025-09-05 ", "_050925"]
+
+
+def test_radar_updates_write_pins_clear_followers_and_skip_unknown_sides():
+    out = review_save.radar_updates(_S1_INFO, _S1_INFO, {"before": True, "after": False})
+    assert out == {"before_radar_img": "Sentinel 1 ascending 2025-09-05 ", "before_radar_img_info": 1757030400000,
+                   "after_radar_img": None, "after_radar_img_info": None}
+    assert review_save.radar_updates(None, _S1_INFO, {"before": True, "after": True}) == {
+        "after_radar_img": "Sentinel 1 ascending 2025-09-05 ", "after_radar_img_info": 1757030400000}
+    assert review_save.radar_updates(None, None, {"before": True, "after": True}) == {}
+
+
+def test_a_side_without_radar_info_keeps_the_rows_radar_columns(tmp_path, monkeypatch):
+    gdf = _review_row()
+    gdf["before_radar_img"] = pd.Series(["Sentinel 1 ascending 2025-09-05 "], dtype="object")
+    export, app_state, analysis, widgets, model, alert = _save_pieces(monkeypatch, gdf, verdict="Confirmed")
+    monkeypatch.setattr("gui.tile.analysis.review_save.write_store", lambda *a, **k: None)
+
+    assert export._save_attributes(widgets, app_state, analysis, model, alert=alert) is True
+    assert gdf.at[0, "before_radar_img"] == "Sentinel 1 ascending 2025-09-05 "
+
+
+def test_a_save_adds_the_radar_columns_to_a_store_without_them(tmp_path, monkeypatch):
+    from gui.tile.analysis.state import capture_alert
+
+    gdf = _review_row()
+    export, app_state, analysis, widgets, model, _alert = _save_pieces(monkeypatch, gdf, verdict="Confirmed")
+    analysis.before_radar_info.set(_S1_INFO)
+    analysis.after_radar_info.set(_S1_INFO)
+    analysis.radar_pinned.set({"before": True, "after": False})
+    written = []
+    monkeypatch.setattr("gui.tile.analysis.review_save.write_store",
+                        lambda staged, *a, **k: written.append(staged))
+
+    alert = capture_alert(analysis, widgets, app_state)
+    assert export._save_attributes(widgets, app_state, analysis, model, alert=alert) is True
+    for frame in (gdf, written[0]):
+        assert frame.at[0, "before_radar_img"] == "Sentinel 1 ascending 2025-09-05 "
+        assert frame.at[0, "before_radar_img_info"] == 1757030400000
+        assert pd.isna(frame.at[0, "after_radar_img"]) and pd.isna(frame.at[0, "after_radar_img_info"])

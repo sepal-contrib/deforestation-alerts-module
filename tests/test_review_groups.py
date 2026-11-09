@@ -35,6 +35,7 @@ def _alerts(n=4, *, statuses=None, groups=None, ids=True, evaluators=None, gap=0
     gdf["alert_date_max"] = [2026.020 + i * 0.001 for i in range(n)]
     gdf["alert_sources"] = ["GLAD-L"] * n
     for col in ("alert_polygon", "before_img", "before_img_info", "after_img", "after_img_info",
+                "before_radar_img", "before_radar_img_info", "after_radar_img", "after_radar_img_info",
                 "admin1", "admin2", "admin3"):
         gdf[col] = pd.Series([None] * n, dtype="object")
     gdf["q_loss_driver"] = [""] * n
@@ -233,6 +234,7 @@ def test_a_detached_row_is_reset_to_unreviewed_with_its_integrate_area():
     gdf["q_loss_driver"] = ["mining"] * 3
     gdf["description"] = ["note"] * 3
     gdf["before_img"] = pd.Series(["b"] * 3, dtype="object")
+    gdf["after_radar_img"] = pd.Series(["r"] * 3, dtype="object")
     gdf["admin1"] = pd.Series(["Brasil"] * 3, dtype="object")
     gdf.at[0, "alert_polygon"] = DRAWING
     gdf["area_ha"] = [5.0, 0.0, 0.0]  # a drawn group: the members' areas are 0
@@ -240,6 +242,7 @@ def test_a_detached_row_is_reset_to_unreviewed_with_its_integrate_area():
     row = out.iloc[2]
     assert row["status"] == NR and row["q_loss_driver"] == "" and row["description"] == ""
     assert pd.isna(row["before_img"]) and pd.isna(row["admin1"]) and row["alert_polygon"] is None
+    assert pd.isna(row["after_radar_img"])
     assert pd.isna(row[rg.COLUMN])
     assert row["area_ha"] == pytest.approx(rg.polygon_area_ha(gdf.geometry.iloc[2], CRS))
     rg.check_groups(out)

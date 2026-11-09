@@ -155,6 +155,22 @@ def _write_plan(alertas_gdf, updates, answer_columns, app_tile_model, folder, ta
     alertas_gdf.attrs.update(staged.attrs)
 
 
+def radar_updates(before_radar_info, after_radar_info, pinned: dict) -> dict:
+    """The radar columns a Save writes: a pinned side its pick (name and
+    millis, like the optical side), a following side ``None`` -- it is derived
+    from the optical pick again on the next load. A side with no info (the
+    radar lane never shown, or its restore pending) is left out, so the row
+    keeps its values."""
+    out = {}
+    for side, info in (("before", before_radar_info), ("after", after_radar_info)):
+        if info is None:
+            continue
+        keep = bool((pinned or {}).get(side))
+        out[f"{side}_radar_img"] = info[3] if keep else None
+        out[f"{side}_radar_img_info"] = info[1] if keep else None
+    return out
+
+
 def review_status(confirmation) -> str:
     """The status a Save stores (spec §10): one of the three, never a label.
 
@@ -259,13 +275,17 @@ def save_review(alert, app_tile_model):
     defo_layer = alert.defo_layer
     # A side with no pick keeps what the row has: a reopened alert whose
     # saved pick is not restored yet (scene index loading or failed) must
-    # not lose its saved pair, which gates its GIF (spec D9).
+    # not lose its saved pair, which gates its GIF (spec D9). The radar side
+    # follows the same rule (``radar_updates``).
     if before_info is not None:
         updates["before_img"] = before_info[3]
         updates["before_img_info"] = before_info[1]
     if after_info is not None:
         updates["after_img"] = after_info[3]
         updates["after_img_info"] = after_info[1]
+    updates.update(radar_updates(getattr(alert, "before_radar_info", None),
+                                 getattr(alert, "after_radar_info", None),
+                                 getattr(alert, "radar_pinned", None)))
     updates[IMAGE_AREA] = getattr(alert, "image_area", "normal")
 
     # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).

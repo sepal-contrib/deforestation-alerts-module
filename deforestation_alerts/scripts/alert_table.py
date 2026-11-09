@@ -33,6 +33,9 @@ def convert_to_geopandas(vectorized_gdf, digit_map):
     gdf["before_img_info"] = pd.Series([], dtype="object")
     gdf["after_img"] = pd.Series([], dtype="str")
     gdf["after_img_info"] = pd.Series([], dtype="object")
+    for side in ("before", "after"):
+        gdf[f"{side}_radar_img"] = pd.Series([], dtype="str")
+        gdf[f"{side}_radar_img_info"] = pd.Series([], dtype="object")
     gdf["alert_polygon"] = pd.Series([], dtype="object")
     if "area_ha" not in gdf.columns:
         gdf["area_ha"] = pd.Series([], dtype="float")

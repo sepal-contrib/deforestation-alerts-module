@@ -43,7 +43,8 @@ SAVE, REMOVE = "save", "remove"
 OVERWRITTEN, MOVED, JOINED, REMOVED = "overwritten", "moved", "joined", "removed"
 
 #: the image picks and the admin names a review writes, copied to members and cleared on a reset
-IMAGE_COLUMNS = ("before_img", "before_img_info", "after_img", "after_img_info", store_schema.IMAGE_AREA)
+IMAGE_COLUMNS = ("before_img", "before_img_info", "after_img", "after_img_info",
+                 *store_schema.RADAR_IMAGE_COLUMNS, store_schema.IMAGE_AREA)
 ADMIN_COLUMNS = ("admin1", "admin2", "admin3")
 
 

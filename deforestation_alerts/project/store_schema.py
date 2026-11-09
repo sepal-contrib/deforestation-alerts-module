@@ -32,7 +32,10 @@ REVIEW_BEFORE = ("status",)
 #: The image area the reviewer saw the alert in (a key of the timeline's
 #: ``IMAGE_AREAS``); missing in older stores, which read as ``"normal"``.
 IMAGE_AREA = "image_area"
-REVIEW_AFTER = ("before_img", "before_img_info", "after_img", "after_img_info", IMAGE_AREA,
+#: The Sentinel-1 pick of each side, beside the optical one in ``*_img``: a
+#: pinned pick is written, a following one is stored empty (spec 2026-11-09).
+RADAR_IMAGE_COLUMNS = ("before_radar_img", "before_radar_img_info", "after_radar_img", "after_radar_img_info")
+REVIEW_AFTER = ("before_img", "before_img_info", "after_img", "after_img_info", *RADAR_IMAGE_COLUMNS, IMAGE_AREA,
                 "admin1", "admin2", "admin3", "alert_polygon", "area_ha", GROWS_FROM, REVIEW_GROUP)
 
 #: The column an evaluator split writes (``project.split``, spec §3).
@@ -41,7 +44,7 @@ EVALUATOR = "evaluator"
 #: Every column a store carries before its attribute layers and its questions:
 #: ``alert_table.convert_to_geopandas`` on the vectorizer's output, plus the ids.
 STORE_COLUMNS = (*VECTOR_COLUMNS, "bounding_box", "point", "status", "alert_sources",
-                 "before_img", "before_img_info", "after_img", "after_img_info",
+                 "before_img", "before_img_info", "after_img", "after_img_info", *RADAR_IMAGE_COLUMNS,
                  "alert_polygon", "description", "admin1", "admin2", "admin3", *ID_COLUMNS)
 
 #: The names no attribute column and no question key may take.

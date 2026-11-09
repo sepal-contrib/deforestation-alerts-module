@@ -63,6 +63,20 @@ class AnalysisState:
     #: and the timeline sets the keys *before* the info for that reason.
     before_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
     after_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
+    #: the Sentinel-1 pick of each side, beside the optical one above: the
+    #: ee.Image, its info list and its granule keys, as for the optical pick
+    before_radar_image: solara.Reactive = field(default_factory=_identity)
+    after_radar_image: solara.Reactive = field(default_factory=_identity)
+    before_radar_info: solara.Reactive = field(default_factory=_plain)
+    after_radar_info: solara.Reactive = field(default_factory=_plain)
+    before_radar_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
+    after_radar_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
+    #: per side, whether the radar pick is the reviewer's (pinned: a Save
+    #: writes it) or follows the optical pick (a Save stores it empty)
+    radar_pinned: solara.Reactive = field(default_factory=lambda: _plain({"before": False, "after": False}))
+    #: per side, which pick the map shows: ``"optical"`` or ``"radar"``.
+    #: Session state: ``reset_alert`` leaves it alone.
+    shown_kind: solara.Reactive = field(default_factory=lambda: _plain({"before": "optical", "after": "optical"}))
     #: CNN prediction rasters by model number: {1: path, 2: path}
     prediction_files: solara.Reactive = field(default_factory=lambda: solara.reactive({}))
     #: the reviewer's answer for this alert: None until one of the three
@@ -183,6 +197,13 @@ class AnalysisState:
             self.after_info.set(None)
             self.before_keys.set([])
             self.after_keys.set([])
+            self.before_radar_image.set(None)
+            self.after_radar_image.set(None)
+            self.before_radar_info.set(None)
+            self.after_radar_info.set(None)
+            self.before_radar_keys.set([])
+            self.after_radar_keys.set([])
+            self.radar_pinned.set({"before": False, "after": False})
             self.prediction_files.set({})
             self.verdict.set(None)
             self.answers.set({})
@@ -222,6 +243,11 @@ class AnalysisState:
                 after_image=self.after_image.value,
                 before_info=self.before_info.value,
                 after_info=self.after_info.value,
+                before_radar_image=self.before_radar_image.value,
+                after_radar_image=self.after_radar_image.value,
+                before_radar_info=self.before_radar_info.value,
+                after_radar_info=self.after_radar_info.value,
+                radar_pinned=dict(self.radar_pinned.value),
                 **read(),
             )
 
