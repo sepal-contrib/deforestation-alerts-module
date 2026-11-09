@@ -4,7 +4,7 @@ import os
 import zipfile
 import numpy as np
 
-from deforestation_alerts.scripts.image_sources import SOURCES
+from deforestation_alerts.scripts.image_sources import S1_ASC, S1_DESC, SOURCES
 
 from datetime import datetime, timedelta
 from shapely.geometry import shape
@@ -71,7 +71,25 @@ def scaleS2v2(image):
     return result
 
 
+#: SEPAL's point-in-time radar preset (radarMosaic/visualizations.js), in dB.
+RADAR_VIS = {"bands": ["VV", "VH", "ratio"], "min": [-20, -25, 3], "max": [0, -5, 14]}
+
+
+def scaleS1(image):
+    """Raw Sentinel-1 (VV, VH, ratio) as the 4-band uint8 B,G,R,N layout of
+    scaleS2v2: R=VV, G=VH, B=ratio, N=VV, linear over RADAR_VIS and clamped."""
+    lo, hi = RADAR_VIS["min"], RADAR_VIS["max"]
+    scaled = [
+        image.select(b).subtract(lo[i]).divide(hi[i] - lo[i]).clamp(0, 1).multiply(254)
+        for i, b in enumerate(RADAR_VIS["bands"])
+    ]
+    vv, vh, ratio = scaled
+    return ee.Image.cat([ratio, vh, vv, vv]).rename(["B", "G", "R", "N"]).toUint8()
+
+
 def _scale_for_source(image, source):
+    if source in (S1_ASC, S1_DESC):
+        return scaleS1(image)
     if source in ("Sentinel 2", "Landsat"):
         return scaleS2v2(image)
     if source == "Planet NICFI":

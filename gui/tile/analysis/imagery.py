@@ -43,7 +43,9 @@ import math
 import ee
 from shapely.geometry import box
 
+from deforestation_alerts.scripts.image_sources import SOURCES
 from deforestation_alerts.scripts.mosaics_helper import (
+    RADAR_VIS,
     SFIM_pan_sharpen,
     harmonizeL8ToS2_scaled,
 )
@@ -73,6 +75,7 @@ _SR_BANDS = ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7"]
 #: Per source, the (true colour, false colour) visualizations. Planet's bands
 #: are named by colour; the harmonized S2/Landsat ones by number.
 _VIS = {
+    **{n: (RADAR_VIS, RADAR_VIS) for n, s in SOURCES.items() if not s.optical},
     SOURCE_PLANET: (
         {"min": 0, "max": 1600, "bands": ["R", "G", "B"]},
         {"min": 0, "max": [6500, 1600, 1600], "bands": ["N", "R", "G"]},
@@ -162,6 +165,11 @@ def rebuild_image(source, keys, geom):
         return None
     if source == SOURCE_LANDSAT:
         return _landsat_pair(keys, geom)
+    if source in SOURCES and not SOURCES[source].optical:
+        # Raw radar: the granules of the date mosaicked, as VV, VH and VV - VH.
+        mosaic = ee.ImageCollection([ee.Image(k) for k in keys]).mosaic()
+        vv_vh = mosaic.select(["VV", "VH"])
+        return vv_vh.addBands(vv_vh.select("VV").subtract(vv_vh.select("VH")).rename("ratio")).clip(geom)
     if source == SOURCE_PLANET:
         # A NICFI basemap is already an AOI-wide monthly mosaic, so one key is
         # the whole image; the index never records more than one per month.
@@ -318,8 +326,10 @@ def image_slider_map_callback(
     # views for the next one (``PaneLayers.clear("alert")``, after
     # ``reset_alert``), which must not get this alert's layers.
     with _gated(map_element, analysis, token, fresh):
-        map_element.addLayer(img, vis1, "True Color", True)
-        map_element.addLayer(img, vis2, "False Color", False)
+        optical = img_source not in SOURCES or SOURCES[img_source].optical
+        map_element.addLayer(img, vis1, "True Color" if optical else "Radar", True)
+        if optical:
+            map_element.addLayer(img, vis2, "False Color", False)
         # "All alerts": the set's combined raster, band 3 (display), through
         # localtileserver (spec §10): every alert of the set, where the
         # "Original alert" outlines show the one on screen. Starting the tile

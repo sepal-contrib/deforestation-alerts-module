@@ -113,3 +113,17 @@ def test_the_pan_sharpened_landsat_keeps_the_scene_grid_and_is_not_one_flat_pixe
     spreads = [v for v in stats.values() if v is not None]
     assert spreads, f"no pixels to measure over: {stats}"
     assert min(spreads) > 0, f"the image is one flat colour over the grid: {stats}"
+
+
+def test_a_radar_pick_rebuilds_as_vv_vh_ratio(gee):
+    import ee
+
+    from gui.tile.analysis import imagery
+
+    geom = _geom()
+    key = (ee.ImageCollection("COPERNICUS/S1_GRD").filterBounds(geom)
+           .filter(ee.Filter.eq("instrumentMode", "IW"))
+           .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH"))
+           .first().get("system:id").getInfo())
+    img = imagery.rebuild_image("Sentinel 1 ascending", [key], geom)
+    assert img.bandNames().getInfo() == ["VV", "VH", "ratio"]
