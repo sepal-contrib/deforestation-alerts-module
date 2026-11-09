@@ -1269,3 +1269,49 @@ def test_radar_is_fetched_only_while_the_project_has_it_on(data_root, monkeypatc
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_review_copy_fetches_radar_from_the_session_choice(data_root, monkeypatch, no_planet, local_aoi):
+    """A review copy cannot save the menu, so the timeline keeps its choice
+    for the session (``session_sources``); the loader must read that same
+    choice, or a saved Sentinel-1 pick on an evaluator's copy waits for ever."""
+    from deforestation_alerts.project.models import ReviewCopy
+
+    pdir = paths.project_dir("sl")
+    covered = (date(2026, 3, 1), date(2026, 10, 2))
+    scene_cache.store_chunk(pdir, scene_index.parse_scenes(RAW), covered, "d1",
+                            now=datetime.now(timezone.utc))
+    asked = []
+
+    def scene_request(aoi, s, e, **kwargs):
+        asked.append((s, e, kwargs))
+        return "SCENES"
+
+    async def get_info_async(obj):
+        return EMPTY_RAW
+
+    monkeypatch.setattr(sl.scene_index, "scene_request", scene_request)
+    monkeypatch.setattr(sl, "BACKGROUND_MONTHS", 2)
+    state = AppState()
+    p = _with_period(_p())
+    p.review_copy = ReviewCopy(evaluator="Ana", evaluator_index=1, set_id="x", split_id="s",
+                               set_fingerprint="f", origin_project="o", imported_at=datetime.now())
+    state.load_project_state(p)
+
+    async def main():
+        box_, rc = _render(state, SimpleNamespace(get_info_async=get_info_async))
+        try:
+            assert await _settle(lambda: state.scene_index.value is not None)
+            await asyncio.sleep(0.2)
+            assert not any(k.get("radar") for _, _, k in asked)
+
+            state.session_sources.set(("sl", frozenset({"Sentinel 2", "Sentinel 1"})))
+            assert await _settle(lambda: state.scene_manifest.value is not None
+                                 and state.scene_manifest.value.radar == _covered(*covered))
+            radar = [k for _, _, k in asked if k.get("radar")]
+            assert radar and all(k == {"optical": False, "radar": True} for k in radar)
+            assert state.project.value.image_sources is None  # nothing saved on the copy
+        finally:
+            rc.close()
+
+    asyncio.run(main())

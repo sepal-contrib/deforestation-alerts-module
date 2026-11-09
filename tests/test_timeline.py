@@ -742,6 +742,7 @@ def _fake_state(index="default", rows=None):
         scene_index_error=solara.reactive(None),
         scene_index_retry=solara.reactive(0),
         scene_window_request=solara.reactive(None),
+        session_sources=solara.reactive(None),
     )
 
     def update_project(name, fn):  # ``StateManager.update_project``, without the lock

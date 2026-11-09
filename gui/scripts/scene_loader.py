@@ -30,8 +30,8 @@ thread, where a firing assert would kill the thread and drop the chunk -- so it
 is enforced here, in the layer that computes windows and can widen a bad one
 (``contiguous``).
 
-This component reads only the project, the AOI selection, the requested window
-and the retry counter during its render, never ``scene_index`` or
+This component reads only the project, the AOI selection, the requested window,
+the retry counter and the session's source choice during its render, never ``scene_index`` or
 ``scene_manifest``; the tasks publish those, so reading them in the render body
 would subscribe the component to its own output and re-run the tasks for ever.
 """
@@ -52,6 +52,7 @@ from gui.scripts import aoi_io, remote_facts, vis_layers
 from gui.scripts.error_text import ee_no_access, error_text
 from gui.scripts.solara_threads import to_thread_in_context, use_loop_dependencies
 from gui.store.project_writers import writing
+from gui.store.state_manager import enabled_entries_now
 
 #: Under ``SEPALUI.deforestation_alerts`` so a failure reaches the server log
 #: (``notify_bridge.install_server_log_handler`` takes WARNING+ there). The
@@ -217,7 +218,7 @@ def SceneIndexLoader(app_state, gee_interface):
     bg = widest(wanted_window(p, today, BACKGROUND_MONTHS), requested)
     retry = app_state.scene_index_retry.value
     # Sentinel-1 rows are fetched only while the project shows them.
-    radar_on = p is not None and image_sources.S1 in image_sources.enabled_entries(p)
+    radar_on = p is not None and image_sources.S1 in enabled_entries_now(app_state, p)
 
     def _still_current() -> bool:
         """The project and AOI this fetch was started for are still the open

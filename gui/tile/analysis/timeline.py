@@ -33,7 +33,7 @@ import pandas as pd
 
 from deforestation_alerts.scripts import scene_query
 from deforestation_alerts.project.review_copy import read_only
-from deforestation_alerts.scripts.image_sources import MENU, S1, SOURCES, enabled_entries, entry_of
+from deforestation_alerts.scripts.image_sources import MENU, S1, SOURCES, entry_of
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from deforestation_alerts.scripts.scene_index import (
     SOURCE_PLANET,
@@ -42,6 +42,7 @@ from deforestation_alerts.scripts.scene_index import (
 )
 from gui.i18n import format_date, t
 from gui.scripts.growth_index import OLDER_GREY
+from gui.store.state_manager import enabled_entries_now
 from gui.tile.analysis.labels import Labels
 from gui.tile.analysis.state import IMAGE_AREAS, imagery_changed
 from gui.tile.analysis.widgets import replace_children
@@ -563,9 +564,6 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
 
     labels = labels if labels is not None else Labels()
     max_cloud = solara.reactive(40.0)
-    #: the menu keys switched on for a project that could not save them (a
-    #: review copy, or one closed meanwhile): ``(project name, keys)``
-    session_entries = solara.reactive(None)
     collapsed = solara.reactive(frozenset())
     extra = solara.reactive((0, 0))
     before_id = solara.reactive(None)
@@ -648,13 +646,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                                        max_cloud=max_cloud.value), window)
 
     def _entries() -> frozenset:
-        """The menu keys on: this session's for a project that could not save
-        them, else the project's own (``enabled_entries``)."""
-        project = app_state.project.value
-        name, keys = session_entries.value or (None, None)
-        if keys is not None and getattr(project, "name", None) == name:
-            return keys
-        return enabled_entries(project)
+        """The menu keys on (``enabled_entries_now``)."""
+        return enabled_entries_now(app_state, app_state.project.value)
 
     def _planet_access() -> bool:
         planet = getattr(app_state.scene_manifest.value, "planet", None)
@@ -1002,7 +995,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         saved = (project is not None and not read_only(project)
                  and app_state.update_project(project.name,
                                               lambda live: setattr(live, "image_sources", sorted(keys))))
-        session_entries.set(None if saved else (getattr(project, "name", None), keys))
+        app_state.session_sources.set(None if saved else (getattr(project, "name", None), keys))
 
     def _toggle(key):
         _write_entries(_entries() ^ {key})

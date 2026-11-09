@@ -39,6 +39,7 @@ import solara
 
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import Project
+from deforestation_alerts.scripts.image_sources import enabled_entries
 from gui.scripts import alert_filter as af
 
 
@@ -48,6 +49,15 @@ def _set_id_of(gdf) -> Optional[str]:
     if gdf is None or not len(gdf) or "set_id" not in gdf.columns:
         return None
     return str(gdf["set_id"].iloc[0])
+
+
+def enabled_entries_now(app_state, project) -> frozenset:
+    """The menu keys on for ``project``: this session's choice for a project
+    that could not save it (``session_sources``), else the project's own."""
+    name, keys = app_state.session_sources.value or (None, None)
+    if keys is not None and getattr(project, "name", None) == name:
+        return keys
+    return enabled_entries(project)
 
 
 class AppState:
@@ -83,6 +93,11 @@ class AppState:
         # so a month outside the cache is fetched rather than drawn empty. A
         # tuple of two dates, or None for "the default is enough".
         self.scene_window_request = solara.reactive(None)
+        # The image-source menu keys switched on for a project that could not
+        # save them (a review copy, or one closed meanwhile): ``(project name,
+        # keys)``. Read through ``enabled_entries_now`` by the timeline and the
+        # loader alike, so the radar fetch follows what the timeline shows.
+        self.session_sources = solara.reactive(None)
         self._lock = threading.RLock()
         # True only while a project read from disk is being installed: the
         # auto-save hook skips that publish (it would just rewrite the file).
