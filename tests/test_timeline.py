@@ -1318,6 +1318,23 @@ def test_radar_count_is_a_dash_until_radar_is_indexed():
     assert _menu_rows(card)[3] == ("Sentinel-1", "0", False)
 
 
+def test_radar_count_stays_a_dash_while_radar_covers_only_part_of_the_view(monkeypatch):
+    """Walk bug B2: the count read "0" while the backfill was still on its
+    way, because the dash only waited for the first radar chunk."""
+    state = _fake_state()
+    partial = _manifest()
+    partial.radar = scene_index.Coverage(start=date(2026, 8, 1), end=date(2026, 12, 31))
+    state.scene_manifest.set(partial)
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    assert _menu_rows(card)[3] == ("Sentinel-1", "\u2013", False)
+    # the view runs past today: radar up to today covers it
+    monkeypatch.setattr(timeline, "today", lambda: date(2026, 9, 1))
+    upto_today = _manifest()
+    upto_today.radar = scene_index.Coverage(start=date(2026, 1, 1), end=date(2026, 9, 1))
+    state.scene_manifest.set(upto_today)
+    assert _menu_rows(card)[3] == ("Sentinel-1", "0", False)
+
+
 def test_a_saved_radar_pick_turns_radar_on_and_waits_for_its_coverage():
     state = _fake_state(index=_any_index(_FOUR))
     state.scene_manifest.set(_covering())  # optical answered, radar not indexed yet

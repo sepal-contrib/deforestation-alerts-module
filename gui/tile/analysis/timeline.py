@@ -1007,13 +1007,17 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         return v.Html(tag="span", class_="defo-src-dot",
                       style_=f"width: 8px; height: 8px; border-radius: 4px; flex: 0 0 8px; background: {color};")
 
-    def _menu_row(entry, counts, on):
+    def _menu_row(entry, counts, on, window):
         """One source's row: checkbox, dot, name over its note, and the count."""
         shown = sum(counts.get(m, (0, 0))[0] for m in entry.members)
         hidden = sum(counts.get(m, (0, 0))[1] for m in entry.members)
         planet = entry.key == SOURCE_PLANET
         disabled = planet and not _planet_access()
-        radar_waiting = entry.key == S1 and getattr(app_state.scene_manifest.value, "radar", None) is None
+        # a dash, not a partial count, until radar covers the whole view
+        radar = getattr(app_state.scene_manifest.value, "radar", None)
+        # (no images of the future: the loader stops at today, so does this)
+        radar_waiting = entry.key == S1 and (radar is None or window is None or not
+                                             radar.start <= window[0] <= min(window[1], today()) <= radar.end)
         note = (t("analysis.timeline.planet_no_access") if disabled
                 else t("analysis.timeline.over_cloud", n=hidden) if hidden else None)
         checked = entry.key in on
@@ -1045,7 +1049,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             row.on_event("click", lambda *_a, key=entry.key: _toggle(key))
         return row
 
-    def _render_menu(rows):
+    def _render_menu(rows, window):
         # ``rows`` is the whole view window, not ``_enabled(rows)``: a row
         # counts what its source holds here whether or not it is on, so an
         # off row tells the reviewer what they are hiding.
@@ -1066,7 +1070,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                                     f"color: {MUTED}; padding: 6px 12px 2px"),
                             children=[title])
             groups.append(v.Html(tag="div", attributes={"role": "group", "aria-label": title},
-                                 children=[header, *(_menu_row(e, counts, on) for e in MENU if e.group == group)]))
+                                 children=[header, *(_menu_row(e, counts, on, window) for e in MENU if e.group == group)]))
         replace_children(sources_list, groups)
 
     def _render_titles(sel):
@@ -1332,7 +1336,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                                   else "analysis.timeline.sources_off")]
             message.style_ = _MESSAGE_STYLE
             _clear_track()
-            _render_menu(rows)
+            _render_menu(rows, window)
             _render_titles(sel)
             _render_status()
             return
@@ -1370,7 +1374,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         _render_strip(sel, segs)
         _render_axis(segs)
         _render_blocks(segs, sel)
-        _render_menu(rows)
+        _render_menu(rows, window)
         _render_titles(sel)
         _render_status()
 
