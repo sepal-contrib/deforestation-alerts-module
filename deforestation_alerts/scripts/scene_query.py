@@ -15,12 +15,12 @@ from typing import Iterable, NamedTuple, Optional
 
 import pandas as pd
 
+from deforestation_alerts.scripts.image_sources import SOURCES
+
 from deforestation_alerts.scripts.scene_index import (
     INDEX_VERSION,
     SOURCE_CODE,
-    SOURCE_LANDSAT,
     SOURCE_PLANET,
-    SOURCE_S2,
     row_id,
 )
 
@@ -173,7 +173,7 @@ def scenes_for(tables, bbox, start: date, end: date, *, max_cloud: Optional[floa
 def source_counts(sel: pd.DataFrame) -> dict[str, tuple[int, int]]:
     """``{source: (visible, hidden)}`` for the collection toggles, every source
     present even at zero so the toolbar shows a count rather than nothing."""
-    out = {name: (0, 0) for name in SOURCE_CODE}
+    out = {name: (0, 0) for name, s in SOURCES.items() if s.optical}  # radar joins with its lanes
     for name, part in sel.groupby("source", sort=False):
         hidden = int(part["hidden"].sum())
         out[name] = (len(part) - hidden, hidden)
@@ -414,7 +414,7 @@ _CODE_SOURCE = {code: source for source, code in SOURCE_CODE.items()}
 #: ``info[3]`` as ``export`` stores it: ``"<source> <YYYY-MM-DD> "``.
 _SAVED = re.compile(r"^\s*(.+?) (\d{4}-\d{2}-\d{2})\s*$")
 #: the order of two collections on one date, in the GIF as on the strip
-_RANK = {SOURCE_S2: 0, SOURCE_LANDSAT: 1, SOURCE_PLANET: 2}
+_RANK = {n: s.rank for n, s in SOURCES.items()}
 
 
 def parse_row_id(rid) -> tuple[str, date]:

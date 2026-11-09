@@ -19,6 +19,8 @@ import pandas as pd
 from pydantic import BaseModel, Field
 from shapely.geometry import shape
 
+from deforestation_alerts.scripts import image_sources as _sources
+
 #: 2: each Sentinel-2 granule is its own tile; a version-1 index filed them by
 #: MGRS tile, under partial footprints, and is rebuilt.
 INDEX_VERSION = 2
@@ -40,11 +42,13 @@ def index_lock(pdir) -> threading.Lock:
 
 # Exactly the strings ``mosaics_helper._scale_for_source`` and ``before_info[0]``
 # switch on. The UI label "Sentinel-2" is a display string and never lands here.
-SOURCE_S2 = "Sentinel 2"
-SOURCE_LANDSAT = "Landsat"
-SOURCE_PLANET = "Planet NICFI"
+SOURCE_S2 = _sources.S2
+SOURCE_LANDSAT = _sources.LANDSAT
+SOURCE_PLANET = _sources.PLANET
+SOURCE_S1_ASC = _sources.S1_ASC
+SOURCE_S1_DESC = _sources.S1_DESC
 
-SOURCE_CODE = {SOURCE_S2: "s", SOURCE_LANDSAT: "l", SOURCE_PLANET: "p"}
+SOURCE_CODE = {n: s.code for n, s in _sources.SOURCES.items()}
 
 
 def row_id(source: str, d: date) -> str:

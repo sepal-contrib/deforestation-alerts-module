@@ -32,6 +32,7 @@ import ipyvuetify as v
 import pandas as pd
 
 from deforestation_alerts.scripts import scene_query
+from deforestation_alerts.scripts.image_sources import SOURCES
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from deforestation_alerts.scripts.scene_index import (
     SOURCE_LANDSAT,
@@ -63,12 +64,12 @@ BAND = {SOURCE_S2: (0, 17), SOURCE_LANDSAT: (19, 14), SOURCE_PLANET: (35, 10)}
 #: in the pane titles that has to follow the theme: ``THEME_CSS`` defines the
 #: light values on the stage and the dark ones on its ``analysis-stage--dark``
 #: marker. The fallback is the dark value.
-SRC_COLOR = {SOURCE_S2: "var(--dat-s2, #7fa8e0)", SOURCE_LANDSAT: "var(--dat-landsat, #c9a87c)",
-             SOURCE_PLANET: "var(--dat-planet, #9bd98a)"}
+# only the drawn collections until the radar lanes land (BAND is theirs to extend)
+SRC_COLOR = {n: f"var({s.color_var}, {s.color_dark})" for n, s in SOURCES.items() if n in BAND}
 #: display labels only. ``SOURCE_S2`` -- "Sentinel 2" with a space -- is what
 #: the saved store, ``mosaics_helper`` and ``before_info[0]`` switch on; the
 #: hyphenated form must never reach a data structure.
-SRC_LABEL = {SOURCE_S2: "Sentinel-2", SOURCE_LANDSAT: "Landsat", SOURCE_PLANET: "Planet"}
+SRC_LABEL = {n: s.label for n, s in SOURCES.items() if n in BAND}
 SELECTED_COLOR = "#bf8f2d"  # the theme's primary_contrast
 #: the before side's selection colour. A CSS variable because it is the one
 #: colour on the strip that has to follow the theme: bone on the dark stage, a
@@ -84,12 +85,14 @@ WARN = "var(--dat-warn, #d9ab4e)"
 #: On the stage, not the timeline card: the pane titles above the maps read
 #: ``MUTED``, ``WARN`` and ``SRC_COLOR`` too. The light values are darker so a
 #: label keeps 4.5:1 and a stripe 3:1 on the white surface.
+_VARS_LIGHT = " ".join(f"{v}: {c};" for v, c in {s.color_var: s.color_light for s in SOURCES.values()}.items())
+_VARS_DARK = " ".join(f"{v}: {c};" for v, c in {s.color_var: s.color_dark for s in SOURCES.values()}.items())
 THEME_CSS = (
-    ".analysis-stage { --dat-s2: #3a6db5; --dat-landsat: #9a7240; --dat-planet: #3f8f32; "
+    f".analysis-stage {{ {_VARS_LIGHT} "
     "--dat-muted: #6b665e; --dat-warn: #9a6400; --dat-ink: #2a2724; --dat-chip: #f4f1ec; "
     "--dat-fold-a: #ebe6de; --dat-fold-b: #f5f2ed; --dat-edge: rgba(0, 0, 0, 0.25); } "
-    ".analysis-stage.analysis-stage--dark { --dat-s2: #7fa8e0; --dat-landsat: #c9a87c; "
-    "--dat-planet: #9bd98a; --dat-muted: #a8a39b; --dat-warn: #d9ab4e; --dat-ink: #f0ece6; "
+    f".analysis-stage.analysis-stage--dark {{ {_VARS_DARK} "
+    "--dat-muted: #a8a39b; --dat-warn: #d9ab4e; --dat-ink: #f0ece6; "
     "--dat-chip: #24221f; --dat-fold-a: #24221f; --dat-fold-b: #1e1c1a; --dat-edge: #44403a; } "
 )
 HIT_PX = 11
@@ -101,7 +104,7 @@ STRIPE_PX, SELECTED_STRIPE_PX = 2.5, 4.0
 HIDDEN_SCALE, HIDDEN_OPACITY = 0.45, 0.3
 #: the order of two collections on one date: the one a drag or an arrow lands
 #: on first. The same order as the GIF's (``scene_query._RANK``).
-_RANK = {SOURCE_S2: 0, SOURCE_LANDSAT: 1, SOURCE_PLANET: 2}
+_RANK = {n: s.rank for n, s in SOURCES.items()}
 
 _LANE_STYLE = f"position: relative; height: {LANE_H}px"
 _LEGEND_ID = "analysis-timeline-legend"

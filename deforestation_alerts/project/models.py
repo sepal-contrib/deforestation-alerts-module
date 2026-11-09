@@ -434,6 +434,9 @@ class Project(BaseModel):
     vis_layers: dict[str, VisLayer] = {}
     grid: Optional[GridSpec] = None
     look_back_days: int = 0
+    #: the Analysis timeline's image-source menu keys that are on; ``None`` = the defaults
+    #: (``image_sources.enabled_entries``)
+    image_sources: Optional[list[str]] = None
     periods: dict[str, Period] = {}
     active_period: Optional[str] = None
     coverage: dict[str, SourceCoverage] = {}

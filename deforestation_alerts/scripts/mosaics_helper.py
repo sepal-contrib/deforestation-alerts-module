@@ -4,6 +4,8 @@ import os
 import zipfile
 import numpy as np
 
+from deforestation_alerts.scripts.image_sources import SOURCES
+
 from datetime import datetime, timedelta
 from shapely.geometry import shape
 
@@ -78,7 +80,7 @@ def _scale_for_source(image, source):
 
 
 #: Each imagery source's own pixel size, in metres (Landsat: pan-sharpened).
-NATIVE_SCALE_M = {"Sentinel 2": 10.0, "Landsat": 15.0, "Planet NICFI": 4.77}
+NATIVE_SCALE_M = {n: s.native_m for n, s in SOURCES.items()}
 
 
 def composite_scale(source1, source2) -> float:
