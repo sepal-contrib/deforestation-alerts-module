@@ -109,8 +109,7 @@ _RANK = {n: s.rank for n, s in SOURCES.items()}
 
 _LANE_STYLE = f"position: relative; height: {LANE_H}px"
 _LEGEND_ID = "analysis-timeline-legend"
-#: ``pre-line``: the legend is a few short lines, one fact each
-_LEGEND_STYLE = "padding: 12px 14px; font-size: 12.5px; line-height: 1.5; white-space: pre-line"
+_LEGEND_STYLE = "padding: 12px 14px; font-size: 12.5px; line-height: 1.5"
 _MESSAGE_STYLE = f"padding: 14px 0; color: {MUTED}; font-size: 12.5px"
 _TRACK_STYLE = "position: relative; flex: 1 1 auto; min-width: 0"
 

@@ -189,7 +189,7 @@
       "image_failed_after": "Could not draw the after image: {error}",
       "retry": "Try again",
       "loading": "Loading the image index…",
-      "legend": "One band per source, Sentinel-2 on top.\nFaded stripe: over the cloud limit.\nGold band: the alert window.\nDrag a handle, or click a stripe, to choose the before and after images. The arrow keys work too.\nThe user guide explains the rest.",
+      "legend": "Each image source has its own row, with Sentinel-2 at the top. Faded stripes are images over the cloud limit, and the gold band marks the alert window. Drag the handles or click a stripe to choose the before and after images. You can also use the arrow keys. More information in the documentation.",
       "legend_label": "What this timeline shows",
       "set_before": "Set as before image",
       "set_after": "Set as after image",

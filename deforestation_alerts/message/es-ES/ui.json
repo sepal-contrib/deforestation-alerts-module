@@ -194,7 +194,7 @@
       "image_failed_after": "No se pudo mostrar la imagen de después: {error}",
       "retry": "Intentar de nuevo",
       "loading": "Cargando el índice de imágenes…",
-      "legend": "Una banda por fuente, Sentinel-2 arriba.\nFranja atenuada: supera el límite de nubes.\nBanda dorada: la ventana de alerta.\nArrastra un control, o haz clic en una franja, para elegir las imágenes de antes y después. Las flechas del teclado también sirven.\nLa guía de usuario explica el resto.",
+      "legend": "Cada fuente de imágenes tiene su propia fila, con Sentinel-2 arriba. Las franjas atenuadas son imágenes que superan el límite de nubes, y la banda dorada marca la ventana de alerta. Arrastra los controles o haz clic en una franja para elegir las imágenes de antes y después. También puedes usar las flechas del teclado. Más información en la documentación.",
       "legend_label": "Qué muestra esta cronología",
       "set_before": "Fijar como imagen de antes",
       "set_after": "Fijar como imagen de después",

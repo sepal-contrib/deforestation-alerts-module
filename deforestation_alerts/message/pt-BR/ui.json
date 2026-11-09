@@ -194,7 +194,7 @@
       "image_failed_after": "Não foi possível exibir a imagem de depois: {error}",
       "retry": "Tentar novamente",
       "loading": "Carregando o índice de imagens…",
-      "legend": "Uma banda por fonte, Sentinel-2 em cima.\nFaixa esmaecida: acima do limite de nuvens.\nBanda dourada: a janela do alerta.\nArraste um controle, ou clique em uma faixa, para escolher as imagens de antes e depois. As setas do teclado também funcionam.\nO guia do usuário explica o resto.",
+      "legend": "Cada fonte de imagens tem sua própria linha, com o Sentinel-2 no topo. As faixas esmaecidas são imagens acima do limite de nuvens, e a banda dourada marca a janela do alerta. Arraste os controles ou clique em uma faixa para escolher as imagens de antes e depois. Você também pode usar as setas do teclado. Mais informações na documentação.",
       "legend_label": "O que esta linha do tempo mostra",
       "set_before": "Definir como imagem de antes",
       "set_after": "Definir como imagem de depois",

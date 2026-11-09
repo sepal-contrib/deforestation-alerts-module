@@ -194,7 +194,7 @@
       "image_failed_after": "Impossible d'afficher l'image après : {error}",
       "retry": "Réessayer",
       "loading": "Chargement de l'index des images…",
-      "legend": "Un couloir par source, Sentinel-2 en haut.\nBarre pâle : au-dessus de la limite de nuages.\nPlage dorée : la fenêtre d'alerte.\nFaites glisser une poignée, ou cliquez sur une barre, pour choisir les images avant et après. Les flèches du clavier fonctionnent aussi.\nLe guide d'utilisation explique le reste.",
+      "legend": "Chaque source d'images a sa propre ligne, avec Sentinel-2 en haut. Les barres pâles sont des images au-dessus de la limite de nuages, et la plage dorée marque la fenêtre d'alerte. Faites glisser les poignées ou cliquez sur une barre pour choisir les images avant et après. Vous pouvez aussi utiliser les flèches du clavier. Plus d'informations dans la documentation.",
       "legend_label": "Ce que montre cette chronologie",
       "set_before": "Définir comme image avant",
       "set_after": "Définir comme image après",
