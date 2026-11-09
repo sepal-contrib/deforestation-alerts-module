@@ -2488,7 +2488,7 @@ The key figures
 Map layers
 ^^^^^^^^^^
 
-The **Map layers** button next to the headline opens a list of the layers the Overview can draw on the main map, grouped by period. The button counts the layers drawn. Tick a layer to draw it: the Overview closes, to show the map. Clear it to take the layer off. Every layer is named with its period ("Alerts · 2026-01-01 → 2026-01-31"), in the list, on the map and in the legend.
+The **Map layers** button beside **Review alerts** opens a list of the layers the Overview can draw on the main map, grouped by period. Tick a layer to draw it: the Overview closes, to show the map. Clear it to take the layer off. Every layer is named with its period ("Alerts · 2026-01-01 → 2026-01-31"), in the list, on the map and in the legend.
 
 -   **This set**: the selected set's **Alerts**, coloured by status, and its not-analysable pixels (too small, or over the alert cap), when the set's run recorded them.
 -   **Other periods**: the alerts of every other period's newest set, newest period first, each on its own. When there are several, **Show all** and **Hide all** draw or clear them together.

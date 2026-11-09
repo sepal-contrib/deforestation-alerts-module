@@ -2422,7 +2422,7 @@ Os números principais
 Camadas do mapa
 ^^^^^^^^^^^^^^^
 
-O botão **Camadas do mapa**, ao lado do título, abre a lista das camadas que a Visão geral pode desenhar no mapa principal, agrupadas por período. O botão conta as camadas desenhadas. Marque uma camada para desenhá-la: a Visão geral se fecha, para mostrar o mapa. Desmarque-a para tirar a camada. Cada camada traz o período no nome ("Alertas · 2026-01-01 → 2026-01-31"), na lista, no mapa e na legenda.
+O botão **Camadas do mapa**, ao lado de **Revisar alertas**, abre a lista das camadas que a Visão geral pode desenhar no mapa principal, agrupadas por período. Marque uma camada para desenhá-la: a Visão geral se fecha, para mostrar o mapa. Desmarque-a para tirar a camada. Cada camada traz o período no nome ("Alertas · 2026-01-01 → 2026-01-31"), na lista, no mapa e na legenda.
 
 -   **Este conjunto**: os **Alertas** do conjunto selecionado, coloridos pelo status, e os pixels não analisáveis dele (pequenos demais, ou acima do limite de alertas), quando a execução do conjunto os registrou.
 -   **Outros períodos**: os alertas do conjunto mais recente de cada um dos outros períodos, do mais recente ao mais antigo, cada um à parte. Quando há vários, **Mostrar tudo** e **Ocultar tudo** os desenham ou tiram juntos.

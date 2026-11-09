@@ -1028,7 +1028,7 @@ def _funnel_values(rc, which=0):
     grids = [w for w in _walk(rc.container) if "minmax(150px" in (getattr(w, "style_", None) or "")]
     rows = {}
     cells = grids[which].children
-    for label, _, value, _ in zip(*[iter(cells)] * 4):
+    for label, _, value in zip(*[iter(cells)] * 3):
         rows[" ".join(_strings(label)).strip()] = _strings(value)[0]
     return rows
 

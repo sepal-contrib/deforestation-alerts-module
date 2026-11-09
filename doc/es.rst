@@ -2418,7 +2418,7 @@ Las cifras clave
 Capas del mapa
 ^^^^^^^^^^^^^^
 
-El botón **Capas del mapa**, junto al titular, abre la lista de las capas que el Resumen puede dibujar en el mapa principal, agrupadas por período. El botón cuenta las capas dibujadas. Marca una capa para dibujarla: el Resumen se cierra para mostrar el mapa. Desmárcala para quitar la capa. Cada capa lleva su período en el nombre ("Alertas · 2026-01-01 → 2026-01-31"), en la lista, en el mapa y en la leyenda.
+El botón **Capas del mapa**, junto a **Revisar alertas**, abre la lista de las capas que el Resumen puede dibujar en el mapa principal, agrupadas por período. Marca una capa para dibujarla: el Resumen se cierra para mostrar el mapa. Desmárcala para quitar la capa. Cada capa lleva su período en el nombre ("Alertas · 2026-01-01 → 2026-01-31"), en la lista, en el mapa y en la leyenda.
 
 -   **Este conjunto**: las **Alertas** del conjunto seleccionado, coloreadas según su estado, y sus píxeles no analizables (demasiado pequeños o sobre el límite de alertas), cuando la ejecución del conjunto los registró.
 -   **Otros períodos**: las alertas del conjunto más reciente de cada uno de los demás períodos, del más reciente al más antiguo, cada una por separado. Cuando hay varias, **Mostrar todo** y **Ocultar todo** las dibujan o las quitan juntas.

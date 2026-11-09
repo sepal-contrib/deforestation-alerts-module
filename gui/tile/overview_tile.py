@@ -16,7 +16,7 @@ tab is rendered.
 Architecture layer: view. The alert layers, the earlier sets and the not-analysable
 pixels are the shell's ``_AlertLayers`` leaf, because a layer switched on stays on
 while the user moves between steps and dialogs. This view carries that leaf's three
-booleans as the layer buttons at the end of the tab row. The eyes of the Pixels tab
+booleans as the Map layers menu beside Review alerts. The eyes of the Pixels tab
 (a source's harmonized file, a mask) are plain ``MapLayers`` shows, as the Prepare
 step makes them. Turning a layer on closes this dialog: the map is behind it.
 
@@ -274,14 +274,13 @@ def _headline(summary, history, measure: str, all_periods: bool):
 
 
 def _funnel(rows, *, pixel_ha: Optional[float] = None):
-    """Horizontal steps: ``(key, label, value, dropped, sub, eye)`` per row,
-    ``eye`` None or ``(on, on_click, busy)``. A dropped step is a soft bar with
-    a minus; a value the set did not record is a dash and no bar. With
+    """Horizontal steps: ``(key, label, value, dropped, sub)`` per row. A
+    dropped step is a soft bar with a minus; a value the set did not record is a dash and no bar. With
     ``pixel_ha`` each value also reads in hectares."""
     top = max((value for _, _, value, *_ in rows if value), default=0) or 1
-    grid = "display: grid; grid-template-columns: minmax(150px, 1.2fr) 2fr minmax(90px, auto) 28px;"
+    grid = "display: grid; grid-template-columns: minmax(150px, 1.2fr) 2fr minmax(90px, auto);"
     with rv.Html(tag="div", style_=f"{grid} gap: 4px 10px; align-items: center;"):
-        for key, label, value, dropped, sub, eye in rows:
+        for key, label, value, dropped, sub in rows:
             colour = "rgba(128, 128, 128, 0.35)" if dropped else _BAR
             width = 0.0 if not value else max(value / top * 100, 0.8)
             solara.Text(label, style=f"font-size: 0.8rem;{' padding-left: 14px; opacity: 0.8;' if sub else ''}")
@@ -295,11 +294,6 @@ def _funnel(rows, *, pixel_ha: Optional[float] = None):
                 solara.Text(text)
                 if pixel_ha and value is not None:
                     solara.Text(f" {t('overview_tile.px_ha', ha=format_number(value * pixel_ha, 1))}", style=_NOTE)
-            if eye is None:
-                rv.Html(tag="span")
-            else:
-                on, on_click, busy = eye
-                _eye(on, on_click, busy=busy, title=label)
 
 
 # --- the tabs ------------------------------------------------------------
@@ -369,15 +363,14 @@ def _pixels_tab(px, grid_m: float, eyes):
     layer that cannot be shown (All periods, no file)."""
     before, kept = px.total(1), px.total(2)
     masked = None if before is None or kept is None else before - kept
-    states, alerts = eyes.get("states"), eyes.get("alerts")
     rows = [
-        ("source", t("overview_tile.px_source"), before, False, False, None),
-        ("masked", t("overview_tile.px_masked"), masked, True, True, None),
-        ("kept", t("overview_tile.px_kept"), kept, False, True, None),
-        ("combined", t("overview_tile.px_combined"), px.combined_px, False, False, None),
-        ("small", t("overview_tile.px_too_small"), px.too_small_px, True, True, states),
-        ("cap", t("overview_tile.px_over_cap"), px.over_cap_px, True, True, states),
-        ("alerts", t("overview_tile.px_alerts"), px.analysable_px, False, False, alerts),
+        ("source", t("overview_tile.px_source"), before, False, False),
+        ("masked", t("overview_tile.px_masked"), masked, True, True),
+        ("kept", t("overview_tile.px_kept"), kept, False, True),
+        ("combined", t("overview_tile.px_combined"), px.combined_px, False, False),
+        ("small", t("overview_tile.px_too_small"), px.too_small_px, True, True),
+        ("cap", t("overview_tile.px_over_cap"), px.over_cap_px, True, True),
+        ("alerts", t("overview_tile.px_alerts"), px.analysable_px, False, False),
     ]
     note = t("overview_tile.pixels_note")
     if grid_m:
@@ -427,10 +420,8 @@ def _layers_menu(groups):
     row ``(label, sub, on, on_click, busy)``. The menu stays open on a click:
     the click that turns a layer on closes the whole dialog anyway."""
     n_on = sum(1 for _, _, rows in groups for row in rows if row[2])
-    label = t("overview_tile.map_layers") + (f" ({format_number(n_on, 0)})" if n_on else "")
-    activator = solara.Button(label, icon_name="mdi-layers-outline", v_on="menu.on", small=True, depressed=True,
-                              outlined=not n_on, color="primary" if n_on else None,
-                              children=[rv.Icon(right=True, small=True, children=["mdi-menu-down"])])
+    activator = solara.Button(t("overview_tile.map_layers"), v_on="menu.on", small=True, depressed=True,
+                              outlined=not n_on, color="primary" if n_on else None)
     with rv.Menu(offset_y=True, left=True, close_on_content_click=False, max_height=480,
                  v_slots=[{"name": "activator", "variable": "menu", "children": activator}]):
         with rv.Card(style_="min-width: 340px; max-width: 420px; padding: 4px 0 8px;"):
@@ -470,14 +461,14 @@ def _clusters_tab(summary, px, nearby, grouping_on: bool, growth, measure: str, 
     small = None if px.clusters is None or px.clusters_kept is None else px.clusters - px.clusters_kept
     capped = None if px.clusters_kept is None else px.clusters_kept - summary.n_alerts
     rows = [
-        ("formed", t("overview_tile.cl_formed"), px.clusters, False, False, None),
-        ("small", t("overview_tile.cl_small"), small, True, True, None),
+        ("formed", t("overview_tile.cl_formed"), px.clusters, False, False),
+        ("small", t("overview_tile.cl_small"), small, True, True),
     ]
     if capped:
-        rows.append(("cap", t("overview_tile.cl_over_cap"), capped, True, True, None))
+        rows.append(("cap", t("overview_tile.cl_over_cap"), capped, True, True))
     rows += [
-        ("alerts", t("overview_tile.cl_alerts"), summary.n_alerts, False, False, None),
-        ("reviewed", t("overview_tile.cl_reviewed"), summary.n_reviewed, False, True, None),
+        ("alerts", t("overview_tile.cl_alerts"), summary.n_alerts, False, False),
+        ("reviewed", t("overview_tile.cl_reviewed"), summary.n_reviewed, False, True),
     ]
     with _pair():
         with _column():
@@ -823,12 +814,6 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
     if s is not None and not all_periods:
         pdir = paths.project_dir(p.name)
         period = p.periods.get(s.period_id)
-        if has_alerts:
-            eyes["alerts"] = (app_state.show_alerts.value, _switch(app_state.show_alerts),
-                              alert_layers.SET_LAYER_KEY in inflight)
-        if alert_layers.has_states(p, s):
-            eyes["states"] = (app_state.show_unanalysable.value, _switch(app_state.show_unanalysable),
-                              alert_layers.STATES_LAYER_KEY in inflight)
         for name in s.sources:
             art = p.artifacts.get(harm_key(s.period_id, name))
             if art is None or period is None:
@@ -921,9 +906,13 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
                 _segment(((charts.MEASURE_AREA, t("overview_tile.measure_area")),
                           (charts.MEASURE_ALERTS, t("overview_tile.measure_alerts"))), measure, set_measure)
             rv.Spacer()
-            with rv.Html(tag="span", attributes={"title": t("overview_tile.review_pick_one")} if all_periods else {}):
-                solara.Button(t("overview_tile.review_button"), color="primary", small=True, depressed=True,
-                              disabled=s is None or not s.n_alerts or all_periods, on_click=_review_alerts)
+            with solara.Row(style="gap: 8px; align-items: center; flex-wrap: nowrap;"):
+                groups = _menu_groups() if s is not None else []
+                if any(rows for _, _, rows in groups):
+                    _layers_menu(groups)
+                with rv.Html(tag="span", attributes={"title": t("overview_tile.review_pick_one")} if all_periods else {}):
+                    solara.Button(t("overview_tile.review_button"), color="primary", small=True, depressed=True,
+                                  disabled=s is None or not s.n_alerts or all_periods, on_click=_review_alerts)
         if s is None:
             solara.Text(t("overview_tile.no_set"), style=_NOTE)
             return
@@ -946,12 +935,7 @@ def OverviewTile(app_state, map_, layers, dismiss=None):
         shown = [k for k in TABS if k != "answers" or questions]
         current = shown[min(tab, len(shown) - 1)]
         counts = {"answers": len(questions), "clusters": summary.n_alerts}
-        groups = _menu_groups()
-        # the Map layers button sits right of the headline: the tabs keep the whole width
-        with solara.Row(style="gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap;"):
-            _headline(summary, history, measure, all_periods)
-            if any(rows for _, _, rows in groups):
-                _layers_menu(groups)
+        _headline(summary, history, measure, all_periods)
         rv.Tabs(v_model=shown.index(current), on_v_model=set_tab, show_arrows=True, height=36,
                 children=[rv.Tab(children=[_tab_label(k, counts.get(k))]) for k in shown])
         if current == "status":

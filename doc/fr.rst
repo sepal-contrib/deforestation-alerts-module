@@ -2420,7 +2420,7 @@ Les chiffres clés
 Couches de la carte
 ^^^^^^^^^^^^^^^^^^^
 
-Le bouton **Couches de la carte**, à côté du titre, ouvre la liste des couches que l'Aperçu peut dessiner sur la carte principale, groupées par période. Le bouton compte les couches dessinées. Cochez une couche pour la dessiner : l'Aperçu se ferme, pour montrer la carte. Décochez-la pour retirer la couche. Chaque couche porte sa période dans son nom (« Alertes · 2026-01-01 → 2026-01-31 »), dans la liste, sur la carte et dans la légende.
+Le bouton **Couches de la carte**, à côté de **Réviser les alertes**, ouvre la liste des couches que l'Aperçu peut dessiner sur la carte principale, groupées par période. Cochez une couche pour la dessiner : l'Aperçu se ferme, pour montrer la carte. Décochez-la pour retirer la couche. Chaque couche porte sa période dans son nom (« Alertes · 2026-01-01 → 2026-01-31 »), dans la liste, sur la carte et dans la légende.
 
 -   **Cet ensemble** : les **Alertes** du jeu sélectionné, colorées selon leur statut, et ses pixels non analysables (trop petits, ou au-delà du plafond d'alertes), si l'exécution du jeu les a enregistrés.
 -   **Autres périodes** : les alertes du jeu le plus récent de chaque autre période, de la plus récente à la plus ancienne, chacune à part. Quand il y en a plusieurs, **Tout afficher** et **Tout masquer** les dessinent ou les retirent ensemble.
