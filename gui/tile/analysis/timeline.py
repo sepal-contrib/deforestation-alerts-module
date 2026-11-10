@@ -100,7 +100,7 @@ THEME_CSS = (
     "--dat-chip: #24221f; --dat-fold-a: #24221f; --dat-fold-b: #1e1c1a; --dat-edge: #44403a; } "
     # the radar rail runs through the collapsed-month blocks: lift its "N days
     # apart" over them, on a chip so the block's text does not show through
-    ".defo-tl-radar-box .dah-gap { z-index: 4; background: var(--dat-chip); padding: 0 4px; border-radius: 2px; } "
+    ".analysis-timeline .defo-tl-radar-box .dah-gap { z-index: 4; background: var(--dat-chip); padding: 0 4px; border-radius: 2px; } "
 )
 HIT_PX = 11
 #: a collapsed month at least this wide carries its full label ("JUN 2026",
