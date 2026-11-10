@@ -1979,6 +1979,36 @@ def test_a_radar_pick_pins_its_side_and_marks_the_alert_unsaved():
     assert analysis.dirty.value is True
 
 
+def test_a_render_during_a_radar_pick_does_not_put_the_following_id_back():
+    """Final review M1: ``render`` also runs on the scene loader's thread. One
+    landing while the pick is being published must find the side pinned, or
+    ``_follow`` overwrites the reviewer's pick with the following one."""
+    from deforestation_alerts.scripts.scene_index import SceneTables
+
+    state, analysis, _widgets, card = _radar_build()
+    fired = []
+
+    def _loader_tick(info):
+        if info is not None and not fired:
+            fired.append(info)
+            tables = state.scene_index.value
+            state.scene_index.set(SceneTables(scenes=tables.scenes, tiles=tables.tiles))
+
+    analysis.before_radar_info.subscribe(_loader_tick)
+    _pick(_strips(card)[1], "b", "d20260422")
+    assert fired
+    assert analysis.radar_pinned.value["before"] is True
+    assert analysis.before_radar_info.value[3] == "Sentinel 1 descending 2026-04-22 "
+    assert _strips(card)[1].before["id"] == "d20260422"
+
+
+def test_a_refused_radar_pick_does_not_pin_its_side():
+    _state, analysis, _widgets, card = _radar_build()
+    _pick(_strips(card)[1], "b", "d20990101")  # no such row
+    assert analysis.radar_pinned.value == {"before": False, "after": False}
+    assert analysis.dirty.value is False
+
+
 def test_moving_the_optical_pick_leaves_a_pinned_radar_handle():
     _state, analysis, _widgets, card = _radar_build()
     optical, radar = _strips(card)
@@ -2091,9 +2121,22 @@ def test_an_all_cloudy_side_gets_the_over_limit_auto_pick():
 def test_the_radar_handles_are_named_apart_from_the_optical_ones():
     _state, _analysis, _widgets, card = _radar_build()
     optical, radar = _strips(card)
-    assert radar.labels["b"] == timeline.t("analysis.timeline.radar_before")
-    assert radar.labels["a"] == timeline.t("analysis.timeline.radar_after")
+    # both following here: the label goes on to say so (final review M5)
+    assert radar.labels["b"].startswith(timeline.t("analysis.timeline.radar_before"))
+    assert radar.labels["a"].startswith(timeline.t("analysis.timeline.radar_after"))
     assert {radar.labels["b"], radar.labels["a"]}.isdisjoint({optical.labels["b"], optical.labels["a"]})
+
+
+def test_a_following_radar_handle_says_so_in_its_label():
+    """Final review M5: hollow (following) and filled (pinned) differ only by
+    the look; the label tells a screen-reader user which one it is."""
+    _state, _analysis, _widgets, card = _radar_build()
+    radar = _strips(card)[1]
+    follows = timeline.t("analysis.timeline.radar_following")
+    assert follows in radar.labels["b"] and follows in radar.labels["a"]
+    _pick(radar, "b", "d20260422")
+    assert follows not in radar.labels["b"] and follows in radar.labels["a"]
+    assert radar.labels["b"].startswith(timeline.t("analysis.timeline.radar_before"))
 
 
 def test_a_new_image_area_publishes_no_radar_keys_while_sentinel_1_is_off():
@@ -2120,3 +2163,37 @@ def test_follow_optical_drops_a_saved_radar_pick_still_on_its_way():
     # the saved pick does not land and re-pin: the side follows the optical one
     assert analysis.radar_pinned.value == {"before": False, "after": False}
     assert _strips(card)[1].hollow == ["b", "a"]
+
+
+def test_a_radar_pin_or_follow_optical_keeps_the_model_results():
+    """Final review M2: the CNN runs on the optical pair only, so a radar
+    change marks the alert unsaved but keeps what the model found."""
+    _state, analysis, _widgets, card = _radar_build()
+    analysis.prediction_files.set({1: "/tmp/p1.tif"})
+    analysis.prediction_shapes.set({1: "shapes"})
+    _pick(_strips(card)[1], "b", "d20260422")
+    assert analysis.dirty.value is True
+    analysis.dirty.set(False)
+    _follow_btn(card).fire_event("click", None)
+    assert analysis.dirty.value is True
+    assert analysis.prediction_files.value == {1: "/tmp/p1.tif"}
+    assert analysis.prediction_shapes.value == {1: "shapes"}
+    # an optical pick still drops them
+    _pick(_strips(card)[0], "a", "s20260928")
+    assert analysis.prediction_files.value == {}
+
+
+def test_follow_optical_clears_the_saved_radar_not_found_note():
+    """Final review M3: once the reviewer follows the optical pick, the
+    "saved image not found" note on the radar side is answered."""
+    rows = [r for r in _MIX if r[1] != "2026-08-30"]
+    state, analysis, widgets, card = _radar_build(
+        rows=rows, sources=None, manifest=_covering(),
+        saved_after_radar="Sentinel 1 ascending 2026-08-30 ")
+    state.scene_radar_error.set("radar boom")  # answered without the saved row
+    analysis.shown_kind.set({"before": "optical", "after": "radar"})
+    _pick(_strips(card)[1], "b", "a20260408")  # a pin, so Follow optical is on
+    note = timeline.t("analysis.timeline.saved_missing")
+    assert note in _text(widgets.map_title_after)
+    _follow_btn(card).fire_event("click", None)
+    assert note not in _text(widgets.map_title_after)

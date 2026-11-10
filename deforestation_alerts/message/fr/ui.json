@@ -180,6 +180,7 @@
       "lane_after": "Poignée de l'image après. Faites-la glisser le long de la frise, ou utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
       "radar_before": "Poignée de l'image radar avant. Faites-la glisser le long de la ligne radar, ou utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
       "radar_after": "Poignée de l'image radar après. Faites-la glisser le long de la ligne radar, ou utilisez les flèches gauche et droite pour parcourir les dates et Entrée pour choisir l'image.",
+      "radar_following": "Elle suit l'image optique choisie tant que vous ne la déplacez pas.",
       "unset": "non défini",
       "max_cloud": "Nuages max.",
       "one_more_month": "+1 mois",

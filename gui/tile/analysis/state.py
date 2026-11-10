@@ -399,7 +399,7 @@ def set_links(analysis: AnalysisState, links: Sequence[str]) -> None:
         touch(analysis)
 
 
-def imagery_changed(analysis: AnalysisState) -> None:
+def imagery_changed(analysis: AnalysisState, *, optical: bool = True) -> None:
     """The reviewer picked other imagery for this alert (the timeline's lanes).
 
     Two consequences, both per alert. The review is unsaved: the store keeps
@@ -415,9 +415,13 @@ def imagery_changed(analysis: AnalysisState) -> None:
 
     Not called by the auto-pick in ``timeline.render``: that one is the alert's
     default, and an alert nobody touched must not open claiming unsaved work.
+
+    ``optical=False`` (a radar pick, *Follow optical*): unsaved only. The CNN
+    runs on the optical pair, so its result still holds.
     """
-    analysis.prediction_files.set({})
-    analysis.prediction_shapes.set({})
+    if optical:
+        analysis.prediction_files.set({})
+        analysis.prediction_shapes.set({})
     touch(analysis)
 
 

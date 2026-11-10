@@ -775,15 +775,19 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         fell_back.set(fell_back.value - {lane})
         chosen = ids[lane]
         was = chosen.value
-        _assign(lane, rid, sel)
-        changed = chosen.value != was
-        # a radar pick is the reviewer's: it pins its side, which a Save writes
+        # A radar pick is the reviewer's: it pins its side, which a Save writes.
+        # Pinned before ``_assign``: a ``render`` on the loader's thread in
+        # between would otherwise ``_follow`` over the pick (final review M1).
         side = LANE_SIDE[lane]
-        if lane in ("rb", "ra") and chosen.value == rid and not analysis.radar_pinned.value[side]:
+        pin = lane in ("rb", "ra") and not analysis.radar_pinned.value[side]
+        if pin:
             analysis.radar_pinned.set({**analysis.radar_pinned.value, side: True})
-            changed = True
-        if changed:
-            imagery_changed(analysis)
+        _assign(lane, rid, sel)
+        if pin and chosen.value != rid:  # refused: the side follows again
+            analysis.radar_pinned.set({**analysis.radar_pinned.value, side: False})
+            pin = False
+        if chosen.value != was or pin:
+            imagery_changed(analysis, optical=lane in ("b", "a"))
 
     def _of_kind(sel, radar: bool):
         """``sel``'s rows of one lane: radar or optical."""
@@ -1445,7 +1449,9 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         analysis.radar_pinned.set({"before": False, "after": False})
         # a saved radar pick still on its way must not land and re-pin a side
         restoring.set({k: rid for k, rid in restoring.value.items() if k not in ("rb", "ra")})
-        imagery_changed(analysis)
+        # the reviewer's answer to "saved image not found" on a radar side
+        fell_back.set(fell_back.value - {"rb", "ra"})
+        imagery_changed(analysis, optical=False)
         render()
 
     def _render_radar(sel, segs):
@@ -1459,6 +1465,10 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         pins = analysis.radar_pinned.value
         radar_strip.hollow = [side for side in ("b", "a")
                               if ids[RADAR_LANE[side]].value and not pins[LANE_SIDE[side]]]
+        # hollow vs filled is only a look: the label says it too (final review M5)
+        follows = t("analysis.timeline.radar_following")
+        radar_strip.labels = {**radar_strip.labels,
+                              **{side: f"{radar_strip.labels[side]} {follows}" for side in radar_strip.hollow}}
         follow_btn.disabled = not any(pins.values())
 
     def _publish_radar_pending():
