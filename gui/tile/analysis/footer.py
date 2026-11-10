@@ -248,14 +248,17 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
     labels = labels if labels is not None else Labels()
     # The screen's size (``small``), and halves of the row, as the verdict
     # buttons above them. Which one is filled is ``_sync_emphasis``'s call.
+    # Never narrower than their words: a label too long to share the row
+    # ("Guardar para 3 alertas") wraps *Next* onto its own line instead of
+    # overflowing its button.
     save = btn("primary", t("analysis_tile.export_labels.save_btn"), icon="mdi-content-save-outline",
-               class_="flex-grow-1", style_="flex-basis: 0;")
+               class_="flex-grow-1", style_="flex-basis: 0; min-width: max-content;")
     nxt = btn("secondary", t("analysis_tile.nav.next"), icon_right="mdi-arrow-right",
-              class_="flex-grow-1", style_="flex-basis: 0;")
+              class_="flex-grow-1", style_="flex-basis: 0; min-width: max-content;")
     # Next unreviewed (user, 2026-10-27, option B): an icon after *Next*,
     # filled or outlined with it; disabled when every other alert is reviewed.
     skip = icon_btn("secondary", "mdi-skip-next", style_="min-width: 0; padding: 0 10px;")
-    buttons = v.Html(tag="div", class_="d-flex", style_="gap: 8px;", children=[save, nxt, skip])
+    buttons = v.Html(tag="div", class_="d-flex flex-wrap", style_="gap: 8px;", children=[save, nxt, skip])
     state_line = v.Html(tag="div", class_=_STATE_LINE, children=[])
 
     # The prompt, in place of the button row while it asks. *Stay* is the
@@ -279,7 +282,7 @@ def build_footer(run_save, export_root, app_state, analysis, *, labels=None, cap
         prompt.style_ = PROMPT_STYLE + ("" if flag else _HIDDEN)
         # by class, not style: Vuetify's ``.d-flex`` is ``display: flex
         # !important``, which an inline ``display: none`` does not beat
-        buttons.class_ = "d-none" if flag else "d-flex"
+        buttons.class_ = "d-none" if flag else "d-flex flex-wrap"
         if not flag:
             pending["move"] = None
 
