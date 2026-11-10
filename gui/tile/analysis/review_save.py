@@ -160,12 +160,14 @@ def radar_updates(before_radar_info, after_radar_info, pinned: dict) -> dict:
     millis, like the optical side), a following side ``None`` -- it is derived
     from the optical pick again on the next load. A side with no info (the
     radar lane never shown, or its restore pending) is left out, so the row
-    keeps its values."""
+    keeps its values -- unless the reviewer unpinned it (``pinned`` False,
+    *Follow optical*), which clears them even with radar off."""
     out = {}
+    pinned = pinned or {}
     for side, info in (("before", before_radar_info), ("after", after_radar_info)):
-        if info is None:
+        if info is None and pinned.get(side) is not False:
             continue
-        keep = bool((pinned or {}).get(side))
+        keep = info is not None and bool(pinned.get(side))
         out[f"{side}_radar_img"] = info[3] if keep else None
         out[f"{side}_radar_img_info"] = info[1] if keep else None
     return out

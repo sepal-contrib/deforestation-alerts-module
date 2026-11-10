@@ -1470,7 +1470,8 @@ def radar(page, on: bool):
     page.mouse.click(VIEWPORT["width"] - 240, VIEWPORT["height"] - 300)  # close the menu (Escape does not)
     if not on:
         return
-    stripes = tl.locator('button[tabindex="-1"][aria-label^="Sentinel-1"]')
+    # the folded strip's dots, or the unfolded lane's stripes
+    stripes = tl.locator('.dah-dot, button[tabindex="-1"][aria-label^="Sentinel-1"]')
     chips = page.locator('button[aria-pressed]:has-text("Sentinel-1")')
     last, stable, t0 = -1, 0, time.time()
     while stable < 4 or chips.count() < 2:

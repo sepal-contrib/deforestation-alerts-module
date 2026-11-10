@@ -54,9 +54,9 @@ def strip_state(page) -> dict:
         const ax = vis(a) ? a.querySelector('svg').getBoundingClientRect().left : null;
         const titles = [...document.querySelectorAll('.analysis-mapbox .v-card__title')]
             .filter(vis).map(e => e.innerText.replace(/\\s+/g, ' ').trim());
-        // the slider's label carries the limit ("Max cloud 40%")
-        const lab = q('.v-slider') && q('.v-slider').closest('.v-input').querySelector('label');
-        const pct = lab && /\\d+%$/.test(lab.innerText) ? lab.innerText : null;
+        // the cloud chip reads the limit ("40%")
+        const lab = [...card.querySelectorAll('button[aria-haspopup]')].find(b => /^\\d+%$/.test(b.innerText.trim()));
+        const pct = lab ? lab.innerText.trim() : null;
         return {root: box(q('.dah-root')), before: box(b), after: box(a), bx, ax,
                 b_text: b && b.getAttribute('aria-valuetext'), a_text: a && a.getAttribute('aria-valuetext'),
                 flag: [...(card ? card.querySelectorAll('.dah-flag') : [])].map(e => e.innerText),

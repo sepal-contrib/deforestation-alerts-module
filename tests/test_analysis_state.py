@@ -715,7 +715,7 @@ def test_reset_alert_clears_radar_picks_but_keeps_the_shown_kind():
     s.reset_alert()
     assert s.before_radar_image.value is None and s.after_radar_info.value is None
     assert s.before_radar_keys.value == [] and s.after_radar_keys.value == []
-    assert s.radar_pinned.value == {"before": False, "after": False}
+    assert s.radar_pinned.value == {"before": None, "after": None}
     assert s.shown_kind.value == {"before": "radar", "after": "optical"}
 
 

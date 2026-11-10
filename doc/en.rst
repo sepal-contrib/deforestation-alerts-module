@@ -2084,7 +2084,7 @@ A map displays "Imagery failed to load" when the tiles of its image do not load.
 Choose the images: the timeline
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: analysis-timeline | The timeline strip of the demo alert at full width: the "Image sources" button with a blue, an orange and a pink dot (Sentinel-2, Landsat and Sentinel-1 on; no Planet), the "?" button, Collapse the alert window / Expand every month, the Max cloud 40% slider, Image area = Normal; the track with "‹ +1 month" and "+1 month ›", the gold alert-window band with two collapsed month blocks in it, Sentinel-2 stripes on top, Landsat under them, a few faded half-height stripes over the cloud limit, the before handle left of the band and the after handle right of it with the "122 days apart" bracket between them; under that optical lane the radar lane, with the Sentinel-1 stripes, its own two hollow handles (following the optical picks) and the "Follow optical" button at its right; the month names on the axis. Crop to the timeline card.
+.. shot: analysis-timeline | The timeline strip of the demo alert at full width: the "Image sources" button with a blue, an orange and a pink dot (Sentinel-2, Landsat and Sentinel-1 on; no Planet), the cloud chip reading 40%, the "?" button, the Collapse the alert window and Expand every month icons, Image area = Normal; the track with "‹ +1 month" and "+1 month ›", the gold alert-window band with two collapsed month blocks in it, Sentinel-2 stripes on top, Landsat under them, a few faded half-height stripes over the cloud limit, the before handle left of the band and the after handle right of it with the "122 days apart" bracket between them; under that optical lane the folded radar strip, with the Sentinel-1 dots, its two hollow diamond handles (following the optical picks) and the chain and arrow icons at its left; the month names on the axis. Crop to the timeline card.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/analysis-timeline.png
     :alt: The image timeline
@@ -2110,7 +2110,7 @@ When an alert opens, the app chooses the image nearest *before* the alert window
 
 Each map's title names its image in an **Optical** chip: "Before image · Optical · Sentinel-2 2026-07-28 · 3%" (collection, date, cloud cover). When the other collection has an image of the same day, a button in the title ("⇄ Landsat") switches to it.
 
-When Sentinel-1 is on, a second lane under the optical one holds its images, with its own two handles. They are hollow while they follow the optical picks: each sits on the radar image nearest to the date of its optical handle (from the same pass as the other radar handle when one is within 30 days, otherwise from either pass) and moves with it. Hollow handles are not saved: they are placed again when the alert opens. Drag one, or click a radar stripe, and it becomes filled: it is yours and stays where you put it, and saving the alert saves it. **Follow optical** (at the right of the radar lane) hands both handles back to the optical picks. A map whose side has a radar image gets a **Radar** chip next to the **Optical** one in its title: click a chip to choose what that map shows.
+When Sentinel-1 is on, a thin strip under the optical lane holds its images as dots, with two diamond-shaped handles. The arrow at the left of the strip unfolds it into a lane with one band per pass, and folds it again. The radar handles are hollow while they follow the optical picks: each sits on the radar image nearest to the date of its optical handle (from the same pass as the other radar handle when one is within 30 days, otherwise from either pass) and moves with it. Hollow handles are not saved: they are placed again when the alert opens. Drag one, or click a radar stripe in the unfolded lane, and it becomes filled: it is yours and stays where you put it, and saving the alert saves it. The chain icon at the left of the strip is linked while both handles follow the optical picks. Once you move one, the chain is broken: select it (**Follow optical**) to hand both handles back to the optical picks. A map whose side has a radar image gets a **Radar** chip next to the **Optical** one in its title: click a chip to choose what that map shows.
 
 The toolbar above the track:
 
@@ -2136,7 +2136,7 @@ The toolbar above the track:
         -   Unfolds every month.
         -
     *   -   **Max cloud**
-        -   The cloud limit, from 0 to 100 % in steps of 5. Images over it are faded and never chosen automatically. Planet mosaics and Sentinel-1 radar images have no cloud figure, so the limit never hides them.
+        -   The cloud limit, chosen in a menu of presets (10, 20, 40, 60 or 80 %, or **All images**), each with the number of images it keeps on the timeline. Images over it are faded and never chosen automatically. Planet mosaics and Sentinel-1 radar images have no cloud figure, so the limit never hides them.
         -   40 %.
     *   -   **Image area**
         -   How far around the alert the images reach: **Normal**, **Large** or **Extra large** (100 m, 1 km or 2.5 km around it). Larger areas take longer to load and export. Saving the review saves the area: the alert opens on it again, and its files and GIF are made on it. An alert never saved opens on **Normal**.

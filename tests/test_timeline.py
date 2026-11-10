@@ -529,14 +529,41 @@ def test_turning_a_source_off_takes_its_stripes_off_the_track():
     assert _count_stripes(card) < before
 
 
+def _cloud_chip(card):
+    """The cloud limit's chip button."""
+    return next(w for w in _walk(card) if getattr(w, "tag", None) == "button"
+                and (getattr(w, "attributes", None) or {}).get("title") == timeline.t("analysis.timeline.max_cloud"))
+
+
+def _cloud_rows(card) -> list:
+    return [w for w in _walk(card) if (getattr(w, "attributes", None) or {}).get("role") == "menuitemradio"]
+
+
+def _set_limit(card, limit):
+    """Pick ``limit`` in the cloud chip's menu."""
+    name = timeline.t("analysis.timeline.cloud_upto", n=limit)
+    next(w for w in _cloud_rows(card) if name in _text(w)).fire_event("click", None)
+
+
+def test_the_cloud_menu_offers_presets_with_the_images_each_keeps():
+    state = _fake_state(rows=[(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (LS, "2026-09-04", 30.0)])
+    card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
+    rows = _cloud_rows(card)
+    assert len(rows) == len(timeline.CLOUD_PRESETS)
+    kept = [_text(next(w for w in _walk(r) if "defo-cloud-count" in (getattr(w, "class_", None) or "")))
+            for r in rows]
+    assert kept == ["2", "2", "3", "3", "3", "3"]  # 10, 20, 40, 60, 80, all
+    assert [r.attributes["aria-checked"] for r in rows] == ["false", "false", "true", "false", "false", "false"]
+    _set_limit(card, 20)
+    assert _cloud_chip(card).attributes["aria-label"].endswith(" 20%")
+
+
 def test_the_cloud_limit_hides_a_row_without_dropping_it():
     # the 30% row is not a selection: a selected row keeps its full stripe
     state = _fake_state(rows=[(S2, "2026-04-24", 8.0), (LS, "2026-08-27", 3.0), (LS, "2026-09-04", 30.0)])
     card = timeline.build_timeline(state, _fake_analysis(), _fake_widgets())
     assert not [w for w in _walk(card) if "opacity: 0.3" in (getattr(w, "style_", "") or "")]
-    slider = next(w for w in _walk(card) if (getattr(w, "label", None) or "").startswith(timeline.t(
-        "analysis.timeline.max_cloud")))
-    slider.fire_event("change", 10)
+    _set_limit(card, 10)
     faint = [w for w in _walk(card) if "opacity: 0.3" in (getattr(w, "style_", "") or "")]
     assert faint, "a row over the new limit is faded, not removed"
 
@@ -841,7 +868,8 @@ def _bar_width(row, *, selected: bool) -> float:
 def _count_stripes(card) -> int:
     """The stripes in both lanes: one per drawn row, whatever its label says."""
     lanes = [_lane(card), *_radar_lanes(card)]
-    return sum(1 for lane in lanes for w in _walk(lane) if getattr(w, "tag", None) == "button")
+    folded = sum(len(s.candidates) for s in _strips(card) if s.fold)  # the folded radar strip's dots
+    return folded + sum(1 for lane in lanes for w in _walk(lane) if getattr(w, "tag", None) == "button")
 
 
 def _radar_lanes(card) -> list:
@@ -1036,8 +1064,7 @@ def test_a_language_switch_relabels_a_rendered_strip_and_keeps_the_pick():
         assert english_leftovers(card, "fr") == []
         assert english_leftovers(widgets.map_title_before, "fr") == []
         # composed text the sweep's catalogue match may not see: exact
-        slider = [w for w in _walk(card) if isinstance(w, timeline.v.Slider)][0]
-        assert slider.label == f"{t('analysis.timeline.max_cloud')} 40%"
+        assert _cloud_chip(card).attributes["aria-label"] == f"{t('analysis.timeline.max_cloud')} 40%"
         # dates go through ``format_date`` and carry no catalogue text, so the
         # sweep cannot tell a stale one: the handle flag and an axis month, exact
         strip = next(w for w in _walk(card) if isinstance(w, HandleStrip))
@@ -1823,9 +1850,7 @@ def test_the_timeline_publishes_its_filter():
     widgets = _fake_widgets()
     card = timeline.build_timeline(_fake_state(), _fake_analysis(), widgets)
     assert widgets.timeline_filter.value == (frozenset({S2, LS}), 40.0)
-    slider = next(w for w in _walk(card) if (getattr(w, "label", None) or "").startswith(timeline.t(
-        "analysis.timeline.max_cloud")))
-    slider.fire_event("change", 10)
+    _set_limit(card, 10)
     assert widgets.timeline_filter.value == (frozenset({S2, LS}), 10.0)
 
 
@@ -1911,8 +1936,17 @@ def _pick(strip, side, rid):
 
 
 def _follow_btn(card):
-    label = timeline.t("analysis.timeline.follow_optical")
-    return next(w for w in _walk(card) if label in _text(w) and "click" in (getattr(w, "_events", None) or []))
+    """The radar lane's chain button, named for what a click does or, while
+    both radar handles follow, for that."""
+    names = {timeline.t("analysis.timeline.follow_optical"), timeline.t("analysis.timeline.radar_following")}
+    return next(w for w in _walk(card) if isinstance(w, timeline.v.Btn)
+                and (getattr(w, "attributes", None) or {}).get("aria-label") in names)
+
+
+def _open_radar(card):
+    """Unfold the radar strip into its lane."""
+    next(w for w in _walk(card) if "defo-tl-radar-open" in (getattr(w, "class_", None) or "")).fire_event(
+        "click", None)
 
 
 def _radar_build(rows=_MIX, sources=_WITH_S1, manifest=None, **ctx):
@@ -1932,8 +1966,11 @@ def test_the_radar_lane_shows_only_while_sentinel_1_is_on():
     _state, _analysis, _widgets, card = _radar_build(sources=None)
     assert len(_strips(card)) == 1 and not _radar_lanes(card)
     _tick(card, "Sentinel-1")
-    assert len(_strips(card)) == 2 and len(_radar_lanes(card)) == 1
-    assert _analysis.dirty.value is False  # the lane appearing is not an edit
+    # folded at first: a strip of dots with diamond handles, no lane
+    assert len(_strips(card)) == 2 and not _radar_lanes(card) and _strips(card)[1].fold is True
+    _open_radar(card)
+    assert len(_radar_lanes(card)) == 1 and _strips(card)[1].fold is False
+    assert _analysis.dirty.value is False  # neither the strip nor the lane appearing is an edit
     _tick(card, "Sentinel-1")
     assert len(_strips(card)) == 1 and not _radar_lanes(card)
 
@@ -1946,6 +1983,8 @@ def test_radar_rows_are_drawn_in_the_radar_lane_only():
     assert len(radar.candidates) == 6
     stripes = [w for w in _walk(_lane(card)) if getattr(w, "tag", None) == "button"]
     assert len(stripes) == 3
+    _open_radar(card)
+    assert len(_strips(card)[1].candidates) == 6  # the same rows, unfolded
     [radar_lane] = _radar_lanes(card)
     assert len([w for w in _walk(radar_lane) if getattr(w, "tag", None) == "button"]) == 6
 
@@ -1959,7 +1998,7 @@ def test_radar_handles_follow_the_optical_picks_and_are_hollow():
     assert analysis.before_radar_info.value[3] == "Sentinel 1 ascending 2026-04-20 "
     assert analysis.after_radar_info.value[3] == "Sentinel 1 ascending 2026-08-30 "
     assert analysis.before_radar_keys.value and analysis.after_radar_keys.value
-    assert analysis.radar_pinned.value == {"before": False, "after": False}
+    assert analysis.radar_pinned.value == {"before": None, "after": None}
     # the optical pair is untouched
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
     assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
@@ -1971,7 +2010,7 @@ def test_a_radar_pick_pins_its_side_and_marks_the_alert_unsaved():
     radar = _strips(card)[1]
     _pick(radar, "b", "d20260422")
     assert analysis.before_radar_info.value[3] == "Sentinel 1 descending 2026-04-22 "
-    assert analysis.radar_pinned.value == {"before": True, "after": False}
+    assert analysis.radar_pinned.value == {"before": True, "after": None}
     assert radar.hollow == ["a"]
     # the following side takes the pinned pass, within 30 days
     assert radar.after["id"] == "d20260925"
@@ -2005,7 +2044,7 @@ def test_a_render_during_a_radar_pick_does_not_put_the_following_id_back():
 def test_a_refused_radar_pick_does_not_pin_its_side():
     _state, analysis, _widgets, card = _radar_build()
     _pick(_strips(card)[1], "b", "d20990101")  # no such row
-    assert analysis.radar_pinned.value == {"before": False, "after": False}
+    assert analysis.radar_pinned.value == {"before": None, "after": None}
     assert analysis.dirty.value is False
 
 
@@ -2039,7 +2078,7 @@ def test_a_saved_radar_pick_restores_pinned_and_turns_sentinel_1_on():
         sources=None, saved_before_radar="Sentinel 1 descending 2026-04-22 ")
     assert "Sentinel 1" in state.project.value.image_sources
     assert analysis.before_radar_info.value[3] == "Sentinel 1 descending 2026-04-22 "
-    assert analysis.radar_pinned.value == {"before": True, "after": False}
+    assert analysis.radar_pinned.value == {"before": True, "after": None}
     radar = _strips(card)[1]
     assert radar.hollow == ["a"] and radar.after["id"] == "d20260925"
     assert analysis.dirty.value is False
@@ -2051,12 +2090,12 @@ def test_turning_sentinel_1_off_unpublishes_the_radar_pair_and_on_again_restores
     _tick(card, "Sentinel-1")
     assert analysis.before_radar_info.value is None and analysis.after_radar_info.value is None
     assert analysis.before_radar_keys.value == [] and analysis.after_radar_keys.value == []
-    assert analysis.radar_pinned.value == {"before": True, "after": False}
+    assert analysis.radar_pinned.value == {"before": True, "after": None}
     _tick(card, "Sentinel-1")
     assert analysis.before_radar_info.value[3] == "Sentinel 1 ascending 2026-04-08 "
     assert analysis.after_radar_info.value[3] == "Sentinel 1 ascending 2026-08-30 "
     assert analysis.before_radar_keys.value
-    assert analysis.radar_pinned.value == {"before": True, "after": False}
+    assert analysis.radar_pinned.value == {"before": True, "after": None}
 
 
 def test_a_pending_radar_restore_publishes_nothing():
@@ -2068,7 +2107,7 @@ def test_a_pending_radar_restore_publishes_nothing():
     radar = _strips(card)[1]
     assert analysis.after_radar_info.value is None and analysis.after_radar_keys.value == []
     assert radar.after is None and "a" not in radar.hollow
-    assert analysis.radar_pinned.value["after"] is False
+    assert analysis.radar_pinned.value["after"] is None
     # the other side follows, of the waiting pick's pass
     assert radar.before["id"] == "a20260420"
 
@@ -2077,7 +2116,7 @@ def test_a_pending_radar_restore_publishes_nothing():
     state.scene_index.set(_any_index(_MIX))
     state.scene_manifest.set(covered)
     assert analysis.after_radar_info.value[3] == "Sentinel 1 ascending 2026-08-30 "
-    assert analysis.radar_pinned.value == {"before": False, "after": True}
+    assert analysis.radar_pinned.value == {"before": None, "after": True}
     assert analysis.dirty.value is False
 
 

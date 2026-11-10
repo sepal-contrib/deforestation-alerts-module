@@ -34,7 +34,6 @@ def test_a_following_radar_pair_is_staged_and_captioned_as_nearest(staged, tmp_p
     assert staged == [(f"{S1D} 2026-03-25 ", f"{S1A} 2026-09-05 ", "img_b", "img_a", "large")]
     assert extra["before_radar"] == f"{S1D} 2026-03-25 (nearest radar image, other pass)"
     assert extra["after_radar"] == f"{S1A} 2026-09-05"  # pinned
-    assert extra["image_note"] == ""
     same = _alert(_info(S1A, "2026-03-25"), _info(S1A, "2026-09-05"))
     _, _, extra = report_images.stage_report_images(same, tmp_path)
     assert extra["before_radar"] == f"{S1A} 2026-03-25 (nearest radar image)"
@@ -61,4 +60,4 @@ def test_a_radar_side_with_no_image_gets_the_note(staged, tmp_path):
 def test_without_radar_infos_nothing_is_staged_even_with_stale_images(staged, tmp_path):
     radar, missing, extra = report_images.stage_report_images(_alert(images=("stale_b", "stale_a")), tmp_path)
     assert (radar, missing, staged) == (None, {}, [])
-    assert extra == {"image_note": ""}
+    assert extra == {}

@@ -254,12 +254,11 @@ def test_a_title_offers_the_other_collection_of_the_same_day():
 
 
 def test_the_cloud_limit_value_is_always_on_screen():
+    from tests.test_timeline import _cloud_chip, _set_limit, _text
     card = timeline.build_timeline(_state(), _fake_analysis(), _fake_widgets())
-    slider = next(w for w in _walk(card)
-                  if (getattr(w, "label", None) or "").startswith(timeline.t("analysis.timeline.max_cloud")))
-    assert slider.label.endswith(" 40%")
-    slider.fire_event("change", 25)
-    assert slider.label.endswith(" 25%")
+    assert " 40% " in _text(_cloud_chip(card))
+    _set_limit(card, 20)
+    assert " 20% " in _text(_cloud_chip(card))
 
 
 def _click_row(card, src, iso):

@@ -37,14 +37,13 @@ def stage_report_images(alert, folder, area="normal") -> tuple[Optional[Path], d
     only with its info: the timeline unpublishes a side by its info and leaves
     its last ee.Image behind. A side with no image takes the other side's
     place in the file, and ``missing`` gives its figures a note instead;
-    ``extra`` holds the radar captions, ``radar_summary`` and an empty
-    ``{image_note}``."""
+    ``extra`` holds the radar captions and ``radar_summary``."""
     infos = (alert.before_radar_info, alert.after_radar_info)
     images = tuple(None if info is None else image
                    for info, image in zip(infos, (alert.before_radar_image, alert.after_radar_image)))
     pinned = alert.radar_pinned or {}
     if all(info is None for info in infos):
-        return None, {}, {"image_note": ""}
+        return None, {}, {}
     present = [(info, image) for info, image in zip(infos, images) if image is not None]
     radar = None
     if present:
@@ -55,7 +54,7 @@ def stage_report_images(alert, folder, area="normal") -> tuple[Optional[Path], d
         if image is None:
             missing.update(dict.fromkeys(markers, t("analysis_tile.export_labels.report_no_radar")))
     extra = {"before_radar": _caption(infos[0], infos[1], pinned.get("before")),
-             "after_radar": _caption(infos[1], infos[0], pinned.get("after")), "image_note": ""}
+             "after_radar": _caption(infos[1], infos[0], pinned.get("after"))}
     # the summary names the radar pair too ("–" for a side with none)
     extra["radar_summary"] = t("analysis_tile.export_labels.report_radar_summary",
                                before=extra["before_radar"] or "–", after=extra["after_radar"] or "–")

@@ -1,11 +1,14 @@
 <template>
-  <div class="dah-root" :style="{ height: rail_h + 'px' }">
-    <div class="dah-base"></div>
-    <div v-for="(x, i) in ticks" :key="'t' + i" class="dah-tick" :style="{ left: x + '%' }"></div>
-    <div v-if="both" class="dah-bracket" :style="span(13, 6)"></div>
-    <div v-if="both && !moving" :class="['dah-gap', { 'dah-warn': gap_warn }]"
+  <div :class="['dah-root', { 'dah-fold': fold }]" :style="{ height: (fold ? lane_h : rail_h) + 'px' }">
+    <template v-if="fold">
+      <span v-for="c in candidates" :key="c.id" class="dah-dot" :style="{ left: c.x + '%', top: (c.top + c.h / 2) + 'px' }"></span>
+    </template>
+    <div v-if="!fold" class="dah-base"></div>
+    <div v-for="(x, i) in (fold ? [] : ticks)" :key="'t' + i" class="dah-tick" :style="{ left: x + '%' }"></div>
+    <div v-if="both && !fold" class="dah-bracket" :style="span(13, 6)"></div>
+    <div v-if="both && !moving && !fold" :class="['dah-gap', { 'dah-warn': gap_warn }]"
          :style="{ left: (pos('b') + pos('a')) / 2 + '%' }">{{ gap }}</div>
-    <div v-if="both" class="dah-wash" :style="span(rail_h, lane_h)"></div>
+    <div v-if="both && !fold" class="dah-wash" :style="span(rail_h, lane_h)"></div>
     <div v-if="glow" class="dah-glow" :style="glow"></div>
     <div
       v-for="side in ['b', 'a']"
@@ -29,7 +32,10 @@
       @blur="blur(side)"
     >
       <span v-if="isMoving(side) && pendingRow(side)" class="dah-flag">{{ pendingRow(side).flag }}</span>
-      <svg width="11" height="14" viewBox="0 0 11 14" aria-hidden="true">
+      <svg v-if="fold" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <polygon points="6,0.5 11.5,6 6,11.5 0.5,6" />
+      </svg>
+      <svg v-else width="11" height="14" viewBox="0 0 11 14" aria-hidden="true">
         <polygon :points="side === 'b' ? '0,0 11,0 11,14' : '0,0 11,0 0,14'" />
       </svg>
     </div>
@@ -56,7 +62,7 @@ module.exports = {
       const box = c.w != null
         ? { left: c.x0 + '%', width: c.w + '%' }
         : { left: 'calc(' + c.x + '% - 6px)', width: '12px' };
-      return Object.assign(box, { top: (this.rail_h + c.top) + 'px', height: c.h + 'px' });
+      return Object.assign(box, { top: ((this.fold ? 0 : this.rail_h) + c.top) + 'px', height: c.h + 'px' });
     },
   },
   watch: {

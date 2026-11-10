@@ -36,7 +36,7 @@ import pandas as pd
 
 from deforestation_alerts.scripts import scene_query
 from deforestation_alerts.project.review_copy import read_only
-from deforestation_alerts.scripts.image_sources import MENU, S1, S1_ASC, SOURCES, entry_of, is_radar
+from deforestation_alerts.scripts.image_sources import MENU, S1, S1_ASC, S1_DESC, SOURCES, entry_of, is_radar
 from deforestation_alerts.scripts.mosaics_helper import convert_julian_to_date
 from deforestation_alerts.scripts.scene_index import (
     SOURCE_PLANET,
@@ -58,6 +58,9 @@ LANE_H = 45
 #: the strip above the lane the two handles and the bracket between them ride on
 RAIL_H = 28
 AXIS_H = 27
+#: the folded radar strip: a dot per image, ascending passes over descending
+FOLD_H = 16
+FOLD_BANDS = {S1_ASC: (3, 3), S1_DESC: (9, 3)}
 VIEW_MONTHS = 2
 
 BAND_GAP, MIN_BAND = 2, 6
@@ -118,6 +121,12 @@ LANE_SIDE = {"b": "before", "a": "after", "rb": "before", "ra": "after"}
 
 _LANE_STYLE = f"position: relative; height: {LANE_H}px"
 _LEGEND_ID = "analysis-timeline-legend"
+#: the toolbar's two chips: the image sources and the cloud limit
+_CHIP_STYLE = ("height: 28px; padding: 0 4px 0 10px; border-radius: 14px; display: inline-flex; "
+               "flex: 0 0 auto; align-items: center; gap: 4px; cursor: pointer; "
+               "background: var(--dat-chip); border: 1px solid var(--dat-edge)")
+#: the cloud limit's choices, in %; 100 keeps every image
+CLOUD_PRESETS = (10, 20, 40, 60, 80, 100)
 _LEGEND_STYLE = "padding: 12px 14px; font-size: 12.5px; line-height: 1.5"
 _MESSAGE_STYLE = f"padding: 14px 0; color: {MUTED}; font-size: 12.5px"
 _TRACK_STYLE = "position: relative; flex: 1 1 auto; min-width: 0"
@@ -610,6 +619,9 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     #: answered for their months yet (it loads the latest months first): picked
     #: once a candidate arrives, given up once the index answers without one
     auto_waiting = solara.reactive(frozenset())
+    #: whether the radar lane is unfolded; folded, it is a slim strip of dots
+    #: with diamond handles. A view choice for the session, not saved.
+    radar_open = solara.reactive(False)
 
     # also ``optical_lane``: ``render`` has a ``lane`` loop variable of its own
     lane = optical_lane = v.Html(tag="div", style_=_LANE_STYLE)
@@ -624,16 +636,22 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                         style_=f"{_LANE_STYLE}; border-top: 1px dashed var(--dat-edge)")
     radar_strip = HandleStrip(on_pick=lambda side, rid: _on_drop(RADAR_LANE[side], rid),
                               rail_h=RAIL_H, lane_h=LANE_H)
-    # copies the toolbar's fold buttons (``defo-tl-btn``)
-    follow_btn = v.Btn(small=True, text=True, class_="defo-tl-btn",
-                       disabled=True,
-                       children=[t("analysis.timeline.follow_optical")])
+    # The radar lane's two controls sit in the gutter left of it, under
+    # "+1 month": a chain (linked while both radar handles follow the optical
+    # picks; a click on the broken chain makes them follow again) and the
+    # fold chevron. The chain's name is on a wrapper: a disabled button gets
+    # no hover, so its own title would never show.
+    follow_icon = v.Icon(small=True, children=["mdi-link-variant"])
+    follow_btn = v.Btn(icon=True, x_small=True, disabled=True, attributes={}, children=[follow_icon])
     follow_btn.on_event("click", lambda *_a: _follow_optical())
-    radar_name = v.Html(tag="span", style_=f"font-size: 10.5px; color: {MUTED}",
-                        children=[t("analysis.timeline.group_radar")])
-    radar_label = v.Html(tag="div", style_=("position: absolute; right: 0; top: 0; z-index: 5; display: flex; "
-                                            f"align-items: center; gap: 4px; height: {RAIL_H}px"),
-                         children=[radar_name, follow_btn])
+    follow_tip = v.Html(tag="span", attributes={}, style_="display: inline-flex", children=[follow_btn])
+    open_icon = v.Icon(small=True, children=["mdi-chevron-down"])
+    open_btn = v.Btn(icon=True, x_small=True, class_="defo-tl-radar-open", attributes={}, children=[open_icon])
+    open_btn.on_event("click", lambda *_a: (radar_open.set(not radar_open.value), render()))
+    tools_style = ("position: absolute; right: calc(100% + 4px); top: 0; z-index: 5; display: flex; "
+                   "align-items: center; height: {}px")
+    radar_label = v.Html(tag="div", class_="defo-tl-radar-tools", style_=tools_style.format(FOLD_H),
+                         children=[follow_tip, open_btn])
     #: the radar rail and lane, or nothing while Sentinel-1 is off. Its
     #: children are set, never replaced (``replace_children`` would close them).
     radar_box = v.Html(tag="div", class_="defo-tl-radar-box", style_="position: relative", children=[])
@@ -646,9 +664,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     caret = v.Icon(small=True, style_=f"color: {MUTED}", children=["mdi-menu-down"])
     sources_btn = v.Html(tag="button", v_on="menu.on",
                          attributes={"type": "button", "aria-haspopup": "true", "aria-expanded": "false"},
-                         style_=("height: 28px; padding: 0 4px 0 10px; border-radius: 14px; display: inline-flex; "
-                                 "flex: 0 0 auto; align-items: center; gap: 4px; cursor: pointer; "
-                                 "background: var(--dat-chip); border: 1px solid var(--dat-edge)"),
+                         style_=_CHIP_STYLE,
                          children=[caret])
     # The stage's own surface and ink: the overlay's Vuetify theme class is
     # not reliably the app's (``gui/widget/text_style.py``).
@@ -779,12 +795,13 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         # Pinned before ``_assign``: a ``render`` on the loader's thread in
         # between would otherwise ``_follow`` over the pick (final review M1).
         side = LANE_SIDE[lane]
-        pin = lane in ("rb", "ra") and not analysis.radar_pinned.value[side]
+        had = analysis.radar_pinned.value[side]
+        pin = lane in ("rb", "ra") and not had
         if pin:
             analysis.radar_pinned.set({**analysis.radar_pinned.value, side: True})
         _assign(lane, rid, sel)
         if pin and chosen.value != rid:  # refused: the side follows again
-            analysis.radar_pinned.set({**analysis.radar_pinned.value, side: False})
+            analysis.radar_pinned.set({**analysis.radar_pinned.value, side: had})
             pin = False
         if chosen.value != was or pin:
             imagery_changed(analysis, optical=lane in ("b", "a"))
@@ -890,7 +907,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         sel = _of_kind(sel, radar)
         before_id, after_id = (radar_before_id, radar_after_id) if radar else (ids["b"], ids["a"])
         cands = []
-        bands = _bands(radar)
+        bands = FOLD_BANDS if radar and not radar_open.value else _bands(radar)
         for rid in _navigable(sel, segs):
             source, d = scene_query.parse_row_id(rid)
             top, height = bands[source]
@@ -1125,6 +1142,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         # off row tells the reviewer what they are hiding.
         # every render: Planet access arrives with the manifest, after the click
         _publish_filter()
+        _render_cloud(rows)
         counts = scene_query.source_counts(rows) if rows is not None else {}
         on, name = _entries(), t("analysis.timeline.sources_button")
         sources_btn.attributes = {**sources_btn.attributes, "title": name, "aria-label": name}
@@ -1459,8 +1477,16 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         if S1 not in _entries():
             radar_box.children = []
             return
-        radar_box.children = [radar_strip, radar_label, radar_lane]
-        _render_lane(radar_lane, sel, segs, radar=True)
+        opened = radar_open.value
+        radar_box.style_ = "position: relative" if opened else "position: relative; margin: 4px 0 2px"
+        radar_strip.fold = not opened
+        radar_strip.lane_h = LANE_H if opened else FOLD_H
+        radar_label.style_ = tools_style.format(RAIL_H if opened else FOLD_H)
+        radar_box.children = [radar_strip, radar_label, radar_lane] if opened else [radar_strip, radar_label]
+        if opened:
+            _render_lane(radar_lane, sel, segs, radar=True)
+        else:
+            replace_children(radar_lane, [])
         _render_strip(radar_strip, sel, segs, radar=True)
         pins = analysis.radar_pinned.value
         radar_strip.hollow = [side for side in ("b", "a")
@@ -1470,6 +1496,16 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         radar_strip.labels = {**radar_strip.labels,
                               **{side: f"{radar_strip.labels[side]} {follows}" for side in radar_strip.hollow}}
         follow_btn.disabled = not any(pins.values())
+        follow_icon.children = ["mdi-link-variant" if follow_btn.disabled else "mdi-link-variant-off"]
+        follow_name = t("analysis.timeline.radar_following" if follow_btn.disabled else "analysis.timeline.follow_optical")
+        follow_tip.attributes = {"title": follow_name}
+        follow_btn.attributes = {"aria-label": follow_name}
+        # !important: Vuetify greys a disabled button's icon with an !important rule
+        follow_icon.style_ = f"color: {SRC_COLOR[S1_ASC]} !important" if follow_btn.disabled else ""
+        open_name = t("analysis.timeline.radar_hide" if opened else "analysis.timeline.radar_show")
+        open_btn.attributes = {"title": open_name, "aria-label": open_name,
+                               "aria-expanded": "true" if opened else "false"}
+        open_icon.children = ["mdi-chevron-up" if opened else "mdi-chevron-down"]
 
     def _publish_radar_pending():
         """``analysis.radar_pending``: a saved radar pick is still on its way
@@ -1573,56 +1609,56 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         _render_status()
         _publish_radar_pending()
 
-    def _on_cloud(widget, event, value):
-        # @change, not @input: dragging would otherwise rebuild ~170 widgets
-        # per pixel. Vuetify sends the new value; a null slip is ignored
-        # rather than crashing the handler on ``float(None)``.
-        if value is None:
-            return
-        max_cloud.set(float(value))
-        _show_cloud(max_cloud.value)
+    def _set_cloud(limit):
+        max_cloud.set(float(limit))
         _publish_filter()
         render()
 
-    # The limit in words, always: Vuetify's thumb label shows only while the
-    # thumb is held, which left the reviewer guessing what the faded rows
-    # were faded by. In the label rather than beside the slider: the toolbar
-    # is full at the drawer-open width, and an extra element there pushed the
-    # value off the card. On a narrow card the words give way to a cloud icon
-    # (the screen's container query); ``slider.label`` keeps them, for the
-    # thumb's accessible name.
-    cloud_word = v.Html(tag="span", class_="defo-tl-cloud-word", children=[])
-    cloud_value = v.Html(tag="span", children=[])
-    cloud_label = v.Html(tag="span", style_="white-space: nowrap", attributes={}, children=[
-        v.Icon(small=True, class_="defo-tl-cloud-icon", children=["mdi-weather-cloudy"]), cloud_word, cloud_value])
+    # The cloud limit is a chip like the sources menu's: the cloud icon and the
+    # limit, opening a list of presets, each with the number of images on the
+    # timeline it keeps. Presets, not a slider: a reviewer picks a rough
+    # threshold, and the counts say what each one costs before the click.
+    cloud_value = v.Html(tag="span", style_="font-size: 12.5px; font-variant-numeric: tabular-nums", children=[])
+    cloud_btn = v.Html(tag="button", v_on="menu.on",
+                       attributes={"type": "button", "aria-haspopup": "true", "aria-expanded": "false"},
+                       style_=_CHIP_STYLE,
+                       children=[v.Icon(small=True, style_=f"color: {MUTED}", children=["mdi-weather-cloudy"]),
+                                 cloud_value, v.Icon(small=True, style_=f"color: {MUTED}", children=["mdi-menu-down"])])
+    cloud_list = v.Card(attributes={"role": "menu"},
+                        style_="padding: 4px 0; min-width: 200px; background: var(--dat-chip); color: var(--dat-ink)",
+                        children=[])
+    cloud_menu = v.Menu(v_model=False, top=True, offset_y=True, nudge_top=4, content_class=SOURCES_MENU_CLASS,
+                        v_slots=[{"name": "activator", "variable": "menu", "children": cloud_btn}],
+                        children=[cloud_list])
+    cloud_menu.observe(lambda change: setattr(cloud_btn, "attributes", {
+        **cloud_btn.attributes, "aria-expanded": "true" if change["new"] else "false"}), "v_model")
 
-    def _show_cloud(value):
-        word = t("analysis.timeline.max_cloud")
-        slider.label = f"{word} {value:.0f}%"
-        cloud_word.children = [word]
-        cloud_value.children = [f" {value:.0f}%"]
-        cloud_label.attributes = {"title": word}
-
-    slider = v.Slider(v_model=max_cloud.value, min=0, max=100, step=5, hide_details=True, dense=True,
-                      # gives way first on a narrow card, down to a track
-                      # still wide enough to drag beside its label. Its basis
-                      # is that minimum, grown up to 230 px: a flex row
-                      # breaks its lines on the bases, so a 230 px basis
-                      # wrapped the row before the slider had shrunk at all.
-                      class_="defo-cloud-slider", style_="flex: 1 1 170px; min-width: 170px; max-width: 230px",
-                      v_slots=[{"name": "label", "children": cloud_label}])
-    _show_cloud(max_cloud.value)
-    slider.on_event("change", _on_cloud)
-
-    def _on_cloud_drag(widget, event, value):
-        # The label follows the thumb while it is dragged, in place of
-        # Vuetify's thumb label: that one floats above the slider, past the
-        # strip's top edge, where the panes cover it. Only the label: the
-        # filter waits for @change (see ``_on_cloud``).
-        if value is not None:
-            _show_cloud(float(value))
-
-    slider.on_event("input", _on_cloud_drag)
+    def _render_cloud(rows):
+        """The chip's value and the presets, each with the images it keeps
+        among those drawn (no cloud figure, as on Planet and radar, is never over)."""
+        word, now = t("analysis.timeline.max_cloud"), max_cloud.value
+        cloud_value.children = [f"{now:.0f}%"]
+        cloud_btn.attributes = {**cloud_btn.attributes, "title": word, "aria-label": f"{word} {now:.0f}%"}
+        cloud_list.attributes = {**cloud_list.attributes, "aria-label": word}
+        drawn = None if rows is None else _enabled(rows)
+        items = []
+        for limit in CLOUD_PRESETS:
+            on = float(limit) == now
+            kept = "" if drawn is None else str(int((~drawn["cloud"].gt(limit)).sum()))
+            name = t("analysis.timeline.cloud_any") if limit >= 100 else t("analysis.timeline.cloud_upto", n=limit)
+            row = v.Html(tag="button",
+                         attributes={"type": "button", "role": "menuitemradio", "aria-checked": "true" if on else "false"},
+                         style_=("display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 12px; "
+                                 "background: none; border: 0; color: inherit; font-size: 12px; line-height: 16px; "
+                                 "text-align: left; cursor: pointer"),
+                         children=[v.Icon(small=True, color="primary" if on else None,
+                                          children=["mdi-check" if on else "mdi-blank"]),
+                                   v.Html(tag="span", style_="flex: 1 1 auto", children=[name]),
+                                   v.Html(tag="span", class_="defo-cloud-count",
+                                          style_="opacity: 0.7; font-variant-numeric: tabular-nums", children=[kept])])
+            row.on_event("click", lambda *_a, limit=limit: _set_cloud(limit))
+            items.append(row)
+        replace_children(cloud_list, items)
 
     def _side(side, arrow):
         # its text comes from ``_label_side`` (the toolbar's label hook)
@@ -1638,21 +1674,14 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     left_btn = _side("left", "‹")
     right_btn = _side("right", "›")
 
-    # sentence case, not Vuetify's spaced capitals: the toolbar is full at
-    # the drawer-open width, and the slider is what gave way. On a card too
-    # narrow for the toolbar the labels go too (``defo-tl-label``, hidden by
-    # the screen's container query), so each button carries its name in a
-    # tooltip and in ``aria-label`` as well. A Vuetify tooltip, not ``title``:
-    # the browser's shows only after a long still hover, and not at all to a
-    # keyboard reviewer.
-    _compact = "text-transform: none; letter-spacing: normal"
-
+    # The fold buttons are bare icons, so each carries its name in a tooltip
+    # and in ``aria-label``. A Vuetify tooltip, not ``title``: the browser's
+    # shows only after a long still hover, and not at all to a keyboard reviewer.
     def _fold_btn(icon, key):
         text = t(key)
-        btn = v.Btn(small=True, text=True, class_="defo-tl-btn defo-tl-fold", style_=_compact,
+        btn = v.Btn(icon=True, small=True, class_="defo-tl-btn defo-tl-fold",
                     v_on="tooltip.on", attributes={"aria-label": text},
-                    children=[v.Icon(small=True, left=True, children=[icon]),
-                              v.Html(tag="span", class_="defo-tl-label", children=[text])])
+                    children=[v.Icon(small=True, children=[icon])])
         tip = v.Tooltip(bottom=True, open_delay=200, children=[text],
                         v_slots=[{"name": "activator", "variable": "tooltip", "children": btn}])
         return btn, tip
@@ -1660,7 +1689,6 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     def _label_fold(btn, tip, key):
         text = t(key)
         btn.attributes = {**btn.attributes, "aria-label": text}
-        btn.children[1].children = [text]
         tip.children = [text]
 
     fold, fold_tip = _fold_btn("mdi-arrow-collapse-horizontal", "analysis.timeline.collapse_all")
@@ -1706,7 +1734,8 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             imagery_changed(analysis)
 
     area = v.Select(items=[{"text": t(f"analysis.timeline.area_{k}"), "value": k} for k in IMAGE_AREAS],
-                    v_model=analysis.image_area.value, dense=True, outlined=True, hide_details=True,
+                    v_model=analysis.image_area.value, dense=True, solo=True, flat=True, background_color="transparent",
+                    hide_details=True,
                     label=t("analysis.timeline.image_area"), class_="defo-area-select",
                     attributes={"title": t("analysis.timeline.area_hint")},
                     style_="flex: 1 1 120px; min-width: 120px; max-width: 150px;")
@@ -1714,7 +1743,6 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
     analysis.image_area.subscribe(lambda value: setattr(area, "v_model", value))
 
     def _label_toolbar():
-        _show_cloud(max_cloud.value)
         _label_fold(fold, fold_tip, "analysis.timeline.collapse_all")
         _label_fold(unfold, unfold_tip, "analysis.timeline.expand_all")
         legend_label = t("analysis.timeline.legend_label")
@@ -1725,31 +1753,22 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         area.attributes = {**area.attributes, "title": t("analysis.timeline.area_hint")}
         _label_side(left_btn, "left", "‹")
         _label_side(right_btn, "right", "›")
-        follow_btn.children = [t("analysis.timeline.follow_optical")]
-        radar_name.children = [t("analysis.timeline.group_radar")]
 
     labels.add(_label_toolbar)
 
-    def _divider():
-        # hidden where the toolbar may wrap (the screen's container query): a
-        # divider left at the end of a line separates nothing
-        return v.Html(tag="span", class_="defo-tl-divider",
-                      style_="width: 1px; height: 24px; background: var(--dat-edge); flex: 0 0 1px;")
-
-    # The controls hold together on one line: the slider and the image area
-    # shrink first, and only when even their minimums do not fit beside the
-    # sources menu does the whole group, not the image area alone, drop below them.
+    # The fold buttons and the image area hold together at the right; the
+    # sources menu, the cloud limit and the legend stay at the left.
     controls = v.Html(tag="div", class_="defo-tl-controls",
                       style_="display: flex; flex: 1 1 0; min-width: min-content; align-items: center;"
-                             " justify-content: flex-end; gap: 12px",
-                      children=[fold_tip, unfold_tip, _divider(), slider, _divider(), area])
+                             " justify-content: flex-end; gap: 4px",
+                      children=[fold_tip, unfold_tip, area])
 
     card = v.Card(flat=True, class_="analysis-timeline", children=[
         # wraps rather than running off the card when even the icon-only
         # toolbar does not fit
         v.Html(tag="div", style_="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;"
                                  " padding: 8px 8px 6px",
-               children=[sources_menu, legend_menu, controls, status]),
+               children=[sources_menu, cloud_menu, legend_menu, controls, status]),
         # tall enough, even when it holds only a one-line message, for
         # pysepal's log button to sit under "+1 month" (the shell's
         # ``.pill-wrapper`` rule) without covering it

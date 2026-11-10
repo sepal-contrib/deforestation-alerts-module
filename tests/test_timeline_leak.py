@@ -13,7 +13,7 @@ from ipywidgets.widgets.widget import _instances
 
 from gui.tile.analysis import timeline
 from gui.tile.analysis.labels import Labels
-from tests.test_timeline import LS, S2, _ctx, _fake_analysis, _fake_state, _fake_widgets, _tick, _walk
+from tests.test_timeline import LS, S2, _ctx, _fake_analysis, _fake_state, _fake_widgets, _set_limit, _tick, _walk
 
 
 def _rows(n=150):
@@ -31,15 +31,14 @@ def test_repeated_redraws_leave_the_live_widget_count_unchanged():
     ctx["token"] = analysis.alert_token.value
     widgets.imagery_ctx.set(ctx)
     card = timeline.build_timeline(_fake_state(rows=_rows()), analysis, widgets, labels=labels)
-    slider = next(w for w in _walk(card) if isinstance(w, timeline.v.Slider))
 
     def ticks():
         """Every way a reviewer redraws the strip, each one undone, so the
         screen ends where it started."""
         _tick(card, "Landsat")  # off
         _tick(card, "Landsat")  # on again
-        slider.fire_event("change", 10)
-        slider.fire_event("change", 40)
+        _set_limit(card, 10)
+        _set_limit(card, 40)
         stripe = next(w for w in _walk(card) if "click" in (getattr(w, "_events", None) or [])
                       and (w.attributes or {}).get("aria-current") == "true")
         stripe.fire_event("click", None)  # the picked image again: a redraw, no change

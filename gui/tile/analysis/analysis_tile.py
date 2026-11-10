@@ -865,23 +865,9 @@ SCREEN_CSS = (
     ".analysis-panes-slot > *, .analysis-panes-slot .analysis-views { position: absolute; inset: 0; }\n"
     # The timeline spans the views' width: its edges line up with theirs.
     ".analysis-strip { flex: 0 0 auto; padding: 0 0 4px 0; }\n"
-    # The fold buttons keep their labels while the toolbar fits on one line:
-    # measured 2026-11-09 with the sources menu, it needs 755 px in Spanish
-    # (the longest), 800 px with all four source dots. Narrower, they drop to
-    # their icons, which name themselves in a tooltip. Below 950 px the
-    # dividers go, as they would dangle at a line's end if the row wrapped.
+    # The timeline's toolbar is icons beside the sources menu: one line down
+    # to a ~500 px card, below which the right-hand group wraps whole.
     ".defo-analysis-screen .analysis-timeline { container-type: inline-size; }\n"
-    "@container (max-width: 800px) { .defo-analysis-screen .defo-tl-label { display: none; }"
-    " .defo-analysis-screen .defo-tl-fold .v-icon--left { margin-right: 0; } }\n"
-    "@container (max-width: 950px) { .defo-analysis-screen .defo-tl-divider { display: none; } }\n"
-    # Narrower still, the cloud slider's words give way to a cloud icon (its
-    # title keeps the words) and the fold buttons to their bare icons, so the
-    # image-area select stays on the chips' line on a ~650 px card.
-    ".defo-analysis-screen .v-icon.defo-tl-cloud-icon { display: none; }\n"
-    "@container (max-width: 820px) { .defo-analysis-screen .defo-tl-cloud-word { display: none; }"
-    " .defo-analysis-screen .v-icon.defo-tl-cloud-icon { display: inline-flex; }"
-    " .defo-analysis-screen .defo-cloud-slider { flex-basis: 130px !important; min-width: 130px !important; }"
-    " .defo-analysis-screen .defo-tl-fold { min-width: 0 !important; padding: 0 6px !important; } }\n"
     # The strip's outline follows the theme. The views are not bordered: they
     # draw their own limit with the basemap.
     ".defo-analysis-screen .analysis-timeline { border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 4px; }\n"

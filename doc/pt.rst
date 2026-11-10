@@ -2054,7 +2054,7 @@ Quando um alerta abre, o app escolhe a imagem mais próxima *antes* da janela do
 
 O título de cada mapa indica a sua imagem numa etiqueta **Óptica**: "Imagem de antes · Óptica · Sentinel-2 2026-07-28 · 3%" (coleção, data, cobertura de nuvens). Quando a outra coleção tem uma imagem do mesmo dia, um botão no título ("⇄ Landsat") troca para ela.
 
-Quando o Sentinel-1 está ativado, uma segunda faixa sob a óptica contém as suas imagens, com dois controles próprios. Eles ficam vazados enquanto seguem as escolhas ópticas: cada um fica na imagem de radar mais próxima da data do seu controle óptico (da mesma passagem do outro controle de radar se houver uma a menos de 30 dias; senão, de qualquer uma das duas) e se move com ele. Os controles vazados não são salvos: são colocados de novo quando o alerta abre. Arraste um, ou clique numa listra de radar, e ele fica preenchido: é seu e fica onde você o pôs, e salvar o alerta o salva. **Seguir a óptica** (à direita da faixa de radar) devolve os dois controles às escolhas ópticas. Um mapa cujo lado tem uma imagem de radar recebe no título uma etiqueta **Radar** ao lado da **Óptica**: clique numa etiqueta para escolher o que esse mapa mostra.
+Quando o Sentinel-1 está ativado, uma faixa fina sob a faixa óptica contém as suas imagens como pontos, com dois controles em forma de losango. A seta à esquerda da faixa a abre numa faixa com uma banda por passagem, e a recolhe de novo. Os controles de radar ficam vazados enquanto seguem as escolhas ópticas: cada um fica na imagem de radar mais próxima da data do seu controle óptico (da mesma passagem do outro controle de radar se houver uma a menos de 30 dias; senão, de qualquer uma das duas) e se move com ele. Os controles vazados não são salvos: são colocados de novo quando o alerta abre. Arraste um, ou clique numa listra de radar da faixa aberta, e ele fica preenchido: é seu e fica onde você o pôs, e salvar o alerta o salva. O ícone de corrente à esquerda da faixa fica unido enquanto os dois controles seguem as escolhas ópticas. Quando você move um, a corrente se rompe: selecione-a (**Seguir a óptica**) para devolver os dois controles às escolhas ópticas. Um mapa cujo lado tem uma imagem de radar recebe no título uma etiqueta **Radar** ao lado da **Óptica**: clique numa etiqueta para escolher o que esse mapa mostra.
 
 A barra de ferramentas acima da trilha:
 
@@ -2080,7 +2080,7 @@ A barra de ferramentas acima da trilha:
         -   Expande todos os meses.
         -
     *   -   **Nuvens máx.**
-        -   O limite de nuvens, de 0 a 100 %, em passos de 5. As imagens acima dele ficam esmaecidas e nunca são escolhidas automaticamente. Os mosaicos Planet e as imagens de radar Sentinel-1 não têm valor de nebulosidade, então o limite nunca os esconde.
+        -   O limite de nuvens, escolhido num menu de valores (10, 20, 40, 60 ou 80 %, ou **Todas as imagens**), cada um com o número de imagens que mantém na linha do tempo. As imagens acima dele ficam esmaecidas e nunca são escolhidas automaticamente. Os mosaicos Planet e as imagens de radar Sentinel-1 não têm valor de nebulosidade, então o limite nunca os esconde.
         -   40 %.
     *   -   **Área da imagem**
         -   Até onde as imagens se estendem ao redor do alerta: **Normal**, **Grande** ou **Muito grande** (100 m, 1 km ou 2,5 km ao redor). Áreas maiores demoram mais para carregar e exportar. Salvar a revisão salva a área: o alerta volta a abrir com ela, e os arquivos e o GIF dele são feitos com ela. Um alerta nunca salvo abre em **Normal**.

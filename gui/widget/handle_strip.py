@@ -42,6 +42,11 @@ _HANDLES_CSS = """
 .dah-after polygon { fill: #bf8f2d; }
 .dah-h:focus-visible polygon { stroke: #d9ab4e; stroke-width: 1.5px; }
 .dah-h.dah-hollow polygon { fill: none; stroke: var(--dat-s1, #d98ac0); stroke-width: 2px; }
+.dah-fold { background: var(--dat-fold-b, rgba(128, 128, 128, 0.12)); border-radius: 3px; }
+.dah-dot { position: absolute; width: 3px; height: 3px; border-radius: 50%; transform: translate(-50%, -50%);
+  background: var(--dat-s1, #d98ac0); pointer-events: none; }
+.dah-fold .dah-h.dah-before, .dah-fold .dah-h.dah-after { bottom: auto; top: 50%; padding: 3px;
+  transform: translate(-50%, -50%); align-items: center; }
 .dah-flag { position: absolute; bottom: calc(100% + 2px); padding: 3px 6px; border-radius: 3px;
   font-size: 10.5px; line-height: 1; white-space: nowrap; font-weight: 500; pointer-events: none; }
 .dah-before .dah-flag { right: 0; background: var(--dah-before); color: var(--dah-before-ink);
@@ -91,6 +96,9 @@ class HandleStrip(v.VuetifyTemplate):
     #: the sides drawn hollow (``"b"``, ``"a"``): a radar handle that follows
     #: the optical pick rather than one the reviewer pinned
     hollow = traitlets.List([]).tag(sync=True)
+    #: folded: a slim strip with a dot per row and diamond handles, no rail;
+    #: ``lane_h`` is then the strip's height
+    fold = traitlets.Bool(False).tag(sync=True)
 
     def __init__(self, on_pick, **kwargs):
         super().__init__(**kwargs)

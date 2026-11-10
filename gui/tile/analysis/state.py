@@ -71,9 +71,11 @@ class AnalysisState:
     after_radar_info: solara.Reactive = field(default_factory=_plain)
     before_radar_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
     after_radar_keys: solara.Reactive = field(default_factory=lambda: _plain([]))
-    #: per side, whether the radar pick is the reviewer's (pinned: a Save
-    #: writes it) or follows the optical pick (a Save stores it empty)
-    radar_pinned: solara.Reactive = field(default_factory=lambda: _plain({"before": False, "after": False}))
+    #: per side, whether the radar pick is the reviewer's (True: a Save writes
+    #: it) or follows the optical pick: ``False`` once the reviewer unpinned it
+    #: (*Follow optical*: a Save clears the row's pick, even with radar off),
+    #: ``None`` when nobody said (a Save with radar off keeps the row's pick)
+    radar_pinned: solara.Reactive = field(default_factory=lambda: _plain({"before": None, "after": None}))
     #: a saved radar pick is still waiting for its radar index (Sentinel-1
     #: on): the build waits for it like an image still loading. The timeline's.
     radar_pending: solara.Reactive = field(default_factory=lambda: _plain(False))
@@ -206,7 +208,7 @@ class AnalysisState:
             self.after_radar_info.set(None)
             self.before_radar_keys.set([])
             self.after_radar_keys.set([])
-            self.radar_pinned.set({"before": False, "after": False})
+            self.radar_pinned.set({"before": None, "after": None})
             self.prediction_files.set({})
             self.verdict.set(None)
             self.answers.set({})

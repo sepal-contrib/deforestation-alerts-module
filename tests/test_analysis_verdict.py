@@ -280,6 +280,9 @@ def test_radar_updates_write_pins_clear_followers_and_skip_unknown_sides():
     assert review_save.radar_updates(None, _S1_INFO, {"before": True, "after": True}) == {
         "after_radar_img": "Sentinel 1 ascending 2025-09-05 ", "after_radar_img_info": 1757030400000}
     assert review_save.radar_updates(None, None, {"before": True, "after": True}) == {}
+    # unpinned by the reviewer (Follow optical) with radar off: the row's pick is cleared
+    assert review_save.radar_updates(None, None, {"before": False, "after": None}) == {
+        "before_radar_img": None, "before_radar_img_info": None}
 
 
 def test_a_side_without_radar_info_keeps_the_rows_radar_columns(tmp_path, monkeypatch):
