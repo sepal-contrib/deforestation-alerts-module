@@ -1456,19 +1456,49 @@ def guide_alert_reviewed(page):
         review_alert(page, "true", "loss_driver1")
 
 
+def radar(page, on: bool):
+    """Turn Sentinel-1 on or off in the timeline's Image sources menu (saved on
+    the project, so a shot that turns it on turns it off again after). On, it
+    waits until the radar stripes stop arriving and both radar chips show."""
+    tl = page.locator(".analysis-timeline:visible").first
+    tl.locator(f'button[aria-label="{T("analysis.timeline.sources_button")}"]').first.click()
+    item = page.locator('button[role="menuitemcheckbox"]:has-text("Sentinel-1")').first
+    item.wait_for(state="visible", timeout=10000)
+    if (item.get_attribute("aria-checked") == "true") != on:
+        item.click()
+        wait(page, 800)
+    page.mouse.click(VIEWPORT["width"] - 240, VIEWPORT["height"] - 300)  # close the menu (Escape does not)
+    if not on:
+        return
+    stripes = tl.locator('button[tabindex="-1"][aria-label^="Sentinel-1"]')
+    chips = page.locator('button[aria-pressed]:has-text("Sentinel-1")')
+    last, stable, t0 = -1, 0, time.time()
+    while stable < 4 or chips.count() < 2:
+        if time.time() - t0 > 600:
+            raise AssertionError(f"radar stripes still arriving after 10 min ({last}, {chips.count()} chips)")
+        wait(page, 5000)
+        n = stripes.count()
+        stable, last = (stable + 1 if n == last and n > 0 else 0), n
+
+
 def shot_analysis_screen(page):
     guide_alert(page)
     if reviewed() != 12 or store().set_index("alert_id").loc[GUIDE_ALERT, "status"] != "Not reviewed":
         raise AssertionError("analysis-screen wants 12 reviewed alerts and the guide's alert not reviewed")
+    radar(page, True)
     open_section(page, T("analysis_tile.sections.questions"))
+    maps_ready(page)
     quiet(page)
     save(page, "analysis-screen")
+    radar(page, False)
 
 
 def shot_analysis_timeline(page):
     guide_alert(page)
+    radar(page, True)
     quiet(page)
     save(page, "analysis-timeline", box(page, ".analysis-timeline"), pad=2)
+    radar(page, False)
 
 
 def shot_analysis_console(page):

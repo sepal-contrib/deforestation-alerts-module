@@ -98,6 +98,9 @@ THEME_CSS = (
     f".analysis-stage.analysis-stage--dark, body:has(.analysis-stage--dark) .{SOURCES_MENU_CLASS} {{ {_VARS_DARK} "
     "--dat-muted: #a8a39b; --dat-warn: #d9ab4e; --dat-ink: #f0ece6; "
     "--dat-chip: #24221f; --dat-fold-a: #24221f; --dat-fold-b: #1e1c1a; --dat-edge: #44403a; } "
+    # the radar rail runs through the collapsed-month blocks: lift its "N days
+    # apart" over them, on a chip so the block's text does not show through
+    ".defo-tl-radar-box .dah-gap { z-index: 4; background: var(--dat-chip); padding: 0 4px; border-radius: 2px; } "
 )
 HIT_PX = 11
 #: a collapsed month at least this wide carries its full label ("JUN 2026",
@@ -633,7 +636,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                          children=[radar_name, follow_btn])
     #: the radar rail and lane, or nothing while Sentinel-1 is off. Its
     #: children are set, never replaced (``replace_children`` would close them).
-    radar_box = v.Html(tag="div", style_="position: relative", children=[])
+    radar_box = v.Html(tag="div", class_="defo-tl-radar-box", style_="position: relative", children=[])
     track = v.Html(tag="div", style_=_TRACK_STYLE,
                    children=[strip, parent_bands, window_band, lane, radar_box, lane_axis, blocks])
     message = v.Html(tag="div", style_=_MESSAGE_STYLE, children=[])
