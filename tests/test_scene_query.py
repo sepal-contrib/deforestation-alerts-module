@@ -700,6 +700,8 @@ def test_the_auto_pick_falls_back_over_the_limit():
     sel = _sel([(S2, "2026-04-01", 95.0), (S2, "2026-04-20", 60.0), (S2, "2026-08-27", 4.0)])
     # nothing under 40 % before A0: the least cloudy within 30 days, drawn although hidden
     assert scene_query.default_pick(sel, A0, A1) == ("s20260420", "s20260827")
+    # not allowed for a side whose months are still loading: it waits
+    assert scene_query.default_pick(sel, A0, A1, fallback=(False, True)) == (None, "s20260827")
 
 
 def test_the_auto_pick_keeps_a_clear_side():  # unchanged behaviour

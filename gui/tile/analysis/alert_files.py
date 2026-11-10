@@ -91,7 +91,11 @@ def images_picked(alert) -> bool:
 def radar_images_ready(alert) -> bool:
     """Each radar side on screen (its info set) has its ee.Image rebuilt: the
     files' rule for the radar pair, as ``images_picked`` is for the optical
-    one. Not in ``images_picked``: the CNN runs on the optical pair alone."""
+    one. Not in ``images_picked``: the CNN runs on the optical pair alone.
+    A saved radar pick still waiting for its index (``radar_pending``) is not
+    ready either: the files would otherwise go out without it."""
+    if getattr(alert, "radar_pending", False):
+        return False
     return all(info is None or image is not None
                for info, image in ((alert.before_radar_info, alert.before_radar_image),
                                    (alert.after_radar_info, alert.after_radar_image)))

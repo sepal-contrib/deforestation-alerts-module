@@ -390,13 +390,17 @@ def auto_collapsed(start: date, end: date, a0: date, a1: date) -> set[tuple[int,
 # ------------------------------------------------------------- default pick
 
 
-def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], Optional[str]]:
+def default_pick(sel: pd.DataFrame, a0: date, a1: date,
+                 fallback: tuple[bool, bool] = (True, True)) -> tuple[Optional[str], Optional[str]]:
     """The pair to mark when an alert opens: ``(before_id, after_id)``.
 
     Nearest first, among the rows the cloud limit does not hide. A side whose
     every candidate is over the limit falls back to ``least_cloudy_near``: the
     least cloudy image within ``STAND_IN_DAYS`` (hidden or not), else the
     nearest one. The rows over the limit are still drawn, faded.
+    ``fallback`` (before, after) allows that stand-in per side: the timeline
+    allows it only once the index has answered for the side's months, so a
+    clear image still loading is not lost to a cloudy one already here.
 
     Nothing inside ``[a0, a1]`` is ever picked, because an image taken while
     the alert was accumulating shows partial clearing and would understate
@@ -433,8 +437,8 @@ def default_pick(sel: pd.DataFrame, a0: date, a1: date) -> tuple[Optional[str], 
     # a single-day window keeps "before" strictly earlier, in the fallback too
     before_day = a0 - timedelta(days=1) if a0 == a1 else a0
     return (
-        _nearest(before_all, newest=True) or least_cloudy_near(sel, before_day, "before"),
-        _nearest(after_all, newest=False) or least_cloudy_near(sel, a1, "after"),
+        _nearest(before_all, newest=True) or (least_cloudy_near(sel, before_day, "before") if fallback[0] else None),
+        _nearest(after_all, newest=False) or (least_cloudy_near(sel, a1, "after") if fallback[1] else None),
     )
 
 

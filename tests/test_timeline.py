@@ -1727,6 +1727,46 @@ def test_a_side_the_loading_index_has_no_image_for_yet_gets_its_automatic_pick_w
     assert analysis.dirty.value is False and analysis.edit_rev.value == 0
 
 
+def test_an_only_cloudy_side_waits_for_its_months_before_taking_the_over_limit_pick():
+    """Final review I2: the over-limit stand-in is for "nothing under the
+    limit exists", not "nothing has loaded yet". A side whose months the index
+    has not answered for keeps waiting, and gets a clear image that arrives."""
+    rows = [(S2, "2026-04-24", 80.0), (LS, "2026-08-27", 3.0)]
+    state = _fake_state(index=_any_index(rows))
+    analysis = _fake_analysis()
+    timeline.build_timeline(state, analysis, _fake_widgets())
+    assert analysis.before_info.value is None  # waiting, not the cloudy stand-in
+    assert analysis.after_info.value[3] == "Landsat 2026-08-27 "
+
+    state.scene_index.set(_any_index([(S2, "2026-04-10", 5.0), *rows]))  # a clear one lands
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-10 "
+    assert analysis.dirty.value is False and analysis.edit_rev.value == 0
+
+
+def test_an_only_cloudy_side_takes_the_over_limit_pick_once_its_months_are_answered():
+    rows = [(S2, "2026-04-24", 80.0), (LS, "2026-08-27", 3.0)]
+    state = _fake_state(index=_any_index(rows))
+    analysis = _fake_analysis()
+    timeline.build_timeline(state, analysis, _fake_widgets())
+    state.scene_manifest.set(_covering())
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
+
+
+def test_a_gone_saved_pick_waits_for_its_sides_months_before_the_over_limit_stand_in():
+    """The restore fallback (``_resolve_restores``) follows the same rule: the
+    saved row is gone, but the side's other months are still loading."""
+    rows = [(S2, "2026-04-24", 80.0), (LS, "2026-08-27", 3.0)]
+    state = _fake_state(index=_any_index(rows))
+    state.scene_manifest.set(_covering(start=date(2026, 3, 15)))  # the saved date answered, not the look-back
+    analysis = _fake_analysis()
+    timeline.build_timeline(state, analysis, _fake_widgets(saved_before="Sentinel 2 2026-03-20 "))
+    assert analysis.before_info.value is None
+
+    state.scene_index.set(_any_index([(S2, "2026-03-10", 5.0), *rows]))
+    state.scene_manifest.set(_covering())
+    assert analysis.before_info.value[3] == "Sentinel 2 2026-03-10 "
+
+
 def test_a_side_with_no_image_stops_waiting_once_the_index_has_answered():
     rows = [(LS, "2026-08-27", 3.0)]
     state = _fake_state(index=_any_index(rows))
@@ -2011,9 +2051,39 @@ def test_a_pending_radar_restore_publishes_nothing():
     assert analysis.dirty.value is False
 
 
+def test_a_pending_radar_restore_holds_the_build():
+    """Final review I1: a saved radar pin still waiting for its radar index
+    holds Build files, as an optical image still loading does, instead of
+    building a report with no radar."""
+    from gui.tile.analysis import alert_files
+
+    rows = [r for r in _MIX if r[1] != "2026-08-30"]
+    state, analysis, _widgets, card = _radar_build(
+        rows=rows, sources=None, manifest=_covering(),  # radar not indexed yet
+        saved_after_radar="Sentinel 1 ascending 2026-08-30 ")
+    assert analysis.radar_pending.value is True
+    assert not alert_files.radar_images_ready(analysis.capture())
+
+    covered = _covering()
+    covered.radar = scene_index.Coverage(start=date(2026, 1, 1), end=date(2026, 12, 31))
+    state.scene_index.set(_any_index(_MIX))
+    state.scene_manifest.set(covered)
+    assert analysis.radar_pending.value is False
+
+
+def test_a_pending_radar_restore_does_not_hold_the_build_once_sentinel_1_is_off():
+    rows = [r for r in _MIX if r[1] != "2026-08-30"]
+    _state, analysis, _widgets, card = _radar_build(
+        rows=rows, sources=None, manifest=_covering(),
+        saved_after_radar="Sentinel 1 ascending 2026-08-30 ")
+    _tick(card, "Sentinel-1")
+    assert analysis.radar_pending.value is False
+
+
 def test_an_all_cloudy_side_gets_the_over_limit_auto_pick():
     rows = [(S2, "2026-04-24", 80.0), (LS, "2026-08-27", 3.0)]
-    _state, analysis, _widgets, card = _radar_build(rows=rows, sources=None)
+    # once the index has answered for its months (final review I2)
+    _state, analysis, _widgets, card = _radar_build(rows=rows, sources=None, manifest=_covering())
     assert analysis.before_info.value[3] == "Sentinel 2 2026-04-24 "
     assert _strips(card)[0].before["id"] == "s20260424"
 

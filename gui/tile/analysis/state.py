@@ -74,6 +74,9 @@ class AnalysisState:
     #: per side, whether the radar pick is the reviewer's (pinned: a Save
     #: writes it) or follows the optical pick (a Save stores it empty)
     radar_pinned: solara.Reactive = field(default_factory=lambda: _plain({"before": False, "after": False}))
+    #: a saved radar pick is still waiting for its radar index (Sentinel-1
+    #: on): the build waits for it like an image still loading. The timeline's.
+    radar_pending: solara.Reactive = field(default_factory=lambda: _plain(False))
     #: per side, which pick the map shows: ``"optical"`` or ``"radar"``.
     #: Session state: ``reset_alert`` leaves it alone.
     shown_kind: solara.Reactive = field(default_factory=lambda: _plain({"before": "optical", "after": "optical"}))
@@ -255,6 +258,7 @@ class AnalysisState:
                 before_radar_info=self.before_radar_info.value,
                 after_radar_info=self.after_radar_info.value,
                 radar_pinned=dict(self.radar_pinned.value),
+                radar_pending=self.radar_pending.value,
                 **read(),
             )
 

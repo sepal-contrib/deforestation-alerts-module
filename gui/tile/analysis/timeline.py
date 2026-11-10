@@ -1336,13 +1336,20 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         source, day = scene_query.parse_row_id(rid)
         return _answered(day, source)
 
+    def _auto(sel, a0, a1, window) -> dict:
+        """``default_pick`` by lane, its over-limit stand-in only for a side
+        whose months the index has answered for (final review I2)."""
+        spans = ((window[0], a0), (a1, window[1]))
+        fallback = tuple(all(_answered(d) for d in span) for span in spans)
+        return dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1, fallback)))
+
     def _resolve_auto_waits(sel, a0, a1, window):
         """Give each side in ``auto_waiting`` its automatic pick once the index
         holds a candidate for it. A side stops waiting then, once the index has
         answered for its months without one, or once the reviewer has picked it."""
         if not auto_waiting.value or a0 is None or a1 is None:
             return
-        auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
+        auto = _auto(sel, a0, a1, window)
         for lane in sorted(auto_waiting.value):
             chosen = before_id if lane == "b" else after_id
             span = (window[0], a0) if lane == "b" else (a1, window[1])
@@ -1353,7 +1360,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                 continue
             auto_waiting.set(auto_waiting.value - {lane})
 
-    def _resolve_restores(sel, a0, a1):
+    def _resolve_restores(sel, a0, a1, window):
         """Restore each waiting saved pick whose row is here, and fall back to
         the automatic pick for one the index has answered without (spec D4).
         Neither is an edit (spec D3): both go through ``_assign``.
@@ -1392,12 +1399,14 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                 if a0 is None or a1 is None:
                     continue
                 if auto is None:
-                    auto = dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
+                    auto = _auto(sel, a0, a1, window)
                 # The note says the automatic pick stood in, so only when one
                 # did: a side with no candidate is "not set", and says so.
                 if auto[lane]:
                     fell_back.set(fell_back.value | {lane})
                     _assign(lane, auto[lane], sel, restore=True)  # may be over the limit
+                else:  # its months may still be loading: the automatic pick waits
+                    auto_waiting.set(auto_waiting.value | {lane})
 
     def _follow(sel, a0, a1):
         """Place the following radar handles (``scene_query.follow_radar``)
@@ -1452,6 +1461,11 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                               if ids[RADAR_LANE[side]].value and not pins[LANE_SIDE[side]]]
         follow_btn.disabled = not any(pins.values())
 
+    def _publish_radar_pending():
+        """``analysis.radar_pending``: a saved radar pick is still on its way
+        while Sentinel-1 is on, so Build files waits (final review I1)."""
+        analysis.radar_pending.set(S1 in _entries() and any(k in restoring.value for k in ("rb", "ra")))
+
     def render(*_):
         ctx = widgets.imagery_ctx.value
         # ``alert_id`` is ``actual_alert_id``, an *index* into the active set's
@@ -1503,6 +1517,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             _render_menu(rows, window)
             _render_titles(sel)
             _render_status()
+            _publish_radar_pending()
             return
         track.style_ = _TRACK_STYLE
         message.style_ = "display: none"
@@ -1519,7 +1534,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
             if a0 is not None and a1 is not None:
                 collapsed.set(frozenset(scene_query.auto_collapsed(window[0], window[1], a0, a1)))
                 split.set(frozenset())
-                auto =dict(zip(("b", "a"), scene_query.default_pick(sel, a0, a1)))
+                auto = _auto(sel, a0, a1, window)
                 for lane in ("b", "a"):
                     chosen = before_id if lane == "b" else after_id
                     if lane in restoring.value:
@@ -1531,7 +1546,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
                         _assign(lane, auto[lane], sel, restore=True)
                 auto_waiting.set(frozenset(lane for lane in ("b", "a")
                                            if not auto[lane] and lane not in restoring.value))
-        _resolve_restores(sel, a0, a1)
+        _resolve_restores(sel, a0, a1, window)
         _resolve_auto_waits(sel, a0, a1, window)
         _follow(sel, a0, a1)
 
@@ -1546,6 +1561,7 @@ def build_timeline(app_state, analysis, widgets, *, labels=None):
         _render_menu(rows, window)
         _render_titles(sel)
         _render_status()
+        _publish_radar_pending()
 
     def _on_cloud(widget, event, value):
         # @change, not @input: dragging would otherwise rebuild ~170 widgets
