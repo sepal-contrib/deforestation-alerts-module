@@ -40,6 +40,16 @@ def test_ensure_converted_converts_once(tmp_path):
     assert io.load_project(NAME, tmp_path).migrated_from.version == 1
 
 
+def test_stale_marker_beside_a_manifest_is_removed(tmp_path):
+    write_recipe(tmp_path / NAME)
+    resolve, _ = _counting()
+    ensure_converted(NAME, tmp_path, resolve=resolve)
+    marker = tmp_path / NAME / ".v1_converting"
+    marker.touch()  # a death after the manifest, before the marker was removed
+    assert ensure_converted(NAME, tmp_path, resolve=resolve) is False
+    assert not marker.exists()
+
+
 def test_two_opens_convert_once(tmp_path):
     write_recipe(tmp_path / NAME)
     resolve, calls = _counting(delay=0.2)

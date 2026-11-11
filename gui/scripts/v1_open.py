@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from deforestation_alerts.project import io, paths
-from deforestation_alerts.project.v1_migration import convert, is_v1_recipe
+from deforestation_alerts.project.v1_migration import CONVERTING, convert, is_v1_recipe
 from gui.scripts.aoi_io import sidecar_request
 
 _ADMIN = {"ADMIN0": 0, "ADMIN1": 1, "ADMIN2": 2}
@@ -70,6 +70,8 @@ def ensure_converted(name: str, root: Optional[Path] = None, resolve=resolve_v1_
     with io.manifest_lock(name, root):
         folder = paths.project_dir(name, root)
         if not is_v1_recipe(folder):
+            # a marker beside a manifest is stale: left, a deleted manifest would reconvert over the reviews
+            (folder / CONVERTING).unlink(missing_ok=True)
             return False
         convert(folder, resolve)
         return True
