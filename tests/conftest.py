@@ -250,6 +250,7 @@ def _alerts_gdf():
 
     gdf = gpd.GeoDataFrame(
         {
+            "alert_id": [1],
             "admin1": ["Paraguay"], "admin2": ["Canindeyú"], "admin3": ["Curuguaty"],
             "alert_date_min": [2026.001], "alert_date_max": [2026.010],
             "before_img": ["S2_before"], "after_img": ["S2_after"],

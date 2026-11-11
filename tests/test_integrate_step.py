@@ -284,7 +284,7 @@ def _art(key, kind="store"):
 
 
 def _result(n):
-    alerts = gpd.GeoDataFrame({"alert_id": list(range(n))}, geometry=[box(0, 0, 1, 1)] * n, crs="EPSG:4326")
+    alerts = gpd.GeoDataFrame({"alert_id": list(range(1, n + 1))}, geometry=[box(0, 0, 1, 1)] * n, crs="EPSG:4326")
     s = _set("x", 0).model_copy(update={"n_alerts": n})
     return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts, outcomes={},
                            n_growth=0, n_growth_small=0)
@@ -1059,7 +1059,7 @@ def test_replacing_a_reviewed_split_set_names_both(step):
 def _store(tmp_path, statuses):
     store = tmp_path / "d" / SET_DIR / "alert_db.parquet"
     store.parent.mkdir(parents=True, exist_ok=True)
-    gpd.GeoDataFrame({"alert_id": list(range(len(statuses))), "status": statuses,
+    gpd.GeoDataFrame({"alert_id": list(range(1, len(statuses) + 1)), "status": statuses,
                       "area_ha": [1.5 + i for i in range(len(statuses))]},
                      geometry=[box(i, i, i + 0.01, i + 0.01) for i in range(len(statuses))],
                      crs="EPSG:4326").to_parquet(store)
@@ -1074,9 +1074,9 @@ def test_the_replace_confirmation_lists_the_reviewed_alerts(step, tmp_path):
         _run(rc)
         texts = _texts(rc)
         assert tn("steps.integrate.replace_message", 3) in texts
-        assert {"#0 · Reviewed: confirmed · 1.50 ha", "#2 · Reviewed: false positive · 3.50 ha",
-                "#3 · Reviewed: needs revision · 4.50 ha"} <= set(texts)
-        assert not any(s.startswith("#1 ·") for s in texts)  # not reviewed: nothing lost
+        assert {"#1 · Reviewed: confirmed · 1.50 ha", "#3 · Reviewed: false positive · 3.50 ha",
+                "#4 · Reviewed: needs revision · 4.50 ha"} <= set(texts)
+        assert not any(s.startswith("#2 ·") for s in texts)  # not reviewed: nothing lost
     finally:
         rc.close()
 
@@ -1085,7 +1085,7 @@ def test_reviewed_lines_skip_a_blank_status(step, tmp_path):
     """Spec §3: ``""`` is not a review (``review_status.is_reviewed``)."""
     p = _project("d", "GLAD-L", sets=[_set("x", 1)])
     _store(tmp_path, ["", "Confirmed", "Not reviewed"])
-    assert integrate_jobs.reviewed_lines(p, "x") == ["#1 · Reviewed: confirmed · 2.50 ha"]
+    assert integrate_jobs.reviewed_lines(p, "x") == ["#2 · Reviewed: confirmed · 2.50 ha"]
 
 
 def test_reviewed_lines_are_capped_and_survive_a_missing_store(step, tmp_path):
@@ -1093,7 +1093,7 @@ def test_reviewed_lines_are_capped_and_survive_a_missing_store(step, tmp_path):
     assert integrate_jobs.reviewed_lines(p, "x") == []  # no store on disk: the count alone remains
     _store(tmp_path, ["Confirmed"] * 25)
     lines = integrate_jobs.reviewed_lines(p, "x", limit=20)
-    assert len(lines) == 21 and lines[0] == "#0 · Reviewed: confirmed · 1.50 ha"
+    assert len(lines) == 21 and lines[0] == "#1 · Reviewed: confirmed · 1.50 ha"
     assert lines[-1] == t("steps.integrate.replace_more", n=5)
     assert integrate_jobs.status_label(None) == t("legend.status.not_reviewed")
 

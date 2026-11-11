@@ -36,7 +36,7 @@ def _state(tmp_path, monkeypatch):
 
 def _alerts(n):
     return gpd.GeoDataFrame(
-        {"status": ["Not reviewed"] * n, "alert_id": list(range(n)), "set_id": ["x"] * n,
+        {"status": ["Not reviewed"] * n, "alert_id": list(range(1, n + 1)), "set_id": ["x"] * n,
          "alert_sources": ["GLAD-L"] * n, "alert_date_min": [2026.010] * n, "alert_date_max": [2026.020] * n},
         geometry=[box(i, 0, i + 1, 1) for i in range(n)], crs="EPSG:4326")
 

@@ -294,7 +294,7 @@ def test_return_rows_are_the_evaluators_reviewed_alerts(copy):
     p, pdir = copy
     gdf = alert_store.load_gdf_from_parquet(paths.resolve(pdir, p.alert_sets[SET1].store_rel_path))
     rows = return_rows(gdf, "Ana", p.questions)
-    assert rows["alert_id"].tolist() == [0, 4]
+    assert rows["alert_id"].tolist() == [1, 5]
     assert list(rows.columns) == ["alert_id", "evaluator", "status", "description", "q_cause", "admin1",
                                   "alert_polygon", "area_ha"]
 
@@ -310,7 +310,7 @@ def test_a_reviewed_copy_holds_the_header_and_the_rows(copy, tmp_path):
     assert (h.origin_project, h.set_fingerprint, h.app_version) == (CREATOR, f"fp-{SET1}", APP_VERSION)
     assert h.returned_at is not None and h.questions_digest == split_mod.questions_digest(p.questions)
     rows = read_table(tmp_path / "r.parquet")
-    assert rows["alert_id"].tolist() == [0, 4] and rows["status"].tolist() == ["Confirmed", "False Positive"]
+    assert rows["alert_id"].tolist() == [1, 5] and rows["status"].tolist() == ["Confirmed", "False Positive"]
     assert rows["q_cause"].tolist() == ["fire", "fire"] and "notes" not in rows.columns
     assert rows["alert_polygon"].isna().all()
 
@@ -354,7 +354,7 @@ def test_package_carries_earlier_alerts(data_root, tmp_path):
     rows = _snapshot(out, tmp_path)
     run1 = run_id_of(p.alert_sets[SET1])
     assert [(r.key, r.node.status, r.run_id) for r in rows] == [
-        (f"{SET1}#0", "Confirmed", run1), (f"{SET1}#2", "Need revision", run1)]
+        (f"{SET1}#1", "Confirmed", run1), (f"{SET1}#3", "Need revision", run1)]
     n = rows[0].node
     assert (n.period_id, n.period_start, n.period_end, n.area_ha) == (P1.id, P1.start, P1.end, 1.5)
     assert n.shape.equals(alerts_frame(["x"]).geometry.iloc[0])
@@ -363,12 +363,12 @@ def test_package_carries_earlier_alerts(data_root, tmp_path):
 def test_package_snapshot_holds_every_linked_row_whatever_its_status(data_root, tmp_path):
     """Ruling 12: a later alert linked to a since false-positive parent, and a
     candidate linked to an unreviewed one, keep their targets in the copy."""
-    p, pdir = make_growth_creator(data_root, links={0: [f"{SET1}#1@{{run}}"]},
-                                  earlier_links={0: [f"{SET1}#3@{{run}}"]})
+    p, pdir = make_growth_creator(data_root, links={0: [f"{SET1}#2@{{run}}"]},
+                                  earlier_links={0: [f"{SET1}#4@{{run}}"]})
     rows = _snapshot(_build(p, pdir, tmp_path / "out", set_id=SET2), tmp_path)
     assert [(r.key, r.node.status) for r in rows] == [
-        (f"{SET1}#0", "Confirmed"), (f"{SET1}#2", "Need revision"),
-        (f"{SET1}#1", "False Positive"), (f"{SET1}#3", "Not reviewed")]
+        (f"{SET1}#1", "Confirmed"), (f"{SET1}#3", "Need revision"),
+        (f"{SET1}#2", "False Positive"), (f"{SET1}#4", "Not reviewed")]
 
 
 def test_a_package_with_no_earlier_loss_has_no_snapshot(data_root, tmp_path):
@@ -378,10 +378,10 @@ def test_a_package_with_no_earlier_loss_has_no_snapshot(data_root, tmp_path):
 
 def test_the_snapshot_carries_review_group(data_root, tmp_path):
     """Group review (spec 2026-10-26 §7.2): a copy builds the creator's member-main edges."""
-    groups = pd.array([0, pd.NA, 0, pd.NA], dtype="Int64")
+    groups = pd.array([1, pd.NA, 1, pd.NA], dtype="Int64")
     p, pdir = make_growth_creator(data_root, earlier_extra={"review_group": groups})
     rows = _snapshot(_build(p, pdir, tmp_path / "out", set_id=SET2), tmp_path)
-    assert [(r.key, r.node.review_group) for r in rows] == [(f"{SET1}#0", 0), (f"{SET1}#2", 0)]
+    assert [(r.key, r.node.review_group) for r in rows] == [(f"{SET1}#1", 1), (f"{SET1}#3", 1)]
 
 
 def test_an_old_snapshot_reads_no_groups(tmp_path):

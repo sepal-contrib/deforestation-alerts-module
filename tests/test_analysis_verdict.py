@@ -89,7 +89,7 @@ def test_an_alert_change_seeds_the_verdict_from_the_row(tmp_path, monkeypatch):
     id_field = SimpleNamespace(v_model=None)
 
     gdf = gpd.GeoDataFrame(
-        {"status": ["Confirmed", "Not reviewed"], "alert_id": [0, 1], "set_id": ["x", "x"],
+        {"status": ["Confirmed", "Not reviewed"], "alert_id": [1, 2], "set_id": ["x", "x"],
          "alert_sources": ["GLAD-L"] * 2, "alert_date_min": [2026.010] * 2,
          "alert_date_max": [2026.020] * 2, "alert_polygon": [None, None],
          "description": [None, None], "bounding_box": [box(0, 0, 1, 1)] * 2},

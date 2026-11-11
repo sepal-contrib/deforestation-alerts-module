@@ -57,7 +57,7 @@ def alerts_frame(statuses, evaluators=None, *, sid=SET1, extra=None):
     the split's ``evaluator`` column (left out when ``evaluators`` is None)
     and ``extra`` columns."""
     n = len(statuses)
-    data = {"alert_id": list(range(n)), "set_id": [sid] * n, "status": list(statuses),
+    data = {"alert_id": list(range(1, n + 1)), "set_id": [sid] * n, "status": list(statuses),
             "description": [""] * n, "area_ha": [1.5] * n}
     if evaluators is not None:
         data["evaluator"] = list(evaluators)
@@ -187,7 +187,7 @@ EARLIER_STATUSES = ("Confirmed", "False Positive", "Need revision", "Not reviewe
 def make_growth_creator(root, name=CREATOR, *, links=None, earlier_links=None, statuses=EARLIER_STATUSES,
                         earlier_extra=None):
     """A creator whose later set SET2 (P2) is split between Ana and Bo and
-    active, its alerts ``links`` (``{alert_id: [link, ...]}``) into SET1, whose
+    active, its alerts ``links`` (``{position: [link, ...]}``) into SET1, whose
     store holds ``statuses``, ``earlier_links`` and the ``earlier_extra``
     columns. Returns ``(project, pdir)``."""
     from deforestation_alerts.project.growth import run_id_of

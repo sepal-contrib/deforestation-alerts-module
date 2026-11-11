@@ -41,7 +41,7 @@ def _viewed(tmp_path, monkeypatch, extra):
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
     app_state = AppState()
     app_state.new_project_state(Project(name="d", created_at=datetime.now(), updated_at=datetime.now()))
-    columns = {"status": ["Not reviewed"], "alert_id": [0], "set_id": ["x"], "alert_sources": ["GLAD-L"],
+    columns = {"status": ["Not reviewed"], "alert_id": [1], "set_id": ["x"], "alert_sources": ["GLAD-L"],
                "alert_date_min": [2026.010], "alert_date_max": [2026.020], "alert_polygon": [None],
                "bounding_box": [box(0, 0, 1, 1)], **extra}
     app_state.alerts_gdf.value = gpd.GeoDataFrame(columns, geometry=[box(0, 0, 1, 1)], crs="EPSG:4326")

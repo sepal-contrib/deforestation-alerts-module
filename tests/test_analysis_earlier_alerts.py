@@ -75,7 +75,7 @@ def _setup(monkeypatch, *, project=None, view=_view):
     monkeypatch.setattr(earlier, "active_set", lambda p: SimpleNamespace(id="oct"))
     monkeypatch.setattr(earlier, "has_earlier_sets", lambda p: True)
     monkeypatch.setattr(earlier, "spawn_in_context", lambda target, args=(): target(*args))
-    gdf = gpd.GeoDataFrame({"alert_id": [0, 1]}, geometry=[SHAPE, SHAPE], crs="EPSG:4326")
+    gdf = gpd.GeoDataFrame({"alert_id": [1, 2]}, geometry=[SHAPE, SHAPE], crs="EPSG:4326")
     p = project if project is not None else SimpleNamespace(review_copy=None)
     app_state = SimpleNamespace(alerts_gdf=solara.reactive(gdf), actual_alert_id=solara.reactive(1),
                                 project=solara.reactive(p))
@@ -98,7 +98,7 @@ def test_rows_grouped_by_period_with_states(monkeypatch):
     analysis.auto_links.set((SEP12.link,))
     section = earlier.build_earlier_controls(widgets, app_state, analysis)
     earlier.refresh_earlier(widgets, analysis, app_state)
-    assert calls[-1]["alert_id"] == 1 and calls[-1]["set_id"] == "oct" and calls[-1]["radius_m"] == 100.0
+    assert calls[-1]["alert_id"] == 2 and calls[-1]["set_id"] == "oct"  # position 1's stored id and calls[-1]["radius_m"] == 100.0
     groups = [(g.period_id, [r.key for r in g.rows]) for g in section.groups]
     assert groups == [(SEP.id, ["sep#12", "sep#15"]), (AUG.id, ["aug#4", "aug#7"])]
     rows = {r.key: r for g in section.groups for r in g.rows}
@@ -484,7 +484,7 @@ def test_a_grouped_alert_measures_from_its_group(monkeypatch):
 
     widgets, analysis, app_state, calls = _setup(monkeypatch)
     a, b, c = box(-55.0, -25.0, -54.999, -24.999), box(-54.99, -25.0, -54.989, -24.999), box(-54.9, -25.0, -54.899, -24.999)
-    gdf = gpd.GeoDataFrame({"alert_id": [0, 1, 2], "review_group": pd.array([0, 0, pd.NA], dtype="Int64")},
+    gdf = gpd.GeoDataFrame({"alert_id": [1, 2, 3], "review_group": pd.array([1, 1, pd.NA], dtype="Int64")},
                            geometry=[a, b, c], crs="EPSG:4326")
     app_state.alerts_gdf.set(gdf)
     on = {"value": None}
@@ -524,7 +524,7 @@ def _small_setup(monkeypatch, *, below_min=True):
     widgets, analysis, app_state, calls = _setup(monkeypatch)
     monkeypatch.setattr(earlier, "active_set",
                         lambda p: SimpleNamespace(id="oct", params=SimpleNamespace(min_size_ha=0.5)))
-    gdf = gpd.GeoDataFrame({"alert_id": [0, 1], "area_ha": [1.0, 0.3], "below_min": [False, below_min]},
+    gdf = gpd.GeoDataFrame({"alert_id": [1, 2], "area_ha": [1.0, 0.3], "below_min": [False, below_min]},
                            geometry=[SHAPE, SHAPE], crs="EPSG:4326")
     app_state.alerts_gdf.set(gdf)
     asked = []

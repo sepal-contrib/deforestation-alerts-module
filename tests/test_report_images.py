@@ -17,7 +17,7 @@ S1A, S1D = "Sentinel 1 ascending", "Sentinel 1 descending"
 def staged(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(report_images, "stage_alert_image",
-                        lambda folder, aid, b, a, ib, ia, grid, area: calls.append((b[3], a[3], ib, ia, area))
+                        lambda folder, aid, b, a, ib, ia, grid, area: calls.append((aid, b[3], a[3], ib, ia, area))
                         or tmp_path / "radar.tif")
     return calls
 
@@ -32,7 +32,8 @@ def test_a_following_radar_pair_is_staged_and_captioned_as_nearest(staged, tmp_p
     alert = _alert(_info(S1D, "2026-03-25"), _info(S1A, "2026-09-05"), pinned=(False, True))
     radar, missing, extra = report_images.stage_report_images(alert, tmp_path, "large")
     assert radar == tmp_path / "radar.tif" and missing == {}
-    assert staged == [(f"{S1D} 2026-03-25 ", f"{S1A} 2026-09-05 ", "img_b", "img_a", "large")]
+    # named by the stored id (4) of the row at position 3, not the position
+    assert staged == [(4, f"{S1D} 2026-03-25 ",f"{S1A} 2026-09-05 ", "img_b", "img_a", "large")]
     assert extra["before_radar"] == f"{S1D} 2026-03-25 (nearest radar image, other pass)"
     assert extra["after_radar"] == f"{S1A} 2026-09-05"  # pinned
     same = _alert(_info(S1A, "2026-03-25"), _info(S1A, "2026-09-05"))
@@ -53,7 +54,7 @@ def test_a_radar_side_with_no_image_gets_the_note(staged, tmp_path):
     alert = _alert(None, _info(S1A, "2026-09-05"), pinned=(False, True), images=("stale", "img_a"))
     radar, missing, extra = report_images.stage_report_images(alert, tmp_path)
     # the side without info has no image (its stale ee.Image is not used): the after one fills the file
-    assert staged == [(f"{S1A} 2026-09-05 ", f"{S1A} 2026-09-05 ", "img_a", "img_a", "normal")]
+    assert staged == [(4, f"{S1A} 2026-09-05 ",f"{S1A} 2026-09-05 ", "img_a", "img_a", "normal")]
     assert radar is not None and set(missing) == {"[Placeholder for Radar 1]"}
     assert extra["before_radar"] == "" and extra["after_radar"] == f"{S1A} 2026-09-05"
 

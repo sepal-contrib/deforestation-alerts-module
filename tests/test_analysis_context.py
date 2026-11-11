@@ -40,7 +40,7 @@ def _state(tmp_path, monkeypatch):
 def _alerts(statuses, set_id="x"):
     n = len(statuses)
     return gpd.GeoDataFrame(
-        {"status": list(statuses), "alert_id": list(range(n)), "set_id": [set_id] * n,
+        {"status": list(statuses), "alert_id": list(range(1, n + 1)), "set_id": [set_id] * n,
          "alert_sources": ["GLAD-L"] * n, "alert_date_min": [2026.010] * n,
          "alert_date_max": [2026.020] * n},
         geometry=[box(i, 0, i + 1, 1) for i in range(n)], crs="EPSG:4326")
@@ -416,7 +416,7 @@ def test_the_facts_row_shows_group_of_n(tmp_path, monkeypatch):
     card = context.build_context(s, v.TextField(v_model=None))
     slots = getattr(card, context._SLOTS)
     gdf = _alerts(["Confirmed", "Confirmed", "Confirmed", "Confirmed", "Not reviewed"])
-    gdf["review_group"] = pd.array([0, 0, 0, 3, None], dtype="Int64")
+    gdf["review_group"] = pd.array([1, 1, 1, 4, None], dtype="Int64")  # the main's alert_id
     s.alerts_gdf.set(gdf)
     for index, size in [(0, 3), (1, 3), (2, 3), (3, None), (4, None)]:
         s.actual_alert_id.value = index

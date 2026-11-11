@@ -34,7 +34,7 @@ QS = default_questions() + [Question(key="road", label="Road nearby?", options=[
 
 def _alerts(**cols):
     n = len(next(iter(cols.values())))
-    base = {"alert_id": list(range(n)), "set_id": ["s"] * n, "alert_sources": ["GLAD-L"] * n,
+    base = {"alert_id": list(range(1, n + 1)), "set_id": ["s"] * n, "alert_sources": ["GLAD-L"] * n,
             "count": [3] * n, "alert_date_min": [2026.01] * n, "alert_date_max": [2026.02] * n,
             "area_ha": [1.5] * n, "before_img": ["2026-01-01"] * n, "before_img_info": [0.5] * n,
             "alert_type_unique": [np.array([1, 2])] * n}

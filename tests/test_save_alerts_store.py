@@ -99,7 +99,7 @@ def _alerts_x():
     from tests.test_set_context import _review_alerts
 
     alerts = _review_alerts("x")
-    alerts["alert_id"] = [0, 1]
+    alerts["alert_id"] = [1, 2]
     alerts["alert_date_min"] = [2025.05, 2025.05]
     alerts["alert_date_max"] = [2025.06, 2025.06]
     alerts["grows_from"] = [[], []]

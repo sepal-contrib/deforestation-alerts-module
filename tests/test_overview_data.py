@@ -42,7 +42,7 @@ def _project(tmp_path, monkeypatch):
     store = set_store.store_path(p, s)
     store.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({
-        "alert_id": [0, 1, 2, 3],
+        "alert_id": [1, 2, 3, 4],
         "status": ["Confirmed", "False Positive", "Need revision", "Not reviewed"],
         "area_ha": [1.5, 0.25, 2.0, 0.75],
         "description": ["Logging", "", "mining", "logging"],  # a legacy label read back to its code

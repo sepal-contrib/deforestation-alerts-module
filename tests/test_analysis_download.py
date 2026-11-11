@@ -35,7 +35,7 @@ _JPEG_1PX = base64.b64decode(
 
 _BEFORE_INFO = ["Sentinel 2", 1700000000, None, "S2_before", "_010124"]
 _AFTER_INFO = ["Sentinel 2", 1700000001, None, "S2_after", "_020224"]
-_TIF_NAME = "alert_0_s_010124_s_020224.tif"
+_TIF_NAME = "alert_1_s_010124_s_020224.tif"
 
 
 @pytest.fixture()
@@ -102,22 +102,22 @@ def test_download_writes_every_artifact_into_the_set_folder(download_ctx, data_f
     result = _run(ctx)
 
     assert result == {
-        "zip_path": f"{folder}/alert_0.zip",
-        "report_path": f"{folder}/alert_0.docx",
+        "zip_path": f"{folder}/alert_1.zip",
+        "report_path": f"{folder}/alert_1.docx",
     }
     # The four artifacts, and nothing else (no .part, no GDAL sidecar).
     assert data_files(folder) == sorted(
-        folder / name for name in ("alert_0.gpkg", _TIF_NAME, "alert_0.zip", "alert_0.docx")
+        folder / name for name in ("alert_1.gpkg", _TIF_NAME, "alert_1.zip", "alert_1.docx")
     )
     # The composite was downloaded once, through a .part of the set folder.
     [downloaded] = ctx.downloads
     assert Path(downloaded).parent == folder and Path(downloaded).name.startswith(_TIF_NAME + ".")
     # The zip carries the two members under their plain names, not the
     # scratch path they were built in.
-    assert sorted(zipfile.ZipFile(folder / "alert_0.zip").namelist()) == sorted(
-        [_TIF_NAME, "alert_0.gpkg"]
+    assert sorted(zipfile.ZipFile(folder / "alert_1.zip").namelist()) == sorted(
+        [_TIF_NAME, "alert_1.gpkg"]
     )
-    assert (folder / "alert_0.docx").read_bytes()[:2] == b"PK"
+    assert (folder / "alert_1.docx").read_bytes()[:2] == b"PK"
     # The scratch folder the gpkg, zip and report were built in is gone.
     assert list(ctx.scratch.iterdir()) == []
 
@@ -204,7 +204,7 @@ def test_a_failed_composite_download_leaves_no_composite_or_part_file(download_c
 
 def test_a_failed_composite_download_leaves_no_gpkg_in_the_set_folder(download_ctx, monkeypatch):
     """Deferred T2: the gpkg was copied into the set folder before the
-    composite was downloaded, so a failed download left ``alert_0.gpkg`` behind."""
+    composite was downloaded, so a failed download left ``alert_1.gpkg`` behind."""
     from gui.tile.analysis import paths
 
     ctx = download_ctx
@@ -343,9 +343,9 @@ def test_the_download_labels_the_questions_and_fills_their_placeholders(download
         ctx.widgets, ctx.analysis, ctx.app_state, ctx.aux_model, ctx.app_tile_model, alert=alert
     )
 
-    row = gpd.read_file(ctx.folder / "alert_0.gpkg").iloc[0]
+    row = gpd.read_file(ctx.folder / "alert_1.gpkg").iloc[0]
     assert row["description"] == questions_mod.label(default_questions()[0], "logging, roads")
-    assert "q_gone" not in gpd.read_file(ctx.folder / "alert_0.gpkg").columns
+    assert "q_gone" not in gpd.read_file(ctx.folder / "alert_1.gpkg").columns
     text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
     assert f"PH True alert / {row['description']}" in text
 
@@ -366,7 +366,7 @@ def test_the_download_writes_the_links_joined_and_no_working_growth_columns(down
 
     _run(ctx)
 
-    back = gpd.read_file(ctx.folder / "alert_0.gpkg")
+    back = gpd.read_file(ctx.folder / "alert_1.gpkg")
     assert back.iloc[0]["grows_from"] == "sep#4@20261002080000000000;sep#9@20261002080000000000"
     assert "grows_from_auto" not in back.columns and "below_min" not in back.columns
 
@@ -383,7 +383,8 @@ def _grouped(ctx, drawing=None):
     gdf["bounding_box"] = gdf.geometry.envelope
     gdf["alert_polygon"] = gpd.GeoSeries([drawing, None, None], crs="EPSG:4326")
     gdf["status"] = "Confirmed"
-    gdf["review_group"] = pd.array([0, 0, 0], dtype="Int64")
+    gdf["alert_id"] = [1, 2, 3]
+    gdf["review_group"] = pd.array([1, 1, 1], dtype="Int64")
     ctx.app_state.alerts_gdf.value = gdf
     return gdf
 
@@ -399,11 +400,11 @@ def test_a_group_download_is_one_feature_with_the_group_outline(download_ctx):
 
     result = _run(ctx)
 
-    assert result["zip_path"] == f"{ctx.folder}/alert_2.zip"
-    back = gpd.read_file(ctx.folder / "alert_2.gpkg")
+    assert result["zip_path"] == f"{ctx.folder}/alert_3.zip"  # position 2's stored id
+    back = gpd.read_file(ctx.folder / "alert_3.gpkg")
     assert len(back) == 1 and back.crs.to_epsg() == 4326
     assert back.iloc[0]["area_ha"] == pytest.approx(3.75)
-    assert back.iloc[0]["group_size"] == 3 and back.iloc[0]["group_alerts"] == "0, 1, 2"  # no alert_id: the positions
+    assert back.iloc[0]["group_size"] == 3 and back.iloc[0]["group_alerts"] == "1, 2, 3"  # the stored ids
     assert back.geometry.iloc[0].equals(drawing)
 
 
@@ -413,7 +414,7 @@ def test_a_group_download_without_a_drawing_is_the_union_of_its_alerts(download_
     ctx = download_ctx
     gdf = _grouped(ctx)
     _run(ctx)
-    back = gpd.read_file(ctx.folder / "alert_0.gpkg")
+    back = gpd.read_file(ctx.folder / "alert_1.gpkg")
     assert back.geometry.iloc[0].equals(gdf.geometry.union_all())
 
 
@@ -428,9 +429,9 @@ def test_a_single_download_is_unchanged_but_for_two_columns(download_ctx):
 
     _run(ctx)
 
-    back = gpd.read_file(ctx.folder / "alert_0.gpkg")
+    back = gpd.read_file(ctx.folder / "alert_1.gpkg")
     assert back.iloc[0]["grows_from"] == "sep#4@20261002080000000000;sep#9@20261002080000000000"
-    assert back.iloc[0]["group_size"] == 1 and back.iloc[0]["group_alerts"] == "0"
+    assert back.iloc[0]["group_size"] == 1 and back.iloc[0]["group_alerts"] == "1"
     assert back.iloc[0]["area_ha"] == pytest.approx(1.25)
     assert back.geometry.iloc[0].equals(gdf["bounding_box"].iloc[0])  # no drawing: the box, as before
     assert sorted(set(back.columns) - {"group_size", "group_alerts"}) == sorted(
@@ -452,7 +453,7 @@ def test_the_report_fills_group_size_and_group_alerts(download_ctx):
     result = _run(ctx)
 
     text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
-    assert "GROUP 3 / 0, 1, 2" in text
+    assert "GROUP 3 / 1, 2, 3" in text
 
 
 # ---------------------------------------------------------------------------
@@ -502,8 +503,8 @@ def _export_harness(tmp_path, monkeypatch, set_badge=None, defer=False, labels=N
         export_mod,
         "_download_data",
         lambda *a, **k: {
-            "zip_path": str(tmp_path / "alert_0.zip"),
-            "report_path": str(tmp_path / "alert_0.docx"),
+            "zip_path": str(tmp_path / "alert_1.zip"),
+            "report_path": str(tmp_path / "alert_1.docx"),
         },
     )
     # Serve tmp_path, so the built files get a real link.
@@ -570,7 +571,7 @@ def test_the_export_list_follows_its_states(tmp_path, monkeypatch):
     are links and the build row says *Rebuild files*. The Timelapse row is
     there in every state, disabled without a GIF (the alert is not saved
     Confirmed here)."""
-    (tmp_path / "alert_0.zip").write_bytes(b"z" * 3072)
+    (tmp_path / "alert_1.zip").write_bytes(b"z" * 3072)
     harness = _export_harness(tmp_path, monkeypatch)
     zip_tile, docx_tile, gif_tile = harness.parts.tiles
     assert harness.parts.body.children == [zip_tile, docx_tile, gif_tile, harness.build_tile]
@@ -594,8 +595,8 @@ def test_the_export_list_follows_its_states(tmp_path, monkeypatch):
         "Rebuild files", "Makes them again from the saved review", "mdi-refresh")
     assert (ready.build_enabled, ready.busy, ready.files) == (True, False, True)
     assert gif_tile.disabled
-    assert zip_tile.href.endswith("alert_0.zip") and docx_tile.href.endswith("alert_0.docx")
-    assert zip_tile.attributes["download"] == "alert_0.zip"
+    assert zip_tile.href.endswith("alert_1.zip") and docx_tile.href.endswith("alert_1.docx")
+    assert zip_tile.attributes["download"] == "alert_1.zip"
     assert zip_tile.size_text == "3 KB"
     assert docx_tile.size_text == ""  # not on disk in this harness: no size, still linked
 
@@ -692,7 +693,7 @@ def test_a_template_change_takes_ready_back_to_the_build_tile(tmp_path, monkeypa
 
 def _dead_links(harness):
     """Whether the two download links offer nothing (no path, both disabled)."""
-    return all("alert_0" not in btn.href and btn.disabled is True
+    return all("alert_1" not in btn.href and btn.disabled is True
                for btn in harness.download_btns)
 
 
@@ -888,7 +889,7 @@ def test_a_save_that_lands_after_the_alert_change_offers_no_build(tmp_path, monk
 # ---------------------------------------------------------------------------
 # The GIF (spec D9): in the zip, and on its own button
 # ---------------------------------------------------------------------------
-_GIF_NAME = "alert_0_s_010124_s_020224.gif"
+_GIF_NAME = "alert_1_s_010124_s_020224.gif"
 
 
 def _gif_job():
@@ -908,7 +909,7 @@ def test_a_confirmed_alerts_zip_carries_its_gif(download_ctx, monkeypatch):
     result = export_mod._download_data(download_ctx.widgets, download_ctx.analysis, download_ctx.app_state,
                                        download_ctx.aux_model, download_ctx.app_tile_model, gif=_gif_job())
     assert result["gif_path"] == f"{download_ctx.folder}/{_GIF_NAME}"
-    assert _GIF_NAME in zipfile.ZipFile(download_ctx.folder / "alert_0.zip").namelist()
+    assert _GIF_NAME in zipfile.ZipFile(download_ctx.folder / "alert_1.zip").namelist()
 
 
 def test_no_gif_for_an_alert_not_saved_as_confirmed(download_ctx, monkeypatch):
@@ -920,7 +921,7 @@ def test_no_gif_for_an_alert_not_saved_as_confirmed(download_ctx, monkeypatch):
     result = export_mod._download_data(download_ctx.widgets, download_ctx.analysis, download_ctx.app_state,
                                        download_ctx.aux_model, download_ctx.app_tile_model, gif=_gif_job())
     assert called == [] and "gif_path" not in result
-    assert _GIF_NAME not in zipfile.ZipFile(download_ctx.folder / "alert_0.zip").namelist()
+    assert _GIF_NAME not in zipfile.ZipFile(download_ctx.folder / "alert_1.zip").namelist()
 
 
 def test_a_failed_gif_still_builds_the_zip_and_says_so(download_ctx, monkeypatch):
@@ -934,8 +935,8 @@ def test_a_failed_gif_still_builds_the_zip_and_says_so(download_ctx, monkeypatch
     result = export_mod._download_data(download_ctx.widgets, download_ctx.analysis, download_ctx.app_state,
                                        download_ctx.aux_model, download_ctx.app_tile_model, gif=_gif_job())
     assert result["gif_warning"] is True and "gif_path" not in result
-    assert sorted(zipfile.ZipFile(download_ctx.folder / "alert_0.zip").namelist()) == sorted(
-        [_TIF_NAME, "alert_0.gpkg"])
+    assert sorted(zipfile.ZipFile(download_ctx.folder / "alert_1.zip").namelist()) == sorted(
+        [_TIF_NAME, "alert_1.gpkg"])
 
 
 def _gif_tile(body):
@@ -960,7 +961,7 @@ def _gif_harness(tmp_path, monkeypatch, status=None, **kw):
     (tmp_path / _GIF_NAME).write_bytes(b"GIF89a")
 
     def _download(*a, **k):
-        paths = {"zip_path": str(tmp_path / "alert_0.zip"), "report_path": str(tmp_path / "alert_0.docx")}
+        paths = {"zip_path": str(tmp_path / "alert_1.zip"), "report_path": str(tmp_path / "alert_1.docx")}
         if k.get("gif") is not None:
             paths["gif_path"] = str(tmp_path / _GIF_NAME)
         return paths
@@ -1053,7 +1054,7 @@ def test_a_zip_build_with_nothing_to_animate_still_offers_the_files_and_says_so(
 
     def _download(*a, **k):
         passed["gif"] = k.get("gif")
-        return {"zip_path": str(tmp_path / "alert_0.zip"), "report_path": str(tmp_path / "alert_0.docx")}
+        return {"zip_path": str(tmp_path / "alert_1.zip"), "report_path": str(tmp_path / "alert_1.docx")}
 
     monkeypatch.setattr(gif_mod, "capture_gif", _refuse)
     monkeypatch.setattr(export_mod, "_download_data", _download)
@@ -1198,7 +1199,7 @@ def test_the_zip_of_a_true_alert_with_an_unsaved_pair_has_no_gif_and_says_so(tmp
 
     def _download(*a, **k):
         passed["gif"] = k.get("gif")
-        return {"zip_path": str(tmp_path / "alert_0.zip"), "report_path": str(tmp_path / "alert_0.docx")}
+        return {"zip_path": str(tmp_path / "alert_1.zip"), "report_path": str(tmp_path / "alert_1.docx")}
 
     monkeypatch.setattr(export_mod, "_download_data", _download)
     _status(harness, "Confirmed")
@@ -1253,7 +1254,7 @@ def test_a_switch_while_a_build_runs_rewords_the_row_and_holds_it(tmp_path, monk
 # ---------------------------------------------------------------------------
 _RADAR_B = ["Sentinel 1 ascending", 1700000000, "N/A", "Sentinel 1 ascending 2024-01-01 ", "_010124"]
 _RADAR_A = ["Sentinel 1 ascending", 1700000001, "N/A", "Sentinel 1 ascending 2024-02-02 ", "_020224"]
-_RADAR_TIF = "alert_0_a_010124_a_020224.tif"
+_RADAR_TIF = "alert_1_a_010124_a_020224.tif"
 
 
 def _report_text(path):
@@ -1270,9 +1271,9 @@ def test_with_radar_the_zip_has_both_tifs_and_the_report_its_radar_block(downloa
     ctx.analysis.after_radar_info.set(_RADAR_A)
     ctx.analysis.radar_pinned.set({"before": True, "after": False})
     _run(ctx)
-    assert sorted(zipfile.ZipFile(ctx.folder / "alert_0.zip").namelist()) == sorted(
-        [_TIF_NAME, _RADAR_TIF, "alert_0.gpkg"])
-    text = _report_text(ctx.folder / "alert_0.docx")
+    assert sorted(zipfile.ZipFile(ctx.folder / "alert_1.zip").namelist()) == sorted(
+        [_TIF_NAME, _RADAR_TIF, "alert_1.gpkg"])
+    text = _report_text(ctx.folder / "alert_1.docx")
     assert "Radar evidence" in text
     assert "Sentinel 1 ascending 2024-02-02 (nearest radar image)" in text
 
@@ -1284,8 +1285,8 @@ def test_without_radar_the_report_has_no_radar_block_and_the_zip_one_tif(downloa
     ctx.analysis.before_radar_image.set(object())
     ctx.analysis.after_radar_image.set(object())
     _run(ctx)
-    assert sorted(zipfile.ZipFile(ctx.folder / "alert_0.zip").namelist()) == sorted([_TIF_NAME, "alert_0.gpkg"])
-    assert "Radar evidence" not in _report_text(ctx.folder / "alert_0.docx")
+    assert sorted(zipfile.ZipFile(ctx.folder / "alert_1.zip").namelist()) == sorted([_TIF_NAME, "alert_1.gpkg"])
+    assert "Radar evidence" not in _report_text(ctx.folder / "alert_1.docx")
 
 
 def test_turning_radar_on_after_a_save_keeps_the_files_buildable(tmp_path, monkeypatch):
@@ -1325,7 +1326,7 @@ def test_a_radar_image_still_loading_holds_the_build_until_it_lands(download_ctx
     assert ctx.downloads == [] and list(ctx.folder.iterdir()) == []
     ctx.analysis.before_radar_image.set(object())  # the rebuild lands
     assert _run(ctx) is not None
-    assert "alert_0_a_010124_a_010124.tif" in zipfile.ZipFile(ctx.folder / "alert_0.zip").namelist()
+    assert "alert_1_a_010124_a_010124.tif" in zipfile.ZipFile(ctx.folder / "alert_1.zip").namelist()
 
 
 def test_an_na_radar_column_counts_as_empty():

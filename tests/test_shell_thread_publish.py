@@ -161,7 +161,7 @@ def _row_artifacts(source):
 
 def _alerts(n, set_id):
     return gpd.GeoDataFrame(
-        {"status": ["Not reviewed"] * n, "alert_id": list(range(n)), "set_id": [set_id] * n,
+        {"status": ["Not reviewed"] * n, "alert_id": list(range(1, n + 1)), "set_id": [set_id] * n,
          "area_ha": [1.0] * n},
         geometry=[box(i * 0.01, 0, i * 0.01 + 0.005, 0.005) for i in range(n)], crs="EPSG:4326")
 

@@ -175,7 +175,7 @@ def test_nodes_of_set_reads_every_cell_shape():
 
     link = "s0#1@20260101000000000000"
     full = _gdf({
-        "alert_id": [0, 1, 2, 3, 4],
+        "alert_id": [1, 2, 3, 4, 5],
         "status": [CONFIRMED, None, np.nan, "", FALSE_POSITIVE],
         "area_ha": [1.5, np.nan, 0.0, 2.0, 3.0],
         "alert_date_min": [2026.1, np.nan, 2026.2, 2026.3, 2026.4],
@@ -187,11 +187,11 @@ def test_nodes_of_set_reads_every_cell_shape():
     NR, FP = NOT_REVIEWED, FALSE_POSITIVE
     got = [(n.alert_id, n.status, n.area_ha, n.date_min, n.date_max, n.links)
            for n in nodes_of_set(_set(), _period(), full)]
-    assert got == [(0, CONFIRMED, 1.5, 2026.1, 2026.2, (link,)),
-                   (1, NR, 0.0, None, 2026.3, ()),
-                   (2, NR, 0.0, 2026.2, None, (link,)),
-                   (3, NR, 2.0, 2026.3, 2026.4, (link,)),
-                   (4, FP, 3.0, 2026.4, 2026.5, ())]
+    assert got == [(1, CONFIRMED, 1.5, 2026.1, 2026.2, (link,)),
+                   (2, NR, 0.0, None, 2026.3, ()),
+                   (3, NR, 0.0, 2026.2, None, (link,)),
+                   (4, NR, 2.0, 2026.3, 2026.4, (link,)),
+                   (5, FP, 3.0, 2026.4, 2026.5, ())]
     # the drawing (a WKB one too) else the row's own; an empty drawing is none
     shapes = [n.shape for n in nodes_of_set(_set(), _period(), full)]
     assert [s.equals(e) for s, e in zip(shapes, (_sq(5), _sq(1), _sq(2), _sq(6), _sq(4)))] == [True] * 5
@@ -203,11 +203,11 @@ def test_nodes_of_set_reads_every_cell_shape():
 
 # ---- group review (spec 2026-10-26 §7): a group is one patch -------------------
 
-def _grouped(drawn=None, groups=(0, 0, 0, None), statuses=(CONFIRMED,) * 4):
-    """Rows 0-2 a group (main 0) unless ``groups`` says otherwise; row 3 alone."""
+def _grouped(drawn=None, groups=(1, 1, 1, None), statuses=(CONFIRMED,) * 4):
+    """Alerts 1-3 a group (main 1) unless ``groups`` says otherwise; alert 4 alone."""
     import pandas as pd
 
-    return _gdf({"alert_id": [0, 1, 2, 3], "status": list(statuses), "area_ha": [1.0, 2.0, 3.0, 4.0],
+    return _gdf({"alert_id": [1, 2, 3, 4], "status": list(statuses), "area_ha": [1.0, 2.0, 3.0, 4.0],
                  "geometry": [_sq(-57), _sq(-56.999), _sq(-56.9), _sq(-56.5)],
                  "alert_polygon": [drawn, None, None, None],
                  "review_group": pd.array(list(groups), dtype="Int64")})
@@ -219,7 +219,7 @@ def test_a_drawn_groups_members_have_no_shape():
     assert nodes[0].shape.equals(drawn)
     assert nodes[1].shape is None and nodes[2].shape is None
     assert nodes[3].shape.equals(_sq(-56.5))
-    assert [n.review_group for n in nodes] == [0, 0, 0, None]
+    assert [n.review_group for n in nodes] == [1, 1, 1, None]
 
 
 def test_an_undrawn_groups_members_keep_their_own():
@@ -235,9 +235,9 @@ def test_a_store_without_review_group_has_no_groups():
 def test_group_members_are_one_history():
     nodes = nodes_of_set(_set(), _period(), _grouped(_sq(-57, d=0.003)))
     graph = LinkGraph(nodes, {"s1": run_id_of(_set())})
-    assert graph.component("s1#0") == {"s1#0", "s1#1", "s1#2"}
-    assert graph.component("s1#2") == {"s1#0", "s1#1", "s1#2"}
-    assert graph.component("s1#3") == {"s1#3"}
+    assert graph.component("s1#1") == {"s1#1", "s1#2", "s1#3"}
+    assert graph.component("s1#3") == {"s1#1", "s1#2", "s1#3"}
+    assert graph.component("s1#4") == {"s1#4"}
 
 
 def test_group_candidates_fold_members_into_the_main():
@@ -245,20 +245,20 @@ def test_group_candidates_fold_members_into_the_main():
 
     from deforestation_alerts.project.growth import group_candidates
 
-    # row 3 a group of one
-    nodes = nodes_of_set(_set(), _period(), _grouped(groups=(0, 0, 0, 3)))
+    # alert 4 a group of one
+    nodes = nodes_of_set(_set(), _period(), _grouped(groups=(1, 1, 1, 4)))
     got = group_candidates(nodes)
-    assert [n.key for n in got] == ["s1#0", "s1#3"]
+    assert [n.key for n in got] == ["s1#1", "s1#4"]
     assert got[0].area_ha == 6.0 and got[0].status == CONFIRMED
     assert got[0].shape.equals(shapely.union_all([_sq(-57), _sq(-56.999), _sq(-56.9)]))
     assert got[1] == nodes[3]
     # a drawn group: its drawing
     drawn = _sq(-57, d=0.003)
     got = group_candidates(nodes_of_set(_set(), _period(), _grouped(drawn)))
-    assert [n.key for n in got] == ["s1#0", "s1#3"] and got[0].shape.equals(drawn) and got[0].area_ha == 6.0
+    assert [n.key for n in got] == ["s1#1", "s1#4"] and got[0].shape.equals(drawn) and got[0].area_ha == 6.0
     # a false-positive group is no candidate
     fp = _grouped(statuses=(FALSE_POSITIVE,) * 3 + (CONFIRMED,))
-    assert [c.key for c in _candidates(fp)] == ["s1#3"]
+    assert [c.key for c in _candidates(fp)] == ["s1#4"]
 
 
 def test_the_snapshot_keeps_a_drawn_groups_members(tmp_path):
@@ -267,8 +267,8 @@ def test_the_snapshot_keeps_a_drawn_groups_members(tmp_path):
     s = _set()
     pool = rows_of_set(s, _period(), _grouped(_sq(-57, d=0.003), statuses=(CONFIRMED,) * 3 + (NOT_REVIEWED,)))
     got = snapshot_rows(pool, [])
-    assert [r.key for r in got] == ["s1#0", "s1#1", "s1#2"]
+    assert [r.key for r in got] == ["s1#1", "s1#2", "s1#3"]
     run_ids = {"s1": run_id_of(s)}
     creator = LinkGraph([r.node for r in pool], run_ids)
     copy = LinkGraph([r.node for r in read_snapshot(write_snapshot(got, tmp_path / "snap.parquet"))], run_ids)
-    assert copy.component("s1#0") == creator.component("s1#0") == {"s1#0", "s1#1", "s1#2"}
+    assert copy.component("s1#1") == creator.component("s1#1") == {"s1#1", "s1#2", "s1#3"}

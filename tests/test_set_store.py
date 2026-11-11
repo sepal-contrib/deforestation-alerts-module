@@ -17,7 +17,7 @@ from gui.scripts import set_store
 
 
 def _gdf():
-    return gpd.GeoDataFrame({"alert_id": [0, 1]},
+    return gpd.GeoDataFrame({"alert_id": [1, 2]},
                             geometry=[box(0, 0, 0.01, 0.01), box(1, 1, 1.01, 1.01)], crs="EPSG:4326")
 
 
@@ -82,7 +82,7 @@ def test_pmtiles_stale_follows_the_store(tmp_path, monkeypatch):
 
 def _alerts():
     return gpd.GeoDataFrame(
-        {"alert_id": [0, 1], "status": ["Not reviewed", "Confirmed"], "area_ha": [1.5, 0.5],
+        {"alert_id": [1, 2], "status": ["Not reviewed", "Confirmed"], "area_ha": [1.5, 0.5],
          "alert_date_min": [2026.01, 2026.02], "set_id": ["s", "s"]},
         geometry=[box(0, 0, 0.01, 0.01), box(1, 1, 1.01, 1.01)], crs="EPSG:4326",
     )
@@ -193,7 +193,7 @@ def test_ensure_pmtiles_builds_from_the_store_on_disk(tmp_path, monkeypatch):
 
     assert pm == store.parent / "alerts.pmtiles" and pm.exists()
     [alerts] = built
-    assert alerts["alert_id"].tolist() == [0]
+    assert alerts["alert_id"].tolist() == [1]
 
 
 def test_ensure_pmtiles_waits_while_the_project_is_being_written(tmp_path, monkeypatch):
@@ -250,7 +250,7 @@ def test_a_store_rewritten_during_the_build_discards_the_tiles(tmp_path, monkeyp
         set_store.ensure_pmtiles(p, s)
     assert len(built) == 1 and not (store.parent / "alerts.pmtiles").exists()
     assert set_store.pmtiles_stale(p, s)  # so the next ask rebuilds, from the new store
-    assert set_store.ensure_pmtiles(p, s).exists() and built[-1]["alert_id"].tolist() == [0]
+    assert set_store.ensure_pmtiles(p, s).exists() and built[-1]["alert_id"].tolist() == [1]
 
 
 def test_on_wait_runs_before_the_writer_mark_is_released(tmp_path, monkeypatch):
@@ -350,8 +350,8 @@ def test_centroid_geojson_has_one_point_per_alert():
     assert points[0]["coordinates"] == pytest.approx((0.005, 0.005))
     assert points[1]["coordinates"] == pytest.approx((1.005, 1.005))
     assert [f["properties"] for f in fc["features"]] == [
-        {"alert_id": 0, "status_code": 0},
-        {"alert_id": 1, "status_code": 1},
+        {"alert_id": 1, "status_code": 0},
+        {"alert_id": 2, "status_code": 1},
     ]
 
 

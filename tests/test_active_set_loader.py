@@ -73,7 +73,7 @@ class _Map:
 
 
 def _alerts(n, x0=0.0):
-    return gpd.GeoDataFrame({"status": ["Not reviewed"] * n, "alert_id": list(range(n)), "set_id": [SET] * n},
+    return gpd.GeoDataFrame({"status": ["Not reviewed"] * n, "alert_id": list(range(1, n + 1)), "set_id": [SET] * n},
                             geometry=[box(x0 + i, 0, x0 + i + 0.5, 0.5) for i in range(n)], crs="EPSG:4326")
 
 

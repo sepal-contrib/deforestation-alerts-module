@@ -114,16 +114,16 @@ def test_the_package_keeps_the_split_grouping_record(data_root, tmp_path, evalua
 
 
 def test_the_copy_records_the_evaluators_grouped_alerts(data_root, tmp_path, evaluator_root):
-    """Spec 2026-10-26 §8.3: Ana's 0 and 2 are one group; Bo's 1 and 3 are
+    """Spec 2026-10-26 §8.3: Ana's 1 and 3 are one group; Bo's 2 and 4 are
     groups of one, and Bo's rows are not Ana's to record."""
     p, pdir = make_creator(data_root)
     store = pdir / "legacy" / "alert_db.parquet"
     gdf = load_gdf_from_parquet(store)
-    gdf["review_group"] = pd.array([0, 1, 0, 3], dtype="Int64")
+    gdf["review_group"] = pd.array([1, 2, 1, 4], dtype="Int64")
     save_gdf_to_parquet(gdf, store)
     copy = import_package(build_package(p, pdir, SET1, "Ana", AOI_FC, tmp_path / "out", app_version=APP_VERSION),
                           evaluator_root)
-    assert copy.review_copy.grouped_at_packaging == [0, 2]
+    assert copy.review_copy.grouped_at_packaging == [1, 3]
 
 
 def test_the_default_root_is_the_data_directory(package, data_root):
@@ -375,7 +375,7 @@ def test_copy_reads_snapshot(growth_package, tmp_path):
     assert snap.read_bytes() == (tmp_path / "m.parquet").read_bytes()
     assert copy.review_copy.snapshot_at == peek_header(growth_package).created_at
     assert growth_index.candidates_for(copy, SET2) == read_snapshot(snap)
-    assert [c.key for c in growth_index.candidates_for(copy, SET2)] == [f"{SET1}#0", f"{SET1}#2"]
+    assert [c.key for c in growth_index.candidates_for(copy, SET2)] == [f"{SET1}#1", f"{SET1}#3"]
 
 
 def test_old_package_without_snapshot_imports(growth_package, tmp_path):

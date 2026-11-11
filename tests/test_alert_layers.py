@@ -59,7 +59,7 @@ def _alerts(set_id=None):
     """Four alerts, one per status. ``set_id``: the column the engine writes
     (integrate.py), naming the set the alerts belong to."""
     gdf = gpd.GeoDataFrame(
-        {"alert_id": [0, 1, 2, 3],
+        {"alert_id": [1, 2, 3, 4],
          "status": ["Confirmed", "False Positive", "Need revision", "Not reviewed"],
          "area_ha": [1.5, 0.25, 2.0, 0.75]},
         geometry=[box(0, 0, 0.01, 0.01), box(1, 1, 1.01, 1.01), box(2, 2, 2.01, 2.01), box(3, 3, 3.01, 3.01)],
@@ -511,7 +511,8 @@ def test_a_click_on_an_alert_opens_a_popup_whose_review_opens_analysis(ov, tmp_p
         [popup] = _popups(map_)
         assert popup.key == alert_layers.POPUP_KEY and popup.location == [1.005, 1.005]
         summary, go = popup.child.children
-        assert summary.children == [t("steps.integrate.popup", id=1, status="False Positive", area="0.25")]
+        # the popup names the stored id; Go selects the row's position
+        assert summary.children == [t("steps.integrate.popup", id=2, status="False Positive", area="0.25")]
         assert go.children == [t("steps.integrate.go")]
 
         go.fire_event("click", None)
@@ -527,10 +528,10 @@ def test_a_click_off_the_alerts_closes_the_popup(ov, tmp_path):
     try:
         _click(map_, 2.005, 2.005)
         assert len(_popups(map_)) == 1
-        _click(map_, 3.013, 3.005)  # just outside alert 3, within the tolerance: a new popup
+        _click(map_, 3.013, 3.005)  # just outside alert 4, within the tolerance: a new popup
         [popup] = _popups(map_)
         assert popup.child.children[0].children == [
-            t("steps.integrate.popup", id=3, status="Not reviewed", area="0.75")]
+            t("steps.integrate.popup", id=4, status="Not reviewed", area="0.75")]
         _click(map_, 50, 50)  # far from every alert
         assert _popups(map_) == []
     finally:
@@ -617,7 +618,7 @@ def _other_set(p, tmp_path, period, *, store=True):
     if store:
         path = tmp_path / p.name / s.store_rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        gpd.GeoDataFrame({"alert_id": [0, 1, 2], "status": ["Confirmed", "Not reviewed", "Not reviewed"],
+        gpd.GeoDataFrame({"alert_id": [1, 2, 3], "status": ["Confirmed", "Not reviewed", "Not reviewed"],
                           "area_ha": [0.5, 0.5, 0.5], "set_id": [s.id] * 3},
                          geometry=[box(k, k, k + 0.01, k + 0.01) for k in (5, 6, 7)],
                          crs="EPSG:4326").to_parquet(path)
@@ -695,10 +696,11 @@ def test_go_on_an_earlier_sets_alert_switches_the_set_and_opens_that_alert(ov, t
         _click(map_, 7.005, 7.005)
         [popup] = _popups(map_)
         summary, which, go = popup.child.children
-        assert summary.children == [t("steps.integrate.popup", id=2, status="Not reviewed", area="0.50")]
+        assert summary.children == [t("steps.integrate.popup", id=3, status="Not reviewed", area="0.50")]
         assert which.children == [earlier_set_name(dec)]
         go.fire_event("click", None)
-        assert state.project.value.active_set == dec.id and state.goto_alert.value == (dec.id, 2)
+        # the wish carries the stored id; the publish maps it back to position 2
+        assert state.project.value.active_set == dec.id and state.goto_alert.value == (dec.id, 3)
         assert state.current_page_view.value == "analysis_tile"
         # what the shell's _ActiveSetLoader does next, on its worker:
         gdf = set_store.load_set_alerts(state.project.value, dec)

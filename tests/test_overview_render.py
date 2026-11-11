@@ -68,7 +68,7 @@ def _alerts(set_id=None):
     ``set_id``: the column the engine writes (integrate.py), naming the set the
     alerts belong to."""
     gdf = gpd.GeoDataFrame(
-        {"alert_id": [0, 1, 2, 3],
+        {"alert_id": [1, 2, 3, 4],
          "status": ["Confirmed", "False Positive", "Need revision", "Not reviewed"],
          "area_ha": [1.5, 0.25, 2.0, 0.75]},
         geometry=[box(0, 0, 0.01, 0.01), box(1, 1, 1.01, 1.01), box(2, 2, 2.01, 2.01), box(3, 3, 3.01, 3.01)],
@@ -316,7 +316,7 @@ def test_the_kpi_strip_leads_with_the_confirmed_loss(ov, tmp_path):
         assert t("overview_tile.kpi_reviewed_of", reviewed="3", total="4") in reviewed
         largest = _kpi(rc, t("overview_tile.kpi_largest"))
         assert "2.0" in largest  # the 2.0 ha alert, whatever its status
-        assert t("overview_tile.kpi_largest_at", id="2",
+        assert t("overview_tile.kpi_largest_at", id="3",
                  where=t("overview_tile.admin_unattributed")) in largest
     finally:
         rc.close()
@@ -742,12 +742,12 @@ def test_a_rebuilt_export_card_keeps_the_scope_the_user_picked(ov, tmp_path):
 # The History card: growth alerts and the clearings they grow
 # ---------------------------------------------------------------------------
 def _growth_february(p, tmp_path):
-    """February over January's confirmed alert 0: February's alert 10 grows from
+    """February over January's confirmed alert 1: February's alert 10 grows from
     it, alert 11 is a new one."""
     jan = p.alert_sets[p.active_set]
     feb = _with_february(p, tmp_path)
     gdf = _february_alerts()
-    gdf["grows_from"] = [f"{jan.id}#0@{run_id_of(jan)}", ""]
+    gdf["grows_from"] = [f"{jan.id}#1@{run_id_of(jan)}", ""]
     gdf["below_min"] = [False, False]
     _write_store(tmp_path, "d", feb, gdf)
     return feb, gdf
@@ -821,7 +821,7 @@ def _nearby_store(p, tmp_path):
     gdf = _alerts()
     gdf.geometry = [box(0, 0, 0.0005, 0.0005), box(0.0015, 0, 0.002, 0.0005),
                     box(0.003, 0, 0.0035, 0.0005), box(3, 3, 3.01, 3.01)]
-    gdf["review_group"] = pd.array([0, 0, None, None], dtype="Int64")  # main alert 0
+    gdf["review_group"] = pd.array([1, 1, None, None], dtype="Int64")  # main alert 1
     _write_store(tmp_path, "d", s, gdf)
     return gdf
 

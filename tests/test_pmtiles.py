@@ -12,7 +12,7 @@ from gui.scripts import pmtiles_map
 
 def _alerts():
     return gpd.GeoDataFrame(
-        {"alert_id": [0, 1], "status": ["Not reviewed", "Confirmed"], "area_ha": [1.5, 0.5],
+        {"alert_id": [1, 2], "status": ["Not reviewed", "Confirmed"], "area_ha": [1.5, 0.5],
          "alert_date_min": [2026.01, None], "set_id": ["s", "s"]},
         geometry=[box(0, 0, 0.01, 0.01), box(1, 1, 1.01, 1.01)], crs="EPSG:4326",
     )

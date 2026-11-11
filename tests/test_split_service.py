@@ -30,7 +30,7 @@ def _set(params=None):
 
 def _alerts(statuses, set_id="x"):
     n = len(statuses)
-    return gpd.GeoDataFrame({"alert_id": list(range(n)), "status": list(statuses), "set_id": [set_id] * n},
+    return gpd.GeoDataFrame({"alert_id": list(range(1, n + 1)), "status": list(statuses), "set_id": [set_id] * n},
                             geometry=[box(i, 0, i + 1, 1) for i in range(n)], crs="EPSG:4326")
 
 
@@ -277,7 +277,7 @@ def _pairs():
         return box(-70 + x, -10, -70 + x + 0.0009, -10 + 0.0009)
 
     boxes = [b(0), b(0.0014), b(0.018), b(0.0194)]
-    return gpd.GeoDataFrame({"alert_id": [0, 1, 2, 3], "status": ["Not reviewed"] * 4, "set_id": ["x"] * 4},
+    return gpd.GeoDataFrame({"alert_id": [1, 2, 3, 4], "status": ["Not reviewed"] * 4, "set_id": ["x"] * 4},
                             geometry=boxes, crs="EPSG:4326")
 
 

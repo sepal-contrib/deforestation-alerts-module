@@ -20,7 +20,7 @@ class StoreMoved(Exception):
 
 
 def _alerts(status, n=3):
-    return gpd.GeoDataFrame({"alert_id": list(range(n)), "status": [status] * n},
+    return gpd.GeoDataFrame({"alert_id": list(range(1, n + 1)), "status": [status] * n},
                             geometry=[box(i, 0, i + 1, 1) for i in range(n)], crs="EPSG:4326")
 
 

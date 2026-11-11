@@ -251,7 +251,7 @@ def test_the_tiles_build_with_a_readonly_cwd_and_no_temp_hint(tmp_path, readonly
     assert gdal.GetConfigOption("CPL_TMPDIR") is None and "TMPDIR" not in os.environ
     out = tmp_path / "project"
     out.mkdir()
-    alerts = gpd.GeoDataFrame({"alert_id": [0, 1], "status": ["Not reviewed", "Confirmed"], "set_id": ["s", "s"]},
+    alerts = gpd.GeoDataFrame({"alert_id": [1, 2], "status": ["Not reviewed", "Confirmed"], "set_id": ["s", "s"]},
                               geometry=[box(-55.01, -24.01, -55.0, -24.0), box(-55.02, -24.02, -55.01, -24.01)],
                               crs="EPSG:4326")
     assert pmtiles.alerts_to_pmtiles(alerts, out / "alerts.pmtiles").stat().st_size > 0

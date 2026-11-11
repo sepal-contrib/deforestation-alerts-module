@@ -97,13 +97,13 @@ def test_rows_are_new_conflicts_unchanged_or_ignored(tmp_path, monkeypatch):
     p, _ = _creator(tmp_path, monkeypatch)
     zp = _return(tmp_path)
     preview = read_return(zp, p, _store(p))
-    assert (preview.new, preview.conflicts, preview.unchanged, preview.ignored) == ([3], [2], [0], [1])
+    assert (preview.new, preview.conflicts, preview.unchanged, preview.ignored) == ([4], [3], [1], [2])
     assert preview.header.evaluator == "Ana" and not preview.questions_changed
     assert preview.columns[0] == "status" and "evaluator" not in preview.columns
     assert preview.extra_columns == []
     # an alert the store does not hold is ignored too
-    without_3 = _store(p).iloc[:3]
-    assert read_return(zp, p, without_3).ignored == [1, 3]
+    without_4 = _store(p).iloc[:3]
+    assert read_return(zp, p, without_4).ignored == [2, 4]
 
 
 def test_missing_values_and_equal_geometries_are_unchanged(tmp_path, monkeypatch):
@@ -117,15 +117,15 @@ def test_missing_values_and_equal_geometries_are_unchanged(tmp_path, monkeypatch
         "after_img": [None] * 4,
         "alert_polygon": gpd.GeoSeries([box(0.0, 0.0, 0.01, 0.01), None, box(0, 0, 1, 1), None], crs="EPSG:4326")})
     preview = read_return(zp, p, _store(p))
-    assert 0 in preview.unchanged
-    assert 2 in preview.conflicts
+    assert 1 in preview.unchanged
+    assert 3 in preview.conflicts
 
 
 def test_a_drawn_polygon_alone_makes_a_reviewed_row_a_conflict(tmp_path, monkeypatch):
     p, _ = _creator(tmp_path, monkeypatch)
     zp = _return(tmp_path, columns={
         "alert_polygon": gpd.GeoSeries([box(0, 0, 1, 1), None, None, None], crs="EPSG:4326")})
-    assert read_return(zp, p, _store(p)).conflicts == [0, 2]
+    assert read_return(zp, p, _store(p)).conflicts == [1, 3]
 
 
 def test_a_changed_questionnaire_warns_and_extra_columns_are_named(tmp_path, monkeypatch):
@@ -308,7 +308,7 @@ def test_merging_the_same_copy_again_changes_nothing(tmp_path, monkeypatch):
     generation = set_store.store_generation(store)
 
     again = _preview(app_state, zp)
-    assert (again.new, again.conflicts, again.unchanged, again.ignored) == ([], [], [0, 2, 3], [1])
+    assert (again.new, again.conflicts, again.unchanged, again.ignored) == ([], [], [1, 3, 4], [2])
     for preview in (again, stale):
         record = merge_service.merge_return(app_state, ctx, analysis, preview, "theirs")
         assert (record.taken, record.unchanged, record.conflicts, record.choice, record.ignored) == (0, 3, 0, None, 1)
@@ -416,26 +416,26 @@ def test_same_value_compares_link_lists():
 
 
 def test_return_carries_grows_from_and_merges(tmp_path, monkeypatch):
-    link = f"{SET1}#0@20261001120000000000"
+    link = f"{SET1}#1@20261001120000000000"
     p, _ = _creator(tmp_path, monkeypatch)
     zp = _return(tmp_path, extra={"grows_from": [[link], [], [], []]})
     preview = read_return(zp, p, _store(p))
-    assert "grows_from" in preview.columns and preview.new == [3]
+    assert "grows_from" in preview.columns and preview.new == [4]
     merged = apply_return(_store(p), preview, "theirs")
-    assert links_of(merged.loc[merged["alert_id"] == 0, "grows_from"].iloc[0]) == [link]
+    assert links_of(merged.loc[merged["alert_id"] == 1, "grows_from"].iloc[0]) == [link]
     assert [links_of(v) for v in merged["grows_from"]] == [[link], [], [], []]
 
 
 def test_a_store_with_an_all_empty_grows_from_column_takes_the_links(tmp_path, monkeypatch):
     """Integrate stores ``grows_from`` as ``list<null>`` when it linked nothing."""
-    link = f"{SET1}#0@20261001120000000000"
+    link = f"{SET1}#1@20261001120000000000"
     p, pdir = _creator(tmp_path, monkeypatch, columns={"grows_from": [[], [], [], []]})
     import pyarrow.parquet as pq
 
     assert str(pq.read_schema(pdir / "legacy" / "alert_db.parquet").field("grows_from").type) == "list<element: null>"
     zp = _return(tmp_path, extra={"grows_from": [[], [], [link], [link]]})
     preview = read_return(zp, p, _store(p))
-    assert preview.unchanged == [0]  # [] against list<null>'s empty array
+    assert preview.unchanged == [1]  # [] against list<null>'s empty array
     merged = apply_return(_store(p), preview, "theirs")
     assert [links_of(v) for v in merged["grows_from"]] == [[], [], [link], [link]]
     out = tmp_path / "merged.parquet"
@@ -447,7 +447,7 @@ def test_a_store_with_an_all_empty_grows_from_column_takes_the_links(tmp_path, m
 
 
 def _open_copy(state_root, links):
-    """A growth creator whose SET2 alert 0 is linked ``links`` into SET1, its
+    """A growth creator whose SET2 alert 1 is linked ``links`` into SET1, its
     package for Ana imported into the data directory and open in an AppState."""
     from tests._share_helpers import make_growth_creator
 
@@ -464,7 +464,7 @@ def _open_copy(state_root, links):
 
 
 def _view(p, gdf, links):
-    return growth_index.earlier_view(p, SET2, gdf, 0, links, links, 50_000.0)  # the alerts are 0.1 deg apart
+    return growth_index.earlier_view(p, SET2, gdf, 1, links, links, 50_000.0)  # the alerts are 0.1 deg apart
 
 
 def test_a_copy_shows_a_link_to_a_since_false_positive_parent_as_broken(tmp_path, monkeypatch):
@@ -472,14 +472,14 @@ def test_a_copy_shows_a_link_to_a_since_false_positive_parent_as_broken(tmp_path
 
     root = tmp_path / "data"
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(root))
-    creator, state = _open_copy(root, [f"{SET1}#1@{{run}}"])
+    creator, state = _open_copy(root, [f"{SET1}#2@{{run}}"])
     copy = state.project.value
-    link = f"{SET1}#1@{run_id_of(creator.alert_sets[SET1])}"
+    link = f"{SET1}#2@{run_id_of(creator.alert_sets[SET1])}"
     view = _view(copy, state.alerts_gdf.value, [link])
     assert [(it.cand.key, it.state, it.cand.node.status) for it in view.items if it.cand.link == link] == [
-        (f"{SET1}#1", "broken", "False Positive")]
+        (f"{SET1}#2", "broken", "False Positive")]
     assert earlier._kept_links(copy, view, (link,)) == (link,)  # kept, greyed (spec §11.5), as in the creator's project
-    assert growth_index.history_summary(copy, SET2, state.alerts_gdf.value, 0, [link]) is None
+    assert growth_index.history_summary(copy, SET2, state.alerts_gdf.value, 1, [link]) is None
     growth_index.clear_cache()
 
 
@@ -493,10 +493,10 @@ def test_a_copy_link_survives_open_save_return_and_merge(tmp_path, monkeypatch):
 
     root = tmp_path / "data"
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(root))
-    creator, state = _open_copy(root, [f"{SET1}#0@{{run}}"])
+    creator, state = _open_copy(root, [f"{SET1}#1@{{run}}"])
     copy = state.project.value
     run1 = run_id_of(creator.alert_sets[SET1])
-    stored, ticked = f"{SET1}#0@{run1}", f"{SET1}#2@{run1}"
+    stored, ticked = f"{SET1}#1@{run1}", f"{SET1}#3@{run1}"
     gdf = state.alerts_gdf.value
 
     view = _view(copy, gdf, [stored])
@@ -504,7 +504,7 @@ def test_a_copy_link_survives_open_save_return_and_merge(tmp_path, monkeypatch):
     assert ticked in {it.cand.link for it in view.items}  # offered to tick
     kept = earlier._kept_links(copy, view, (stored,))
     assert kept == (stored,)
-    summary = growth_index.history_summary(copy, SET2, gdf, 0, [stored, ticked])
+    summary = growth_index.history_summary(copy, SET2, gdf, 1, [stored, ticked])
     assert summary is not None and summary.n == 3
 
     stub_admin_lookups(monkeypatch)
@@ -515,15 +515,15 @@ def test_a_copy_link_survives_open_save_return_and_merge(tmp_path, monkeypatch):
     widgets = types.SimpleNamespace(actual_bb=types.SimpleNamespace(geometry=lambda: None))
     assert export._save_attributes(widgets, state, analysis, SetContext(state)) is True
     saved = set_store.load_set_alerts(copy, copy.alert_sets[SET2])
-    assert links_of(saved.loc[saved["alert_id"] == 0, "grows_from"].iloc[0]) == [stored, ticked]
+    assert links_of(saved.loc[saved["alert_id"] == 1, "grows_from"].iloc[0]) == [stored, ticked]
 
     zp = share.build_return(state.project.value, paths.project_dir(copy.name), tmp_path / "back",
                             app_version=APP_VERSION)
     cstore = set_store.load_set_alerts(creator, creator.alert_sets[SET2])
     preview = read_return(zp, creator, cstore)
-    assert preview.new == [0]
+    assert preview.new == [1]
     merged = apply_return(cstore, preview, "theirs")
-    row = merged.loc[merged["alert_id"] == 0].iloc[0]
+    row = merged.loc[merged["alert_id"] == 1].iloc[0]
     assert row["status"] == "Confirmed" and links_of(row["grows_from"]) == [stored, ticked]
     growth_index.clear_cache()
 
@@ -592,104 +592,104 @@ def test_a_return_without_grouping_is_format_one_as_before(tmp_path):
     assert list(rows.columns) == ["alert_id", "evaluator", *[c for c in share.review_columns(p.questions)
                                                              if c in store.columns]]
     assert "review_group" not in rows.columns
-    assert rows["alert_id"].tolist() == [0, 2]  # the reviewed rows only, as before
+    assert rows["alert_id"].tolist() == [1, 3]  # the reviewed rows only, as before
 
 
 def test_a_grouping_return_is_format_two_and_carries_a_detached_member(tmp_path, monkeypatch):
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA),
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (1, 1, NA, NA),
                           assigned=("Ana", "Ana", "Ana", "Bo"))
     members = zip_members(zp)
     assert json.loads(members[share.HEADER_MEMBER])["format_version"] == share.RETURN_GROUPS_VERSION
     rows = share.read_table(BytesIO(members[share.REVIEWS_MEMBER]))
-    assert rows["alert_id"].tolist() == [0, 1, 2]  # every row assigned to Ana, reviewed or not
+    assert rows["alert_id"].tolist() == [1, 2, 3]  # every row assigned to Ana, reviewed or not
     assert rows["status"].tolist() == ["Confirmed", "Confirmed", "Not reviewed"]
-    assert _plain(rows["review_group"]) == [0, 0, None]
+    assert _plain(rows["review_group"]) == [1, 1, None]
     assert share.DETACHED not in rows.columns  # a copy imported before the record says nothing
-    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (1, 1, 1, NA))
     assert read_return(zp, p, _store(p)).header.format_version == 2  # a Not-reviewed row reads in format 2
 
 
 def test_a_grouping_return_flags_the_rows_detached_since_packaging(tmp_path):
-    """Packaged as one group of all four; in the copy 2 left it and 3 was
+    """Packaged as one group of all four; in the copy 3 left it and 4 was
     saved alone (a group of one)."""
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Confirmed"), (0, 0, NA, 3),
-                          packaged=[0, 1, 2, 3])
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Confirmed"), (1, 1, NA, 4),
+                          packaged=[1, 2, 3, 4])
     rows = share.read_table(BytesIO(zip_members(zp)[share.REVIEWS_MEMBER]))
-    assert rows["alert_id"].tolist() == [0, 1, 2, 3]
+    assert rows["alert_id"].tolist() == [1, 2, 3, 4]
     assert rows[share.DETACHED].tolist() == [False, False, True, True]
     assert rows[share.DETACHED].dtype == bool
 
 
 def test_a_return_without_grouping_carries_no_detached_flag(tmp_path):
     p, pdir = make_copy(tmp_path / "copies", statuses=("Confirmed",) * 4, assigned=ANA)
-    p.review_copy = p.review_copy.model_copy(update={"grouped_at_packaging": [0, 1]})
+    p.review_copy = p.review_copy.model_copy(update={"grouped_at_packaging": [1, 2]})
     members = zip_members(share.build_return(p, pdir, tmp_path / "out", app_version=APP_VERSION))
     assert json.loads(members[share.HEADER_MEMBER])["format_version"] == 1
     assert share.DETACHED not in share.read_table(BytesIO(members[share.REVIEWS_MEMBER])).columns
 
 
 def test_rows_the_creator_grouped_after_packaging_keep_the_creators_review(tmp_path, monkeypatch):
-    """Review M3: nothing was grouped when packaged. Ana grouped 0 and 1;
-    the creator grouped 2 and 3 meanwhile and reviewed them, which Ana's
+    """Review M3: nothing was grouped when packaged. Ana grouped 1 and 2;
+    the creator grouped 3 and 4 meanwhile and reviewed them, which Ana's
     unreviewed rows leave alone, even with Take theirs."""
-    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Not reviewed",) * 2 + ("False Positive",) * 2, (NA, NA, 2, 2))
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA),
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Not reviewed",) * 2 + ("False Positive",) * 2, (NA, NA, 3, 3))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (1, 1, NA, NA),
                           packaged=[])
     gdf = _store(p)
     preview = read_return(zp, p, gdf)
-    assert _classes(preview) == ([0, 1], [], [2, 3], [])
+    assert _classes(preview) == ([1, 2], [], [3, 4], [])
     assert preview.extra_columns == [] and share.DETACHED not in preview.columns
     merged = apply_return(gdf, preview, "theirs")
     assert merged["status"].tolist() == ["Confirmed", "Confirmed", "False Positive", "False Positive"]
-    assert _plain(merged["review_group"]) == [0, 0, 2, 2]
+    assert _plain(merged["review_group"]) == [1, 1, 3, 3]
     assert share.DETACHED not in merged.columns
     review_groups.check_groups(merged)
     # Without the flag (a copy imported before the record) the same rows read as detached.
     old = _reviews(zp, tmp_path / "old.zip", lambda r: r.drop(columns=share.DETACHED))
-    assert _classes(read_return(old, p, gdf)) == ([0, 1], [2, 3], [], [])
+    assert _classes(read_return(old, p, gdf)) == ([1, 2], [3, 4], [], [])
 
 
-@pytest.mark.parametrize("packaged", [None, [0, 1, 2]], ids=["no-record", "flagged"])
+@pytest.mark.parametrize("packaged", [None, [1, 2, 3]], ids=["no-record", "flagged"])
 def test_a_detached_member_resets_the_creators_row(tmp_path, monkeypatch, packaged):
-    """Alert 2 was merged as a member of alert 0's group, then detached in the copy."""
-    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA),
+    """Alert 3 was merged as a member of alert 1's group, then detached in the copy."""
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (1, 1, 1, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (1, 1, NA, NA),
                           packaged=packaged)
     gdf = _store(p)
     preview = read_return(zp, p, gdf)
-    assert _classes(preview) == ([], [0, 1, 2], [3], [])  # the group is one conflict
+    assert _classes(preview) == ([], [1, 2, 3], [4], [])  # the group is one conflict
     assert preview.n_groups == 1
     merged = apply_return(gdf, preview, "theirs")
     assert merged["status"].tolist() == ["Confirmed", "Confirmed", "Not reviewed", "Not reviewed"]
-    assert _plain(merged["review_group"]) == [0, 0, None, None]
+    assert _plain(merged["review_group"]) == [1, 1, None, None]
     assert str(merged["review_group"].dtype) == "Int64"
     review_groups.check_groups(merged)
 
 
 def test_a_not_reviewed_row_outside_a_group_is_unchanged(tmp_path, monkeypatch):
-    """Alert 3, reviewed by the creator alone, is left as it is by Ana's unreviewed row."""
+    """Alert 4, reviewed by the creator alone, is left as it is by Ana's unreviewed row."""
     p, _ = _grouped_creator(tmp_path, monkeypatch, ("Not reviewed",) * 3 + ("False Positive",))
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (1, 1, NA, NA))
     gdf = _store(p)
     preview = read_return(zp, p, gdf)
-    assert _classes(preview) == ([0, 1], [], [2, 3], [])
+    assert _classes(preview) == ([1, 2], [], [3, 4], [])
     merged = apply_return(gdf, preview, "theirs")
     assert merged["status"].tolist() == ["Confirmed", "Confirmed", "Not reviewed", "False Positive"]
     assert str(merged["review_group"].dtype) == "Int64"  # created as Int64, not object
-    assert _plain(merged["review_group"]) == [0, 0, None, None]
+    assert _plain(merged["review_group"]) == [1, 1, None, None]
 
 
 def _one_conflict(tmp_path, monkeypatch):
-    """Ana grouped 0, 1 and 2; the creator reviewed alert 0 otherwise."""
+    """Ana grouped 1, 2 and 3; the creator reviewed alert 1 otherwise."""
     p, _ = _grouped_creator(tmp_path, monkeypatch, ("False Positive",) + ("Not reviewed",) * 3)
-    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (1, 1, 1, NA))
     gdf = _store(p)
     return gdf, read_return(zp, p, gdf)
 
 
 def test_one_conflicting_row_makes_its_whole_group_a_conflict(tmp_path, monkeypatch):
     _, preview = _one_conflict(tmp_path, monkeypatch)
-    assert _classes(preview) == ([], [0, 1, 2], [3], [])
+    assert _classes(preview) == ([], [1, 2, 3], [4], [])
     assert preview.n_groups == 1
 
 
@@ -716,15 +716,15 @@ def test_take_theirs_takes_the_whole_group(tmp_path, monkeypatch):
     gdf, preview = _one_conflict(tmp_path, monkeypatch)
     theirs = apply_return(gdf, preview, "theirs")
     assert theirs["status"].tolist() == ["Confirmed"] * 3 + ["Not reviewed"]
-    assert _plain(theirs["review_group"]) == [0, 0, 0, None]
+    assert _plain(theirs["review_group"]) == [1, 1, 1, None]
     review_groups.check_groups(theirs)
 
 
 def test_a_merge_that_breaks_a_group_is_refused(tmp_path, monkeypatch):
     app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, ("Not reviewed",) * 4)
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA))
-    # alert 1 names a main that is not in the return nor in the store
-    zp = _reviews(zp, tmp_path / "broken.zip", lambda r: r.assign(review_group=_groups((0, 99, NA, NA))))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (1, 1, NA, NA))
+    # alert 2 names a main that is not in the return nor in the store
+    zp = _reviews(zp, tmp_path / "broken.zip", lambda r: r.assign(review_group=_groups((1, 99, NA, NA))))
     before = _disk(app_state)
     exc = _refused(lambda: merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "theirs"))
     assert exc.key == "share.merge_err_groups"
@@ -748,13 +748,13 @@ def test_an_older_format_one_zip_still_merges(tmp_path, monkeypatch):
 
 def test_merge_keeps_n_groups(tmp_path, monkeypatch):
     app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, ("Not reviewed",) * 4)
-    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (1, 1, 1, NA))
     record = merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "theirs")
     assert record.taken == 3
     s = app_state.project.value.alert_sets[SET1]
     assert (s.n_reviewed, s.n_groups) == (3, 1)
     disk = _disk(app_state)
-    assert str(disk["review_group"].dtype) == "Int64" and _plain(disk["review_group"]) == [0, 0, 0, None]
+    assert str(disk["review_group"].dtype) == "Int64" and _plain(disk["review_group"]) == [1, 1, 1, None]
 
 
 def test_groups_merged_into_one_set_keep_grouping_on_after_its_split_goes(tmp_path, monkeypatch):
@@ -780,7 +780,7 @@ def test_groups_merged_into_one_set_keep_grouping_on_after_its_split_goes(tmp_pa
 
     _update(_step2)
     _update(lambda live: setattr(live, "active_set", SET1))  # 3. merge into A
-    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed",) * 3 + ("Not reviewed",), (1, 1, 1, NA))
     merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "theirs")
     p = app_state.project.value
     assert p.alert_sets[SET1].n_groups == 1 and p.group_review.enabled is True  # the manifest agrees
@@ -823,7 +823,7 @@ def test_the_preview_counts_a_single_alert_and_several_groups(tmp_path, monkeypa
                                  pd.Series(["0", "x", None, None], dtype=object)])
 def test_a_return_with_an_unreadable_group_id_is_refused(tmp_path, monkeypatch, bad):
     app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, ("Not reviewed",) * 4)
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (1, 1, NA, NA))
     zp = _reviews(zp, tmp_path / "bad.zip", lambda r: r.assign(review_group=bad))
     before = _disk(app_state)
     assert _refused(lambda: _preview(app_state, zp)).key == "share.merge_err_payload"
@@ -834,9 +834,9 @@ def test_a_return_with_an_unreadable_group_id_is_refused(tmp_path, monkeypatch, 
 @pytest.mark.parametrize("bad", [pd.Series(["no", "yes", None, None], dtype=object),
                                  pd.Series([0, 1, 0, 0], dtype="int64")])
 def test_a_return_with_an_unreadable_detached_flag_is_refused(tmp_path, monkeypatch, bad):
-    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (0, 0, 0, NA))
-    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (0, 0, NA, NA),
-                          packaged=[0, 1, 2])
+    p, _ = _grouped_creator(tmp_path, monkeypatch, ("Confirmed",) * 3 + ("Not reviewed",), (1, 1, 1, NA))
+    zp = _grouping_return(tmp_path, ("Confirmed", "Confirmed", "Not reviewed", "Not reviewed"), (1, 1, NA, NA),
+                          packaged=[1, 2, 3])
     zp = _reviews(zp, tmp_path / "bad.zip", lambda r: r.assign(**{share.DETACHED: bad}))
     assert _refused(lambda: read_return(zp, p, _store(p))).key == "share.merge_err_payload"
 
@@ -847,13 +847,13 @@ def test_an_older_apps_return_that_changes_a_group_member_merges_only_as_mine(tm
     p, pdir = make_copy(tmp_path / "copies", statuses=("Confirmed", "False Positive", "Confirmed", "Not reviewed"),
                         assigned=ANA)
     zp = share.build_return(p, pdir, tmp_path / "out", app_version=APP_VERSION)
-    app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, statuses, (0, 0, 0, NA))
+    app_state, ctx, analysis = _grouped_session(tmp_path, monkeypatch, statuses, (1, 1, 1, NA))
     preview = _preview(app_state, zp)
-    assert preview.header.format_version == 1 and _classes(preview) == ([], [0, 1, 2], [], [])
+    assert preview.header.format_version == 1 and _classes(preview) == ([], [1, 2, 3], [], [])
     exc = _refused(lambda: merge_service.merge_return(app_state, ctx, analysis, preview, "theirs"))
     assert exc.key == "share.merge_err_groups"
     assert _disk(app_state)["status"].tolist() == list(statuses)
     record = merge_service.merge_return(app_state, ctx, analysis, _preview(app_state, zp), "mine")
     assert (record.taken, record.conflicts, record.choice) == (0, 3, "mine")
     disk = _disk(app_state)
-    assert disk["status"].tolist() == list(statuses) and _plain(disk["review_group"]) == [0, 0, 0, None]
+    assert disk["status"].tolist() == list(statuses) and _plain(disk["review_group"]) == [1, 1, 1, None]

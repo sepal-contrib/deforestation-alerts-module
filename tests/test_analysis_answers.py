@@ -196,7 +196,7 @@ def _viewed(tmp_path, monkeypatch, alert_id, *, with_road_column=True):
     app_state = AppState()
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now(), questions=[LOSS, ROAD])
     app_state.new_project_state(p)
-    columns = {"status": ["Confirmed", "Not reviewed"], "alert_id": [0, 1], "set_id": ["x", "x"],
+    columns = {"status": ["Confirmed", "Not reviewed"], "alert_id": [1, 2], "set_id": ["x", "x"],
                "alert_sources": ["GLAD-L"] * 2, "alert_date_min": [2026.010] * 2,
                "alert_date_max": [2026.020] * 2, "alert_polygon": [None, None],
                "description": ["logging, Roads", "mining"], "bounding_box": [box(0, 0, 1, 1)] * 2}
