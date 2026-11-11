@@ -1,6 +1,7 @@
 """Project folder layout. Every path is absolute: on SEPAL the process CWD is
 the read-only module mount, so nothing may be relative to it."""
 
+import hashlib
 import os
 import re
 from datetime import date
@@ -41,7 +42,8 @@ def aoi_raster_path(pdir: Path) -> Path:
 
 def admin_boundaries_path(pdir: Path, aoi_digest: str) -> Path:
     """GAUL 2024 L2 boundaries of the AOI: a new digest is a new file, so a changed AOI refetches."""
-    return Path(pdir) / "admin" / f"gaul2024_l2_{safe_token(aoi_digest)[:16]}.gpkg"
+    # hashed: lazy digests ("asset:projects/…") share long prefixes, so a truncated token would collide
+    return Path(pdir) / "admin" / f"gaul2024_l2_{hashlib.sha1(aoi_digest.encode()).hexdigest()[:16]}.gpkg"
 
 
 def imagery_dir(pdir: Path) -> Path:

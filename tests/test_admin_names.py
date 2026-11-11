@@ -134,3 +134,10 @@ def test_path_helper():
     from pathlib import Path
     p = admin_boundaries_path(Path("/p"), "abc/def")
     assert p.parent == Path("/p/admin") and p.name.startswith("gaul2024_l2_") and p.suffix == ".gpkg"
+
+
+def test_asset_digests_with_a_shared_prefix_get_different_paths():
+    from pathlib import Path
+    one, two = "asset:projects/ee-user/assets/aoi_one", "asset:projects/ee-user/assets/aoi_two"
+    assert admin_boundaries_path(Path("/p"), one) != admin_boundaries_path(Path("/p"), two)
+    assert admin_boundaries_path(Path("/p"), one) == admin_boundaries_path(Path("/p"), one)
