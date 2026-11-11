@@ -824,10 +824,18 @@ SCREEN_CSS = (
     # the panel's start, Next with its end. The negative margin cancels the
     # top bar's right padding so the block reaches the screen edge as the
     # panel does.
-    ".defo-analysis-screen .defo-topnav-nav { flex: 0 0 480px; align-self: stretch; display: flex; align-items: center;"
-    " justify-content: space-between; gap: 8px; padding: 0 16px; margin-right: -12px;"
+    # ``min-width: 0`` holds it at 480 px: a sentence in the counter ("No
+    # alert set is loaded") widened it past the panel's border. The sentence
+    # wraps onto two smaller lines instead (ending in an ellipsis past that).
+    ".defo-analysis-screen .defo-topnav-nav { flex: 0 0 480px; min-width: 0; align-self: stretch; display: flex;"
+    " align-items: center; justify-content: space-between; gap: 8px; padding: 0 16px; margin-right: -12px;"
     " border-left: 1px solid rgba(128, 128, 128, 0.25); }\n"
-    ".defo-analysis-screen .defo-topnav-pos { display: flex; align-items: center; gap: 8px; }\n"
+    ".defo-analysis-screen .defo-topnav-pos { display: flex; align-items: center; gap: 8px; min-width: 0; }\n"
+    ".defo-analysis-screen .defo-jump-btn { max-width: 100%; }\n"
+    ".defo-analysis-screen .defo-jump-btn .v-btn__content { flex: 1 1 auto; min-width: 0; }\n"
+    ".defo-analysis-screen .defo-jump-btn .dat-num:not(.dat-pos-chip) { white-space: normal !important;"
+    " font-size: 12px; line-height: 1.2; text-align: left; overflow: hidden; display: -webkit-box;"
+    " -webkit-line-clamp: 2; -webkit-box-orient: vertical; }\n"
     ".defo-analysis-screen .defo-topnav-next { display: flex; align-items: center; gap: 6px; }\n"
     ".defo-analysis-body { flex: 1 1 auto; min-height: 0; display: flex; }\n"
     ".defo-analysis-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px;"
