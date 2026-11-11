@@ -82,6 +82,7 @@ SAME_IN = {
               "analysis.timeline.group_radar", "analysis.timeline.chip_radar"},
     "fr": {
         # "images", "source", "verdict", "question" and "option(s)" are the same words in French.
+        "steps.project.v1_mark",  # "version 1" is the same in French
         "analysis.timeline.images", "analysis_tile.facts.source",
         "analysis_tile.verdict.title",
         "common.actions", "overview_tile.table_total", "steps.alerts.col_source", "steps.alerts.list_title",

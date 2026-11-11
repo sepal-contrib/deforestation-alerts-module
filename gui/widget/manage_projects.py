@@ -59,8 +59,12 @@ def count_chips(info) -> list[tuple[str, bool]]:
 
 def ChipRow(info):
     """A project's count chips (``count_chips``), as Manage's rows and the
-    Project dialog's cards show them."""
+    Project dialog's cards show them; an unconverted version 1 recipe is
+    marked by an outlined chip first."""
     with rv.Html(tag="div", style_="display:flex;flex-wrap:wrap;gap:4px;margin:2px 0;"):
+        if info.legacy:
+            rv.Chip(children=[t("steps.project.v1_mark")], x_small=True, outlined=True,
+                    attributes={"title": t("steps.project.v1_hint")})
         for label, accent in count_chips(info):
             rv.Chip(children=[label], x_small=True, color="primary" if accent else None,
                     text_color="white" if accent else None)
@@ -73,9 +77,9 @@ META = "display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;"
 _SIZE = "font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;min-width:56px;text-align:right;"
 
 
-def icon_button(icon, label, on_click, color=None):
+def icon_button(icon, label, on_click, color=None, disabled=False):
     """A small icon button; ``label`` is its tooltip and its accessible name."""
-    solara.Button(icon_name=icon, icon=True, small=True, color=color, on_click=on_click,
+    solara.Button(icon_name=icon, icon=True, small=True, color=color, on_click=on_click, disabled=disabled,
                   attributes={"title": label, "aria-label": label})
 
 
@@ -93,7 +97,7 @@ def size_label(size_bytes) -> str:
 
 @solara.component
 def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, on_cancel, current=None,
-                         busy=False, covered=False, on_rename=lambda name: None, sizes=None):
+                         busy=False, covered=False, on_rename=lambda name: None, sizes=None, converting=None):
     """Search, open, rename and delete the saved projects.
 
     ``infos``: the ``io.list_projects()`` read the caller holds. ``selected``:
@@ -108,7 +112,8 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
     rename form, the delete confirmation) is on top. This dialog then lets
     go of the focus: two open dialogs that both retain focus pull it back and
     forth (VDialog's ``onFocusin``), so the one on top never keeps it, and the
-    browser's call stack overflows.
+    browser's call stack overflows. ``converting``: the version 1 recipe
+    being converted for its open, whose row says so.
 
     Scrollable: only the list scrolls, so the search and the footer's Open
     stay in view however long the list is.
@@ -164,7 +169,9 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
                                         ChipRow(info=info)
                                         with rv.ListItemSubtitle(style_=META):
                                             aoi_item(info.aoi_name)
-                                            if info.updated_at is not None:
+                                            if info.name == converting:
+                                                solara.Text(t("steps.project.v1_converting", name=info.name))
+                                            elif info.updated_at is not None:
                                                 solara.Text(t("steps.project.modified",
                                                               time_ago=relative_time(info.updated_at, now)))
                                     with rv.ListItemAction(style_="flex-direction:row;align-items:center;gap:2px;"):
@@ -172,8 +179,11 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
                                         rv.Html(tag="span", children=[size_label(size)],
                                                 style_=_SIZE + ("opacity:0.5;" if size is None else ""),
                                                 attributes={"title": t("steps.project.size_on_disk")})
-                                        icon_button("mdi-pencil-outline", t("steps.project.rename"),
-                                                    lambda n=info.name: on_rename(n))
+                                        # a v1 folder is renamed once converted (an open converts it)
+                                        icon_button("mdi-pencil-outline",
+                                                    t("steps.project.v1_convert_first" if info.legacy
+                                                      else "steps.project.rename"),
+                                                    lambda n=info.name: on_rename(n), disabled=info.legacy)
                                         icon_button("mdi-delete-outline", t("common.delete"),
                                                     lambda n=info.name: on_delete(n), color="error")
             rv.Divider()

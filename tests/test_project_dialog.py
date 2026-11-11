@@ -97,10 +97,10 @@ def dialog(monkeypatch, tmp_path):
 
     @solara.component
     def _RecorderManage(open, infos, selected, on_select, on_open, on_delete, on_cancel, current=None,
-                        busy=False, covered=False, on_rename=None, sizes=None):
+                        busy=False, covered=False, on_rename=None, sizes=None, converting=None):
         ns.manage.append(dict(open=open, infos=infos, selected=selected, on_select=on_select, on_open=on_open,
                               on_delete=on_delete, on_cancel=on_cancel, current=current, busy=busy,
-                              covered=covered, on_rename=on_rename, sizes=sizes))
+                              covered=covered, on_rename=on_rename, sizes=sizes, converting=converting))
 
     monkeypatch.setattr(pd, "ManageProjectsDialog", _RecorderManage)
     unsubscribe = install_autosave(ns.state)

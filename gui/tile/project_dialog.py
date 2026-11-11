@@ -28,7 +28,9 @@ loop, where solara starts such a task with a bare ``asyncio.create_task``
 A new, opened or duplicated project starts the workflow at its AOI and closes
 the dialog (``dismiss``, from the shell). A review copy (spec 2026-10-10
 §6.2), imported or opened, lands on Analysis instead, filtered to its
-evaluator: ``_land`` is the one place that decides. **Import** reads a
+evaluator: ``_land`` is the one place that decides. A version 1 recipe
+(listed ``legacy``) is converted on its first open (``_load``, every open by
+name goes through it) and lands on Analysis too. **Import** reads a
 review package's header first: a reviewed copy is refused (it is merged
 from the creator's project), and a package already imported as a copy asks
 to open that copy or import a new one (never overwrite). Opening the project already open
@@ -54,12 +56,14 @@ from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.project import io, paths, share
 from deforestation_alerts.project.models import Project
-from deforestation_alerts.project.review_copy import read_only
+from deforestation_alerts.project.review_copy import is_migrated, read_only
 from deforestation_alerts.project.split import EVALUATOR_COLUMN
+from deforestation_alerts.project.v1_migration import V1MigrationError
 from gui.i18n import t
 from gui.scripts.alert_filter import AlertFilter
 from gui.scripts.error_text import error_text
 from gui.scripts.solara_threads import spawn_in_context, to_thread_in_context
+from gui.scripts.v1_open import ensure_converted
 from gui.store.project_writers import is_writing
 from gui.tile.analysis.state import apply_start_filter
 from gui.widget.confirm_dialog import ConfirmDialog
@@ -365,6 +369,8 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
     # A reactive, not state: Open reads it when pressed, right after the row
     # click that set it, before the dialog has re-rendered.
     selected = solara.use_reactive(None)
+    # The name ``_load`` is opening; a version 1 row or Continue says "Converting" meanwhile.
+    opening = solara.use_reactive(None)
     pending_delete, set_pending_delete = solara.use_state(None)
     size, set_size = solara.use_state(None)
     # The project the Rename form renames: the open one, or a row of Manage.
@@ -475,26 +481,42 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         """Where an opened or imported project starts, after ``_install``
         (which resets the screen to the workflow, ``state_manager.py:138``):
         a review copy on Analysis, filtered to its evaluator before its
-        alerts are published (spec §6.2); any other project at its AOI."""
+        alerts are published (spec §6.2); a converted version 1 recipe on
+        Analysis unfiltered (its setup is locked); any other project at its AOI."""
         copy = loaded.review_copy
-        if copy is None:
+        if copy is None and not is_migrated(loaded):
             _show_workflow()
             return
-        if analysis is not None:
+        if copy is not None and analysis is not None:
             apply_start_filter(analysis, AlertFilter(EVALUATOR_COLUMN, frozenset({copy.evaluator})))
         app_state.current_page_view.value = "analysis_tile"
         dismiss()
 
     async def _load(name):
+        opening.set(name)
         try:
+            # a version 1 recipe is converted first (Earth Engine for its AOI); nothing else is touched
+            converted = await asyncio.to_thread(ensure_converted, name)
             loaded = await asyncio.to_thread(io.load_project, name)
+        except V1MigrationError as exc:
+            notifications.error(error_text(exc))
+            return
         except io.ProjectLoadError as exc:
             notifications.error(t("steps.project.open_failed", name=name, error=error_text(exc)))
             return
+        finally:
+            opening.set(None)
         app_state.load_project_state(loaded)
         manage_open.set(False)
         _land(loaded)
-        notifications.success(t("steps.project.opened", name=name))
+        migrated = loaded.migrated_from
+        if converted:
+            notifications.success(t("steps.project.v1_converted", name=name, reviewed=migrated.n_reviewed,
+                                    alerts=migrated.n_alerts))
+            if migrated.notes:  # once: only the open that converted shows them
+                notifications.warning("\n".join(migrated.notes))
+        else:
+            notifications.success(t("steps.project.opened", name=name))
 
     load_task = solara.lab.use_task(_load, dependencies=None, prefer_threaded=False, raise_error=False)
 
@@ -713,6 +735,7 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
 
     # The project changed last, offered to Continue while none is open.
     recent = max(infos, key=lambda i: i.updated_at or datetime.min, default=None)
+    converting = next((i.name for i in infos if i.legacy and i.name == opening.value), None)
 
     with solara.Column(style="gap:8px;padding:8px;"):
         if p is None and recent is None:
@@ -734,7 +757,8 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
                             if recent.updated_at is not None:
                                 solara.Text(t("steps.project.modified",
                                               time_ago=relative_time(recent.updated_at, datetime.now())))
-                    solara.Button(t("steps.project.continue"), icon_name="mdi-folder-open-outline", color="primary",
+                    solara.Button(t("steps.project.v1_converting", name=recent.name) if converting == recent.name
+                                  else t("steps.project.continue"), icon_name="mdi-folder-open-outline", color="primary",
                                   small=True, disabled=load_task.pending, on_click=lambda: _open(recent.name))
         else:
             with _tinted_card():
@@ -787,6 +811,7 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         on_open=lambda: _open(selected.peek()), on_delete=_ask_delete, on_cancel=lambda: manage_open.set(False),
         current=current, busy=load_task.pending or delete_task.pending or import_task.pending or peek_task.pending,
         covered=pending_delete is not None or rename_open.value, on_rename=_ask_rename, sizes=sizes,
+        converting=converting,
     )
     ConfirmDeleteDialog(
         open=pending_delete is not None, name=pending_delete or "", size_bytes=size,

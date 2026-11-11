@@ -79,7 +79,7 @@ def test_count_chips_accent_only_the_alert_sets():
 # ---------------------------------------------------------------------------
 # ManageProjectsDialog
 # ---------------------------------------------------------------------------
-def _render_manage(infos, *, current=None, busy=False, selected=None, covered=False, sizes=None):
+def _render_manage(infos, *, current=None, busy=False, selected=None, covered=False, sizes=None, converting=None):
     ns = SimpleNamespace(calls=[], open=solara.reactive(True), selected=solara.reactive(selected))
 
     def _select(name):
@@ -94,7 +94,7 @@ def _render_manage(infos, *, current=None, busy=False, selected=None, covered=Fa
             on_delete=lambda name: ns.calls.append(("delete", name)),
             on_rename=lambda name: ns.calls.append(("rename", name)),
             on_cancel=lambda: ns.calls.append(("cancel",)), current=current, busy=busy, covered=covered,
-            sizes=sizes)
+            sizes=sizes, converting=converting)
 
     ns.box, ns.rc = reacton.render(Page(), handle_error=False)
     return ns
