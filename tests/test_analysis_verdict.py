@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 from shapely.geometry import box
 
-from deforestation_alerts.project.models import Project
+from deforestation_alerts.project.models import AoiRecord, Project
 from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.scripts.set_context import SetContext
@@ -157,7 +157,7 @@ def _review_row():
 
 def _save_pieces(monkeypatch, gdf, *, verdict, drawn=None):
     """``(export, app_state, analysis, widgets, model, alert)`` for one direct
-    ``_save_attributes`` call on ``gdf``, with the GEE admin lookups stubbed."""
+    ``_save_attributes`` call on ``gdf``, with the admin boundaries stubbed."""
     import gui.tile.analysis.export as export
     from gui.tile.analysis.state import capture_alert
 
@@ -165,7 +165,8 @@ def _save_pieces(monkeypatch, gdf, *, verdict, drawn=None):
     app_state = AppState()
     # A project with the default questionnaire (Loss driver): the questions a
     # Save writes come with the answers (``capture_alert``).
-    app_state.project.set(Project(name="d", created_at=datetime.now(), updated_at=datetime.now()))
+    app_state.project.set(Project(name="d", created_at=datetime.now(), updated_at=datetime.now(),
+                                  aoi=AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=(0, 0, 1, 1))))
     app_state.alerts_gdf.value = gdf
     app_state.actual_alert_id.value = 0
     analysis = AnalysisState()
@@ -263,7 +264,7 @@ def test_a_save_that_wrote_publishes_every_field_to_the_live_row(tmp_path, monke
     assert gdf.at[0, "status"] == "Confirmed"
     assert gdf.at[0, "description"] == "mining"
     assert gdf.at[0, "before_img"] == "S2_before" and gdf.at[0, "after_img"] == "S2_after"
-    assert gdf.at[0, "admin1"] == "Brasil"  # joined, no trailing comma
+    assert gdf.at[0, "admin1"] == "Brasil"  # the unnamed row is named from the boundaries
     # What was persisted carries the same review as the live row.
     [staged] = written
     assert staged.at[0, "status"] == "Confirmed"

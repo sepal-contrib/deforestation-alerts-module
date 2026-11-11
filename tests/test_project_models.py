@@ -256,6 +256,7 @@ def test_a_project_saved_before_the_evaluator_toggle_is_multi_when_a_set_was_spl
     assert Project.model_validate({**raw, "multi_evaluator": False}).multi_evaluator is False
 
 
+@pytest.mark.usefixtures("no_admin_boundaries")
 def test_old_manifest_keeps_every_status(tmp_path):
     """A d438e0b-era manifest (no per-period look-back) reopens with every raw
     and harmonized artifact CURRENT as before."""
@@ -330,6 +331,7 @@ def _as_legacy(p):
     return raw
 
 
+@pytest.mark.usefixtures("no_admin_boundaries")
 def test_legacy_manifest_keeps_every_fingerprint(tmp_path):
     from deforestation_alerts.engine import fingerprint as fp
     from deforestation_alerts.engine import integrate

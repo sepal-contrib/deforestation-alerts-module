@@ -351,14 +351,18 @@ def _empty_message(result, left_out) -> str:
 
 
 def _done_message(result) -> str:
-    """The toast of a run that found alerts: how many, and how many of them
-    were linked to earlier loss (spec 2026-10-20 §4.6)."""
+    """The toast of a run that found alerts: how many, how many of them were
+    linked to earlier loss (spec 2026-10-20 §4.6), and whether their admin
+    names are left for the Save to fill."""
     lines = [tn("steps.integrate.done", result.alert_set.n_alerts)]
     if result.n_growth and result.n_growth_small:
         lines.append(tn("steps.integrate.growth_linked", result.n_growth, small=result.n_growth_small))
     elif result.n_growth:
         lines.append(tn("steps.integrate.growth_linked_plain", result.n_growth))
-    return ". ".join(lines)
+    text = ". ".join(lines)
+    if result.admin_names_failed:
+        text += ". " + t("steps.integrate.admin_names_failed")
+    return text
 
 
 def run_integration_job(app_state, notifier, job, *, left_out: Optional[dict] = None) -> None:

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from deforestation_alerts.project.models import AlertSet, AlertSetParams, Project, default_questions
+from deforestation_alerts.project.models import AlertSet, AlertSetParams, AoiRecord, Project, default_questions
 from deforestation_alerts.project.review_groups import polygon_area_ha
 from gui.scripts import questions
 from gui.scripts.set_context import SetContext
@@ -30,6 +30,8 @@ def _state(tmp_path, monkeypatch, *, grid=None, params=None):
     s = AppState()
     p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now(), report_template="/t.docx",
                 grid=grid)
+    # where the Save's admin boundaries come from (``AdminLookups`` stands in for the fetch)
+    p.aoi = AoiRecord(spec={}, name="a", method="DRAW", digest="g", bounds=(0, 0, 4, 1))
     p.alert_sets["x"] = AlertSet(id="x", period_id="per", sources=["GLAD-L"], digit_map={0: "GLAD-L"},
                                  params=params or AlertSetParams(), store_rel_path="periods/per/sets/glad-l/alert_db.parquet",
                                  combined_rel_path="periods/per/sets/glad-l/c.tif",

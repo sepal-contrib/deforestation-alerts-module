@@ -287,7 +287,7 @@ def _result(n):
     alerts = gpd.GeoDataFrame({"alert_id": list(range(1, n + 1))}, geometry=[box(0, 0, 1, 1)] * n, crs="EPSG:4326")
     s = _set("x", 0).model_copy(update={"n_alerts": n})
     return SimpleNamespace(alert_set=s, artifacts={"store:x": _art("store:x")}, alerts=alerts, outcomes={},
-                           n_growth=0, n_growth_small=0)
+                           n_growth=0, n_growth_small=0, admin_names_failed=False)
 
 
 def _swapped_in(pdir, result):

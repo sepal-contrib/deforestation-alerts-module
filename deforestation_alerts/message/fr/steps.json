@@ -665,6 +665,7 @@
         "many": "{n} de groupes liés à des pertes antérieures",
         "other": "{n} groupes liés à des pertes antérieures"
       },
+      "admin_names_failed": "Les noms administratifs n'ont pas pu être récupérés ; ils sont remplis à l'enregistrement de chaque alerte.",
       "done_empty": "Aucun nouveau groupe dans cette période : le jeu d'alertes est vide.",
       "done_empty_detail": "Aucun nouveau groupe dans cette période : le jeu d'alertes est vide. {details}",
       "outcome_pixels": {

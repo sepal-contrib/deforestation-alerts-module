@@ -15,7 +15,7 @@ NR = "Not reviewed"
 CRS = "EPSG:32721"  # UTM 21S: the alerts below sit at -55°, -24°
 #: what ``_save_attributes`` hands ``plan_updates`` for the main
 REVIEW = {"status": "Confirmed", "q_loss_driver": "mining", "before_img": "b", "before_img_info": 1,
-          "after_img": "a", "after_img_info": 2, "admin1": "Brasil", "admin2": "", "admin3": ""}
+          "after_img": "a", "after_img_info": 2}
 #: a drawing over the first two alerts
 DRAWING = box(-55.0, -24.0, -54.9985, -23.9995)
 
@@ -208,7 +208,6 @@ def test_a_group_save_copies_the_review_and_points_members_at_the_main():
     assert out[rg.COLUMN].tolist()[:3] == [100, 100, 100] and pd.isna(out[rg.COLUMN].iloc[3])
     assert out["status"].tolist() == ["Confirmed"] * 3 + [NR]
     assert out["q_loss_driver"].tolist() == ["mining"] * 3 + [""]
-    assert out["admin1"].tolist()[:3] == ["Brasil"] * 3
     assert out["area_ha"].tolist() == [1.0, 2.0, 3.0, 4.0]  # no drawing: each keeps its own
 
 
@@ -241,7 +240,7 @@ def test_a_detached_row_is_reset_to_unreviewed_with_its_integrate_area():
     out = _apply(gdf, rg.plan_updates(gdf, rg.plan_group(gdf, 0, {1}), REVIEW, crs=CRS))
     row = out.iloc[2]
     assert row["status"] == NR and row["q_loss_driver"] == "" and row["description"] == ""
-    assert pd.isna(row["before_img"]) and pd.isna(row["admin1"]) and row["alert_polygon"] is None
+    assert pd.isna(row["before_img"]) and row["admin1"] == "Brasil" and row["alert_polygon"] is None
     assert pd.isna(row["after_radar_img"])
     assert pd.isna(row[rg.COLUMN])
     assert row["area_ha"] == pytest.approx(rg.polygon_area_ha(gdf.geometry.iloc[2], CRS))
@@ -297,13 +296,6 @@ def test_polygon_area_matches_a_known_utm_area():
     square = gpd.GeoSeries([box(500000, 7300000, 501000, 7301000)], crs=CRS).to_crs(4326).iloc[0]
     assert rg.polygon_area_ha(square, CRS) == pytest.approx(100.0, rel=1e-6)
     assert rg.polygon_area_ha(square) == pytest.approx(100.0, rel=1e-6)  # its own UTM zone is 21S
-
-
-def test_bounds_span_the_rows_boxes():
-    gdf = _alerts(3)
-    minx, miny, maxx, maxy = rg.bounds(gdf, [0, 2])
-    assert (minx, miny) == pytest.approx(gdf.geometry.iloc[0].bounds[:2])
-    assert (maxx, maxy) == pytest.approx(gdf.geometry.iloc[2].bounds[2:])
 
 
 def test_ensure_column_adds_a_nullable_int_column():

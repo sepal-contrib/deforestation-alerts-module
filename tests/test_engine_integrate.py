@@ -28,6 +28,8 @@ DEC = Period(id="2025-12-01_2025-12-31", start=date(2025, 12, 1), end=date(2025,
 # centroid geopandas flags for any geographic CRS (a pre-existing warning of
 # convert_to_geopandas). For alert-sized polygons the planar centroid in degrees
 # is off by far less than a pixel, so the warning is noise here.
+pytestmark = pytest.mark.usefixtures("no_admin_boundaries")
+
 _LONLAT_CENTROID = pytest.mark.filterwarnings("ignore:Geometry is in a geographic CRS:UserWarning")
 
 

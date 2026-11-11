@@ -13,6 +13,8 @@ from tests.test_analysis_download import _run, download_ctx  # noqa: F401 - fixt
 from tests.test_engine_integrate import _LONLAT_CENTROID, _job, JAN, ready_project  # noqa: F401 - fixture
 
 
+pytestmark = pytest.mark.usefixtures("no_admin_boundaries")
+
 @_LONLAT_CENTROID
 def test_integrate_numbers_from_one(ready_project):  # noqa: F811
     p, pdir = ready_project

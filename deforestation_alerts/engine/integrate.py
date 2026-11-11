@@ -30,6 +30,7 @@ import numpy as np
 import rasterio
 from rasterio.windows import Window
 
+from deforestation_alerts.engine.admin_names import admin_names, load_boundaries
 from deforestation_alerts.engine.fingerprint import (
     carry_sets, combined_key, earlier_sets, fingerprint, footprint_key, harm_key, make_artifact, mask_key,
     period_masks, set_inputs, store_key,
@@ -237,6 +238,9 @@ class IntegrationResult:
     # stored alerts linked to earlier loss, and those of them under the minimum size
     n_growth: int = 0
     n_growth_small: int = 0
+    # the GAUL boundaries could not be fetched: the alerts are stored unnamed
+    # and each is named when a review Save writes it
+    admin_names_failed: bool = False
 
 
 def _staged(path: Path) -> Path:
@@ -423,6 +427,15 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         alerts[BELOW_MIN] = alerts[BELOW_MIN].astype(bool)
         alerts["alert_id"] = range(1, len(alerts) + 1)  # the number a person reads; older sets start at 0
         alerts["set_id"] = sid
+        names_failed = False
+        if len(alerts):
+            try:
+                names = admin_names(alerts.geometry, load_boundaries(pdir, p.aoi))
+                alerts[list(names.columns)] = names
+            except Exception:  # noqa: BLE001 - the set is still usable; the Save fills the names
+                logger.warning("Integrate: the admin boundaries could not be fetched", exc_info=True)
+                alerts[["admin1", "admin2", "admin3"]] = ""
+                names_failed = True
         if layers:
             # One export region serves every Earth Engine layer; a GeoTIFF needs none.
             region = _attribute_region(p) if any(layer.get("kind") == "gee" for layer in layers) else None
@@ -486,4 +499,5 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
     growth = alerts[GROWS_FROM_AUTO].map(bool)
     return IntegrationResult(alert_set=alert_set, artifacts=artifacts, alerts=alerts,
                              outcomes=_outcomes(p, period, sources), n_growth=int(growth.sum()),
-                             n_growth_small=int((growth & alerts[BELOW_MIN]).sum()))
+                             n_growth_small=int((growth & alerts[BELOW_MIN]).sum()),
+                             admin_names_failed=names_failed)

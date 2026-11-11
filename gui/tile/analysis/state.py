@@ -356,6 +356,9 @@ def capture_alert(analysis: AnalysisState, widgets, app_state, *, remove=False) 
             "bb": getattr(widgets, "actual_bb", None),
             "status": analysis.verdict.value,
             "reviewer": getattr(app_state, "reviewer", "") or "",
+            # where the Save reads the admin boundaries of a row without names
+            "project_dir": app_state.project_dir,
+            "aoi": p.aoi if p is not None else None,
             "answers": {k: list(v) for k, v in (analysis.answers.value or {}).items()},
             "questions": list(p.questions) if p is not None else [],
             "links": tuple(analysis.links.value),

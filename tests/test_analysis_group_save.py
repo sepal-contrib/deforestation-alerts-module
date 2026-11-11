@@ -2,7 +2,7 @@
 §5): one store write for every row of the plan, the area rules every save
 follows, the refusals, *Remove from group*, and what the save runner hands
 ``on_saved``. The harness is ``test_set_context``'s: a real active set, its
-store in ``tmp_path``, the FAO/GAUL lookups stood in for."""
+store in ``tmp_path``, the admin boundaries stood in for."""
 
 import threading
 from datetime import datetime
@@ -19,33 +19,10 @@ from gui.scripts.set_context import SetContext
 from gui.tile.analysis import export, review_save
 from gui.tile.analysis.review_save import SaveRefused
 from gui.tile.analysis.state import AnalysisState, capture_alert, toggle_selection, touch
+from tests._review_helpers import stub_admin_lookups
 from tests.test_set_context import _loaded, _review_alerts, _state
 
 IDS = [10, 11, 12, 13]
-
-
-class _Lookups:
-    """Stands in for ``review_save.ee``: every attribute and call is itself,
-    the calls recorded by name (``Rectangle`` gets the lookup's bounds)."""
-
-    def __init__(self):
-        self.seen = []
-        self.calls = 0
-        self._name = None
-
-    def __getattr__(self, name):
-        if name.startswith("__"):
-            raise AttributeError(name)
-        self._name = name
-        return self
-
-    def __call__(self, *args, **kwargs):
-        self.seen.append((self._name, args))
-        return self
-
-    def getInfo(self):  # noqa: N802 - Earth Engine's name
-        self.calls += 1
-        return {"admin1": "Brasil", "admin2": "Acre", "admin3": "Rio Branco"}
 
 
 def _alerts(n=4, ids=True, **columns):
@@ -67,8 +44,7 @@ def _setup(tmp_path, monkeypatch, *, grouping=False, alerts=None, copy_of=None):
             origin_project="o", imported_at=datetime.now())
     ctx = SetContext(s)
     gdf, store = _loaded(s, alerts if alerts is not None else _alerts())
-    lookups = _Lookups()
-    monkeypatch.setattr("gui.tile.analysis.review_save.ee", lookups)
+    lookups = stub_admin_lookups(monkeypatch)
     return SimpleNamespace(s=s, ctx=ctx, store=store, lookups=lookups)
 
 
@@ -126,8 +102,6 @@ def test_grouping_off_saves_exactly_as_before(tmp_path, monkeypatch):
     assert list(row["grows_from"]) == []
     assert row["area_ha"] == pytest.approx(review_groups.polygon_area_ha(box(0, 0, 1, 1)))
     assert stored["status"].tolist()[1:] == ["Not reviewed"] * 3
-    # the lookup is the alert's own box, as before
-    assert not any(name == "Rectangle" for name, _ in h.lookups.seen)
 
 
 def test_a_drawing_with_overlapping_features_measures_the_union(tmp_path, monkeypatch):
@@ -240,13 +214,6 @@ def test_the_store_changed_guard_refuses_a_group_save(tmp_path, monkeypatch):
     assert h.store.read_bytes() == before
 
 
-def test_the_admin_lookup_spans_the_whole_group(tmp_path, monkeypatch):
-    h = _setup(tmp_path, monkeypatch, grouping=True)
-    _save(h, 0, {2})
-    assert [args for name, args in h.lookups.seen if name == "Rectangle"] == [([0.0, 0.0, 3.0, 1.0],)]
-    assert h.lookups.calls == 1  # one ee.Dictionary round trip
-
-
 def test_a_drawn_group_measures_the_union_once(tmp_path, monkeypatch):
     h = _setup(tmp_path, monkeypatch, grouping=True)
     a, b = box(0.1, 0.1, 0.3, 0.3), box(0.2, 0.1, 0.4, 0.3)
@@ -267,7 +234,8 @@ def test_remove_from_group_resets_the_member(tmp_path, monkeypatch):
     for gdf in (_stored(h), h.s.alerts_gdf.value):
         assert gdf["status"].tolist() == ["Confirmed", "Not reviewed", "Confirmed", "Not reviewed"]
         assert _groups(gdf) == [10, None, 10, None]
-        assert gdf["description"].iloc[1] == "" and pd.isna(gdf["admin1"].iloc[1])
+        # the names are the alert's location, not a review output: kept
+        assert gdf["description"].iloc[1] == "" and gdf["admin1"].iloc[1] == "Brasil"
         assert gdf["admin1"].iloc[2] == "Brasil"
         assert gdf["area_ha"].iloc[1] == pytest.approx(review_groups.polygon_area_ha(box(1, 0, 2, 1)))
         review_groups.check_groups(gdf)

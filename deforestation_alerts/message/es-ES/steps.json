@@ -665,6 +665,7 @@
         "many": "Se vincularon {n} de grupos a pérdidas anteriores",
         "other": "Se vincularon {n} grupos a pérdidas anteriores"
       },
+      "admin_names_failed": "No se pudieron obtener los nombres administrativos; se completan al guardar cada alerta.",
       "done_empty": "No hay grupos nuevos en este período: el conjunto de alertas está vacío.",
       "done_empty_detail": "No hay grupos nuevos en este período: el conjunto de alertas está vacío. {details}",
       "outcome_pixels": {

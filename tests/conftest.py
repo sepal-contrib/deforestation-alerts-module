@@ -68,6 +68,19 @@ def _no_live_ee(request, monkeypatch):
 
 
 @pytest.fixture()
+def no_admin_boundaries(monkeypatch):
+    """Integrate's GAUL boundaries are an empty layer (no Earth Engine fetch):
+    the alerts are stored with empty names. A module that runs the Integrate
+    store step opts in with ``pytestmark = pytest.mark.usefixtures("no_admin_boundaries")``."""
+    import geopandas as gpd
+
+    from deforestation_alerts.engine import integrate
+
+    empty = gpd.GeoDataFrame({"admin1": [], "admin2": [], "admin3": []}, geometry=[], crs="EPSG:4326")
+    monkeypatch.setattr(integrate, "load_boundaries", lambda pdir, aoi: empty)
+
+
+@pytest.fixture()
 def english_locale():
     """English for the test and after it (a test may switch the language).
     A module that asserts English copy opts in with

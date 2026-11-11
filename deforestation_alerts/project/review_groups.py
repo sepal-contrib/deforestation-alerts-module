@@ -42,9 +42,10 @@ SAVE, REMOVE = "save", "remove"
 #: how a row the plan rewrites changes, as the save's confirmation names it
 OVERWRITTEN, MOVED, JOINED, REMOVED = "overwritten", "moved", "joined", "removed"
 
-#: the image picks and the admin names a review writes, copied to members and cleared on a reset
+#: the image picks a review writes, copied to members and cleared on a reset
 IMAGE_COLUMNS = ("before_img", "before_img_info", "after_img", "after_img_info",
                  *store_schema.RADAR_IMAGE_COLUMNS, store_schema.IMAGE_AREA)
+#: the alert's location (GAUL), each row's own: never copied, never reset
 ADMIN_COLUMNS = ("admin1", "admin2", "admin3")
 
 
@@ -305,11 +306,12 @@ def own_area(gdf, p, crs=None) -> float:
 
 def reset_values(gdf, p, crs=None) -> dict:
     """The cells of a row taken out of a review (§4.4): unreviewed, every
-    answer column ``""``, no picks, no admin names, no drawing, its Integrate
-    area, no group and, in a store with growth columns, its automatic links."""
+    answer column ``""``, no picks, no drawing, its Integrate area, no group
+    and, in a store with growth columns, its automatic links. Its admin names
+    stay: they are its location, not a review output."""
     values = {"status": NOT_REVIEWED}
     values.update({c: "" for c in gdf.columns if is_answer_column(c)})
-    values.update({c: None for c in (*IMAGE_COLUMNS, *ADMIN_COLUMNS) if c in gdf.columns})
+    values.update({c: None for c in IMAGE_COLUMNS if c in gdf.columns})
     values.update(reviewed_by="", reviewed_at="")
     values["alert_polygon"] = None
     values["area_ha"] = own_area(gdf, p, crs)
@@ -324,7 +326,7 @@ def plan_updates(gdf, plan, review=None, *, drawing=None, crs=None, links=None) 
     """``{position: {column: value}}``, every cell ``plan`` writes (§4.3-§4.5).
 
     ``review`` is the reviewer's values for the main (status, the current
-    questions' answer columns, the image picks, the admin names); a REMOVE
+    questions' answer columns, the image picks); a REMOVE
     plan takes none and changes only its detached row. ``drawing`` is the
     drawn polygon (EPSG:4326, the union), or None; its area is measured in
     ``crs``. ``links``, when not None, are the group's ``grows_from`` and go
@@ -366,13 +368,6 @@ def ensure_column(gdf) -> None:
         gdf[COLUMN] = pd.array(group_values(gdf).to_numpy(), dtype="Int64")
 
 
-def bounds(gdf, positions) -> tuple:
-    """``(minx, miny, maxx, maxy)`` around the rows' boxes (their geometry
-    without a ``bounding_box`` column): where the admin lookup looks."""
-    column = "bounding_box" if "bounding_box" in gdf.columns else gdf.geometry.name
-    return tuple(float(v) for v in gpd.GeoSeries(list(gdf[column].iloc[list(positions)])).total_bounds)
-
-
 def n_groups(gdf) -> int:
     """The groups with members: ``review_group`` values held by two rows or more."""
     counts = group_values(gdf).dropna().value_counts()
@@ -407,11 +402,18 @@ def _sources(values) -> str:
     return format_list(list(dict.fromkeys(part for part in parts if part)))
 
 
+def _names(values) -> str:
+    """The distinct names of ``values`` (each comma-joined, as ``admin_names``
+    writes them), in order, joined the same way."""
+    parts = (part.strip() for value in values if isinstance(value, str) for part in value.split(","))
+    return ", ".join(dict.fromkeys(part for part in parts if part))
+
+
 def group_record(gdf, p) -> tuple:
     """``(row, outline)`` the per-alert outputs describe (§9). For a grouped
     row: the main's row with the group's summed ``area_ha``, its first and
-    last detection dates and its distinct sources (the main's first). A
-    single row is itself. Either row carries ``group_size``, ``group_alerts``
+    last detection dates, its distinct sources and admin names (the main's
+    first). A single row is itself. Either row carries ``group_size``, ``group_alerts``
     (the stored alert ids, ``number``, comma separated) and, in a store with links,
     ``grows_from`` as the main's links joined by ``";"``. The outline is
     ``group_shape``."""
@@ -428,6 +430,9 @@ def group_record(gdf, p) -> tuple:
             row["alert_date_max"] = pd.to_numeric(part["alert_date_max"], errors="coerce").max()
         if "alert_sources" in part.columns:
             row["alert_sources"] = _sources(part["alert_sources"])
+        for column in ADMIN_COLUMNS:
+            if column in part.columns:
+                row[column] = _names(part[column])
     if store_schema.GROWS_FROM in gdf.columns:
         row[store_schema.GROWS_FROM] = ";".join(_links(gdf[store_schema.GROWS_FROM].iloc[main]))
     row["group_size"] = len(rows)

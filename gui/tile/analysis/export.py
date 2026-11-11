@@ -49,7 +49,7 @@ Threading (FIXED by the task contract — same shape as ``edit_tools`` / ``recip
   under ``tracked_job`` and always releases the button, so the notification pill shows it
   running and the worker thread's app log lines become its milestones.
 * **No widget mutation inside the blocking bodies.** The save body does the gdf
-  mutation + GEE admin lookup + CSV write (data/IO only) and returns ``True``. The
+  mutation + admin names (a first GAUL fetch) + store write (data/IO only) and returns ``True``. The
   download body does the gpkg/image/zip/report (IO only) and RETURNS
   ``{"zip_path": ..., "report_path": ...}``. The OLD post-task apply step (enabling
   the build tile, ``set_file(...)``, showing ``toolbar_downloads``) now runs at the
@@ -270,8 +270,8 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
         outpaced = []  # the reviewer changed this alert while the save ran
         refusal = {}  # the SaveRefused of a refused save, for ``on_refused``
 
-        # No ``total_steps`` — the save is a single opaque phase (GEE admin
-        # lookups + the alert-store write), so the pill stays indeterminate.
+        # No ``total_steps`` — the save is a single opaque phase (admin
+        # names + the alert-store write), so the pill stays indeterminate.
         def _body(task, notifier):
             task.step(t("analysis_tile.export_labels.save_step"))
             # Writer tracking: register the open project while the set's

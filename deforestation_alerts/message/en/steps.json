@@ -636,6 +636,7 @@
         "one": "Linked {n} cluster to earlier loss",
         "other": "Linked {n} clusters to earlier loss"
       },
+      "admin_names_failed": "Admin names could not be fetched; they are filled when an alert is saved.",
       "done_empty": "No new clusters in this period: the alert set is empty.",
       "done_empty_detail": "No new clusters in this period: the alert set is empty. {details}",
       "outcome_pixels": {

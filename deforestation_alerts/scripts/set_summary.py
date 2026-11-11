@@ -8,11 +8,14 @@ Two details of the store shape drive this module:
 
 * ``alert_date_min`` is a **decimal year** (``year + doy/1000``, written by
   ``engine/vectorize.yyyyddd_to_decimal``), not a date.
-* the answer columns (one per question, spec D9) and the admin names are
-  written per alert **during Analysis review**, so ``by_question``,
-  ``by_admin`` and ``by_admin_level1`` cover reviewed alerts only. The admin
-  columns are off by one from FAO GAUL: ``admin1`` holds the country
-  (``ADM0_NAME``) and ``admin2`` the GAUL level 1 (``ADM1_NAME``). An answer holds several comma-joined codes, and
+* the answer columns (one per question, spec D9) are written per alert
+  **during Analysis review**, so ``by_question``, ``by_admin`` and
+  ``by_admin_level1`` cover reviewed alerts only. The admin names come from
+  GAUL 2024, written by Integrate for every alert (or by the review Save, for
+  a set made before that or whose fetch failed); reviews saved earlier keep
+  their GAUL 2015 names. The admin columns are off by one from GAUL:
+  ``admin1`` holds the country (``gaul0_name``) and ``admin2`` the GAUL
+  level 1 (``gaul1_name``). An answer holds several comma-joined codes, and
   an alert's full area counts once under each code it names: splitting it
   between the answers would invent a number the review never recorded.
 

@@ -665,6 +665,7 @@
         "many": "{n} de agrupamentos vinculados a perdas anteriores",
         "other": "{n} agrupamentos vinculados a perdas anteriores"
       },
+      "admin_names_failed": "Não foi possível obter os nomes administrativos; eles são preenchidos ao salvar cada alerta.",
       "done_empty": "Nenhum agrupamento novo neste período: o conjunto de alertas está vazio.",
       "done_empty_detail": "Nenhum agrupamento novo neste período: o conjunto de alertas está vazio. {details}",
       "outcome_pixels": {

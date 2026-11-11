@@ -8,9 +8,10 @@ the one the alerts came from; anything else is a ``SaveRefused``, which
 writes nothing.
 """
 
-import ee
+import logging
 from datetime import datetime, timezone
 
+from deforestation_alerts.engine.admin_names import admin_names, load_boundaries
 from deforestation_alerts.errors import KeyedError
 import pandas as pd
 
@@ -22,6 +23,8 @@ from deforestation_alerts.project.store_schema import GROWS_FROM, IMAGE_AREA
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from gui.scripts import growth_index, questions
 from gui.scripts import set_store
+
+logger = logging.getLogger("SEPALUI.deforestation_alerts")
 
 
 def stamp_now() -> str:
@@ -61,9 +64,9 @@ def refuse_unless_current(alertas_gdf, app_tile_model, target) -> None:
     ``alerts_gdf`` and the active set are separate reactives: Integrate records
     a new set before it publishes that set's alerts, so for a moment the alerts
     on hand are the previous set's. Saved, they would overwrite the new set's
-    store. And the admin lookups block for seconds, during which an Integrate
-    can activate another set, or the project can be switched: the alerts this
-    Save edited then belong to a set that is no longer the open project's
+    store. And the admin lookups (a first boundaries fetch) block for seconds,
+    during which an Integrate can activate another set, or the project can be
+    switched: the alerts this Save edited then belong to a set that is no longer the open project's
     active set, so they are not written at all (Review Focus 5).
 
     A re-run of the *same* set keeps its id, so those two checks pass while
@@ -161,6 +164,29 @@ def _write_plan(alertas_gdf, updates, answer_columns, app_tile_model, folder, ta
     alertas_gdf.attrs.update(staged.attrs)
 
 
+def missing_names(alert, gdf, positions) -> dict:
+    """``{position: {admin1..3: name}}`` for the rows of ``positions`` that
+    have no names yet (a set made before Integrate named its alerts, or one
+    whose fetch failed). Names already stored are never rewritten, GAUL 2015
+    ones included. The boundaries are the project's cache, fetched once on
+    first need; a fetch that fails leaves the names empty and the Save goes on."""
+    columns = list(review_groups.ADMIN_COLUMNS)
+
+    def _named(p):
+        return any(isinstance(v, str) and v for v in gdf.iloc[p].reindex(columns))
+
+    need = [p for p in positions if not _named(p)]
+    pdir, aoi = getattr(alert, "project_dir", None), getattr(alert, "aoi", None)
+    if not need or pdir is None or aoi is None:
+        return {}
+    try:
+        names = admin_names(gdf.geometry.iloc[need], load_boundaries(pdir, aoi))
+    except Exception:  # noqa: BLE001 - the review matters more than its names
+        logger.warning("Save: the admin boundaries could not be fetched", exc_info=True)
+        return {}
+    return {p: names.iloc[i].to_dict() for i, p in enumerate(need)}
+
+
 def radar_updates(before_radar_info, after_radar_info, pinned: dict) -> dict:
     """The radar columns a Save writes: a pinned side its pick (name and
     millis, like the optical side), a following side ``None`` -- it is derived
@@ -205,9 +231,9 @@ def save_review(alert, app_tile_model):
     it writes for.
 
     The store it writes is the active set's AS THE SAVE STARTS: the admin
-    lookups below block for seconds, and the live ``SetContext`` (ruling #84)
-    follows an Integrate that activates a new set, or a project switch,
-    meanwhile. The write then happens only if that set is still the active
+    lookups below (``missing_names``: a first boundaries fetch) can block for
+    seconds, and the live ``SetContext`` (ruling #84) follows an Integrate
+    that activates a new set, or a project switch, meanwhile. The write then happens only if that set is still the active
     one (``write_store``); otherwise the Save is refused.
 
     ``alert`` (``state.capture_alert``) is what the Save writes: the alert, its
@@ -216,9 +242,9 @@ def save_review(alert, app_tile_model):
     is the clicked alert's, with its own values.
 
     With grouping effective the capture carries a plan (``alert.plan``,
-    spec 2026-10-26 §5.2): the same refusals, one admin lookup over the
-    group's bounds, the evaluator refusals, then every row of the plan in
-    one store write (``_write_plan``). Without one this is the single save.
+    spec 2026-10-26 §5.2): the same refusals, the names of its unnamed
+    rows from one boundaries read, the evaluator refusals, then every row of
+    the plan in one store write (``_write_plan``). Without one this is the single save.
     """
     plan = getattr(alert, "plan", None)
     if plan is not None and plan.kind == review_groups.REMOVE:
@@ -297,27 +323,14 @@ def save_review(alert, app_tile_model):
                                  getattr(alert, "radar_pinned", None)))
     updates[IMAGE_AREA] = getattr(alert, "image_area", "normal")
 
-    # Administrative location attributes via GEE FAO/GAUL (OLD 1799-1828).
-    # A group save looks over the union bounds of its main and members, still
-    # in one lookup (spec §5.2).
-    adminL2 = ee.FeatureCollection("FAO/GAUL/2015/level2")
-    if plan is None:
-        where = alert.bb.geometry()
-    else:
-        where = ee.Geometry.Rectangle(list(review_groups.bounds(alertas_gdf, (plan.main, *plan.members))))
-    selected_admin = adminL2.filterBounds(where)
-    # Joined server-side: the OLD iterate appended ", " after every name and
-    # sliced one character off, which left a trailing comma ("Paraguay,").
-    names = ee.Dictionary({
-        column: selected_admin.aggregate_array(field).distinct().join(", ")
-        for column, field in (("admin1", "ADM0_NAME"), ("admin2", "ADM1_NAME"),
-                              ("admin3", "ADM2_NAME"))
-    }).getInfo()  # one round trip, not three
-    updates.update(names)
+    # Each row's own GAUL 2024 names, for the rows the Save writes that have
+    # none (Integrate names every alert since 2026-11-11). Not part of the
+    # review: a group's members keep theirs.
+    names = missing_names(alert, alertas_gdf,
+                          (actual_alert_id,) if plan is None else (plan.main, *plan.members))
 
     # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
-    # A refusal: nothing is written at all -- not the store, and not the row
-    # (the admin names above are in ``updates``, which is dropped with it).
+    # A refusal: nothing is written at all -- not the store, and not the row.
     if (
         status == FALSE_POSITIVE
         and defo_layer is not None
@@ -333,6 +346,8 @@ def save_review(alert, app_tile_model):
         _refuse_evaluators(alertas_gdf, plan, alert)
         cells = review_groups.plan_updates(alertas_gdf, plan, updates, drawing=drawing,
                                            crs=alert.area_crs, links=links)
+        for p, row_names in names.items():
+            cells[p].update(row_names)
         _write_plan(alertas_gdf, cells, answer_updates, app_tile_model, folder, target)
         return True
 
@@ -342,6 +357,7 @@ def save_review(alert, app_tile_model):
     # nothing drawn, area_ha is the alert's Integrate area -- not what a save
     # with a drawing left in the row. The store feeds the exports, the map
     # tiles and the report.
+    updates.update(names.get(actual_alert_id, {}))
     updates["alert_polygon"] = drawing
     if drawing is None:
         updates["area_ha"] = review_groups.own_area(alertas_gdf, actual_alert_id, alert.area_crs)
