@@ -177,9 +177,10 @@ def _figure(width: float, height: float, theme: dict, rect=(0.0, 0.0, 1.0, 1.0))
     return fig, ax
 
 
-def to_inline_svg(fig, *, label: str) -> str:
+def to_inline_svg(fig, *, label: str, max_width: float | None = None) -> str:
     """``fig`` as markup safe to drop into the page: no prolog, no timestamp,
-    no global stylesheet, labelled, and sized by its container."""
+    no global stylesheet, labelled, and sized by its container (never wider
+    than ``max_width`` CSS pixels when given)."""
     buffer = io.StringIO()
     with rc_context(_RC):
         fig.savefig(buffer, format="svg", facecolor=fig.get_facecolor(), edgecolor="none")
@@ -192,7 +193,7 @@ def to_inline_svg(fig, *, label: str) -> str:
     attributes = (
         f' role="img" aria-label="{escape(label, {chr(34): "&quot;"})}"'
         ' stroke-linejoin="round" stroke-linecap="butt"'
-        ' style="width:100%;height:auto;display:block"'
+        f' style="width:100%;height:auto;display:block{"" if max_width is None else f";max-width:{max_width:g}px"}"'
     )
     return head + attributes + svg[cut:]
 
@@ -439,6 +440,8 @@ def _ranking(rows, *, measure, theme, label_of, width, height, left, soft_unknow
     values = [value for _, value in merged]
     if not merged or sum(values) <= 0:
         return _empty(width, height, theme)
+    # one bar gets a short figure, not a 160 px block; the card may be far wider than ``width``
+    height = min(height, 22 + 23 * len(merged))
     fig, ax = _figure(width, height, theme, rect=(left, 0.10, 0.97 - left, 0.86))
     spots = range(len(merged))
     unknown = _clip(label_of(UNKNOWN_DRIVER)) if soft_unknown else None
@@ -453,7 +456,8 @@ def _ranking(rows, *, measure, theme, label_of, width, height, left, soft_unknow
     ax.set_xticks([])
     ax.set_yticks(list(spots))
     ax.set_yticklabels(labels, fontsize=_TICK, color=theme["ink2"])
-    return to_inline_svg(fig, label=_listing(zip(labels, (format_value(v, measure) for v in values))))
+    return to_inline_svg(fig, label=_listing(zip(labels, (format_value(v, measure) for v in values))),
+                         max_width=width * 1.5)
 
 
 def _answer_label(label_of):

@@ -241,6 +241,17 @@ def test_no_answer_is_a_soft_bar_not_the_series_hue(theme):
     assert theme["soft"].lower() in svg and theme["accent"].lower() in svg
 
 
+def test_a_one_answer_question_is_a_short_capped_figure(theme):
+    """One "No answer" bar is not stretched into a full-card block."""
+    def height(values):
+        summary = ss.summarize_alerts(_frame(q_road=values), answer_columns={"road": "q_road"})
+        svg = charts.chart_question(summary, "road", measure=charts.MEASURE_ALERTS, theme=theme, label_of=str)
+        assert "max-width:630px" in svg
+        return float(re.search(r'viewBox="0 0 [\d.]+ ([\d.]+)"', svg).group(1))
+
+    assert height([""] * 8) < height(["yes", "no", "", "yes", "", "", "no", ""])
+
+
 def test_a_question_that_was_not_summarised_draws_the_empty_chart(summary, theme):
     svg = charts.chart_question(summary, "road", measure=charts.MEASURE_AREA, theme=theme, label_of=str)
     assert svg.startswith("<svg") and t("overview_tile.chart_no_data") in svg
