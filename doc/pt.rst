@@ -249,10 +249,6 @@ Use esse recurso para:
 -   começar uma nova rodada de monitoramento com a mesma configuração; ou
 -   monitorar outra área depois que a AOI de um projeto estiver bloqueada (veja `Área de interesse <defo-aoi_>`_).
 
-.. note::
-
-    As perguntas do questionário não são copiadas: a cópia começa com as perguntas padrão. Adicione as suas de novo na etapa `Questionário <defo-questionnaire_>`_ dela.
-
 **Duplicar** não é oferecido para uma cópia de revisão.
 
 .. _defo-project-import:

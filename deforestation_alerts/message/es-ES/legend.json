@@ -11,7 +11,7 @@
       "not_reviewed": "No revisada",
       "confirmed": "Revisada: confirmada",
       "false_positive": "Revisada: falso positivo",
-      "needs_revision": "Revisada: necesita revisión"
+      "needs_revision": "Revisada: requiere revisión"
     },
     "mask": {
       "keep": "Área conservada: se eliminan las alertas fuera de ella",

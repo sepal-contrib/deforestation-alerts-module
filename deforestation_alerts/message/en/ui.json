@@ -308,7 +308,7 @@
       "title": "Verdict",
       "true": "True alert",
       "false": "False positive",
-      "revision": "Needs review",
+      "revision": "Needs revision",
       "unsaved": "Unsaved changes on this alert",
       "saved_at": "Saved {time}",
       "unsaved_title": "This alert has unsaved changes",

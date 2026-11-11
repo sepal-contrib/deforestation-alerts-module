@@ -257,10 +257,6 @@ Use it to:
 -   start a new monitoring round from the same setup; or
 -   monitor another area once the AOI of a project is locked (see `Area of interest <defo-aoi_>`_).
 
-.. note::
-
-    The questionnaire's questions are not copied: the copy starts with the default questions. Add your own again in its `Questionnaire <defo-questionnaire_>`_ step.
-
 **Duplicate** is not offered for a review copy.
 
 .. _defo-project-import:
@@ -479,7 +475,7 @@ Growth next to earlier alerts
 
 The pixels of a reported alert are part of the footprint, so the look-back does not bring them back. But a clearing often keeps growing at the edge of an alert reported in an earlier period. The new pixels then form a cluster of their own, often smaller than the **Minimum cluster size**, which would be set aside like any small cluster.
 
-When the earlier alert was saved as **True alert** or **Needs review**, `Integrate & vectorize <defo-integrate-growth_>`_ keeps this growth in view:
+When the earlier alert was saved as **True alert** or **Needs revision**, `Integrate & vectorize <defo-integrate-growth_>`_ keeps this growth in view:
 
 -   A new alert that touches the earlier alert, or lies within one pixel of the grid from it, is a *growth alert*, linked to it.
 -   A cluster under the minimum size is kept when it touches the earlier alert: it is a growth alert *under the minimum area* (unless **Keep smaller clusters that touch earlier confirmed loss** is cleared). A small cluster that touches nothing is set aside, and the look-back can still bring it back in the next period.
@@ -1117,7 +1113,7 @@ The pixels come back whatever their detection date within the earlier set's own 
 Growth of earlier loss
 """"""""""""""""""""""
 
-A clearing often keeps growing from one month to the next. The run links each new alert to the *earlier loss* it grows from: the alerts of earlier periods' sets that were saved as **True alert** or **Needs review**. An earlier alert's shape is the polygon drawn for it in `Refine the polygon <defo-analysis-refine_>`_, or else its detected cluster.
+A clearing often keeps growing from one month to the next. The run links each new alert to the *earlier loss* it grows from: the alerts of earlier periods' sets that were saved as **True alert** or **Needs revision**. An earlier alert's shape is the polygon drawn for it in `Refine the polygon <defo-analysis-refine_>`_, or else its detected cluster.
 
 -   A new cluster that lies within one pixel of the grid of an earlier alert's shape, edge to edge, is a *growth alert*, linked to every earlier alert that close. A cluster one empty pixel away still counts; a diagonal gap of one pixel is farther. One without a link is a *new* alert.
 -   With **Keep smaller clusters that touch earlier confirmed loss** selected (the default), a cluster smaller than the **Minimum cluster size** is kept when it is that close to earlier loss: it is a growth alert *under the minimum area*. Cleared, every small cluster is set aside. A small cluster that touches nothing is always set aside as *not analysable*.
@@ -1151,7 +1147,7 @@ The form opens with the settings of the active alert set (all but the sources), 
         -   Clusters smaller than this are dropped, unless the next option keeps them. The hint gives that size in pixels of the grid (at 10 m, 0.5 ha is "50 pixels on the grid").
         -   0.5 ha. Any number of hectares, 0 or more. Even at 0, a cluster is at least one pixel.
     *   -   **Keep smaller clusters that touch earlier confirmed loss**
-        -   Keeps a cluster under the minimum size when it is within one pixel of an earlier alert reviewed as **True alert** or **Needs review** (see `Growth of earlier loss <defo-integrate-growth_>`_). A line under it says when the run has nothing to link to: "No earlier period has an alert set yet: nothing links in this run." or "No alert of an earlier period is reviewed yet: nothing links in this run."
+        -   Keeps a cluster under the minimum size when it is within one pixel of an earlier alert reviewed as **True alert** or **Needs revision** (see `Growth of earlier loss <defo-integrate-growth_>`_). A line under it says when the run has nothing to link to: "No earlier period has an alert set yet: nothing links in this run." or "No alert of an earlier period is reviewed yet: nothing links in this run."
         -   Selected.
     *   -   **Order**
         -   The order of the clusters in the set, which is the review order: **Bigger clusters first**, **Smaller clusters first**, **Recent clusters first** (by last detection date) or **Older clusters first** (by first detection date).
@@ -1500,7 +1496,7 @@ A new project starts with one question, **Loss driver**:
 -   several answers;
 -   nine options: **Agriculture expansion**, **Livestock grazing**, **Logging**, **Urban expansion**, **Shifting cultivation**, **Mining**, **Forest fires**, **Hurricanes** and **Other**;
 -   typed answers allowed; and
--   asked for **True alert** and **Needs review** (not for a false positive).
+-   asked for **True alert** and **Needs revision** (not for a false positive).
 
 Edit or delete it like any other question.
 
@@ -1549,7 +1545,7 @@ Select **Add question** (or the pencil icon of a question) to open the **Add a q
         -   The review cannot be saved without an answer (for the verdicts it is asked for).
         -   Off.
     *   -   **Ask when the verdict is**
-        -   The verdicts the question is asked for: **True alert**, **False positive**, **Needs review**. For the other verdicts, it is hidden.
+        -   The verdicts the question is asked for: **True alert**, **False positive**, **Needs revision**. For the other verdicts, it is hidden.
         -   All three. At least one.
 
 The last line shows the question's report placeholder (e.g. "Report placeholder: {access_road_nearby}"). It is made from the question's text when the question is created and never changes, even if the question is renamed.
@@ -2206,7 +2202,7 @@ Under **Verdict**, select one of:
     *   -   **False positive**
         -   **Reviewed: false positive**
         -   They show no forest loss: clouds, shadows, a seasonal change…
-    *   -   **Needs review**
+    *   -   **Needs revision**
         -   **Reviewed: needs revision**
         -   No decision is possible yet, or the alert needs a second look.
 
@@ -2881,7 +2877,7 @@ Before the packages
 The coordinator goes on reviewing in the original project while the split is set:
 
 -   alert 3 as **True alert**, with **Agriculture expansion**;
--   alert 4 as **Needs review**, with **Logging**; and
+-   alert 4 as **Needs revision**, with **Logging**; and
 -   alert 5 as **True alert**, with **Mining**.
 
 These verdicts travel in the packages, so the evaluators see them; alerts 3 and 5 are among Ana's. The coordinator then selects **Generate packages** and sends each evaluator their .zip file.
@@ -2926,7 +2922,7 @@ The team also wants to record whether each clearing has an access road nearby. I
 2.  "Access road nearby?";
 3.  **One answer**, with the options Yes and No;
 4.  **Required** on; and
-5.  asked for **True alert** and **Needs review** only.
+5.  asked for **True alert** and **Needs revision** only.
 
 Because the questionnaire changed after the packages were built, their cloud icons in `Evaluation <defo-evaluation-packages_>`_ turn amber. Packages already sent still merge, by question key. For the new question to reach the evaluators, the coordinator selects **Regenerate packages** and sends the new ones.
 

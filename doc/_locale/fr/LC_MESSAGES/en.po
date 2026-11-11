@@ -382,9 +382,6 @@ msgstr "démarrer un nouveau cycle de suivi avec la même configuration ;"
 msgid "monitor another area once the AOI of a project is locked (see `Area of interest <defo-aoi_>`_)."
 msgstr "surveiller une autre zone une fois l'AOI d'un projet verrouillée (voir `Zone d'intérêt <defo-aoi_>`_)."
 
-msgid "The questionnaire's questions are not copied: the copy starts with the default questions. Add your own again in its `Questionnaire <defo-questionnaire_>`_ step."
-msgstr "Les questions du questionnaire ne sont pas copiées : la copie démarre avec les questions par défaut. Ajoutez à nouveau les vôtres dans son étape `Questionnaire <defo-questionnaire_>`_."
-
 msgid "**Duplicate** is not offered for a review copy."
 msgstr "**Dupliquer** n'est pas proposé pour une copie de révision."
 
@@ -706,8 +703,8 @@ msgstr "Extension à côté d'alertes antérieures"
 msgid "The pixels of a reported alert are part of the footprint, so the look-back does not bring them back. But a clearing often keeps growing at the edge of an alert reported in an earlier period. The new pixels then form a cluster of their own, often smaller than the **Minimum cluster size**, which would be set aside like any small cluster."
 msgstr "Les pixels d'une alerte signalée font partie de l'empreinte : la rétrospection ne les fait donc pas revenir. Mais un défrichement continue souvent de s'étendre au bord d'une alerte signalée dans une période antérieure. Les nouveaux pixels forment alors leur propre groupe, souvent plus petit que la **Taille minimale de groupe**, qui serait mis de côté comme tout petit groupe."
 
-msgid "When the earlier alert was saved as **True alert** or **Needs review**, `Integrate & vectorize <defo-integrate-growth_>`_ keeps this growth in view:"
-msgstr "Quand l'alerte antérieure a été enregistrée comme **Alerte réelle** ou **À réexaminer**, `Intégrer et vectoriser <defo-integrate-growth_>`_ garde cette extension en vue :"
+msgid "When the earlier alert was saved as **True alert** or **Needs revision**, `Integrate & vectorize <defo-integrate-growth_>`_ keeps this growth in view:"
+msgstr "Quand l'alerte antérieure a été enregistrée comme **Alerte réelle** ou **À revoir**, `Intégrer et vectoriser <defo-integrate-growth_>`_ garde cette extension en vue :"
 
 msgid "A new alert that touches the earlier alert, or lies within one pixel of the grid from it, is a *growth alert*, linked to it."
 msgstr "Une nouvelle alerte qui touche l'alerte antérieure, ou se trouve à un pixel de la grille au plus, est une *alerte d'extension*, liée à celle-ci."
@@ -1615,8 +1612,8 @@ msgstr "Les pixels reviennent quelle que soit leur date de détection dans la fe
 msgid "Growth of earlier loss"
 msgstr "Extension d'une perte antérieure"
 
-msgid "A clearing often keeps growing from one month to the next. The run links each new alert to the *earlier loss* it grows from: the alerts of earlier periods' sets that were saved as **True alert** or **Needs review**. An earlier alert's shape is the polygon drawn for it in `Refine the polygon <defo-analysis-refine_>`_, or else its detected cluster."
-msgstr "Un défrichement continue souvent de s'étendre d'un mois à l'autre. L'exécution relie chaque nouvelle alerte à la *perte antérieure* dont elle est l'extension : les alertes des jeux des périodes antérieures enregistrées comme **Alerte réelle** ou **À réexaminer**. La forme d'une alerte antérieure est le polygone dessiné pour elle dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut son groupe détecté."
+msgid "A clearing often keeps growing from one month to the next. The run links each new alert to the *earlier loss* it grows from: the alerts of earlier periods' sets that were saved as **True alert** or **Needs revision**. An earlier alert's shape is the polygon drawn for it in `Refine the polygon <defo-analysis-refine_>`_, or else its detected cluster."
+msgstr "Un défrichement continue souvent de s'étendre d'un mois à l'autre. L'exécution relie chaque nouvelle alerte à la *perte antérieure* dont elle est l'extension : les alertes des jeux des périodes antérieures enregistrées comme **Alerte réelle** ou **À revoir**. La forme d'une alerte antérieure est le polygone dessiné pour elle dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut son groupe détecté."
 
 msgid "A new cluster that lies within one pixel of the grid of an earlier alert's shape, edge to edge, is a *growth alert*, linked to every earlier alert that close. A cluster one empty pixel away still counts; a diagonal gap of one pixel is farther. One without a link is a *new* alert."
 msgstr "Un nouveau groupe situé à un pixel de la grille au plus de la forme d'une alerte antérieure, de bord à bord, est une *alerte d'extension*, liée à chaque alerte antérieure aussi proche. Un groupe séparé par un pixel vide compte encore ; un écart d'un pixel en diagonale est plus loin. Une alerte sans lien est une *nouvelle* alerte."
@@ -1675,8 +1672,8 @@ msgstr "0,5 ha. N'importe quel nombre d'hectares, 0 ou plus. Même à 0, un grou
 msgid "**Keep smaller clusters that touch earlier confirmed loss**"
 msgstr "**Garder les groupes plus petits qui touchent une perte confirmée antérieure**"
 
-msgid "Keeps a cluster under the minimum size when it is within one pixel of an earlier alert reviewed as **True alert** or **Needs review** (see `Growth of earlier loss <defo-integrate-growth_>`_). A line under it says when the run has nothing to link to: \"No earlier period has an alert set yet: nothing links in this run.\" or \"No alert of an earlier period is reviewed yet: nothing links in this run.\""
-msgstr "Garde un groupe sous la taille minimale quand il se trouve à un pixel au plus d'une alerte antérieure examinée comme **Alerte réelle** ou **À réexaminer** (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_). Une ligne en dessous indique quand l'exécution n'a rien à quoi lier : « Aucune période antérieure n'a encore de jeu d'alertes : rien ne se lie lors de cette exécution. » ou « Aucune alerte d'une période antérieure n'est encore examinée : rien ne se lie lors de cette exécution. »"
+msgid "Keeps a cluster under the minimum size when it is within one pixel of an earlier alert reviewed as **True alert** or **Needs revision** (see `Growth of earlier loss <defo-integrate-growth_>`_). A line under it says when the run has nothing to link to: \"No earlier period has an alert set yet: nothing links in this run.\" or \"No alert of an earlier period is reviewed yet: nothing links in this run.\""
+msgstr "Garde un groupe sous la taille minimale quand il se trouve à un pixel au plus d'une alerte antérieure examinée comme **Alerte réelle** ou **À revoir** (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_). Une ligne en dessous indique quand l'exécution n'a rien à quoi lier : « Aucune période antérieure n'a encore de jeu d'alertes : rien ne se lie lors de cette exécution. » ou « Aucune alerte d'une période antérieure n'est encore examinée : rien ne se lie lors de cette exécution. »"
 
 msgid "Selected."
 msgstr "Coché."
@@ -2176,8 +2173,8 @@ msgstr "neuf options : **Expansion agricole**, **Pâturage du bétail**, **Explo
 msgid "typed answers allowed; and"
 msgstr "réponses saisies autorisées ;"
 
-msgid "asked for **True alert** and **Needs review** (not for a false positive)."
-msgstr "posée pour **Alerte réelle** et **À réexaminer** (pas pour un faux positif)."
+msgid "asked for **True alert** and **Needs revision** (not for a false positive)."
+msgstr "posée pour **Alerte réelle** et **À revoir** (pas pour un faux positif)."
 
 msgid "Edit or delete it like any other question."
 msgstr "Modifiez-la ou supprimez-la comme n'importe quelle autre question."
@@ -2251,8 +2248,8 @@ msgstr "La révision ne peut pas être enregistrée sans réponse (pour les verd
 msgid "**Ask when the verdict is**"
 msgstr "**Demander quand le verdict est**"
 
-msgid "The verdicts the question is asked for: **True alert**, **False positive**, **Needs review**. For the other verdicts, it is hidden."
-msgstr "Les verdicts pour lesquels la question est posée : **Alerte réelle**, **Faux positif**, **À réexaminer**. Pour les autres verdicts, elle est masquée."
+msgid "The verdicts the question is asked for: **True alert**, **False positive**, **Needs revision**. For the other verdicts, it is hidden."
+msgstr "Les verdicts pour lesquels la question est posée : **Alerte réelle**, **Faux positif**, **À revoir**. Pour les autres verdicts, elle est masquée."
 
 msgid "All three. At least one."
 msgstr "Les trois. Au moins un."
@@ -3226,8 +3223,8 @@ msgstr "**Examinée : faux positif**"
 msgid "They show no forest loss: clouds, shadows, a seasonal change…"
 msgstr "Elles ne montrent aucune perte forestière : nuages, ombres, changement saisonnier…"
 
-msgid "**Needs review**"
-msgstr "**À réexaminer**"
+msgid "**Needs revision**"
+msgstr "**À revoir**"
 
 msgid "**Reviewed: needs revision**"
 msgstr "**Examinée : à revoir**"
@@ -4192,8 +4189,8 @@ msgstr "La coordinatrice continue d'examiner dans le projet d'origine une fois l
 msgid "alert 3 as **True alert**, with **Agriculture expansion**;"
 msgstr "l'alerte 3 comme **Alerte réelle**, avec **Expansion agricole** ;"
 
-msgid "alert 4 as **Needs review**, with **Logging**; and"
-msgstr "l'alerte 4 comme **À réexaminer**, avec **Exploitation forestière** ; et"
+msgid "alert 4 as **Needs revision**, with **Logging**; and"
+msgstr "l'alerte 4 comme **À revoir**, avec **Exploitation forestière** ; et"
 
 msgid "alert 5 as **True alert**, with **Mining**."
 msgstr "l'alerte 5 comme **Alerte réelle**, avec **Exploitation minière**."
@@ -4258,8 +4255,8 @@ msgstr "**Une réponse**, avec les options Oui et Non ;"
 msgid "**Required** on; and"
 msgstr "**Obligatoire** activé ; et"
 
-msgid "asked for **True alert** and **Needs review** only."
-msgstr "posée uniquement pour **Alerte réelle** et **À réexaminer**."
+msgid "asked for **True alert** and **Needs revision** only."
+msgstr "posée uniquement pour **Alerte réelle** et **À revoir**."
 
 msgid "Because the questionnaire changed after the packages were built, their cloud icons in `Evaluation <defo-evaluation-packages_>`_ turn amber. Packages already sent still merge, by question key. For the new question to reach the evaluators, the coordinator selects **Regenerate packages** and sends the new ones."
 msgstr "Comme le questionnaire a changé après la génération des paquets, leurs icônes de nuage passent à l'ambre dans `Évaluation <defo-evaluation-packages_>`_. Les paquets déjà envoyés se fusionnent toujours, par clé de question. Pour que la nouvelle question parvienne aux évaluateurs, la coordinatrice sélectionne **Régénérer les paquets** et envoie les nouveaux."

@@ -251,10 +251,6 @@ Servez-vous-en pour :
 -   démarrer un nouveau cycle de suivi avec la même configuration ;
 -   surveiller une autre zone une fois l'AOI d'un projet verrouillée (voir `Zone d'intérêt <defo-aoi_>`_).
 
-.. note::
-
-    Les questions du questionnaire ne sont pas copiées : la copie démarre avec les questions par défaut. Ajoutez à nouveau les vôtres dans son étape `Questionnaire <defo-questionnaire_>`_.
-
 **Dupliquer** n'est pas proposé pour une copie de révision.
 
 .. _defo-project-import:
@@ -467,7 +463,7 @@ Extension à côté d'alertes antérieures
 
 Les pixels d'une alerte signalée font partie de l'empreinte : la rétrospection ne les fait donc pas revenir. Mais un défrichement continue souvent de s'étendre au bord d'une alerte signalée dans une période antérieure. Les nouveaux pixels forment alors leur propre groupe, souvent plus petit que la **Taille minimale de groupe**, qui serait mis de côté comme tout petit groupe.
 
-Quand l'alerte antérieure a été enregistrée comme **Alerte réelle** ou **À réexaminer**, `Intégrer et vectoriser <defo-integrate-growth_>`_ garde cette extension en vue :
+Quand l'alerte antérieure a été enregistrée comme **Alerte réelle** ou **À revoir**, `Intégrer et vectoriser <defo-integrate-growth_>`_ garde cette extension en vue :
 
 -   Une nouvelle alerte qui touche l'alerte antérieure, ou se trouve à un pixel de la grille au plus, est une *alerte d'extension*, liée à celle-ci.
 -   Un groupe sous la taille minimale est conservé s'il touche l'alerte antérieure : c'est une alerte d'extension *sous la surface minimale* (sauf si **Garder les groupes plus petits qui touchent une perte confirmée antérieure** est décoché). Un petit groupe qui ne touche rien est mis de côté, et la rétrospection peut encore le faire revenir à la période suivante.
@@ -1089,7 +1085,7 @@ Les pixels reviennent quelle que soit leur date de détection dans la fenêtre d
 Extension d'une perte antérieure
 """"""""""""""""""""""""""""""""
 
-Un défrichement continue souvent de s'étendre d'un mois à l'autre. L'exécution relie chaque nouvelle alerte à la *perte antérieure* dont elle est l'extension : les alertes des jeux des périodes antérieures enregistrées comme **Alerte réelle** ou **À réexaminer**. La forme d'une alerte antérieure est le polygone dessiné pour elle dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut son groupe détecté.
+Un défrichement continue souvent de s'étendre d'un mois à l'autre. L'exécution relie chaque nouvelle alerte à la *perte antérieure* dont elle est l'extension : les alertes des jeux des périodes antérieures enregistrées comme **Alerte réelle** ou **À revoir**. La forme d'une alerte antérieure est le polygone dessiné pour elle dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut son groupe détecté.
 
 -   Un nouveau groupe situé à un pixel de la grille au plus de la forme d'une alerte antérieure, de bord à bord, est une *alerte d'extension*, liée à chaque alerte antérieure aussi proche. Un groupe séparé par un pixel vide compte encore ; un écart d'un pixel en diagonale est plus loin. Une alerte sans lien est une *nouvelle* alerte.
 -   Avec **Garder les groupes plus petits qui touchent une perte confirmée antérieure** coché (par défaut), un groupe plus petit que la **Taille minimale de groupe** est conservé s'il est aussi proche d'une perte antérieure : c'est une alerte d'extension *sous la surface minimale*. Décoché, tout petit groupe est mis de côté. Un petit groupe qui ne touche rien est toujours mis de côté comme *non analysable*.
@@ -1123,7 +1119,7 @@ Le formulaire s'ouvre avec les paramètres du jeu d'alertes actif (tous sauf les
         -   Les groupes plus petits sont écartés, sauf si l'option suivante les garde. L'aide donne cette taille en pixels de la grille (à 10 m, 0,5 ha correspond à « 50 pixels sur la grille »).
         -   0,5 ha. N'importe quel nombre d'hectares, 0 ou plus. Même à 0, un groupe fait au moins un pixel.
     *   -   **Garder les groupes plus petits qui touchent une perte confirmée antérieure**
-        -   Garde un groupe sous la taille minimale quand il se trouve à un pixel au plus d'une alerte antérieure examinée comme **Alerte réelle** ou **À réexaminer** (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_). Une ligne en dessous indique quand l'exécution n'a rien à quoi lier : « Aucune période antérieure n'a encore de jeu d'alertes : rien ne se lie lors de cette exécution. » ou « Aucune alerte d'une période antérieure n'est encore examinée : rien ne se lie lors de cette exécution. »
+        -   Garde un groupe sous la taille minimale quand il se trouve à un pixel au plus d'une alerte antérieure examinée comme **Alerte réelle** ou **À revoir** (voir `Extension d'une perte antérieure <defo-integrate-growth_>`_). Une ligne en dessous indique quand l'exécution n'a rien à quoi lier : « Aucune période antérieure n'a encore de jeu d'alertes : rien ne se lie lors de cette exécution. » ou « Aucune alerte d'une période antérieure n'est encore examinée : rien ne se lie lors de cette exécution. »
         -   Coché.
     *   -   **Ordre**
         -   L'ordre des groupes dans le jeu, qui est l'ordre d'examen : **Groupes les plus grands en premier**, **Groupes les plus petits en premier**, **Groupes les plus récents en premier** (selon la date de dernière détection) ou **Groupes les plus anciens en premier** (selon la date de première détection).
@@ -1460,7 +1456,7 @@ Un nouveau projet démarre avec une seule question, **Facteur de perte** :
 -   plusieurs réponses ;
 -   neuf options : **Expansion agricole**, **Pâturage du bétail**, **Exploitation forestière**, **Expansion urbaine**, **Agriculture itinérante**, **Exploitation minière**, **Feux de forêt**, **Ouragans** et **Autre** ;
 -   réponses saisies autorisées ;
--   posée pour **Alerte réelle** et **À réexaminer** (pas pour un faux positif).
+-   posée pour **Alerte réelle** et **À revoir** (pas pour un faux positif).
 
 Modifiez-la ou supprimez-la comme n'importe quelle autre question.
 
@@ -1507,7 +1503,7 @@ Sélectionnez **Ajouter la question** (ou l'icône de crayon d'une question) pou
         -   La révision ne peut pas être enregistrée sans réponse (pour les verdicts où la question est posée).
         -   Désactivé.
     *   -   **Demander quand le verdict est**
-        -   Les verdicts pour lesquels la question est posée : **Alerte réelle**, **Faux positif**, **À réexaminer**. Pour les autres verdicts, elle est masquée.
+        -   Les verdicts pour lesquels la question est posée : **Alerte réelle**, **Faux positif**, **À revoir**. Pour les autres verdicts, elle est masquée.
         -   Les trois. Au moins un.
 
 La dernière ligne affiche la balise de rapport de la question (par exemple « Balise du rapport : {route_d_acces_a_proximite} »). Elle est formée à partir du texte de la question lors de sa création et ne change plus ensuite, même si la question est renommée.
@@ -2146,7 +2142,7 @@ Sous **Verdict**, sélectionnez l'un des boutons :
     *   -   **Faux positif**
         -   **Examinée : faux positif**
         -   Elles ne montrent aucune perte forestière : nuages, ombres, changement saisonnier…
-    *   -   **À réexaminer**
+    *   -   **À revoir**
         -   **Examinée : à revoir**
         -   Aucune décision n'est encore possible, ou l'alerte mérite un second regard.
 
@@ -2807,7 +2803,7 @@ Avant les paquets
 La coordinatrice continue d'examiner dans le projet d'origine une fois la répartition faite :
 
 -   l'alerte 3 comme **Alerte réelle**, avec **Expansion agricole** ;
--   l'alerte 4 comme **À réexaminer**, avec **Exploitation forestière** ; et
+-   l'alerte 4 comme **À revoir**, avec **Exploitation forestière** ; et
 -   l'alerte 5 comme **Alerte réelle**, avec **Exploitation minière**.
 
 Ces verdicts voyagent dans les paquets, si bien que les évaluateurs les voient ; les alertes 3 et 5 font partie de celles d'Ana. La coordinatrice sélectionne ensuite **Générer les paquets** et envoie à chaque évaluateur son fichier .zip.
@@ -2850,7 +2846,7 @@ L'équipe veut aussi noter si chaque coupe a une route d'accès à proximité. �
 2.  « Route d'accès à proximité ? » ;
 3.  **Une réponse**, avec les options Oui et Non ;
 4.  **Obligatoire** activé ; et
-5.  posée uniquement pour **Alerte réelle** et **À réexaminer**.
+5.  posée uniquement pour **Alerte réelle** et **À revoir**.
 
 Comme le questionnaire a changé après la génération des paquets, leurs icônes de nuage passent à l'ambre dans `Évaluation <defo-evaluation-packages_>`_. Les paquets déjà envoyés se fusionnent toujours, par clé de question. Pour que la nouvelle question parvienne aux évaluateurs, la coordinatrice sélectionne **Régénérer les paquets** et envoie les nouveaux.
 

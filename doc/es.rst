@@ -249,10 +249,6 @@ Duplicar un proyecto
 -   empezar una nueva ronda de monitoreo con la misma configuración; o
 -   monitorear otra área una vez que la AOI de un proyecto está bloqueada (consulta `Área de interés <defo-aoi_>`_).
 
-.. note::
-
-    Las preguntas del cuestionario no se copian: la copia empieza con las preguntas predeterminadas. Vuelve a añadir las tuyas en su paso `Cuestionario <defo-questionnaire_>`_.
-
 **Duplicar** no está disponible en una copia de revisión.
 
 .. _defo-project-import:

@@ -11,7 +11,6 @@ dependencies:
   - numpy=1.26
   # Geospatial binaries — conda handles these correctly
   - cartopy>=0.24.0
-  - fiona>=1.10
   - geopandas>=1.0
   # <1.5 (and rioxarray <0.20): on python 3.12 conda picks rasterio 1.5 /
   # rioxarray 0.20, whose metadata wants numpy>=2, so the pip pass swaps in a
@@ -35,8 +34,6 @@ dependencies:
   - scipy
   # GUI / widgets
   - anywidget>=0.9  # the analysis views (gui/widget/multiview)
-  - geemap>=0.35.0
-  - ipyevents>=2.0
   - ipyleaflet>=0.19
   - ipython>=8.12
   - ipyvuetify<3
@@ -66,7 +63,6 @@ dependencies:
       - MightyMosaic==1.2.3
       - python-docx==1.2.0
       - segno==1.6.6   # the report's centroid QR code (scripts/report_builder.py)
-      - pygaul==0.4.2
       # pysepal 4.x resolves the credential source from runtime topology, so
       # Voila/Jupyter get a PROCESS session without the old fork's
       # in_solara_server_context patch (Decision 4 fallback retired).
@@ -95,7 +91,7 @@ dependencies:
 #   grpc-google-iam-v1 0.14.5 requires protobuf<8.0.0,>=6.33.5, but you have
 #   protobuf 4.25.9 which is incompatible.
 # grpcio-status and grpc-google-iam-v1 arrive transitively via conda
-# (pulled in by geemap's google-api-python-client dep); tensorflow==2.17.0's
+# (pulled in transitively by google-api-python-client); tensorflow==2.17.0's
 # own ceiling (`protobuf<5,>=3.20.3`) forces protobuf down from conda's
 # 7.35.1 to 4.25.9 during the pip pass. Verified this does not break
 # anything the app touches:
@@ -103,7 +99,7 @@ dependencies:
 #     Required-by: nothing installed actually depends on them.
 #   - Neither is imported anywhere in earthengine-api's own source (grepped
 #     the installed `ee` package); the only importers in the whole env are
-#     `ee/cli/utils.py` (the `earthengine` CLI tool) and `geemap/ai.py` —
+#     `ee/cli/utils.py` (the `earthengine` CLI tool) —
 #     this app imports neither.
 #   - `from grpc_status import rpc_status` still imports and runs fine
 #     against protobuf 4.25.9 despite the metadata mismatch.
