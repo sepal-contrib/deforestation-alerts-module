@@ -21,7 +21,7 @@ import rasterio
 from affine import Affine
 from rasterio import features
 from rasterio.crs import CRS
-from rasterio.enums import Resampling
+from rasterio.enums import MergeAlg, Resampling
 from rasterio.windows import Window
 from shapely.geometry import box
 
@@ -235,19 +235,28 @@ def window_transform(grid: GridSpec, w: Window) -> Affine:
     return grid.affine @ Affine.translation(w.col_off, w.row_off)
 
 
-def burn(geoms, sindex, grid: GridSpec, w: Window, all_touched: bool = False) -> np.ndarray:
+def burn(geoms, sindex, grid: GridSpec, w: Window, all_touched: bool = False, *, values=None,
+         dtype: str = "uint8") -> np.ndarray:
     """The window's pixels covered by ``geoms`` (a GeoSeries in the grid's CRS,
     ``sindex`` its spatial index or None when empty), or, with
-    ``all_touched``, every pixel they touch."""
+    ``all_touched``, every pixel they touch.
+
+    With ``values`` (aligned with ``geoms``) the pixels hold the value of the
+    last shape over them, in ``dtype``, 0 elsewhere. The hits are sorted, so
+    "last" is the frame order in every window, as in one whole-grid burn."""
     shp = (int(w.height), int(w.width))
     t = window_transform(grid, w)
+    empty = np.zeros(shp, bool if values is None else dtype)
     if sindex is None:
-        return np.zeros(shp, bool)
-    idx = sindex.query(box(t.c, t.f + t.e * shp[0], t.c + t.a * shp[1], t.f))
+        return empty
+    idx = np.sort(sindex.query(box(t.c, t.f + t.e * shp[0], t.c + t.a * shp[1], t.f)))
     if not len(idx):
-        return np.zeros(shp, bool)
-    return features.rasterize(((g, 1) for g in geoms.iloc[idx]), out_shape=shp, transform=t, fill=0,
-                              all_touched=all_touched, dtype="uint8").astype(bool)
+        return empty
+    if values is None:
+        return features.rasterize(((g, 1) for g in geoms.iloc[idx]), out_shape=shp, transform=t, fill=0,
+                                  all_touched=all_touched, dtype="uint8").astype(bool)
+    return features.rasterize(zip(geoms.iloc[idx], np.asarray(values)[idx].tolist()), out_shape=shp, transform=t,
+                              fill=0, all_touched=all_touched, merge_alg=MergeAlg.replace, dtype=dtype)
 
 
 def rasterize_footprint(gdf_grid, grid: GridSpec, out_path, *, all_touched: bool = False, windows=None) -> Path:

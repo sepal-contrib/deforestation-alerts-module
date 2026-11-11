@@ -2,8 +2,9 @@
 
 Purely local. The raw file is in its source's native projection: it is
 aligned onto the grid (``align.reproject_to_grid``, nearest) straight into
-``<out>.part``; then, tile by tile (2048 x 2048, never full-width strips), a
-GeoTIFF source is cleared outside the AOI raster, the masks are applied (a
+``<out>.part``, or a vector source's raw GeoParquet is burned there by the
+``fill`` hook (``rasterize.burn_vector_raw``); then, tile by tile (2048 x 2048,
+never full-width strips), a file source is cleared outside the AOI raster, the masks are applied (a
 keep mask drops alerts where it is 0, an exclude mask where it is non-zero;
 negative values are non-zero) and the alert pixels are counted before and
 after the masks; nearest internal overviews are built, and
@@ -12,6 +13,7 @@ after the masks; nearest internal overviews are built, and
 
 from contextlib import ExitStack
 from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
 import rasterio
@@ -23,8 +25,13 @@ from deforestation_alerts.project.models import GridSpec
 MODES = ("keep", "exclude")
 
 
-def harmonize(raw_path, masks, out_path, grid: GridSpec, *, aoi_raster=None) -> dict:
-    """Write ``out_path`` and return its stats (spec §5.1)."""
+def harmonize(raw_path, masks, out_path, grid: GridSpec, *, aoi_raster=None,
+              fill: Optional[Callable[[Path], None]] = None) -> dict:
+    """Write ``out_path`` and return its stats (spec §5.1).
+
+    ``fill(part)`` writes the grid-aligned 2-band raster at ``part``; the
+    default aligns ``raw_path`` onto the grid. A vector source burns its
+    shapes here instead."""
     for path, mode in masks:
         if mode not in MODES:
             raise ValueError(f"mask mode must be one of {MODES}, not {mode!r}")
@@ -33,7 +40,10 @@ def harmonize(raw_path, masks, out_path, grid: GridSpec, *, aoi_raster=None) -> 
         check_header(aoi_raster, grid)
     stats = {"alert_pixels": 0, "alert_pixels_unmasked": 0, "date_min": None, "date_max": None}
     with part_file(Path(out_path), grid) as part:
-        reproject_to_grid(raw_path, grid, part)
+        if fill is None:
+            reproject_to_grid(raw_path, grid, part)
+        else:
+            fill(part)
         with ExitStack() as stack:
             dst = stack.enter_context(rasterio.open(part, "r+"))
             opened = [(stack.enter_context(rasterio.open(path)), mode) for path, mode in masks]

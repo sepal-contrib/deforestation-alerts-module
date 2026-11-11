@@ -33,6 +33,10 @@ PROGRAMMER_ERRORS = {
     ("deforestation_alerts/engine/runner.py", "RuntimeError", "its harmonize inputs are not recorded"),
     ("deforestation_alerts/project/models.py", "ValueError", "unknown predefined source"),
     ("deforestation_alerts/project/models.py", "ValueError", "is not a custom source"),
+    # CustomSource invariants: the vector dialog builds a consistent spec, so these never reach a user
+    ("deforestation_alerts/project/models.py", "ValueError", "a vector source needs its vector spec"),
+    ("deforestation_alerts/project/models.py", "ValueError", "a vector source is date_only on a FILE"),
+    ("deforestation_alerts/project/models.py", "ValueError", "a CSV vector source needs its lon and lat"),
     # the Alerts step offers only the predefined sources not yet added
     ("deforestation_alerts/project/models.py", "ValueError", "is already a source"),
     # the question form always keeps one verdict ticked; this guards a hand-edited manifest

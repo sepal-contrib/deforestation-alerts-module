@@ -84,3 +84,21 @@ def test_date_stats_count_only_pixels_inside_the_aoi(tmp_path):
     stats = hz.harmonize(raw, [], tmp_path / "h.tif", GRID, aoi_raster=_write(tmp_path / "aoi.tif", aoi))
     assert (stats["date_min"], stats["date_max"]) == (2026001, 2026020)
     assert stats["alert_pixels"] == stats["alert_pixels_unmasked"] == 20 * 35
+
+
+def test_a_fill_hook_replaces_the_reprojection(tmp_path):
+    raw, keep, excl, aoi, _ = _scene(tmp_path)
+    alert = np.zeros((GRID.height, GRID.width), "int32")
+    alert[10:12, 0:40] = 1  # a band across the AOI edge (column 35) and the keep mask's (column 30)
+    dates = np.where(alert > 0, 2026100, 0)
+
+    def fill(part):
+        _write(part, alert, dates)
+
+    stats = hz.harmonize(tmp_path / "not-read.parquet", [(keep, "keep"), (excl, "exclude")], tmp_path / "h.tif",
+                         GRID, aoi_raster=aoi, fill=fill)
+    with rasterio.open(tmp_path / "h.tif") as r:
+        a, d = r.read(1), r.read(2)
+    assert a[10:12, 0:30].min() == 1 and a[:, 30:].max() == 0 and int(a.sum()) == 60
+    assert d[10, 0] == 2026100 and a[0:10].max() == 0  # the raw scene was never read
+    assert stats == {"alert_pixels": 60, "alert_pixels_unmasked": 70, "date_min": 2026100, "date_max": 2026100}

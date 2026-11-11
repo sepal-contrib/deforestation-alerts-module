@@ -75,8 +75,8 @@ def period_dir(pdir, period_id: str) -> Path:
 _period = period_dir
 
 
-def raw_path(pdir, period_id, source, win_start: date, win_end: date) -> Path:
-    name = alert_artifact_name("raw", [source], win_start.isoformat(), win_end.isoformat(), "tif")
+def raw_path(pdir, period_id, source, win_start: date, win_end: date, ext: str = "tif") -> Path:
+    name = alert_artifact_name("raw", [source], win_start.isoformat(), win_end.isoformat(), ext)
     return _period(pdir, period_id) / "raw" / name
 
 

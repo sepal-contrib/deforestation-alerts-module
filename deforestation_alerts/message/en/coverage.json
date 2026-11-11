@@ -18,6 +18,7 @@
     "chip_none": "does not cover the AOI",
     "chip_unchecked": "coverage not checked",
     "chip_checking": "checking coverage…",
+    "chip_vector": "clipped to the AOI",
     "radd_note": "RADD detects only in primary humid tropical forest; elsewhere in its area it reports no alerts.",
     "dates": "{first} → {last}",
     "dates_region": "{region}: {first} → {last}",

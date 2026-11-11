@@ -6,7 +6,8 @@ from deforestation_alerts.engine import fingerprint as fp
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.project import io
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, AoiRecord, GridSpec, Period, Project, add_predefined_source,
+    AlertSet, AlertSetParams, AoiRecord, BandMap, CustomSource, GridSpec, Period, Project, VectorSpec,
+    add_predefined_source,
 )
 
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31),
@@ -189,3 +190,81 @@ def test_a_deleted_harmonized_file_is_not_an_input_change(proj):
     jan = _set(p, pdir, JAN, ["GLAD-L"])
     (pdir / p.artifacts[fp.harm_key(JAN.id, "GLAD-L")].rel_path).unlink()
     assert fp.set_status(p, pdir, jan) is fp.Status.CURRENT
+
+
+EXPECTED_FILE_DEF = {
+    "kind": "custom", "origin": "file", "ref": "/nonexistent/x.tif", "asset_type": "IMAGE", "format": "ccdc",
+    "date_encoding": "yyddd", "band_map": {"alert": "Alert", "date": "Date"}, "native": None,
+    "file": {"missing": True},
+}
+
+
+def _vector_src(path, driver="gpkg"):
+    spec = VectorSpec(driver=driver, lon="lon" if driver == "csv" else None,
+                      lat="lat" if driver == "csv" else None, date="d", date_order="iso")
+    return CustomSource(name="v", origin="vector", ref=str(path), asset_type="FILE", format="date_only",
+                        date_encoding="yyyyddd", band_map=BandMap(alert=None, date="d"), vector=spec, digit=3)
+
+
+def test_a_shapefile_stamp_sees_its_prj(tmp_path):
+    import geopandas as gpd
+    from shapely.geometry import Point
+    shp = tmp_path / "pts.shp"
+    gpd.GeoDataFrame({"d": ["2026-01-02"]}, geometry=[Point(0, 0)], crs="EPSG:4326").to_file(shp, driver="ESRI Shapefile")
+    prj = tmp_path / "pts.prj"
+    wkt = prj.read_text()
+    prj.unlink()
+    src = _vector_src(shp, "shp")
+    before = fp._source_def(src)
+    assert before["sidecars"][".prj"] == {"missing": True}
+    prj.write_text(wkt)
+    assert fp._source_def(src) != before
+
+
+def _shapefile(path):
+    import geopandas as gpd
+    from shapely.geometry import Point
+    gpd.GeoDataFrame({"d": ["2026-01-02"]}, geometry=[Point(0, 0)], crs="EPSG:4326").to_file(path, driver="ESRI Shapefile")
+
+
+def test_an_upper_case_shapefile_stamps_its_sidecars(tmp_path):
+    _shapefile(tmp_path / "pts.shp")
+    for p in tmp_path.iterdir():
+        p.rename(p.with_name(p.stem.upper() + p.suffix.upper()))
+    src = _vector_src(tmp_path / "PTS.SHP", "shp")
+    before = fp._source_def(src)
+    assert list(before["sidecars"]) == [".shp", ".shx", ".dbf", ".prj", ".cpg"]
+    assert all("missing" not in before["sidecars"][e] for e in (".shp", ".shx", ".dbf", ".prj"))
+    dbf = tmp_path / "PTS.DBF"
+    dbf.write_bytes(dbf.read_bytes() + b"\0")
+    assert fp._source_def(src) != before
+
+
+def test_a_lower_case_shapefile_stamp_is_unchanged(tmp_path):
+    shp = tmp_path / "pts.shp"
+    _shapefile(shp)
+    sidecars = fp._source_def(_vector_src(shp, "shp"))["sidecars"]
+    assert list(sidecars) == [".shp", ".shx", ".dbf", ".prj", ".cpg"]
+    for ext, stamp in sidecars.items():
+        st = (tmp_path / f"pts{ext}").stat()
+        assert stamp == {"size": st.st_size, "mtime_ns": st.st_mtime_ns} and "missing" not in stamp
+
+
+def test_raster_source_definitions_are_unchanged():
+    file_src = CustomSource(name="f", origin="file", ref="/nonexistent/x.tif", format="ccdc", digit=3)
+    gee_src = CustomSource(name="g", origin="gee", ref="a/b", format="radd", digit=4)
+    for s in (file_src, gee_src):
+        assert "sidecars" not in fp._source_def(s) and "vector" not in fp._source_def(s)
+    assert fp._source_def(file_src) == EXPECTED_FILE_DEF
+
+
+def test_vector_sources_are_local_file_sources_without_a_native_grid(tmp_path):
+    from deforestation_alerts.engine import grid
+    from gui.scripts import remote_facts
+    vec = _vector_src(tmp_path / "a.gpkg")
+    assert fp.is_file_source(vec) and fp.is_vector_source(vec) and fp._native(vec) is None
+    assert fp._source_def(vec)["file"] == {"missing": True} and "sidecars" not in fp._source_def(vec)
+    p = Project(name="d", created_at=datetime.now(), updated_at=datetime.now())
+    p.sources = {"v": vec}
+    assert grid.default_resolution(p) == grid.FALLBACK_RESOLUTION
+    assert remote_facts.has_file_inputs(p)

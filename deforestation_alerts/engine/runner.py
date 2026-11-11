@@ -26,6 +26,7 @@ records them the same way: the next run then starts from the file on disk
 instead of writing it again. Nothing here touches Solara.
 """
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -34,9 +35,9 @@ from deforestation_alerts.engine import catalogue, normalize
 from deforestation_alerts.engine.coverage import BLOCKED, record_for, window_coverage
 from deforestation_alerts.engine.download import estimate_native_bytes, export_native
 from deforestation_alerts.engine.fingerprint import (
-    AOI_KEY, Status, aoi_raster_inputs, harm_key, harmonized_inputs, is_file_source, make_artifact, mask_file_missing,
-    mask_aligned_status, mask_inputs, mask_key, mask_raw_inputs, mask_raw_key, period_masks, raw_alert_inputs, raw_key,
-    status, user_file_missing,
+    AOI_KEY, Status, aoi_raster_inputs, harm_key, harmonized_inputs, is_file_source, is_vector_source, make_artifact,
+    mask_file_missing, mask_aligned_status, mask_inputs, mask_key, mask_raw_inputs, mask_raw_key, period_masks,
+    raw_alert_inputs, raw_key, status, user_file_missing,
 )
 from deforestation_alerts.engine.grid import estimate_bytes
 from deforestation_alerts.engine.harmonize import harmonize
@@ -44,6 +45,8 @@ from deforestation_alerts.engine.masks import (
     align_mask, build_aoi_raster, build_mask_image, export_mask_native, mask_raw_estimate,
 )
 from deforestation_alerts.engine.raster_io import compressed_estimate, ensure_free_space
+from deforestation_alerts.engine.rasterize import burn_vector_raw
+from deforestation_alerts.engine.vector_input import normalize_vector
 from deforestation_alerts.errors import KeyedError, ProjectRuleError, UserFileMissing
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import Artifact, Period, Project
@@ -172,6 +175,8 @@ def _raw_estimate(p: Project, src) -> int:
         return estimate_native_bytes(p.aoi.bounds, src.catalogue_key)
     if src.origin == "gee":
         return estimate_native_bytes(p.aoi.bounds, (src.native.crs, src.native.scale))
+    if is_vector_source(src):
+        return os.path.getsize(src.ref)
     return normalize.estimate_bytes(src, p.aoi.bounds)
 
 
@@ -211,6 +216,9 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     (``raster_io.compressed_estimate``): the ``.part`` and the old file it
     replaces. If harmonizing fails after a GeoTIFF's AOI-raster build,
     ``HarmonizeFailed`` carries the new AOI-raster artifact.
+
+    A vector source (CSV/GPKG/SHP) has no native grid: its raw file is the
+    window's features as GeoParquet, burned onto the grid at harmonize.
     """
     p, pdir, period = job.project, Path(job.pdir), job.period
     harmonizing = job.mode == "harmonize"
@@ -221,7 +229,8 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
     state, notes = window_coverage(record_for(p, job.source), job.source, win_start, win_end)
     if state in BLOCKED:
         raise CoverageRefused(job.source, state, notes)
-    if src.kind == "custom" and src.native is None:
+    vector = is_vector_source(src)
+    if src.kind == "custom" and src.native is None and not vector:
         raise ProjectRuleError(f"{job.source}: its native grid is unknown; edit the source",
                                key="errors.source_native_unknown", source=job.source)
     missing = user_file_missing(src)
@@ -245,8 +254,11 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
             "GLAD-L: the catalogue metadata (its band list) is not loaded yet; try again in a moment",
             key="errors.bands_not_loaded", source="GLAD-L")
     if downloading:
-        raw_path = paths.raw_path(pdir, period.id, job.source, win_start, win_end)
-        ensure_free_space(raw_path.parent, 2 * compressed_estimate(_raw_estimate(p, src)))
+        raw_path = paths.raw_path(pdir, period.id, job.source, win_start, win_end,
+                                  ext="parquet" if vector else "tif")
+        raw_bytes = _raw_estimate(p, src)  # a vector file's size is already its raw size
+        ensure_free_space(raw_path.parent, 2 * (raw_bytes if vector else compressed_estimate(raw_bytes)))
+        raw_stats = None  # a vector source's read counts
         if src.kind == "predefined":
             image = catalogue.build_image(src.catalogue_key, win_start, win_end, job.aoi, job.meta or {})
             export_native(image, src.catalogue_key, job.aoi, raw_path, on_tiles=on_tiles, on_wait=on_wait)
@@ -254,10 +266,13 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
             image = catalogue.build_custom_image(src, win_start, win_end, job.aoi)
             export_native(image, (src.native.crs, src.native.scale), job.aoi, raw_path,
                           on_tiles=on_tiles, on_wait=on_wait)
+        elif vector:
+            raw_path.parent.mkdir(parents=True, exist_ok=True)
+            raw_stats = normalize_vector(src, win_start, win_end, raw_path)
         else:
             normalize.normalize_file(src, p.aoi.bounds, win_start, win_end, raw_path)
         _drop_superseded(p, pdir, rkey, raw_path)
-        out[rkey] = make_artifact(rkey, "raw_alert", pdir, raw_path, raw_in)
+        out[rkey] = make_artifact(rkey, "raw_alert", pdir, raw_path, raw_in, stats=raw_stats)
     if not harmonizing:
         return out  # the row waits in Harmonize for its click (option C: no chain)
 
@@ -277,10 +292,11 @@ def run_source_row(job: SourceJob, *, on_tiles=None, on_wait=None) -> dict[str, 
                 (paths.resolve(pdir, p.artifacts[mask_key(n)].rel_path), mode)
                 for n, mode, _ in harm_in["masks"]
             ]
-            # only a GeoTIFF is clipped here; its AOI raster was (re)built above
+            # only a user file is clipped here; its AOI raster was (re)built above
             aoi_raster = paths.resolve(pdir, p.artifacts[AOI_KEY].rel_path) if file_source else None
-            stats = harmonize(paths.resolve(pdir, p.artifacts[rkey].rel_path), masks, harm_path, p.grid,
-                              aoi_raster=aoi_raster)
+            raw = paths.resolve(pdir, p.artifacts[rkey].rel_path)
+            fill = (lambda part: burn_vector_raw(raw, p.grid, part, side_m=src.vector.side_m)) if vector else None
+            stats = harmonize(raw, masks, harm_path, p.grid, aoi_raster=aoi_raster, fill=fill)
             _drop_superseded(p, pdir, hkey, harm_path)
             out[hkey] = make_artifact(hkey, "harmonized", pdir, harm_path, harm_in, stats=stats)
     except Exception as exc:

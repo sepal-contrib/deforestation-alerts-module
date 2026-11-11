@@ -73,10 +73,25 @@ PRESETS = {
 }
 
 
+DATE_ORDERS = ("native", "iso", "dmy", "mdy", "yyyymmdd")
+
+
+class VectorSpec(BaseModel):
+    """How a CSV/GPKG/SHP file of points or polygons is read as alerts."""
+
+    driver: Literal["csv", "gpkg", "shp"]
+    layer: Optional[str] = None
+    lon: Optional[str] = None  # CSV coordinate columns (WGS84 degrees)
+    lat: Optional[str] = None
+    date: str  # the date column
+    date_order: Literal["native", "iso", "dmy", "mdy", "yyyymmdd"]
+    side_m: Optional[float] = Field(default=None, gt=0)  # square side burned for a point
+
+
 class CustomSource(BaseModel):
     kind: Literal["custom"] = "custom"
     name: str
-    origin: Literal["gee", "file"]
+    origin: Literal["gee", "file", "vector"]
     ref: str  # asset id, or absolute path
     asset_type: Literal["IMAGE", "IMAGE_COLLECTION", "FILE"] = "IMAGE"
     format: Literal["radd", "ccdc", "pyeo", "date_only"]
@@ -84,6 +99,18 @@ class CustomSource(BaseModel):
     band_map: BandMap = Field(default_factory=lambda: BandMap(alert="Alert", date="Date"))
     native: Optional[NativeGrid] = None  # discovered when the source was added (spec §6.2)
     digit: int
+    vector: Optional[VectorSpec] = None
+
+    @model_validator(mode="after")
+    def _vector_rules(self):
+        if (self.origin == "vector") != (self.vector is not None):
+            raise ValueError("a vector source needs its vector spec, and only a vector source has one")
+        if self.vector is not None:
+            if self.format != "date_only" or self.asset_type != "FILE":
+                raise ValueError("a vector source is date_only on a FILE")
+            if self.vector.driver == "csv" and not (self.vector.lon and self.vector.lat):
+                raise ValueError("a CSV vector source needs its lon and lat columns")
+        return self
 
 
 def mapped_bands(src: "CustomSource") -> list:
@@ -592,7 +619,7 @@ def add_predefined_source(p: Project, key: str, period_id: Optional[str] = None)
 
 def add_custom_source(p: Project, *, name: str, origin: str, ref: str, asset_type: str, format: str,
                       date_encoding: str, band_map: BandMap, native: Optional[NativeGrid],
-                      period_id: Optional[str] = None) -> CustomSource:
+                      period_id: Optional[str] = None, vector: Optional[VectorSpec] = None) -> CustomSource:
     """Validate the name (spec §5.1) and add the definition to the catalogue
     (no limit) and to new periods, and use it in ``period_id`` when given.
     Raises ``ProjectRuleError`` (a ``ValueError``) whose text is a message key:
@@ -607,7 +634,7 @@ def add_custom_source(p: Project, *, name: str, origin: str, ref: str, asset_typ
     # Only the legacy migration reads CustomSource.digit; per-period readers use period_digit.
     digit = _free_custom_digit(p.periods[period_id]) if period_id is not None else CUSTOM_DIGITS[0]
     src = CustomSource(name=name.strip(), origin=origin, ref=ref, asset_type=asset_type, format=format,
-                       date_encoding=date_encoding, band_map=band_map, native=native, digit=digit)
+                       date_encoding=date_encoding, band_map=band_map, native=native, digit=digit, vector=vector)
     p.sources = {**p.sources, src.name: src}  # replaced, not mutated (published snapshots share it)
     set_new_period_source(p, src.name, True)
     if period_id is not None:
@@ -629,7 +656,8 @@ def update_custom_source(p: Project, name: str, **changes) -> CustomSource:
         raise ValueError(f"{name} is not a custom source")
     changes.pop("name", None)
     changes.pop("digit", None)
-    new = src.model_copy(update=changes)
+    # validated, not model_copy'd: an edit across origins must keep the vector rules
+    new = CustomSource.model_validate({**dict(src), **changes})
     p.sources = {**p.sources, name: new}
     return new
 

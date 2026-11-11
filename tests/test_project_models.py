@@ -10,6 +10,7 @@ from deforestation_alerts.project.models import (
     GridSpec,
     Period,
     Project,
+    VectorSpec,
     add_predefined_source,
     period_digit,
     period_id,
@@ -444,3 +445,39 @@ def test_keeping_small_growth_keeps_the_params_dump_unchanged():
     off = AlertSetParams(keep_small_growth=False)
     assert off.model_dump(mode="json")["keep_small_growth"] is False
     assert AlertSetParams.model_validate_json(off.model_dump_json()).keep_small_growth is False
+
+
+def test_a_vector_source_round_trips_and_needs_its_spec():
+    spec = VectorSpec(driver="csv", lon="lon", lat="lat", date="fecha", date_order="dmy", side_m=30)
+    p = _project()
+    src = add_custom_source(p, name="pts", origin="vector", ref="/x/pts.csv", asset_type="FILE",
+                            format="date_only", date_encoding="yyyyddd",
+                            band_map=BandMap(alert=None, date="fecha"), native=None, vector=spec)
+    again = Project.model_validate_json(p.model_dump_json())
+    assert again.sources["pts"] == src and again.sources["pts"].vector.side_m == 30
+    with pytest.raises(ValueError):
+        CustomSource(name="x", origin="vector", ref="/x.csv", asset_type="FILE", format="date_only", digit=3)
+    with pytest.raises(ValueError):
+        VectorSpec(driver="csv", date="d", date_order="iso", side_m=0)
+    with pytest.raises(ValueError):  # a CSV needs its coordinate columns
+        CustomSource(name="x", origin="vector", ref="/x.csv", asset_type="FILE", format="date_only", digit=3,
+                     vector=VectorSpec(driver="csv", date="d", date_order="iso"))
+    with pytest.raises(ValueError):  # a vector spec on a raster origin
+        CustomSource(name="x", origin="file", ref="/x.tif", format="ccdc", digit=3,
+                     vector=VectorSpec(driver="gpkg", date="d", date_order="iso"))
+    with pytest.raises(ValueError):  # a vector source is date-only on a FILE
+        CustomSource(name="x", origin="vector", ref="/x.gpkg", asset_type="IMAGE", format="date_only", digit=3,
+                     vector=VectorSpec(driver="gpkg", date="d", date_order="iso"))
+
+
+def test_an_edit_across_origins_keeps_the_vector_rules():
+    p = _project()
+    spec = VectorSpec(driver="gpkg", date="d", date_order="iso")
+    add_custom_source(p, name="pts", origin="vector", ref="/x/pts.gpkg", asset_type="FILE", format="date_only",
+                      date_encoding="yyyyddd", band_map=BandMap(alert=None, date="d"), native=None, vector=spec)
+    with pytest.raises(ValueError):  # a GeoTIFF that kept the vector spec would not load again
+        update_custom_source(p, "pts", origin="file", ref="/x/a.tif", format="ccdc")
+    assert p.sources["pts"].origin == "vector"
+    new = update_custom_source(p, "pts", origin="file", ref="/x/a.tif", format="ccdc", vector=None,
+                               band_map=BandMap(alert=1, date=2))
+    assert new.origin == "file" and new.vector is None and Project.model_validate_json(p.model_dump_json())

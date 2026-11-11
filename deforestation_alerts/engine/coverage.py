@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from typing import Optional, Sequence
 
 from deforestation_alerts.engine import catalogue
+from deforestation_alerts.engine.fingerprint import is_vector_source
 from deforestation_alerts.project.models import (
     PREDEFINED_KEYS, CustomSource, Project, RegionCoverage, SourceCoverage, mapped_bands,
 )
@@ -210,6 +211,14 @@ def parse_coverage(raw: dict, *, aoi_digest: str, today: date) -> dict:
 
 # ------------------------------------------------------------------ decisions
 def record_for(p: Project, source: str) -> Optional[SourceCoverage]:
+    """The coverage record of ``source`` for the open AOI, or None. A vector
+    source is a local file clipped to the AOI at harmonize: it always covers,
+    and its record is made here (never stored, any stored one ignored)."""
+    src = p.sources.get(source) if p is not None else None
+    if is_vector_source(src):
+        if p.aoi is None:
+            return None
+        return SourceCoverage(aoi_digest=p.aoi.digest, checked_on=date.today(), fraction=1.0, regions=[], gaps=[])
     cov = p.coverage.get(source) if p is not None else None
     if cov is None or p.aoi is None or cov.aoi_digest != p.aoi.digest:
         return None

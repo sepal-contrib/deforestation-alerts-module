@@ -74,15 +74,44 @@ def _file_stamp(path: str) -> dict:
     return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
 
 
+#: The files that make up a shapefile; each is stamped, absent or not.
+SHP_SIDECARS = (".shp", ".shx", ".dbf", ".prj", ".cpg")
+
+
+def _sidecar(base: str, ext: str) -> str:
+    """``base + ext`` or, absent, the file next to it named so in another case
+    (``PTS.DBF``, as on Windows); the lower-case path when there is neither."""
+    path = base + ext
+    if os.path.exists(path):
+        return path
+    folder, stem = os.path.split(base)
+    try:
+        names = os.listdir(folder or ".")
+    except OSError:
+        return path
+    want = (stem + ext).casefold()
+    return next((os.path.join(folder, n) for n in sorted(names) if n.casefold() == want), path)
+
+
 def _source_def(src) -> dict:
     d = src.model_dump(mode="json", exclude={"name", "digit"})
-    if d.get("kind") == "custom" and d.get("origin") == "file":
+    if d.get("vector") is None:
+        d.pop("vector", None)  # raster sources keep their definition from before vector sources
+    if d.get("kind") == "custom" and d.get("origin") in ("file", "vector"):
         d["file"] = _file_stamp(d["ref"])
+    if d.get("origin") == "vector" and d["vector"]["driver"] == "shp":
+        base = os.path.splitext(d["ref"])[0]
+        d["sidecars"] = {ext: _file_stamp(_sidecar(base, ext)) for ext in SHP_SIDECARS}
     return d
 
 
+def is_vector_source(src) -> bool:
+    return getattr(src, "kind", "") == "custom" and src.origin == "vector"
+
+
 def is_file_source(src) -> bool:
-    return getattr(src, "kind", "") == "custom" and src.origin == "file"
+    """A local user file (GeoTIFF or vector), clipped by the AOI raster at harmonize."""
+    return getattr(src, "kind", "") == "custom" and src.origin in ("file", "vector")
 
 
 def user_file_missing(src) -> Optional[str]:
@@ -95,7 +124,7 @@ def _native(src) -> Optional[list]:
     if src.kind == "predefined":
         crs, scale = catalogue.NATIVE[src.catalogue_key]
         return [crs, scale]
-    if src.native is None:
+    if src.origin == "vector" or src.native is None:
         return None
     if src.origin == "file":
         return [src.native.crs, list(src.native.transform or ())]
