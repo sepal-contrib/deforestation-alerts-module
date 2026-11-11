@@ -2,18 +2,46 @@
 written by the old Voila app) into a version 2 project, in place
 (spec 2026-11-11 v1 recipe migration). No GUI imports."""
 
+import ast
+import hashlib
 import json
-from datetime import datetime, timezone
+import shutil
+from contextlib import contextmanager
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import geopandas as gpd
 import pandas as pd
+from pydantic import ValidationError
 from shapely import wkt
 from shapely.errors import ShapelyError
+from shapely.geometry import shape
+from shapely.ops import unary_union
 
-from deforestation_alerts.project.review_status import NOT_REVIEWED
+from deforestation_alerts.errors import KeyedError
+from deforestation_alerts.project import io, paths
+from deforestation_alerts.project.models import (
+    PREDEFINED_DIGITS,
+    AlertSet,
+    AlertSetParams,
+    AoiRecord,
+    BandMap,
+    CustomSource,
+    GeeVisLayer,
+    MaskLayer,
+    MigratedFrom,
+    Period,
+    PeriodMask,
+    PredefinedSource,
+    Project,
+    period_id,
+    set_id,
+)
+from deforestation_alerts.project.review_status import NOT_REVIEWED, reviewed_mask
+from deforestation_alerts.project.share import canonical_set_paths
 from deforestation_alerts.project.store_schema import DETECTED_AREA, GEOM_COLUMNS, STORE_COLUMNS
+from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from deforestation_alerts.scripts.image_sources import LANDSAT, S2
 
 RECIPE_FILE = "recipe_parameters.json"
@@ -66,9 +94,17 @@ def _parse_wkt(text, col: str, i: int, notes: list[str]):
         return None
 
 
-def _codes(value):
-    """``alert_type_unique`` as v1 wrote it (``"[1, 2]"``) back to the list v2 stores."""
-    return json.loads(value) if isinstance(value, str) else value
+def _codes(value, i: int, notes: list[str]):
+    """``alert_type_unique`` as v1 wrote it (``"[1, 2]"``) back to the list v2
+    stores. An unreadable cell is left empty and its text kept in the note:
+    the store's list column cannot hold it."""
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except ValueError:
+        notes.append(f"alert {i}: unreadable alert_type_unique {value!r}, left empty")
+        return None
 
 
 def read_table(csv_path: Path) -> tuple[gpd.GeoDataFrame, list[str]]:
@@ -87,7 +123,7 @@ def read_table(csv_path: Path) -> tuple[gpd.GeoDataFrame, list[str]]:
         df[col] = df[col].astype(object)
     status = df["status"]
     df["status"] = status.where(status.notna() & (status.astype(str).str.strip() != ""), NOT_REVIEWED)
-    df["alert_type_unique"] = df["alert_type_unique"].map(_codes)
+    df["alert_type_unique"] = [_codes(v, i, notes) for i, v in enumerate(df["alert_type_unique"])]
     for side in ("before", "after"):
         df[f"{side}_img"] = [v2_pick(v, ms) or v for v, ms in zip(df[f"{side}_img"], df[f"{side}_img_info"])]
     geoms = {col: gpd.GeoSeries([_parse_wkt(v, col, i, notes) for i, v in enumerate(df[col])], index=df.index, crs=WGS84)
@@ -96,3 +132,178 @@ def read_table(csv_path: Path) -> tuple[gpd.GeoDataFrame, list[str]]:
     for col, series in geoms.items():
         gdf[col] = series
     return gdf, notes
+
+
+ERR_AOI = "migrated.err_aoi"
+ERR_TABLE = "migrated.err_table"
+ERR_PARAMS = "migrated.err_params"
+#: v1's CCDC alerts: the custom source a ``ccdc_layer`` becomes, on its v1 digit.
+CCDC = "CCDC"
+CCDC_DIGIT = 3
+MASK_NAME = "v1 mask"
+LAYER_NAME = "v1 layer"
+_VIS_KEYS = ("bands", "min", "max", "palette")
+
+
+class V1MigrationError(KeyedError):
+    """The conversion failed and wrote nothing. ``key`` is ``migrated.err_aoi``,
+    ``migrated.err_table`` or ``migrated.err_params``; ``values`` hold ``error``."""
+
+
+def is_v1_recipe(folder: Path) -> bool:
+    """Both v1 files are in ``folder`` and it is not a project yet."""
+    folder = Path(folder)
+    return ((folder / RECIPE_FILE).is_file() and (folder / TABLE_FILE).is_file()
+            and not (folder / paths.MANIFEST).exists())
+
+
+def parse_vis(text) -> dict:
+    """``bands``, ``min``, ``max`` and ``palette`` of the Earth Engine vis
+    params a v1 user typed (``"{'min': 0, 'max': 3}"``, braces optional);
+    ``{}`` when the text does not read as a dict."""
+    if not isinstance(text, str):
+        return {}
+    text = text.strip()
+    if not text.startswith("{"):
+        text = "{" + text + "}"
+    try:
+        vis = ast.literal_eval(text)
+    except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+        return {}
+    return {k: vis[k] for k in _VIS_KEYS if k in vis} if isinstance(vis, dict) else {}
+
+
+@contextmanager
+def _failing_as(key: str):
+    try:
+        yield
+    except V1MigrationError:
+        raise
+    except Exception as exc:
+        raise V1MigrationError(f"{key}: {exc}", key=key, error=str(exc)) from exc
+
+
+def _piece(notes: list[str], label: str, build):
+    """A mask, layer or source model, or None with a note when it does not validate."""
+    try:
+        return build()
+    except ValidationError as exc:
+        notes.append(f"{label}: not imported ({exc.errors()[0]['msg']})")
+        return None
+
+
+def convert(folder: Path, resolve_aoi: Callable[[dict], dict]) -> Project:
+    """Turn the v1 recipe in ``folder`` into a locked project in the same
+    folder and return it as saved. ``resolve_aoi(params)`` returns the AOI as
+    a WGS84 GeoJSON FeatureCollection. The v1 files are never changed; on any
+    failure every file written is removed and a ``V1MigrationError`` raised."""
+    folder = Path(folder)
+    with _failing_as(ERR_PARAMS):
+        if not is_v1_recipe(folder):
+            raise V1MigrationError(key=ERR_PARAMS, error=f"{folder} is not an unconverted version 1 recipe")
+        params = json.loads((folder / RECIPE_FILE).read_text(encoding="utf-8"))
+        start, end = date.fromisoformat(params["start_date"]), date.fromisoformat(params["end_date"])
+        selected = list(params.get("selected_alert_sources") or [])
+    with _failing_as(ERR_TABLE):
+        gdf, notes = read_table(folder / TABLE_FILE)
+        fill_areas(gdf, selected)
+    with _failing_as(ERR_AOI):
+        fc = resolve_aoi(params)
+        geom = unary_union([shape(f["geometry"]) for f in fc["features"]])
+        if geom.is_empty:
+            raise V1MigrationError(key=ERR_AOI, error="the area of interest has no geometry")
+    with _failing_as(ERR_PARAMS):
+        p = _project(folder, params, (start, end), selected, gdf, geom, notes)
+    with _failing_as(ERR_TABLE):
+        _write(folder, p, gdf, fc)
+    return io.load_project(folder.name, folder.parent)
+
+
+def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom, notes: list[str]) -> Project:
+    now = datetime.now()
+    period = Period(id=period_id(*dates), start=dates[0], end=dates[1])
+    sources, masks, layers, masks_used = {}, {}, {}, []
+    for name in selected:
+        if name in PREDEFINED_DIGITS:
+            sources[name] = PredefinedSource(name=name, catalogue_key=name, digit=PREDEFINED_DIGITS[name])
+        elif name == CCDC and params.get("ccdc_layer"):
+            src = _piece(notes, CCDC, lambda: CustomSource(
+                name=CCDC, origin="gee", ref=params["ccdc_layer"], asset_type="IMAGE", format="ccdc",
+                date_encoding="decimal_year",
+                band_map=BandMap(alert="detection_count", date="first_detection_date"), digit=CCDC_DIGIT))
+            if src is not None:
+                sources[CCDC] = src
+        if name not in sources:
+            notes.append(f"source {name}: not imported as a source, kept in the alert set only")
+    if params.get("mask_layer"):
+        mask = _piece(notes, MASK_NAME, lambda: MaskLayer(name=MASK_NAME, origin="gee", ref=params["mask_layer"],
+                                                          asset_type="IMAGE"))
+        if mask is not None:
+            masks[MASK_NAME] = mask
+            masks_used = [{"name": MASK_NAME, "mode": "keep", "content_id": "v1"}]
+            layers[MASK_NAME] = GeeVisLayer(name=MASK_NAME, asset=mask.ref)
+    if params.get("aux_layer"):
+        layer = _piece(notes, LAYER_NAME, lambda: GeeVisLayer(name=LAYER_NAME, asset=params["aux_layer"],
+                                                              **parse_vis(params.get("aux_layer_vis"))))
+        if layer is not None:
+            layers[LAYER_NAME] = layer
+    period = period.model_copy(update={
+        "sources": [n for n in selected if n in sources],
+        "digits": {CCDC: CCDC_DIGIT} if CCDC in sources else {},
+        "masks": {MASK_NAME: PeriodMask()} if masks else {},
+    })
+    set_sources = sorted(selected)
+    digit_map = {PREDEFINED_DIGITS[n]: n for n in set_sources if n in PREDEFINED_DIGITS}
+    if CCDC in set_sources:
+        digit_map[CCDC_DIGIT] = CCDC
+    selection = params.get("alert_selection_polygons") or {}
+    drawn = bool(selection.get("features"))
+    n_reviewed = int(reviewed_mask(gdf).sum())
+    s = AlertSet(
+        id=set_id(period.id, set_sources), period_id=period.id, sources=set_sources, digit_map=digit_map,
+        params=AlertSetParams(min_size_ha=params["min_area"], sorting=params["alert_sorting_method"],
+                              max_alerts=params["max_number_alerts"], area_mode="drawn" if drawn else "aoi",
+                              area_geojson=selection if drawn else None),
+        masks_used=masks_used, store_rel_path="", combined_rel_path="", footprint_rel_path="",
+        n_alerts=len(gdf), n_reviewed=n_reviewed,
+        last_alert_index=min(max(int(params.get("actual_alert_id") or 0), 0), max(len(gdf) - 1, 0)),
+        fingerprint="v1:" + hashlib.sha1((folder / TABLE_FILE).read_bytes()).hexdigest(),
+        created_at=datetime.fromtimestamp((folder / TABLE_FILE).stat().st_mtime),
+    )
+    s = s.model_copy(update=canonical_set_paths(s, period))
+    template = params.get("custom_report_template")
+    return Project(
+        name=folder.name, created_at=now, updated_at=now,
+        aoi=AoiRecord(spec={}, name=params.get("aoi_name") or folder.name, method=params.get("aoi_method") or "",
+                      digest=hashlib.sha1(geom.wkb).hexdigest(), bounds=tuple(geom.bounds),
+                      geometry_file=paths.AOI_SIDECAR),
+        sources=sources, new_period_sources=list(sources), masks=masks, vis_layers=layers,
+        periods={period.id: period}, active_period=period.id, alert_sets={s.id: s}, active_set=s.id,
+        report_template=template if template and Path(template).is_file() else None,
+        multi_evaluator=False,
+        migrated_from=MigratedFrom(migrated_at=now, n_alerts=len(gdf), n_reviewed=n_reviewed, notes=notes),
+    )
+
+
+def _write(folder: Path, p: Project, gdf, fc: dict) -> None:
+    """The store, ``aoi.geojson``, then the manifest; on failure, what this call wrote is removed."""
+    s = p.alert_sets[p.active_set]
+    periods_dir = paths.period_dir(folder, s.period_id).parent
+    made_periods = not periods_dir.exists()
+    aoi_file = folder / paths.AOI_SIDECAR
+    made_aoi = not aoi_file.exists()
+    try:
+        store = paths.resolve(folder, s.store_rel_path)
+        store.parent.mkdir(parents=True, exist_ok=True)
+        gdf["set_id"] = s.id
+        save_gdf_to_parquet(gdf, store)
+        aoi_file.write_text(json.dumps(fc), encoding="utf-8")
+        io.save_project(p, folder.parent)
+    except BaseException:
+        if made_periods:
+            shutil.rmtree(periods_dir, ignore_errors=True)
+        if made_aoi:
+            aoi_file.unlink(missing_ok=True)
+        for tmp in folder.glob(f".{paths.MANIFEST}.*.tmp"):
+            tmp.unlink(missing_ok=True)
+        raise

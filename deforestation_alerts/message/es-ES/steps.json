@@ -926,6 +926,9 @@
     "read_only": "Copia de revisión para {evaluator}, de {origin_project}. La configuración está bloqueada."
   },
   "migrated": {
-    "read_only": "Convertido desde una receta de la versión 1. La configuración está bloqueada: la revisión, el guardado y la exportación siguen disponibles."
+    "read_only": "Convertido desde una receta de la versión 1. La configuración está bloqueada: la revisión, el guardado y la exportación siguen disponibles.",
+    "err_aoi": "No se pudo obtener el área de interés de Earth Engine: {error}. La receta no se modificó.",
+    "err_table": "No se pudo leer la tabla de alertas: {error}. La receta no se modificó.",
+    "err_params": "No se pudo leer la configuración de la receta: {error}. La receta no se modificó."
   }
 }

@@ -887,6 +887,9 @@
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."
   },
   "migrated": {
-    "read_only": "Converted from a version 1 recipe. Setup is locked: review, save and export stay available."
+    "read_only": "Converted from a version 1 recipe. Setup is locked: review, save and export stay available.",
+    "err_aoi": "Could not fetch the area of interest from Earth Engine: {error}. The recipe was not changed.",
+    "err_table": "Could not read the alert table: {error}. The recipe was not changed.",
+    "err_params": "Could not read the recipe settings: {error}. The recipe was not changed."
   }
 }

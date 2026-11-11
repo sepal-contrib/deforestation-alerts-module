@@ -73,6 +73,19 @@ def test_alert_codes_are_a_list(tmp_path):
     assert list(gdf["alert_type_unique"].iloc[0]) == [1, 2]
 
 
+def test_bad_codes_keep_the_row(tmp_path):
+    gdf, notes = _read(tmp_path, rows=[{}, {"alert_type_unique": "[1,"}])
+    assert len(gdf) == 2 and gdf["alert_type_unique"].iloc[1] is None
+    assert any("alert 1" in n and "alert_type_unique" in n and "[1," in n for n in notes)
+
+
+def test_v1_index_column_is_dropped(tmp_path):
+    folder = write_recipe(tmp_path / "recipe")
+    assert (folder / TABLE_FILE).read_text(encoding="utf-8").startswith(",")  # v1 wrote its index
+    gdf, _ = read_table(folder / TABLE_FILE)
+    assert not [c for c in gdf.columns if str(c).startswith("Unnamed")]
+
+
 def test_bad_polygon_keeps_the_row(tmp_path):
     gdf, notes = _read(tmp_path, rows=[{}, {}, {"alert_polygon": "POLYGON(("}, {}])
     assert len(gdf) == 4

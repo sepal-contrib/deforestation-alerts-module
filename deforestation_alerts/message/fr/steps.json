@@ -926,6 +926,9 @@
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."
   },
   "migrated": {
-    "read_only": "Converti depuis une recette de la version 1. La configuration est verrouillée : la revue, l'enregistrement et l'export restent disponibles."
+    "read_only": "Converti depuis une recette de la version 1. La configuration est verrouillée : la revue, l'enregistrement et l'export restent disponibles.",
+    "err_aoi": "Impossible de récupérer la zone d'intérêt depuis Earth Engine : {error}. La recette n'a pas été modifiée.",
+    "err_table": "Impossible de lire la table des alertes : {error}. La recette n'a pas été modifiée.",
+    "err_params": "Impossible de lire les paramètres de la recette : {error}. La recette n'a pas été modifiée."
   }
 }

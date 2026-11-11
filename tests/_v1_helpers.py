@@ -44,7 +44,7 @@ def write_recipe(folder: Path, *, rows: list[dict] | None = None, **params) -> P
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     rows = [{}] * 4 if rows is None else rows
-    pd.DataFrame([{**v1_row(i), **over} for i, over in enumerate(rows)]).to_csv(folder / "alert_db.csv", index=False)
+    pd.DataFrame([{**v1_row(i), **over} for i, over in enumerate(rows)], columns=list(v1_row(0))).to_csv(folder / "alert_db.csv")  # with its index, as v1 wrote it
     recipe = {**PARAMS, "recipe_name": folder.name, "recipe_folder_path": str(folder), **params}
     (folder / "recipe_parameters.json").write_text(json.dumps(recipe), encoding="utf-8")
     return folder
