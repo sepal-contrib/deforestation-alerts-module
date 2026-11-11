@@ -164,12 +164,13 @@ def _write_plan(alertas_gdf, updates, answer_columns, app_tile_model, folder, ta
     alertas_gdf.attrs.update(staged.attrs)
 
 
-def missing_names(alert, gdf, positions) -> dict:
+def missing_names(alert, gdf, positions, on_fetch=None) -> dict:
     """``{position: {admin1..3: name}}`` for the rows of ``positions`` that
     have no names yet (a set made before Integrate named its alerts, or one
     whose fetch failed). Names already stored are never rewritten, GAUL 2015
     ones included. The boundaries are the project's cache, fetched once on
-    first need; a fetch that fails leaves the names empty and the Save goes on."""
+    first need; a fetch that fails leaves the names empty and the Save goes on.
+    ``on_fetch()`` runs just before that first fetch (the Save's progress step)."""
     columns = list(review_groups.ADMIN_COLUMNS)
 
     def _named(p):
@@ -179,6 +180,8 @@ def missing_names(alert, gdf, positions) -> dict:
     pdir, aoi = getattr(alert, "project_dir", None), getattr(alert, "aoi", None)
     if not need or pdir is None or aoi is None:
         return {}
+    if on_fetch is not None and not paths.admin_boundaries_path(pdir, aoi.digest).is_file():
+        on_fetch()
     try:
         names = admin_names(gdf.geometry.iloc[need], load_boundaries(pdir, aoi))
     except Exception:  # noqa: BLE001 - the review matters more than its names
@@ -214,7 +217,7 @@ def review_status(confirmation) -> str:
     return confirmation
 
 
-def save_review(alert, app_tile_model):
+def save_review(alert, app_tile_model, on_fetch=None):
     """Write the review of ``alert`` (the OLD ``save_attributes_to_gdf``; data/IO only).
 
     Prepares every field of the review, persists ``alert_db.parquet`` from a
@@ -327,7 +330,7 @@ def save_review(alert, app_tile_model):
     # none (Integrate names every alert since 2026-11-11). Not part of the
     # review: a group's members keep theirs.
     names = missing_names(alert, alertas_gdf,
-                          (actual_alert_id,) if plan is None else (plan.main, *plan.members))
+                          (actual_alert_id,) if plan is None else (plan.main, *plan.members), on_fetch)
 
     # OLD guard (1830): "False Positive" but a polygon was drawn => inconsistent.
     # A refusal: nothing is written at all -- not the store, and not the row.

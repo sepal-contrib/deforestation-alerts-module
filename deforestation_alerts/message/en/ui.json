@@ -398,6 +398,7 @@
       "tile_gif_detail": "Animated GIF",
       "save_task_title": "Saving alert attributes",
       "save_step": "Writing the alert store…",
+      "admin_fetch_step": "Fetching administrative boundaries for this project (once)…",
       "save_done": "Alert attributes saved.",
       "save_outpaced": "Saved, but you changed this alert while it was saving: save again to store those changes",
       "download_task_title": "Preparing alert download",

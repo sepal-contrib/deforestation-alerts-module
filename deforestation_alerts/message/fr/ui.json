@@ -409,6 +409,7 @@
       "tile_gif_detail": "GIF animé",
       "save_task_title": "Enregistrement des attributs de l'alerte",
       "save_step": "Écriture de la base d'alertes…",
+      "admin_fetch_step": "Téléchargement des limites administratives de ce projet (une seule fois)…",
       "save_done": "Attributs de l'alerte enregistrés.",
       "save_outpaced": "Enregistré, mais vous avez modifié cette alerte pendant l'enregistrement : enregistrez à nouveau pour conserver ces modifications",
       "download_task_title": "Préparation du téléchargement de l'alerte",

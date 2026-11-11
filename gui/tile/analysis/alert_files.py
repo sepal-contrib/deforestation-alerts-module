@@ -19,7 +19,13 @@ from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
 from deforestation_alerts.project.review_groups import group_of, group_record, number
 from deforestation_alerts.project.review_status import CONFIRMED, VERDICT_LABEL_KEYS, is_reviewed
-from deforestation_alerts.project.store_schema import BELOW_MIN, DETECTED_AREA, GROWS_FROM, GROWS_FROM_AUTO
+from deforestation_alerts.project.store_schema import (
+    BELOW_MIN,
+    DETECTED_AREA,
+    GEOMETRY_SOURCE,
+    GROWS_FROM,
+    GROWS_FROM_AUTO,
+)
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_export import detected_area
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
@@ -235,7 +241,7 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
     rows = [main, *members]
     drawn = selected_element.get("alert_polygon")
     selected_element[DETECTED_AREA] = float(detected_area(alertas_gdf.iloc[rows]).sum())
-    selected_element["geometry_source"] = "drawn" if isinstance(drawn, BaseGeometry) and not drawn.is_empty \
+    selected_element[GEOMETRY_SOURCE] = "drawn" if isinstance(drawn, BaseGeometry) and not drawn.is_empty \
         else "detected"
     cluster = shapely.union_all(alertas_gdf.geometry.iloc[rows].to_numpy()) if grouped \
         else alertas_gdf.geometry.iloc[main]
@@ -243,7 +249,7 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
         selected_element["alert_polygon"] = outline
     # The answers in the language of the download (stored as codes); the
     # columns of deleted questions are left out.
-    extra = [c for c in (DETECTED_AREA, "group_size", "group_alerts", "geometry_source") if c not in alertas_gdf.columns]
+    extra = [c for c in (DETECTED_AREA, "group_size", "group_alerts", GEOMETRY_SOURCE) if c not in alertas_gdf.columns]
     selected_gdf = questions.with_labels(
         gpd.GeoDataFrame([selected_element], columns=[*alertas_gdf.columns, *extra]),
         alert.questions or [],

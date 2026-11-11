@@ -409,6 +409,7 @@
       "tile_gif_detail": "GIF animado",
       "save_task_title": "Guardando atributos de la alerta",
       "save_step": "Escribiendo la base de alertas…",
+      "admin_fetch_step": "Descargando los límites administrativos de este proyecto (una sola vez)…",
       "save_done": "Atributos de la alerta guardados.",
       "save_outpaced": "Se guardó, pero cambiaste esta alerta mientras se guardaba: guarda de nuevo para almacenar esos cambios",
       "download_task_title": "Preparando la descarga de la alerta",

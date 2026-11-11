@@ -55,5 +55,11 @@ STORE_COLUMNS = (*VECTOR_COLUMNS, DETECTED_AREA, "bounding_box", "point", "statu
 #: Carried by a merge with the winning row, never compared: a re-save moves them.
 MERGE_IGNORED = (*REVIEW_STAMP, "admin1", "admin2", "admin3")
 
+#: Written by the exports and the per-alert files, never stored: what the
+#: exported geometry is, the detected cluster as WKT (CSV), and a group's members.
+GEOMETRY_SOURCE = "geometry_source"
+DETECTED_GEOMETRY = "detected_geometry"
+EXPORT_COLUMNS = (GEOMETRY_SOURCE, DETECTED_GEOMETRY, "group_size", "group_alerts")
+
 #: The names no attribute column and no question key may take.
-RESERVED_COLUMNS = frozenset({*STORE_COLUMNS, IMAGE_AREA, EVALUATOR, *GROWTH_COLUMNS, REVIEW_GROUP})
+RESERVED_COLUMNS = frozenset({*STORE_COLUMNS, IMAGE_AREA, EVALUATOR, *GROWTH_COLUMNS, REVIEW_GROUP, *EXPORT_COLUMNS})

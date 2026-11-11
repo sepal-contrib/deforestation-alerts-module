@@ -331,7 +331,7 @@ def _by_admin(names: list, area: list, code: list, reviewed: list) -> tuple:
     table = {}
     for value, a, c, keep in zip(names, area, code, reviewed):
         if not keep:
-            continue  # admin1 is recorded by review only
+            continue  # the card counts reviewed alerts only (spec 2026-11-11 Scope)
         key = _admin_name(value) or UNATTRIBUTED
         ha, confirmed, n = table.get(key, (0.0, 0.0, 0))
         table[key] = (ha + a, confirmed + (a if c == _CONFIRMED else 0.0), n + 1)

@@ -137,12 +137,12 @@ from gui.tile.analysis.state import capture_alert
 logger = logging.getLogger("SEPALUI.deforestation_alerts.analysis")
 
 
-def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None):
+def _save_attributes(widgets, app_state, analysis, app_tile_model, alert=None, on_fetch=None):
     """The save runner's body: ``review_save.save_review`` of ``alert``
     (``state.capture_alert``; taken here when not given), which hands a
     removal plan to ``remove_from_group``."""
     alert = alert if alert is not None else capture_alert(analysis, widgets, app_state)
-    return review_save.save_review(alert, app_tile_model)
+    return review_save.save_review(alert, app_tile_model, on_fetch=on_fetch)
 
 
 def _download_data(widgets, analysis, app_state, aux_model, app_tile_model, *, task=None, alert=None, gif=None):
@@ -278,7 +278,9 @@ def make_save_runner(widgets, app_state, analysis, app_tile_model, apply_save=No
             # alert store is written, so deleting the project refuses mid-write.
             with writing(writer_name(app_state)):
                 try:
-                    saved = _save_attributes(widgets, app_state, analysis, app_tile_model, alert=alert)
+                    saved = _save_attributes(
+                        widgets, app_state, analysis, app_tile_model, alert=alert,
+                        on_fetch=lambda: task.step(t("analysis_tile.export_labels.admin_fetch_step")))
                 except SaveRefused as exc:
                     refusal["exc"] = exc
                     return error_text(exc)

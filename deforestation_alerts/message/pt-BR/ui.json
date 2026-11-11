@@ -409,6 +409,7 @@
       "tile_gif_detail": "GIF animado",
       "save_task_title": "Salvando atributos do alerta",
       "save_step": "Gravando a base de alertas…",
+      "admin_fetch_step": "Baixando os limites administrativos deste projeto (uma única vez)…",
       "save_done": "Atributos do alerta salvos.",
       "save_outpaced": "Salvo, mas você alterou este alerta enquanto ele era salvo: salve novamente para guardar essas alterações",
       "download_task_title": "Preparando o download do alerta",

@@ -22,7 +22,13 @@ from shapely.geometry.base import BaseGeometry
 from deforestation_alerts.project import review_groups
 from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.review_status import CONFIRMED, reviewed_mask
-from deforestation_alerts.project.store_schema import DETECTED_AREA, GROWS_FROM, SECONDARY_GEOM_COLUMNS
+from deforestation_alerts.project.store_schema import (
+    DETECTED_AREA,
+    DETECTED_GEOMETRY,
+    GEOMETRY_SOURCE,
+    GROWS_FROM,
+    SECONDARY_GEOM_COLUMNS,
+)
 from deforestation_alerts.scripts import local_files
 from deforestation_alerts.scripts.alert_store import ALERT_GEOM_COLS, save_gdf_to_csv
 from deforestation_alerts.scripts.naming import alert_artifact_name
@@ -85,6 +91,9 @@ def reviewed_geometry(gdf) -> tuple:
         if has[p]:
             geoms[p], sources[p] = drawings.iloc[p], DRAWN
         elif main is not None and has[main]:
+            # Spec §2: kept even when the main falls outside the export's scope, so
+            # such a member exports with no shape. A group Save gives every member
+            # the main's verdict, so the scopes do not split a group in practice.
             geoms[p], sources[p] = None, GROUP
     return (gpd.GeoSeries(geoms, index=gdf.index, crs=gdf.crs or "EPSG:4326"),
             pd.Series(sources, index=gdf.index))
@@ -92,12 +101,25 @@ def reviewed_geometry(gdf) -> tuple:
 
 def detected_area(gdf) -> pd.Series:
     """Each row's ``detected_area_ha`` (index of ``gdf``); a store from before
-    the column, or a row without it, takes ``review_groups.own_area``."""
-    stored = (pd.to_numeric(gdf[DETECTED_AREA], errors="coerce") if DETECTED_AREA in gdf.columns
-              else pd.Series(np.nan, index=gdf.index))
-    values = stored.to_numpy(dtype=float, copy=True)
-    for p in np.flatnonzero(np.isnan(values)):
-        values[p] = review_groups.own_area(gdf, p)
+    the column, or a row without it, takes what ``review_groups.own_area``
+    would: its stored ``area_ha`` when positive and nothing is drawn, else its
+    cluster measured -- all such rows at once, in one UTM zone for the store."""
+    def column(name):
+        return (pd.to_numeric(gdf[name], errors="coerce").to_numpy(dtype=float, copy=True) if name in gdf.columns
+                else np.full(len(gdf), np.nan))
+
+    values = column(DETECTED_AREA)
+    missing = np.isnan(values)
+    if missing.any():
+        stored = column("area_ha")
+        drawings = gdf["alert_polygon"] if "alert_polygon" in gdf.columns else [None] * len(gdf)
+        drawn = np.array([_drawn(g) for g in drawings], dtype=bool)
+        keep = missing & ~drawn & (stored > 0)  # NaN > 0 is False
+        values[keep] = stored[keep]
+        measure = missing & ~keep
+        if measure.any():
+            geoms = gpd.GeoSeries(gdf.geometry.to_numpy()[measure], crs=gdf.crs or "EPSG:4326")
+            values[measure] = geoms.to_crs(geoms.estimate_utm_crs()).area.to_numpy() / 10_000.0
     return pd.Series(values, index=gdf.index)
 
 
@@ -113,15 +135,15 @@ def export_alerts_gdf(gdf, folder, fmt, sources, start_date, end_date, scope="al
     detected = rows.geometry
     rows = gpd.GeoDataFrame(rows).copy()
     rows[DETECTED_AREA] = area.loc[rows.index]
-    rows["geometry_source"] = source.loc[rows.index]
+    rows[GEOMETRY_SOURCE] = source.loc[rows.index]
     rows["geometry"] = geometry.loc[rows.index]
     dest = Path(folder) / name
     with local_files.scratch_dir() as scratch:
         local = scratch / name
         if fmt == "csv":
             out = pd.DataFrame(rows)
-            out.insert(out.columns.get_loc("geometry") + 1, "detected_geometry", detected)
-            save_gdf_to_csv(out, str(local), [*ALERT_GEOM_COLS, "detected_geometry"])
+            out.insert(out.columns.get_loc("geometry") + 1, DETECTED_GEOMETRY, detected)
+            save_gdf_to_csv(out, str(local), [*ALERT_GEOM_COLS, DETECTED_GEOMETRY])
         else:
             out = rows.set_geometry("geometry")
             out = out.drop(columns=[c for c in _SECONDARY_GEOM_COLS if c in out.columns])

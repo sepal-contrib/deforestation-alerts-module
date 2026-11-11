@@ -19,7 +19,14 @@ SIMPLIFY_M = 100
 #: World cylindrical equal-area: overlap areas rank right at any latitude.
 EQUAL_AREA = "EPSG:6933"
 
-_LOCK = threading.Lock()
+#: One lock per cache file, so one project's first fetch never blocks another's.
+_LOCKS: dict[Path, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(path, threading.Lock())
 
 
 def _frame(names: dict, geometry) -> gpd.GeoDataFrame:
@@ -46,7 +53,7 @@ def load_boundaries(pdir: Path, aoi, *, fetch=fetch_boundaries) -> gpd.GeoDataFr
     """The AOI's cached boundaries, fetched and written atomically on first use.
     Raises when the fetch fails; nothing is written then."""
     path = admin_boundaries_path(pdir, aoi.digest)
-    with _LOCK:  # a second caller waits, then reads what the first one wrote
+    with _lock_for(path):  # a second caller for this file waits, then reads what the first one wrote
         if path.is_file():
             return gpd.read_file(path)
         gdf = fetch(tuple(aoi.bounds))
