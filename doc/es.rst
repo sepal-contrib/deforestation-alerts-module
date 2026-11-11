@@ -2437,7 +2437,7 @@ Las cifras clave
     *   -   **Revisadas**
         -   La proporción de alertas que tienen veredicto, y "16 de 48 alertas". Siempre cuenta alertas.
     *   -   **Alerta más grande**
-        -   La superficie de la alerta más grande, su número, su país (una vez revisada) y su fecha. Siempre cuenta hectáreas. El número es el número de la alerta: en un conjunto creado con esta versión, el mismo que el del contador de Análisis (un conjunto creado antes numera desde 0, así que es el número del contador menos uno).
+        -   La superficie de la alerta más grande, su número, su país y su fecha. Siempre cuenta hectáreas. El país aparece para todas las alertas de un conjunto creado con esta versión; en un conjunto creado antes, una vez guardada la alerta. El número es el número de la alerta: en un conjunto creado con esta versión, el mismo que el del contador de Análisis (un conjunto creado antes numera desde 0, así que es el número del contador menos uno).
 
 .. _defo-overview-layers:
 

@@ -2439,7 +2439,7 @@ Les chiffres clés
     *   -   **Examinées**
         -   La part des alertes qui ont un verdict, et « 16 alertes sur 48 ». Elle compte toujours des alertes.
     *   -   **Alerte la plus grande**
-        -   La superficie de la plus grande alerte, son numéro, son pays (une fois examinée) et sa date. Elle compte toujours des hectares. Le numéro est le numéro de l'alerte : dans un jeu créé avec cette version, le même que celui du compteur d'Analyse (un jeu créé avant numérote à partir de 0, c'est donc le numéro du compteur moins un).
+        -   La superficie de la plus grande alerte, son numéro, son pays et sa date. Elle compte toujours des hectares. Le pays s'affiche pour toutes les alertes d'un jeu créé avec cette version ; dans un jeu créé avant, une fois l'alerte enregistrée. Le numéro est le numéro de l'alerte : dans un jeu créé avec cette version, le même que celui du compteur d'Analyse (un jeu créé avant numérote à partir de 0, c'est donc le numéro du compteur moins un).
 
 .. _defo-overview-layers:
 

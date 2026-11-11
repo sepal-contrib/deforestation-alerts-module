@@ -2441,7 +2441,7 @@ Os números principais
     *   -   **Revisados**
         -   A proporção de alertas que têm veredito, e "16 de 48 alertas". Conta sempre alertas.
     *   -   **Maior alerta**
-        -   A área do maior alerta, o número dele, o país (depois de revisado) e a data. Conta sempre hectares. O número é o número do alerta: em um conjunto criado com esta versão, o mesmo do contador da Análise (um conjunto criado antes numera a partir de 0, então é o número do contador menos um).
+        -   A área do maior alerta, o número dele, o país e a data. Conta sempre hectares. O país aparece para todos os alertas de um conjunto criado com esta versão; em um conjunto criado antes, depois que o alerta é salvo. O número é o número do alerta: em um conjunto criado com esta versão, o mesmo do contador da Análise (um conjunto criado antes numera a partir de 0, então é o número do contador menos um).
 
 .. _defo-overview-layers:
 

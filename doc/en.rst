@@ -2507,7 +2507,7 @@ The key figures
     *   -   **Reviewed**
         -   The share of alerts that have a verdict, and "16 of 48 alerts". It always counts alerts.
     *   -   **Largest alert**
-        -   The largest alert's area, its number, its country (once reviewed) and its date. It always counts hectares. The number is the alert's number: in a set made with this version, the same as the Analysis counter's number (a set made before numbers from 0, so it is the counter's number minus one).
+        -   The largest alert's area, its number, its country and its date. It always counts hectares. The country shows for every alert of a set made with this version; in a set made before, once the alert is saved. The number is the alert's number: in a set made with this version, the same as the Analysis counter's number (a set made before numbers from 0, so it is the counter's number minus one).
 
 .. _defo-overview-layers:
 
