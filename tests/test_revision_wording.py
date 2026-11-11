@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 MESSAGES = Path(__file__).parent.parent / "deforestation_alerts" / "message"
-LOCALES = sorted(p.name for p in MESSAGES.iterdir() if p.is_dir())
+LOCALES = sorted(p.name for p in MESSAGES.iterdir() if (p / "ui.json").is_file())  # not __pycache__
 
 
 @pytest.mark.parametrize("locale", LOCALES)
