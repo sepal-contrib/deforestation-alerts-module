@@ -774,6 +774,7 @@
     },
     "evaluators": {
       "instruction": "Choose who reviews the alerts.",
+      "v1_locked": "Not available for a project converted from version 1: it is reviewed by one person.",
       "info_header": "Evaluation",
       "info_md": "**Review mode**: in **Solo** you review every alert yourself; with **Multiple evaluators** the alerts are split between evaluators.\n\n**Split alerts…** deals the active set's alerts round-robin, in the set's order, between the evaluators you count or name. Alerts already reviewed stay unassigned unless you include them. **Edit split** re-splits or removes the split.\n\n**Generate packages** builds one zip per evaluator: the set's alerts, the questionnaire, the AOI and the scene cache. Each row's cloud icon then downloads that evaluator's zip. The evaluator imports it in the Project dialog and reviews their alerts in Analysis.\n\n**Merge reviewed copy…** merges the reviews an evaluator sends back. Only alerts assigned to that evaluator are taken; when you reviewed one differently, you choose whose review to keep."
     }

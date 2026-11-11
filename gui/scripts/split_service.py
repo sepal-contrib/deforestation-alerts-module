@@ -19,6 +19,7 @@ from datetime import datetime
 
 from deforestation_alerts.project import grouping, review_groups
 from deforestation_alerts.project.models import EvaluatorSplit
+from deforestation_alerts.project.review_copy import is_migrated
 from deforestation_alerts.project.review_status import is_reviewed
 from deforestation_alerts.project.split import (
     EVALUATOR_COLUMN,
@@ -47,6 +48,8 @@ def _target(app_state, app_tile_model):
     if p is not None and p.review_copy is not None:
         raise SplitError("review_copy.read_only", evaluator=p.review_copy.evaluator,
                          origin_project=p.review_copy.origin_project)
+    if is_migrated(p):
+        raise SplitError("migrated.read_only")
     target = app_tile_model.pin()
     if p is None or target is None:
         raise SplitError("evaluators.err.no_set")

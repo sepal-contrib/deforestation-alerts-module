@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from deforestation_alerts.project.models import EvaluatorReturn
+from deforestation_alerts.project.review_copy import is_migrated
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.project.share import ReturnPreview, ShareError, apply_return, classify_return
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet, store_lock
@@ -36,6 +37,8 @@ def _target(app_state, app_tile_model, preview: ReturnPreview):
     p = app_state.project.value
     if p is not None and p.review_copy is not None:
         raise ShareError("share.merge_err_review_copy")
+    if is_migrated(p):
+        raise ShareError("migrated.read_only")
     target = app_tile_model.pin()
     if p is None or target is None:
         raise ShareError("share.merge_err_changed")

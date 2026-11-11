@@ -809,6 +809,7 @@
     },
     "evaluators": {
       "instruction": "Escolha quem revisa os alertas.",
+      "v1_locked": "Indisponível para um projeto convertido da versão 1: ele é revisado por uma só pessoa.",
       "info_header": "Avaliação",
       "info_md": "**Modo de revisão**: no modo **Individual**, você mesmo revisa todos os alertas; com **Vários avaliadores**, os alertas são divididos entre avaliadores.\n\n**Dividir alertas…** distribui em rodízio os alertas do conjunto ativo, na ordem do conjunto, entre os avaliadores que você contar ou nomear. Os alertas já revisados ficam sem atribuição, a menos que você os inclua. **Editar divisão** divide novamente ou remove a divisão.\n\n**Gerar pacotes** cria um zip por avaliador: os alertas do conjunto, o questionário, a AOI e o cache de cenas. O ícone de nuvem de cada linha então baixa o zip desse avaliador. O avaliador o importa na janela Projeto e revisa os alertas dele na Análise.\n\n**Mesclar cópia revisada…** mescla as revisões que um avaliador devolve. Só são considerados os alertas atribuídos a esse avaliador; quando você revisou um deles de forma diferente, você escolhe qual revisão manter."
     }

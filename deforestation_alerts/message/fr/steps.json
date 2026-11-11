@@ -809,6 +809,7 @@
     },
     "evaluators": {
       "instruction": "Choisissez qui examine les alertes.",
+      "v1_locked": "Indisponible pour un projet converti depuis la version 1 : il est examiné par une seule personne.",
       "info_header": "Évaluation",
       "info_md": "**Mode de revue** : en **Individuelle**, vous examinez vous-même toutes les alertes ; avec **Plusieurs évaluateurs**, les alertes sont réparties entre des évaluateurs.\n\n**Répartir les alertes…** distribue à tour de rôle les alertes de l'ensemble actif, dans l'ordre de l'ensemble, entre les évaluateurs que vous comptez ou nommez. Les alertes déjà révisées restent non attribuées, sauf si vous les incluez. **Modifier la répartition** répartit à nouveau ou supprime la répartition.\n\n**Générer les paquets** crée un zip par évaluateur : les alertes de l'ensemble, le questionnaire, l'AOI et le cache de scènes. L'icône de nuage de chaque ligne télécharge ensuite le zip de cet évaluateur. L'évaluateur l'importe dans la boîte de dialogue Projet et révise ses alertes dans Analyse.\n\n**Fusionner une copie révisée…** fusionne les révisions qu'un évaluateur vous renvoie. Seules les alertes attribuées à cet évaluateur sont prises ; si vous en avez révisé une autrement, vous choisissez la révision à garder."
     }

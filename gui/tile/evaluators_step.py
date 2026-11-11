@@ -41,7 +41,7 @@ from pysepal.solara.components.inputs import FileInputComponent
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project import grouping, paths, share
 from deforestation_alerts.project import split as split_mod
-from deforestation_alerts.project.review_copy import read_only
+from deforestation_alerts.project.review_copy import is_migrated, read_only
 from deforestation_alerts.project.review_status import reviewed_mask
 from deforestation_alerts.scripts import local_files
 from gui.i18n import format_number, t, tn
@@ -945,6 +945,8 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
     with solara.Column(style="gap:16px;"):
         if p is None:
             solara.Info(t("workflow.lock_project"))
+        elif is_migrated(p):
+            solara.Info(t("steps.evaluators.v1_locked"))
         elif s is not None and read_only(p):
             # A review copy neither splits nor builds packages (§6.3): it returns.
             _ReturnPanel(app_state=app_state)
