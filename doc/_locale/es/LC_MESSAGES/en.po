@@ -3167,7 +3167,7 @@ msgid "**Status** row"
 msgstr "Fila **Estado**"
 
 msgid "Its review status, with its colour: **Not reviewed**, **Reviewed: confirmed**, **Reviewed: false positive** or **Reviewed: needs revision**."
-msgstr "Su estado de revisión, con su color: **No revisada**, **Revisada: confirmada**, **Revisada: falso positivo** o **Revisada: necesita revisión**."
+msgstr "Su estado de revisión, con su color: **No revisada**, **Revisada: confirmada**, **Revisada: falso positivo** o **Revisada: requiere revisión**."
 
 msgid "**Group**"
 msgstr "**Grupo**"
@@ -3227,7 +3227,7 @@ msgid "**Needs revision**"
 msgstr "**Requiere revisión**"
 
 msgid "**Reviewed: needs revision**"
-msgstr "**Revisada: necesita revisión**"
+msgstr "**Revisada: requiere revisión**"
 
 msgid "No decision is possible yet, or the alert needs a second look."
 msgstr "Todavía no es posible decidir, o la alerta necesita una segunda mirada."
@@ -3323,7 +3323,7 @@ msgid "Earlier alerts"
 msgstr "Alertas anteriores"
 
 msgid "This section appears when the active set's period has earlier periods with alert sets. It lists the earlier loss near the alert: the alerts of earlier periods reviewed as **Reviewed: confirmed** or **Reviewed: needs revision**, within the distance set in **Within**, in metres (100 m by default, from 10 m to 50 km), plus every alert linked to this one, however far. Use it to check whether an alert continues a clearing already reported, and to link it to that clearing."
-msgstr "Esta sección aparece cuando el período del conjunto activo tiene períodos anteriores con conjuntos de alertas. Enumera la pérdida anterior cercana a la alerta: las alertas de períodos anteriores revisadas como **Revisada: confirmada** o **Revisada: necesita revisión**, dentro de la distancia fijada en **Dentro de**, en metros (100 m por defecto, de 10 m a 50 km), más todas las alertas vinculadas a esta, por lejos que estén. Úsala para comprobar si una alerta continúa un desmonte ya reportado, y para vincularla a ese desmonte."
+msgstr "Esta sección aparece cuando el período del conjunto activo tiene períodos anteriores con conjuntos de alertas. Enumera la pérdida anterior cercana a la alerta: las alertas de períodos anteriores revisadas como **Revisada: confirmada** o **Revisada: requiere revisión**, dentro de la distancia fijada en **Dentro de**, en metros (100 m por defecto, de 10 m a 50 km), más todas las alertas vinculadas a esta, por lejos que estén. Úsala para comprobar si una alerta continúa un desmonte ya reportado, y para vincularla a ese desmonte."
 
 msgid "The alerts are grouped by period, newest first. Each row shows:"
 msgstr "Las alertas se agrupan por período, del más reciente al más antiguo. Cada fila muestra:"
@@ -3788,7 +3788,7 @@ msgid "**Confirmed (ha)**"
 msgstr "**Confirmadas (ha)**"
 
 msgid "The area of the history's alerts reviewed as **Reviewed: confirmed** or **Reviewed: needs revision**, counted once where their shapes overlap."
-msgstr "La superficie de las alertas del historial revisadas como **Revisada: confirmada** o **Revisada: necesita revisión**, contada una sola vez donde sus formas se superponen."
+msgstr "La superficie de las alertas del historial revisadas como **Revisada: confirmada** o **Revisada: requiere revisión**, contada una sola vez donde sus formas se superponen."
 
 msgid "**This set adds (ha)**"
 msgstr "**Aporta este conjunto (ha)**"
@@ -4280,7 +4280,7 @@ msgid "green for **Reviewed: false positive**; and"
 msgstr "verde para **Revisada: falso positivo**; y"
 
 msgid "amber for **Reviewed: needs revision**."
-msgstr "ámbar para **Revisada: necesita revisión**."
+msgstr "ámbar para **Revisada: requiere revisión**."
 
 msgid "With 13 of the 48 alerts reviewed, most dots are still grey. Most alerts lie in the south of the department."
 msgstr "Con 13 de las 48 alertas revisadas, la mayoría de los puntos siguen en gris. La mayoría de las alertas están en el sur del departamento."

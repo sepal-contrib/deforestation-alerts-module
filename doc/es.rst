@@ -2109,7 +2109,7 @@ La parte superior del panel muestra lo que dice la tabla de alertas:
     *   -   **Detectada**
         -   Sus fechas de primera y última detección.
     *   -   Fila **Estado**
-        -   Su estado de revisión, con su color: **No revisada**, **Revisada: confirmada**, **Revisada: falso positivo** o **Revisada: necesita revisión**.
+        -   Su estado de revisión, con su color: **No revisada**, **Revisada: confirmada**, **Revisada: falso positivo** o **Revisada: requiere revisión**.
     *   -   **Grupo**
         -   Para una alerta revisada con alertas cercanas: "grupo de 4". Oculta en los demás casos.
     *   -   **Tipo**
@@ -2141,7 +2141,7 @@ En **Veredicto**, selecciona una de estas opciones:
         -   **Revisada: falso positivo**
         -   No muestran pérdida de bosque: nubes, sombras, un cambio estacional…
     *   -   **Requiere revisión**
-        -   **Revisada: necesita revisión**
+        -   **Revisada: requiere revisión**
         -   Todavía no es posible decidir, o la alerta necesita una segunda mirada.
 
 Una alerta sin revisar se abre sin veredicto: nada se elige automáticamente. Una alerta revisada se abre con su veredicto y sus respuestas guardados.
@@ -2205,7 +2205,7 @@ Elegir otras imágenes u otra **Área de imagen** descarta los resultados de los
 Alertas anteriores
 """"""""""""""""""
 
-Esta sección aparece cuando el período del conjunto activo tiene períodos anteriores con conjuntos de alertas. Enumera la pérdida anterior cercana a la alerta: las alertas de períodos anteriores revisadas como **Revisada: confirmada** o **Revisada: necesita revisión**, dentro de la distancia fijada en **Dentro de**, en metros (100 m por defecto, de 10 m a 50 km), más todas las alertas vinculadas a esta, por lejos que estén. Úsala para comprobar si una alerta continúa un desmonte ya reportado, y para vincularla a ese desmonte.
+Esta sección aparece cuando el período del conjunto activo tiene períodos anteriores con conjuntos de alertas. Enumera la pérdida anterior cercana a la alerta: las alertas de períodos anteriores revisadas como **Revisada: confirmada** o **Revisada: requiere revisión**, dentro de la distancia fijada en **Dentro de**, en metros (100 m por defecto, de 10 m a 50 km), más todas las alertas vinculadas a esta, por lejos que estén. Úsala para comprobar si una alerta continúa un desmonte ya reportado, y para vincularla a ese desmonte.
 
 Las alertas se agrupan por período, del más reciente al más antiguo. Cada fila muestra:
 
@@ -2522,7 +2522,7 @@ Su tabla enumera los historiales que incluyen una alerta de este conjunto, prime
     *   -   **Alertas**
         -   El número de alertas del historial, todos los períodos juntos.
     *   -   **Confirmadas (ha)**
-        -   La superficie de las alertas del historial revisadas como **Revisada: confirmada** o **Revisada: necesita revisión**, contada una sola vez donde sus formas se superponen.
+        -   La superficie de las alertas del historial revisadas como **Revisada: confirmada** o **Revisada: requiere revisión**, contada una sola vez donde sus formas se superponen.
     *   -   **Aporta este conjunto (ha)**
         -   La superficie de las alertas de este conjunto en el historial, sin los falsos positivos.
     *   -   **Revisar**
@@ -2858,7 +2858,7 @@ De vuelta en el flujo de trabajo, **Mostrar estas alertas en el mapa** en `Integ
 -   gris para **No revisada**;
 -   rojo para **Revisada: confirmada**;
 -   verde para **Revisada: falso positivo**; y
--   ámbar para **Revisada: necesita revisión**.
+-   ámbar para **Revisada: requiere revisión**.
 
 Con 13 de las 48 alertas revisadas, la mayoría de los puntos siguen en gris. La mayoría de las alertas están en el sur del departamento.
 

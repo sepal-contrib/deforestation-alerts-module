@@ -2229,7 +2229,7 @@ Certaines lignes n'ont pas de case :
 
 Une alerte liée examinée ensuite comme faux positif reste cochée avec « désormais faux positif ». Elle est grisée et exclue de l'historique ; décochez sa case pour retirer le lien.
 
-Activez **Afficher sur les cartes** pour tracer le contour des alertes listées sur les deux cartes. La couleur est celle de la période, et une petite légende liste les périodes affichées, avec « continu : confirmée · tirets : à réviser · épais : liée ». L'interrupteur démarre activé pour une alerte d'extension ; sur les autres alertes, il garde votre dernier choix. Quand la liste couvre plusieurs périodes, le menu **Périodes** en masque certaines. Le badge indique « désactivé », « aucune à moins de 100 m » ou, par exemple, « 4 à moins de 100 m · liens : 1 ».
+Activez **Afficher sur les cartes** pour tracer le contour des alertes listées sur les deux cartes. La couleur est celle de la période, et une petite légende liste les périodes affichées, avec « continu : confirmée · tirets : à revoir · épais : liée ». L'interrupteur démarre activé pour une alerte d'extension ; sur les autres alertes, il garde votre dernier choix. Quand la liste couvre plusieurs périodes, le menu **Périodes** en masque certaines. Le badge indique « désactivé », « aucune à moins de 100 m » ou, par exemple, « 4 à moins de 100 m · liens : 1 ».
 
 Dans une `copie de révision <defo-evaluation-return_>`_, la liste provient d'un instantané des alertes antérieures pris lors de la génération des paquets : la section indique « Alertes précédentes au (date) », ou « Aucune alerte précédente dans cette copie » pour un paquet créé par une ancienne version de l'application.
 
@@ -2850,7 +2850,7 @@ L'équipe veut aussi noter si chaque coupe a une route d'accès à proximité. �
 
 Comme le questionnaire a changé après la génération des paquets, leurs icônes de nuage passent à l'ambre dans `Évaluation <defo-evaluation-packages_>`_. Les paquets déjà envoyés se fusionnent toujours, par clé de question. Pour que la nouvelle question parvienne aux évaluateurs, la coordinatrice sélectionne **Régénérer les paquets** et envoie les nouveaux.
 
-Dès lors, une alerte réelle ou une alerte à réexaminer reçoit les deux réponses (un faux positif n'en reçoit aucune : les deux questions ne sont posées que pour les deux autres verdicts). L'alerte 10, par exemple, est enregistrée comme **Alerte réelle**, avec **Expansion agricole** comme facteur de perte et « Non » pour la route d'accès. Son statut indique **Examinée : confirmée**, et la section **Questions** indique « 2 sur 2 répondues ».
+Dès lors, une alerte réelle ou une alerte à revoir reçoit les deux réponses (un faux positif n'en reçoit aucune : les deux questions ne sont posées que pour les deux autres verdicts). L'alerte 10, par exemple, est enregistrée comme **Alerte réelle**, avec **Expansion agricole** comme facteur de perte et « Non » pour la route d'accès. Son statut indique **Examinée : confirmée**, et la section **Questions** indique « 2 sur 2 répondues ».
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/use-case-reviewed-alert.png
     :alt: Une alerte examinée : son verdict et ses deux réponses

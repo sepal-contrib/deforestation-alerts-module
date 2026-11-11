@@ -98,9 +98,9 @@ dependencies:
 #   - `pip show grpcio-status` / `grpc-google-iam-v1` report empty
 #     Required-by: nothing installed actually depends on them.
 #   - Neither is imported anywhere in earthengine-api's own source (grepped
-#     the installed `ee` package); the only importers in the whole env are
-#     `ee/cli/utils.py` (the `earthengine` CLI tool) —
-#     this app imports neither.
+#     the installed `ee` package); the only importer in the whole env is
+#     `ee/cli/utils.py` (the `earthengine` CLI tool), and this app imports
+#     neither.
 #   - `from grpc_status import rpc_status` still imports and runs fine
 #     against protobuf 4.25.9 despite the metadata mismatch.
 #   - `import ee; ee.__version__` reports 1.6.14 correctly; the app's real

@@ -1483,7 +1483,7 @@ This step also chooses the report template.
 
 Open the **Questionnaire** step of the **Workflow** panel, in **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). The questionnaire belongs to the project: every alert set of the project is reviewed with it. The step is optional: without changes, Analysis asks the default question.
 
-.. shot: questionnaire-list | The Questionnaire step of the demo project with two questions: the default "Loss driver" (chips "several answers", "9 options", "typed answers", "True alert", "Needs review", note {loss_driver}) and one added question (e.g. "Access road nearby?", "one answer", "2 options", "required" in red, "True alert", "Needs review"); the "Show the questions expanded in Analysis" switch and its hint; the Report template line collapsed ("Report template · Default template", chip "default"). Crop to the Workflow panel.
+.. shot: questionnaire-list | The Questionnaire step of the demo project with two questions: the default "Loss driver" (chips "several answers", "9 options", "typed answers", "True alert", "Needs revision", note {loss_driver}) and one added question (e.g. "Access road nearby?", "one answer", "2 options", "required" in red, "True alert", "Needs revision"); the "Show the questions expanded in Analysis" switch and its hint; the Report template line collapsed ("Report template · Default template", chip "default"). Crop to the Workflow panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/questionnaire-list.png
     :alt: The Questionnaire step
@@ -1515,7 +1515,7 @@ With no questions, the list reads **No questions: Analysis will only ask for the
 Add or edit a question
 ^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: questionnaire-add | The "Add a question" dialog filled in: Question "Access road nearby?", Answer = One answer, two options "Yes" and "No" with their arrow and close icons, Add option, Allow typed answers off, Required on, Ask when the verdict is: True alert and Needs review checked, False positive unchecked; the "Report placeholder: {access_road_nearby}" line. Crop to the dialog.
+.. shot: questionnaire-add | The "Add a question" dialog filled in: Question "Access road nearby?", Answer = One answer, two options "Yes" and "No" with their arrow and close icons, Add option, Allow typed answers off, Required on, Ask when the verdict is: True alert and Needs revision checked, False positive unchecked; the "Report placeholder: {access_road_nearby}" line. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/questionnaire-add.png
     :alt: Adding a question
