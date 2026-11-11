@@ -194,7 +194,7 @@
       "collection_help": "Every image of the collection is used, the newest on top. For a collection of weekly snapshots (like RADD's own), give the latest image's id.",
       "err_band_map": "Choose a format and map its bands.",
       "err_no_ref": "Pick an asset or a file.",
-      "file_preview_after_harmonize": "A GeoTIFF source is shown once it is harmonized.",
+      "file_preview_after_harmonize": "A source read from a file is shown once it is harmonized.",
       "err_aoi_not_ready": "The AOI geometry is not ready yet; try again in a moment.",
       "err_aoi_changed": "The AOI changed during the check; add the source again.",
       "mode_label": "Source type",

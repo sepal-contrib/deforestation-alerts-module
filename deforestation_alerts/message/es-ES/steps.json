@@ -202,7 +202,7 @@
       "collection_help": "Se usa toda imagen de la colección, la más reciente arriba. Para una colección de instantáneas semanales (como la propia de RADD), indica el id de la imagen más reciente.",
       "err_band_map": "Elige un formato y asigna sus bandas.",
       "err_no_ref": "Elige un recurso o un archivo.",
-      "file_preview_after_harmonize": "Una fuente GeoTIFF se muestra una vez armonizada.",
+      "file_preview_after_harmonize": "Una fuente leída de un archivo se muestra una vez armonizada.",
       "err_aoi_not_ready": "La geometría de la AOI todavía no está lista; inténtalo de nuevo en un momento.",
       "err_aoi_changed": "La AOI cambió durante la comprobación; añade la fuente de nuevo.",
       "mode_label": "Tipo de fuente",

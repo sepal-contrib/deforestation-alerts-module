@@ -202,7 +202,7 @@
       "collection_help": "Chaque image de la collection est utilisée, la plus récente en premier. Pour une collection d'instantanés hebdomadaires (comme celle de RADD), indiquez l'id de l'image la plus récente.",
       "err_band_map": "Choisissez un format et associez ses bandes.",
       "err_no_ref": "Choisissez un asset ou un fichier.",
-      "file_preview_after_harmonize": "Une source GeoTIFF s'affiche une fois harmonisée.",
+      "file_preview_after_harmonize": "Une source lue depuis un fichier s'affiche une fois harmonisée.",
       "err_aoi_not_ready": "La géométrie de l'AOI n'est pas encore prête ; réessayez dans un instant.",
       "err_aoi_changed": "L'AOI a changé pendant la vérification ; ajoutez la source à nouveau.",
       "mode_label": "Type de source",
