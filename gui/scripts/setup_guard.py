@@ -16,6 +16,8 @@ from gui.scripts.notify_bridge import current_notifier
 def banner_text(p) -> str:
     """The review-copy banner (and refusal) text of ``p``."""
     rc = p.review_copy
+    if rc is None:
+        return t("migrated.read_only")
     return t("review_copy.read_only", evaluator=rc.evaluator, origin_project=rc.origin_project)
 
 

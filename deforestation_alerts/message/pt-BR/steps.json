@@ -924,5 +924,8 @@
   },
   "review_copy": {
     "read_only": "Cópia de revisão para {evaluator}, de {origin_project}. A configuração está bloqueada."
+  },
+  "migrated": {
+    "read_only": "Convertido de uma receita da versão 1. A configuração está bloqueada: revisão, salvamento e exportação continuam disponíveis."
   }
 }

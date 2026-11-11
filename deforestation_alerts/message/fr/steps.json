@@ -924,5 +924,8 @@
   },
   "review_copy": {
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."
+  },
+  "migrated": {
+    "read_only": "Converti depuis une recette de la version 1. La configuration est verrouillée : la revue, l'enregistrement et l'export restent disponibles."
   }
 }

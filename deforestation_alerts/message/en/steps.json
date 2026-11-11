@@ -885,5 +885,8 @@
   },
   "review_copy": {
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."
+  },
+  "migrated": {
+    "read_only": "Converted from a version 1 recipe. Setup is locked: review, save and export stay available."
   }
 }

@@ -349,6 +349,16 @@ class ReviewCopy(BaseModel):
     grouped_at_packaging: Optional[list[int]] = None
 
 
+class MigratedFrom(BaseModel):
+    """Marks a project converted from a version 1 recipe; setup is read-only while it is set."""
+
+    version: int = 1
+    migrated_at: datetime
+    n_alerts: int
+    n_reviewed: int
+    notes: list[str] = []
+
+
 class AlertSet(BaseModel):
     id: str
     period_id: str
@@ -479,6 +489,7 @@ class Project(BaseModel):
     questions_expanded: bool = False
     #: set when this project was imported from a review package (spec §6)
     review_copy: Optional[ReviewCopy] = None
+    migrated_from: Optional[MigratedFrom] = None
     #: whether the Evaluators step splits the alerts between evaluators;
     #: False is a solo evaluation, None until the user picks a review mode
     multi_evaluator: Optional[bool] = None

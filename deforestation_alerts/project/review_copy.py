@@ -11,8 +11,12 @@ from deforestation_alerts.errors import KeyedError
 
 
 def read_only(p) -> bool:
-    """True for a review copy (``p.review_copy`` is set)."""
-    return p is not None and getattr(p, "review_copy", None) is not None
+    """True for a review copy or a converted v1 project."""
+    return p is not None and (getattr(p, "review_copy", None) is not None or is_migrated(p))
+
+
+def is_migrated(p) -> bool:
+    return p is not None and getattr(p, "migrated_from", None) is not None
 
 
 class ReadOnlyProject(KeyedError, ValueError):
@@ -27,8 +31,10 @@ class ReadOnlyProject(KeyedError, ValueError):
 
 
 def refuse_if_read_only(p) -> None:
-    """Raise ``ReadOnlyProject`` when ``p`` is a review copy."""
+    """Raise ``ReadOnlyProject`` when ``p`` is a review copy or a migrated project."""
     if read_only(p):
+        if p.review_copy is None:
+            raise ReadOnlyProject(f"project {p.name!r} was migrated from v1", key="migrated.read_only")
         rc = p.review_copy
         raise ReadOnlyProject(f"project {p.name!r} is a review copy", evaluator=rc.evaluator,
                               origin_project=rc.origin_project)
