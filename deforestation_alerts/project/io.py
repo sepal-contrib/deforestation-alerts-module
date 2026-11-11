@@ -37,6 +37,7 @@ class ProjectInfo:
     n_sets: int
     updated_at: Optional[datetime]
     aoi_name: Optional[str] = None  # None: no AOI chosen yet
+    legacy: bool = False  # an unconverted version 1 recipe folder
 
 
 def save_project(p: Project, root: Optional[Path] = None) -> Path:
@@ -126,10 +127,28 @@ def list_projects(root: Optional[Path] = None) -> list[ProjectInfo]:
     base = Path(root) if root else paths.data_dir()
     if not base.is_dir():
         return []
+    from deforestation_alerts.project.v1_migration import RECIPE_FILE, TABLE_FILE, is_v1_recipe  # imports io
+
     infos = []
     for folder in sorted(base.iterdir(), key=lambda d: d.name.casefold()):
         manifest = folder / paths.MANIFEST
         if not manifest.is_file():
+            if folder.is_dir() and is_v1_recipe(folder):
+                try:
+                    params = json.loads((folder / RECIPE_FILE).read_text(encoding="utf-8"))
+                    if not isinstance(params, dict):
+                        continue
+                    updated = datetime.fromtimestamp((folder / TABLE_FILE).stat().st_mtime)
+                except (OSError, ValueError):
+                    continue
+                aoi_name = params.get("aoi_name")
+                infos.append(ProjectInfo(
+                    name=folder.name,
+                    n_sources=len(params.get("selected_alert_sources") or []),
+                    n_periods=1, n_sets=1, updated_at=updated,
+                    aoi_name=aoi_name if isinstance(aoi_name, str) else None,
+                    legacy=True,
+                ))
             continue
         try:
             raw = json.loads(manifest.read_text(encoding="utf-8"))
