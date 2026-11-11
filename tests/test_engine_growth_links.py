@@ -21,6 +21,7 @@ def _px(row, col, rows=1, cols=1):
 
 
 def _candidate(shape_grid, set_id="dec", alert_id=0, run_id="r1"):
+    # alert_id is any id here: link matching never reads a position
     shape = gpd.GeoSeries([shape_grid], crs=GRID.epsg).to_crs(epsg=4326).iloc[0]  # stored as EPSG:4326
     node = Node(set_id=set_id, alert_id=alert_id, period_id="p", period_start=date(2025, 12, 1),
                 period_end=date(2025, 12, 31), status="Confirmed", area_ha=1.0, date_min=None, date_max=None,

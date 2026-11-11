@@ -82,6 +82,7 @@ def test_the_labels_name_the_side_the_collection_and_the_date():
 def _alert(before, after, *, polygon=None, token=0):
     alerts = gpd.GeoDataFrame({"alert_polygon": [polygon], "status": ["Confirmed"]},
                               geometry=[box(0.9, 0.9, 1.1, 1.1)], crs="EPSG:4326")
+    # alert_id is the row position; ``alerts`` has no alert_id column (named by position)
     return SimpleNamespace(token=token, alerts=alerts, alert_id=0, grid="GRID", before_info=before, after_info=after)
 
 

@@ -98,7 +98,8 @@ def test_rows_grouped_by_period_with_states(monkeypatch):
     analysis.auto_links.set((SEP12.link,))
     section = earlier.build_earlier_controls(widgets, app_state, analysis)
     earlier.refresh_earlier(widgets, analysis, app_state)
-    assert calls[-1]["alert_id"] == 2 and calls[-1]["set_id"] == "oct"  # position 1's stored id and calls[-1]["radius_m"] == 100.0
+    # alert_id: position 1's stored id
+    assert calls[-1]["alert_id"] == 2 and calls[-1]["set_id"] == "oct" and calls[-1]["radius_m"] == 100.0
     groups = [(g.period_id, [r.key for r in g.rows]) for g in section.groups]
     assert groups == [(SEP.id, ["sep#12", "sep#15"]), (AUG.id, ["aug#4", "aug#7"])]
     rows = {r.key: r for g in section.groups for r in g.rows}

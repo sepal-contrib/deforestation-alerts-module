@@ -91,7 +91,8 @@ WIDGETS = SimpleNamespace(actual_bb=SimpleNamespace(geometry=lambda: None))
 
 
 def _save(h, alert_id=0, selection=(), *, remove=False, analysis=None, **kw):
-    """Press Save (or Remove from group) on ``alert_id``, for real."""
+    """Press Save (or Remove from group) on ``alert_id``, for real.
+    ``alert_id`` is the row position (``actual_alert_id``), not a stored id."""
     analysis = analysis or _analysis(selection=selection, **kw)
     h.s.actual_alert_id.set(alert_id)
     alert = capture_alert(analysis, WIDGETS, h.s, remove=remove)

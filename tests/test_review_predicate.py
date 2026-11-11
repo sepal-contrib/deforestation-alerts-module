@@ -42,7 +42,7 @@ def test_reviewed_mask_is_index_aligned(dtype):
 
 
 def test_reviewed_mask_without_a_status_column_or_rows():
-    bare = pd.DataFrame({"alert_id": [0, 1]}, index=[5, 6])
+    bare = pd.DataFrame({"alert_id": [0, 1]}, index=[5, 6])  # the ids are never read here
     mask = reviewed_mask(bare)
     assert mask.tolist() == [False, False] and list(mask.index) == [5, 6] and mask.dtype == bool
     assert reviewed_mask(pd.DataFrame({"status": []})).tolist() == []

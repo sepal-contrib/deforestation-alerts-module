@@ -816,7 +816,7 @@ def test_linked_card_review_button_waits_for_the_alerts(ov, tmp_path):
 # ---------------------------------------------------------------------------
 def _nearby_store(p, tmp_path):
     """January's four alerts with the first three in a chain about 111 m apart
-    edge to edge and the last one far away; alerts 0 and 1 saved as a group."""
+    edge to edge and the last one far away; alerts 1 and 2 saved as a group."""
     s = p.alert_sets[p.active_set]
     gdf = _alerts()
     gdf.geometry = [box(0, 0, 0.0005, 0.0005), box(0.0015, 0, 0.002, 0.0005),

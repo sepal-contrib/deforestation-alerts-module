@@ -220,7 +220,8 @@ def _review_alerts(set_id="x", n=2):
 
 
 def _save(s, ctx, monkeypatch, lookups=None, alert_id=0):
-    """Press Save on alert ``alert_id`` (Confirmed, no drawn polygon), for real."""
+    """Press Save on alert ``alert_id`` (Confirmed, no drawn polygon), for real.
+    ``alert_id`` is the row position (``actual_alert_id``), not a stored id."""
     from gui.tile.analysis import export
 
     stub_admin_lookups(monkeypatch, lookups)
