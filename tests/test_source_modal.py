@@ -20,6 +20,7 @@ from deforestation_alerts.project.models import (
 from gui.i18n import t
 from gui.store.state_manager import AppState
 from gui.widget import source_modal as sm
+from gui.widget import vector_source as vs
 from gui.widget.enter_key import ENTER_DEFAULT
 from tests._render_helpers import run_rendered
 
@@ -874,7 +875,7 @@ def test_custom_form_order_name_source_picker(monkeypatch):
             [picker] = rc.find(v.Html, class_="dv-stub-raster-input").widgets
             order = fields.children
             assert order.index(name) < order.index(_source(rc)) < order.index(picker)
-            assert [i["value"] for i in _source(rc).items] == list(sm.SOURCE_ORIGINS) == ["gee", "file"]
+            assert [i["value"] for i in _source(rc).items] == list(sm.SOURCE_ORIGINS) == ["gee", "file", "vector"]
             assert _nothing_below_the_picker(rc)  # no raster: nothing, not even the Alert format
             assert t("steps.raster_input.bands_loading") not in _texts(rc)
         finally:
@@ -1307,3 +1308,228 @@ def test_the_raster_block_with_no_raster_draws_nothing_and_reads_nothing(monkeyp
         assert gee.calls == [] and Host.raster.save_blocked is False
 
     run_rendered(lambda: reacton.render(Host(), handle_error=False), main)
+
+
+# ---------------------------------------------------------------- vector sources
+def _vkw(path, **over):
+    kw = dict(name="points", ref=str(path), layer=None, lon="lon", lat="lat", date_col="date", date_order=None,
+              side_m="30")
+    kw.update(over)
+    return kw
+
+
+def _no_earth_engine(monkeypatch):
+    """Any Earth Engine request fails the test."""
+    asked = []
+
+    def _refuse(*a, **kw):
+        asked.append(a)
+        raise AssertionError("a vector source asked Earth Engine")
+
+    monkeypatch.setattr(sm, "coverage_request", _refuse)
+    monkeypatch.setattr(sm, "discovery_request", _refuse)
+    monkeypatch.setattr(sm, "_bundle", _refuse)
+    return asked
+
+
+def _csv(path, rows):
+    path.write_text("lon,lat,date\n" + "".join(f"{x},{y},{d}\n" for x, y, d in rows))
+    return path
+
+
+def test_a_csv_vector_source_is_validated_without_earth_engine(tmp_path, monkeypatch):
+    from deforestation_alerts.project.models import VectorSpec
+
+    asked = _no_earth_engine(monkeypatch)
+    path = _csv(tmp_path / "a.csv", [(-55.45, -24.45, "2026-01-02"), (-55.44, -24.46, "2026-02-03")])
+    out = asyncio.run(vs.validate_vector(_p(), **_vkw(path)))
+    assert asked == [] and out["coverage"] is None
+    f = out["fields"]
+    assert f["vector"] == VectorSpec(driver="csv", lon="lon", lat="lat", date="date", date_order="iso", side_m=30.0)
+    assert (f["origin"], f["asset_type"], f["format"], f["date_encoding"], f["native"]) == (
+        "vector", "FILE", "date_only", "yyyyddd", None)
+    assert f["band_map"] == BandMap(alert=None, date="date") and f["name"] == "points"
+    CustomSource(**f, digit=3)  # the fields make a valid source
+
+
+def test_an_ambiguous_date_column_needs_the_order(tmp_path, monkeypatch):
+    _no_earth_engine(monkeypatch)
+    path = _csv(tmp_path / "a.csv", [(-55.45, -24.45, "03/04/2026"), (-55.44, -24.46, "05/06/2026")])
+    assert asyncio.run(vs.validate_vector(_p(), **_vkw(path))) == {"error": "steps.alerts.err_vector_date_order"}
+    out = asyncio.run(vs.validate_vector(_p(), **_vkw(path, date_order="dmy")))
+    assert out["fields"]["vector"].date_order == "dmy"
+
+
+def test_points_need_a_side_and_polygons_do_not(tmp_path, monkeypatch):
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    _no_earth_engine(monkeypatch)
+    path = _csv(tmp_path / "a.csv", [(-55.45, -24.45, "2026-01-02")])
+    for side in (None, "", "0", "-5", "abc"):
+        assert asyncio.run(vs.validate_vector(_p(), **_vkw(path, side_m=side))) == {
+            "error": "steps.alerts.err_vector_side"}
+    gpkg = tmp_path / "p.gpkg"
+    gpd.GeoDataFrame({"date": ["2026-01-02"]}, geometry=[box(-55.46, -24.46, -55.44, -24.44)],
+                     crs=4326).to_file(gpkg, layer="alerts")
+    out = asyncio.run(vs.validate_vector(_p(), **_vkw(gpkg, name="polys", lon=None, lat=None, side_m=None)))
+    spec = out["fields"]["vector"]
+    assert (spec.driver, spec.side_m, spec.lon, spec.lat) == ("gpkg", None, None, None)
+    assert spec.layer == "alerts"  # named even as the only layer: a later second one cannot take its place
+
+
+def test_a_file_outside_the_aoi_box_is_refused(tmp_path, monkeypatch):
+    _no_earth_engine(monkeypatch)
+    path = _csv(tmp_path / "a.csv", [(10.0, 45.0, "2026-01-02")])
+    assert asyncio.run(vs.validate_vector(_p(), **_vkw(path))) == {"error": "steps.alerts.err_not_covered"}
+
+
+def test_vector_refusals_come_in_order(tmp_path, monkeypatch):
+    _no_earth_engine(monkeypatch)
+    path = _csv(tmp_path / "a.csv", [(-55.45, -24.45, "2026-01-02")])
+    run = lambda **kw: asyncio.run(vs.validate_vector(_p(), **_vkw(path, **kw)))  # noqa: E731
+    assert run(name="RADD") == {"error": "steps.alerts.name_reserved"}
+    assert run(ref=None) == {"error": "steps.alerts.err_no_ref"}
+    assert run(lon="x") == {"error": "steps.alerts.err_vector_columns"}
+    assert run(date_col="when") == {"error": "steps.alerts.err_vector_columns"}
+    assert run(date_col=None) == {"error": "steps.alerts.err_vector_pick"}
+    assert run(lon=None) == {"error": "steps.alerts.err_vector_pick"}
+    (tmp_path / "bad.csv").write_text("lon,lat,date\n-55.45,-24.45,soon\n")
+    assert run(ref=str(tmp_path / "bad.csv")) == {"error": "steps.alerts.err_vector_dates"}
+    mixed = _csv(tmp_path / "m.csv", [(-55.45, -24.45, "13/04/2026"), (-55.44, -24.46, "04/13/2026")])
+    assert run(ref=str(mixed)) == {"error": "steps.alerts.err_vector_dates"}
+    nogeo = _csv(tmp_path / "n.csv", [("", "", "2026-01-02")])
+    assert run(ref=str(nogeo)) == {"error": "steps.alerts.err_vector_no_features"}
+    (tmp_path / "x.txt").write_text("hi")
+    assert run(ref=str(tmp_path / "x.txt")) == {"error": "steps.alerts.err_vector_unreadable"}
+
+
+def test_an_unreadable_file_reports_its_own_key_before_the_missing_picks(tmp_path):
+    (tmp_path / "x.txt").write_text("hi")
+    (tmp_path / "bad.gpkg").write_text("not a geopackage")
+    for bad in ("x.txt", "bad.gpkg"):
+        out = asyncio.run(vs.validate_vector(_p(), **_vkw(tmp_path / bad, date_col=None, lon=None, lat=None)))
+        assert out == {"error": "steps.alerts.err_vector_unreadable"}
+
+
+def _go_vector(rc, name, path):
+    """Custom, named, the Source select on a points/polygons file, the file picked."""
+    _go_custom(rc, name)
+    _source(rc).v_model = "vector"
+    assert _StubRasterInput.seen.origin == "vector"
+    _StubRasterInput.seen.path.set(str(path))
+
+
+def test_an_ambiguous_csv_asks_for_the_order_then_adds_through_validate_vector(tmp_path, monkeypatch):
+    path = _csv(tmp_path / "pts.csv", [(-55.45, -24.45, "03/04/2026"), (-55.44, -24.46, "05/06/2026")])
+    asked = []
+
+    async def fake_vector(project, **kw):
+        asked.append(kw)
+        return {"fields": {"name": kw["name"]}, "coverage": None}
+
+    async def no_custom(*a, **kw):
+        raise AssertionError("validate_custom for a vector source")
+
+    monkeypatch.setattr(sm, "RasterInput", _StubRasterInput)
+    monkeypatch.setattr(vs, "validate_vector", fake_vector)
+    monkeypatch.setattr(sm, "validate_custom", no_custom)
+    monkeypatch.setattr(sm.aoi_io, "ee_aoi", lambda result, pdir: "AOI")
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+
+        def _select(label):
+            return rc.find(v.Select, label=t(label)).widgets
+
+        try:
+            _go_vector(rc, "pts", path)
+            assert await _settle(lambda: bool(_select("steps.alerts.vector_date_order")))
+            assert not _select("steps.alerts.format_label") and not _select("steps.alerts.vector_layer")
+            assert _select("steps.alerts.vector_lon")[0].v_model == "lon"
+            assert _select("steps.alerts.vector_lat")[0].v_model == "lat"
+            assert _select("steps.alerts.vector_date")[0].v_model == "date"
+            order = _select("steps.alerts.vector_date_order")[0]
+            assert order.v_model is None and [i["value"] for i in order.items] == ["dmy", "mdy"]
+            side = rc.find(v.TextField, label=t("steps.alerts.vector_side")).widget
+            assert side.v_model == "30" and side.type == "number"
+            order.v_model = "dmy"
+            summary = t("steps.alerts.vector_summary", order=t("steps.alerts.vector_order_dmy"), points=2,
+                        polygons=0, first="2026-04-03", last="2026-06-05", skipped=0)
+            assert await _settle(lambda: any(summary in str(w.children) for w in rc.find(v.Html).widgets))
+            _submit_btn(rc).fire_event("click", None)
+            assert await _settle(lambda: open_.value is False)
+            [kw] = asked
+            assert (kw["ref"], kw["lon"], kw["lat"], kw["date_col"], kw["date_order"], kw["side_m"]) == (
+                str(path), "lon", "lat", "date", "dmy", "30")
+            assert kw["layer"] is None and kw["editing"] is None
+            assert added == [({"name": "pts"}, None)]
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_a_geopackage_with_two_layers_preselects_the_first(tmp_path, monkeypatch):
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    gpkg = tmp_path / "two.gpkg"
+    for name in ("first", "second"):
+        gpd.GeoDataFrame({"date": ["2026-01-02"]}, geometry=[box(-55.46, -24.46, -55.44, -24.44)],
+                         crs=4326).to_file(gpkg, layer=name)
+    monkeypatch.setattr(sm, "RasterInput", _StubRasterInput)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+
+    async def main():
+        box_, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+
+        def _layer():
+            return rc.find(v.Select, label=t("steps.alerts.vector_layer")).widgets
+
+        try:
+            _go_vector(rc, "polys", gpkg)
+            assert await _settle(lambda: bool(_layer()) and _layer()[0].v_model == "first")
+            assert _layer()[0].items == ["first", "second"]
+            assert rc.find(v.Select, label=t("steps.alerts.vector_date")).widget.v_model == "date"
+            assert not rc.find(v.Select, label=t("steps.alerts.vector_lon")).widgets  # CSV only
+            assert not rc.find(v.TextField, label=t("steps.alerts.vector_side")).widgets  # no points
+            assert not rc.find(v.Select, label=t("steps.alerts.format_label")).widgets  # no raster block
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
+def test_an_unreadable_file_after_a_good_one_clears_the_old_columns_and_summary(tmp_path, monkeypatch):
+    good = _csv(tmp_path / "good.csv", [(-55.45, -24.45, "2026-01-02")])
+    bad = tmp_path / "bad.gpkg"
+    bad.write_text("not a geopackage")
+    monkeypatch.setattr(sm, "RasterInput", _StubRasterInput)
+    state, open_, added, saved = _state(_p()), solara.reactive(True), [], []
+    summary = t("steps.alerts.vector_summary", order=t("steps.alerts.vector_order_iso"), points=1, polygons=0,
+                first="2026-01-02", last="2026-01-02", skipped=0)
+    unreadable = t("steps.alerts.err_vector_unreadable")
+
+    async def main():
+        box_, rc = reacton.render(_modal(state, open_, added, saved), handle_error=False)
+
+        def _texts():
+            return " ".join(str(w.children) for w in rc.find(v.Html).widgets)
+
+        try:
+            _go_vector(rc, "pts", good)
+            assert await _settle(lambda: summary in _texts())
+            _StubRasterInput.seen.path.set(str(bad))
+            assert await _settle(lambda: unreadable in _texts())
+            assert summary not in _texts()
+            assert not rc.find(v.Select, label=t("steps.alerts.vector_date")).widgets
+            assert not rc.find(v.Select, label=t("steps.alerts.vector_lon")).widgets
+            _source(rc).v_model = "file"  # another origin: the vector block goes, its file is not the GeoTIFF's
+            assert await _settle(lambda: unreadable not in _texts())
+            assert _StubRasterInput.seen.path.value == ""
+        finally:
+            rc.close()
+
+    asyncio.run(main())

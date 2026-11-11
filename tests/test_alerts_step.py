@@ -778,6 +778,40 @@ def test_add_custom_saves_the_source_with_its_coverage_and_raises_translated_err
     asyncio.run(main())
 
 
+def test_a_vector_source_is_added_without_a_coverage_record_and_its_row_names_its_kind(monkeypatch, tmp_path):
+    from deforestation_alerts.project.models import VectorSpec
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    _, _, modal, _ = _stub_children(monkeypatch)
+    p = _project_with_source("RADD")
+    state = _app_state(p)
+    fields = dict(name="pts", origin="vector", ref=str(tmp_path / "a.csv"), asset_type="FILE", format="date_only",
+                  date_encoding="yyyyddd", band_map=BandMap(alert=None, date="date"), native=None,
+                  vector=VectorSpec(driver="csv", lon="lon", lat="lat", date="date", date_order="iso", side_m=30.0))
+
+    async def main():
+        box, rc = _render(state)
+        try:
+            modal["on_add_custom"](fields, None)
+            live = state.project.value
+            assert "pts" in live.periods[PER.id].sources and "pts" not in live.coverage
+            row = _rows(live, rows=[PrepareRow("pts", Status.MISSING, Status.MISSING)])["pts"]
+            title, pill = row["cells"]
+            assert title["chips"] == [{"value": t("coverage.chip_vector"), "color": alerts_step.TONE_COLORS[None]}]
+            assert title["subtitle"] == t("steps.prepare.sub_vector")
+            assert pill["label"] == t("steps.alerts.read_file")
+            # an edit saves through without a record, and drops one a raster source left
+            state.update_project(live.name, lambda q: q.coverage.update(pts=_cov()))
+            modal["on_save_custom"]("pts", {**fields, "vector": fields["vector"].model_copy(
+                update={"date_order": "dmy"})}, None)
+            live = state.project.value
+            assert live.sources["pts"].vector.date_order == "dmy" and "pts" not in live.coverage
+        finally:
+            rc.close()
+
+    asyncio.run(main())
+
+
 def test_add_dialog_offers_sources_not_in_the_period(monkeypatch, tmp_path):
     """RADD is a project source the period does not use: listed, and picking
     it adds it to the period without a new definition."""

@@ -222,7 +222,9 @@ def _dynamic_keys():
     from gui.widget.attribute_form import _STATS
     from gui.scripts.prepare_view import WHY_KEYS
     from gui.widget.product_table import _ACTION_ICONS, STATUS_ICONS
+    from deforestation_alerts.project.models import DATE_ORDERS
     from gui.widget.source_modal import ENCODINGS, FORMATS
+    from gui.widget.vector_source import DATE_ORDER_CHOICES
     from gui.widget.vis_style_fields import BANDS_MODES, STYLES
 
     return {
@@ -246,6 +248,9 @@ def _dynamic_keys():
         "steps.alerts.format_": list(FORMATS),
         "steps.alerts.format_help_": list(FORMATS),
         "steps.alerts.encoding_": list(ENCODINGS),
+        # ... a vector file's day/month choice and the date orders its summary names
+        "steps.alerts.vector_": list(DATE_ORDER_CHOICES),
+        "steps.alerts.vector_order_": list(DATE_ORDERS),
         # gui.tile.analysis.edit_tools' model-name tooltips (models 1 and 2)
         "analysis_tile.model_labels.dl_hint": ["1", "2"],
         # ... and their names

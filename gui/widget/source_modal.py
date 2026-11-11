@@ -1,6 +1,8 @@
 """Add Source modal (spec §6.2): a predefined source, offered with its
 coverage of the AOI, or a custom source from an Earth Engine image or
-collection or a GeoTIFF, read through one of the format presets.
+collection or a GeoTIFF, read through one of the format presets, or from a
+CSV, GeoPackage or shapefile of dated points or polygons
+(``gui/widget/vector_source``).
 
 The custom form reads Name, Source, the picker, then the bands (spec
 2026-10-23-source-form): the bands are read once a raster is picked and
@@ -9,7 +11,8 @@ as the alert date); two or more an Alert format that starts on the suggested
 preset and band fields that start on its bands. A date-only source's date
 values are read over the AOI's bounds and suggest its encoding. Everything
 below the picker is the raster block (``use_raster_fields``), so another
-origin can draw its own fields in its place.
+origin can draw its own fields in its place: a points or polygons file draws
+``use_vector_fields``.
 """
 
 import asyncio
@@ -44,12 +47,13 @@ from gui.widget.raster_input import (
     use_band_list,
 )
 from gui.widget.text_style import MUTED
+from gui.widget.vector_source import use_vector_fields
 
 FORMATS = ("radd", "ccdc", "pyeo", "date_only")
 ENCODINGS = ("yymm", "yyddd", "yyyyddd", "decimal_year")
 MAX_CUSTOM = 6
-#: the Source select's choices, in order (a points/polygons source adds its own)
-SOURCE_ORIGINS = ("gee", "file")
+#: the Source select's choices, in order
+SOURCE_ORIGINS = ("gee", "file", "vector")
 
 
 def in_use(project) -> set:
@@ -160,8 +164,9 @@ async def validate_custom(gee_interface, project, aoi_fc, *, name, origin, ref, 
     cov = parse_coverage(raw, aoi_digest=project.aoi.digest, today=date.today())[name]
     if cov.fraction <= 0:
         return {"error": "steps.alerts.err_not_covered"}
+    # ``vector=None``: an edit from a vector source drops its spec
     fields = dict(name=name, origin=origin, ref=ref, asset_type=asset_type, format=fmt,
-                  date_encoding=date_encoding, band_map=band_map, native=native)
+                  date_encoding=date_encoding, band_map=band_map, native=native, vector=None)
     return {"fields": fields, "coverage": cov}
 
 
@@ -430,12 +435,16 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
     asset = solara.use_reactive({"asset_id": src0.ref, "type": src0.asset_type, "column": "ALL", "value": None}
                                 if src0 is not None and src0.origin == "gee" else None)
     path = solara.use_reactive(src0.ref if src0 is not None and src0.origin == "file" else "")
+    # its own reactive: a GeoTIFF picked before is no vector file, nor back
+    vpath = solara.use_reactive(src0.ref if src0 is not None and src0.origin == "vector" else "")
     error, set_error = solara.use_state(None)
     submitted = solara.use_ref(False)  # one Add per opening, held through the validation
 
-    ref = (asset.value or {}).get("asset_id") if origin == "gee" else absolute(path.value)
+    vector = origin == "vector"
+    ref = (asset.value or {}).get("asset_id") if origin == "gee" else absolute((vpath if vector else path).value)
     asset_type = (asset.value or {}).get("type") if origin == "gee" else "FILE"
-    raster = use_raster_fields(gee_interface, app_state, open_, src0, origin, ref, asset_type)
+    raster = use_raster_fields(gee_interface, app_state, open_, src0, origin, None if vector else ref, asset_type)
+    vector_fields = use_vector_fields(src0, ref if vector else None)
     fmt, alert_band, date_band, encoding = raster.fmt, raster.alert_band, raster.date_band, raster.encoding
     use_default_name(
         ref if mode == "custom" and src0 is None else None, name, set_name,
@@ -448,24 +457,28 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
             set_origin(value)
             asset.set(None)
             path.set("")
+            vpath.set("")
             raster.clear()
 
     async def _validate():
         live = app_state.project.value
         digest = live.aoi.digest
-        result = app_state.aoi_result.value
-        # the geometry of THIS AOI: right after an AOI change ``aoi_result`` may
-        # still hold the previous one's selection (remote_facts.aoi_origin)
-        where = aoi_origin(live, result)
-        if where is None:
-            return {"error": "steps.alerts.err_aoi_not_ready"}
-        if where == "result":
-            aoi = aoi_io.ee_aoi(result, None)
-        else:  # parsing the sidecar can take a while for a national AOI: off the loop
-            aoi = await asyncio.to_thread(aoi_io.ee_aoi, None, paths.project_dir(live.name))
-        out = await validate_custom(gee_interface, live, aoi, name=name, origin=origin, ref=ref,
-                                    asset_type=asset_type, fmt=fmt, encoding=encoding, alert_band=alert_band,
-                                    date_band=date_band, editing=editing)
+        if vector:  # local only: the AOI box, no Earth Engine geometry
+            out = await vector_fields.validate(live, name, editing)
+        else:
+            result = app_state.aoi_result.value
+            # the geometry of THIS AOI: right after an AOI change ``aoi_result`` may
+            # still hold the previous one's selection (remote_facts.aoi_origin)
+            where = aoi_origin(live, result)
+            if where is None:
+                return {"error": "steps.alerts.err_aoi_not_ready"}
+            if where == "result":
+                aoi = aoi_io.ee_aoi(result, None)
+            else:  # parsing the sidecar can take a while for a national AOI: off the loop
+                aoi = await asyncio.to_thread(aoi_io.ee_aoi, None, paths.project_dir(live.name))
+            out = await validate_custom(gee_interface, live, aoi, name=name, origin=origin, ref=ref,
+                                        asset_type=asset_type, fmt=fmt, encoding=encoding, alert_band=alert_band,
+                                        date_band=date_band, editing=editing)
         if not open_.value:
             return None  # closed during the check (ESC or Cancel): the user cancelled
         now = app_state.project.value
@@ -545,7 +558,7 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
             # a band list or date values still being read, a band list that could
             # not be read, or a date-only source with no encoding leaves nothing to save
             external_busy=waiting or (mode == "predefined" and key is None)
-            or (mode == "custom" and (bool(name_error) or raster.save_blocked)),
+            or (mode == "custom" and (bool(name_error) or raster.save_blocked or vector_fields.save_blocked)),
             **button,
         )
 
@@ -573,10 +586,12 @@ def _SourceForm(open_, app_state, gee_interface, editing, on_add_predefined, on_
                          outlined=True, disabled=src0 is not None or busy, hint=t("steps.alerts.name_hint"),
                          persistent_hint=True, error_messages=[t(name_error)] if name_error else [])
             SourceSelect(origin=origin, on_origin=_set_origin, disabled=busy, origins=SOURCE_ORIGINS)
-            RasterInput(gee_interface=gee_interface, origin=origin, asset=asset, path=path, disabled=busy)
+            RasterInput(gee_interface=gee_interface, origin=origin, asset=asset, path=vpath if vector else path,
+                        disabled=busy)
             if asset_type == "IMAGE_COLLECTION":  # it does not depend on the bands
                 solara.Text(t("steps.alerts.collection_help"), style=MUTED)
             raster.draw(busy)
+            vector_fields.draw(busy)
         if new_periods is not None and src0 is None:  # an edit changes it in the row's details
             rv.Checkbox(label=t("steps.alerts.add_to_new_periods"), v_model=new_periods.value,
                         on_v_model=lambda value: new_periods.set(bool(value)), dense=True, hide_details=True,

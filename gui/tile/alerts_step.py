@@ -31,7 +31,7 @@ from pysepal.solara.notifications import use_notifications
 from deforestation_alerts.engine import catalogue
 from deforestation_alerts.engine.coverage import NO_DATA, NOT_COVERED, preview_window, record_for, window_coverage
 from deforestation_alerts.engine.fingerprint import (
-    Status, harm_key, is_file_source, raw_key,
+    Status, harm_key, is_file_source, is_vector_source, raw_key,
 )
 from deforestation_alerts.engine.plan import plan_prepare
 from deforestation_alerts.engine.why import source_reason
@@ -105,7 +105,7 @@ def alert_rows(p, pdir, period, *, mine, errors, stages, progress, on, building,
         file_source = is_file_source(src)
         reason = source_reason(p, period, r.source) if not (r.raw is Status.CURRENT or r.blocked) else None
         subtitle, tone = download_subtitle(r, file_source=file_source, raw_art=_art(p, raw_key(period.id, r.source)),
-                                           reason=reason, queued=queued)
+                                           reason=reason, queued=queued, vector=is_vector_source(src))
         chips = [{"value": c["label"], "color": TONE_COLORS[c["tone"]]}
                  for c in coverage_chips(p, r.source, period, pending=pending_cov)]
         title = {"type": "title", "value": source_label(src), "subtitle": subtitle, "chips": chips}
@@ -195,12 +195,14 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
 
     # The two custom callbacks run in SourceModal's validation task (on the
     # loop, never from an effect); what they raise the modal shows inline, so
-    # they raise translated text, never a key.
+    # they raise translated text, never a key. A vector source has no coverage
+    # record (``cov`` None): ``record_for`` makes one.
     def _add_custom(fields, cov):
         def _apply(live):
             src = add_custom_source(live, **fields, period_id=live.active_period)
             set_new_period_source(live, src.name, new_periods.value)
-            live.coverage = {**live.coverage, src.name: cov}
+            if cov is not None:
+                live.coverage = {**live.coverage, src.name: cov}
 
         try:
             update_setup(app_state, p.name, _apply, notifications)
@@ -218,7 +220,10 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
 
         def _apply(live):
             update_custom_source(live, name, **changes)  # refused once a set used it meanwhile
-            live.coverage = {**live.coverage, name: cov}
+            if cov is not None:
+                live.coverage = {**live.coverage, name: cov}
+            elif name in live.coverage:  # now a vector source: the raster's record is moot
+                live.coverage = {k: c for k, c in live.coverage.items() if k != name}
 
         try:
             saved = update_setup(app_state, p.name, _apply, notifications)

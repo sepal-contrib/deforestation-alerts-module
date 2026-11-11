@@ -228,3 +228,19 @@ def test_native_grid_reads_metres_for_earth_engine_and_degrees_for_a_geographic_
     _file_source(p)  # EPSG:32719, 30 m, no transform
     assert _rows(source_details(p, JAN, "tif", PrepareRow("tif", Status.MISSING, Status.MISSING), None,
                                 "To harmonize")["sections"][0])["Native grid"] == "EPSG:32719 · 30 m"
+
+
+def test_vector_source_details_name_its_columns_not_bands():
+    from deforestation_alerts.project.models import VectorSpec
+    from gui.i18n import t
+
+    p = _project()
+    add_custom_source(p, name="pts", origin="vector", ref="/data/pts.gpkg", asset_type="FILE", format="date_only",
+                      date_encoding="yyyyddd", band_map=BandMap(alert=None, date="when"), native=None,
+                      vector=VectorSpec(driver="gpkg", layer="alerts", date="when", date_order="dmy", side_m=30.0))
+    d = source_details(p, JAN, "pts", PrepareRow("pts", Status.MISSING, Status.MISSING), None, "To read")
+    rows = _rows(d["sections"][0])
+    assert rows[t("steps.prepare.f_kind")] == t("steps.prepare.d_kind_vector")
+    assert rows[t("steps.alerts.vector_layer")] == "alerts" and rows[t("steps.alerts.vector_side")] == "30"
+    assert rows[t("steps.alerts.vector_date")] == f"when · {t('steps.alerts.vector_order_dmy')}"
+    assert t("steps.prepare.f_bands") not in rows and d["sections"][1]["title"] == "Read from file"

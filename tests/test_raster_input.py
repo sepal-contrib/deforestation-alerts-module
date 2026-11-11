@@ -15,7 +15,7 @@ from gui.widget import raster_input
 @pytest.fixture
 def pickers(monkeypatch):
     """pysepal's pickers list the user's assets and folders: recorders instead."""
-    ns = SimpleNamespace(asset_types=None, file_label=None)
+    ns = SimpleNamespace(asset_types=None, file_label=None, extensions=None)
 
     @solara.component
     def _Asset(types, value, gee_interface):
@@ -23,7 +23,7 @@ def pickers(monkeypatch):
 
     @solara.component
     def _File(extensions, value, label):
-        ns.file_label = label
+        ns.file_label, ns.extensions = label, extensions
 
     monkeypatch.setattr(raster_input, "AssetSelectComponent", _Asset)
     monkeypatch.setattr(raster_input, "FileInputComponent", _File)
@@ -47,6 +47,12 @@ def test_the_input_is_the_picker_alone_and_follows_the_origin(pickers):
     try:
         assert not rc.find(v.Select).widgets
         assert pickers.file_label == t("steps.raster_input.file")
+    finally:
+        rc.close()
+    _box, rc = reacton.render(_Harness(origin="vector"), handle_error=False)
+    try:
+        assert pickers.file_label == t("steps.raster_input.vector_file")
+        assert pickers.extensions == list(raster_input.VECTOR_PICKER) and ".gpkg" in pickers.extensions
     finally:
         rc.close()
 
@@ -143,3 +149,4 @@ def test_the_source_select_lists_its_origins_in_the_given_order():
     assert _source_items(origins=("file", "gee")) == [{"text": t("steps.raster_input.source_file"), "value": "file"},
                                                       {"text": t("steps.raster_input.source_gee"), "value": "gee"}]
     assert _source_items(origins=("file",)) == [{"text": t("steps.raster_input.source_file"), "value": "file"}]
+    assert _source_items(origins=("vector",)) == [{"text": t("steps.raster_input.source_vector"), "value": "vector"}]

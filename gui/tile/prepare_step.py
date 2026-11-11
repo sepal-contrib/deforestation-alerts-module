@@ -54,7 +54,7 @@ from pysepal.solara.notifications import use_notifications
 
 from deforestation_alerts.engine.coverage import UNCHECKED
 from deforestation_alerts.engine.fingerprint import (
-    AOI_KEY, Status, aoi_raster_inputs, harm_key, is_file_source, period_masks, raw_key, status,
+    AOI_KEY, Status, aoi_raster_inputs, harm_key, is_file_source, is_vector_source, period_masks, raw_key, status,
 )
 from deforestation_alerts.engine.plan import plan_masks, plan_prepare
 from deforestation_alerts.engine.why import source_reason
@@ -191,7 +191,8 @@ def build_rows(p, pdir, period, rows, *, mine, errors, on, building, run, toggle
             notes.append(result)
         reason = source_reason(p, period, r.source) if not (r.ready or r.blocked) else None
         subtitle, tone = source_subtitle(r, file_source=file_source, raw_art=raw_art, harm_art=harm_art,
-                                         reason=reason, stage=running, queued=queued, pct=pct)
+                                         reason=reason, stage=running, queued=queued, pct=pct,
+                                         vector=is_vector_source(p.sources[r.source]))
         title = {"type": "title", "value": source_label(p.sources[r.source]), "subtitle": subtitle}
         if tone:
             title["subtitle_tone"] = tone

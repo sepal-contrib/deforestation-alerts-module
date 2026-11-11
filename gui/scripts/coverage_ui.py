@@ -6,6 +6,7 @@ import solara
 from deforestation_alerts.engine.coverage import (
     FULL, NO_DATA, NOT_COVERED, UNCHECKED, Note, covering_dates, pct_text, record_for, window_coverage,
 )
+from deforestation_alerts.engine.fingerprint import is_vector_source
 from gui.i18n import t, tn
 
 #: a chip's tone -> its colour
@@ -23,7 +24,10 @@ def coverage_chips(p, name: str, period, pending: bool = False) -> list:
     Dates: whether it has data for the period's search window, with its last
     data date; none for a source with no catalogue dates (a custom one).
     ``pending``: the coverage check runs, so a source without a record reads
-    checking, not unchecked."""
+    checking, not unchecked. A vector source is never checked: it is clipped
+    to the AOI at harmonize."""
+    if is_vector_source(p.sources.get(name)):
+        return [{"label": t("coverage.chip_vector"), "tone": None}]
     cov = record_for(p, name)
     if cov is None:
         label = t("coverage.chip_checking" if pending else "coverage.unchecked")

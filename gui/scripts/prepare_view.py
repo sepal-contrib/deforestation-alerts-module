@@ -110,10 +110,16 @@ def source_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], qu
     return cell
 
 
-def _ready_text(row: PrepareRow, file_source: bool, raw_art: Optional[Artifact], harm_art: Optional[Artifact]) -> str:
+def _file_text(vector: bool) -> str:
+    """A user file's format, as its row's grey line names it."""
+    return t("steps.prepare.sub_vector" if vector else "steps.prepare.sub_file")
+
+
+def _ready_text(row: PrepareRow, file_source: bool, raw_art: Optional[Artifact], harm_art: Optional[Artifact],
+                vector: bool = False) -> str:
     """``downloaded {date} · {size} · {n} alert pixels``; a user file names its format."""
     if file_source:
-        origin = t("steps.prepare.sub_file")
+        origin = _file_text(vector)
     else:
         origin = t("steps.prepare.sub_downloaded", date=raw_art.created_at.date().isoformat()) if raw_art else ""
     size = size_text(sum(a.size_bytes for a in (raw_art, harm_art) if a is not None))
@@ -142,11 +148,11 @@ def _reason_line(reason: Reason, file_source: bool, then: str = "harmonize") -> 
 
 def source_subtitle(row: PrepareRow, *, file_source: bool, raw_art: Optional[Artifact],
                     harm_art: Optional[Artifact], reason: Optional[Reason], stage: Optional[str], queued: bool,
-                    pct: Optional[int]) -> tuple[str, Optional[str]]:
+                    pct: Optional[int], vector: bool = False) -> tuple[str, Optional[str]]:
     """The grey line under the source's name (spec "Source cell"), and its
     tone (None, or ``error`` for a missing file). ``reason``: why the row is
     out of date (``engine.why.source_reason``); a download with no percent
-    yet keeps it."""
+    yet keeps it. ``vector``: a points/polygons file."""
     stage = _stage(stage, file_source)
     if stage == "download" and pct is not None:
         return t("steps.prepare.sub_downloading", pct=pct), None
@@ -159,7 +165,7 @@ def source_subtitle(row: PrepareRow, *, file_source: bool, raw_art: Optional[Art
     if row.blocked:
         return row_notes(row.coverage, row.notes)[0]["text"], None
     if row.ready:
-        return _ready_text(row, file_source, raw_art, harm_art), None
+        return _ready_text(row, file_source, raw_art, harm_art, vector), None
     return _reason_line(reason or _fallback(row, file_source), file_source), None
 
 
@@ -218,11 +224,11 @@ def download_state(row: PrepareRow, *, file_source: bool, stage: Optional[str], 
 
 
 def download_subtitle(row: PrepareRow, *, file_source: bool, raw_art: Optional[Artifact], reason: Optional[Reason],
-                      queued: bool) -> tuple[str, Optional[str]]:
+                      queued: bool, vector: bool = False) -> tuple[str, Optional[str]]:
     """The grey line under an Alerts row's name, and its tone: the download's
     date and size once current, else why it must be downloaded (read) again.
     ``reason``: ``engine.why.source_reason``; a harmonize-side reason reads as
-    the row's raw status."""
+    the row's raw status. ``vector``: a points/polygons file."""
     if queued:
         return t("steps.prepare.sub_queued"), None
     if row.file_missing:
@@ -230,13 +236,13 @@ def download_subtitle(row: PrepareRow, *, file_source: bool, raw_art: Optional[A
     if row.blocked:
         return row_notes(row.coverage, row.notes)[0]["text"], None
     if row.raw is Status.CURRENT:
-        origin = t("steps.prepare.sub_file") if file_source else (
+        origin = _file_text(vector) if file_source else (
             t("steps.prepare.sub_downloaded", date=raw_art.created_at.date().isoformat()) if raw_art else "")
         size = size_text(raw_art.size_bytes) if raw_art is not None else ""
         return " · ".join(part for part in (origin, size) if part), None
     if reason is None or reason.key not in _RAW_TERMS:
         if file_source:  # never read: its pill says Read file, the line names its format
-            return t("steps.prepare.sub_file"), None
+            return _file_text(vector), None
         reason = Reason("not_downloaded")
     # a user file is read again by its pill (Read file): its reason reads bare
     return (reason_text(reason) if file_source else _reason_line(reason, False)), None
@@ -410,6 +416,12 @@ def _source_section(p, source: str) -> dict:
                      t("steps.prepare.d_checked", date=cov.checked_on.isoformat())]
         rows = [(t("steps.prepare.f_catalogue"), t(catalogue.LABEL_KEYS[src.catalogue_key])),
                 (t("steps.prepare.f_coverage"), " · ".join(x for x in parts if x))]
+    elif src.origin == "vector":
+        spec = src.vector
+        rows = [(t("steps.prepare.f_kind"), t("steps.prepare.d_kind_vector")), (t("steps.prepare.f_ref"), src.ref),
+                (t("steps.alerts.vector_layer"), spec.layer or ""),
+                (t("steps.alerts.vector_date"), f"{spec.date} · {t(f'steps.alerts.vector_order_{spec.date_order}')}"),
+                (t("steps.alerts.vector_side"), f"{spec.side_m:g}" if spec.side_m else "")]
     else:
         formats = {"radd": t("steps.alerts.format_radd"), "ccdc": t("steps.alerts.format_ccdc"),
                    "pyeo": t("steps.alerts.format_pyeo"), "date_only": t("steps.alerts.format_date_only")}

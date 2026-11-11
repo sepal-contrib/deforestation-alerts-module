@@ -143,6 +143,23 @@
   - Overview: a History card with the set's growth alerts and its largest
     growing clearings, each with a Review button. Exports add `kind`,
     `grows_from` and `history_area_ha`.
+- **Custom alert sources from points or polygons** (CSV, GeoPackage,
+  Shapefile): a file of dated points or polygons is added in the custom
+  source modal like a GeoTIFF (Source: *Points or polygons file*). A CSV has
+  longitude/latitude columns (`,`, `;` or tab, decimal commas with `;`); the
+  columns are suggested from their names. The date column is read as a date
+  field, year-month-day, `yyyymmdd` or day/month/year, and the user is asked
+  whether day or month comes first only when the file cannot tell. Each
+  point becomes a square of a chosen side in metres, and each polygon is
+  burned as drawn (a polygon smaller than a pixel still keeps one). Alerts
+  reads the file (Read file); Download & harmonize burns the features of the
+  period onto the project grid, the earliest date winning where they
+  overlap, clipped to the AOI; they then cluster with the other sources like
+  any alert. Such a source needs no Earth Engine coverage check. A file
+  edited after it was added is read again, unless the edit no longer fits
+  the source (a picked column gone, dates in the other day/month order, or
+  points in a polygon-only source); then the row is refused until the
+  source is edited.
 
 ### Fixed
 

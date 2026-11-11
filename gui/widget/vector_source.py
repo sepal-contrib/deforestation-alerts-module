@@ -1,16 +1,17 @@
 """The vector-file part of the Add Source form (spec §5): a CSV, GeoPackage
 or shapefile of dated points or polygons. Its check before the source is
-added, the read that gives the form its columns and summary, and the fields
-themselves; ``source_modal`` holds the state, as ``raster_input`` serves it
-the band list."""
+added, the read that gives the form its columns and summary, the fields
+themselves and ``use_vector_fields``, the block ``source_modal`` draws below
+the picker in place of its raster block."""
 
 import asyncio
+from types import SimpleNamespace
 
 import reacton.ipyvuetify as rv
 import solara
 
 from deforestation_alerts.engine.vector_input import (
-    ERR_DATES, ERR_NO_FEATURES, VectorInputError, driver_of, list_layers, read_table, summarize,
+    ERR_DATES, ERR_NO_FEATURES, VectorInputError, driver_of, list_layers, read_table, suggest_columns, summarize,
 )
 from deforestation_alerts.project.models import BandMap, VectorSpec
 from deforestation_alerts.project.names import validate_source_name
@@ -114,6 +115,69 @@ def use_vector_table(ref, layer, lon, lat, date_col, date_order):
 
     return solara.lab.use_task(_load, dependencies=[ref, layer, lon, lat, date_col, date_order],
                                prefer_threaded=False, raise_error=False)
+
+
+def use_vector_fields(src0, ref):
+    """Hook: the custom form's block for a points or polygons file, everything
+    below the picker, as ``source_modal.use_raster_fields`` is for a raster.
+
+    It reads the picked file (``use_vector_table``) and holds the layer, the
+    coordinate and date columns, the day/month order and the square side. The
+    result carries ``validate(project, name, editing)``, ``save_blocked``
+    (the file is being read) and ``draw(busy)``, a plain function that draws
+    the block into the caller's container. With no file (``ref`` None, as for
+    another origin) the read stays idle and ``draw`` draws nothing.
+
+    A newly read file starts on its suggested columns; an edit (``src0``)
+    keeps its saved picks until the file changes."""
+    vec0 = src0.vector if src0 is not None else None
+    layer, set_layer = solara.use_state(vec0.layer if vec0 else None)
+    lon, set_lon = solara.use_state(vec0.lon if vec0 else None)
+    lat, set_lat = solara.use_state(vec0.lat if vec0 else None)
+    date_col, set_date_col = solara.use_state(vec0.date if vec0 else None)
+    date_order, set_date_order = solara.use_state(vec0.date_order if vec0 else None)
+    side, set_side = solara.use_state(f"{vec0.side_m:g}" if vec0 and vec0.side_m else SIDE_DEFAULT)
+    suggested_for = solara.use_ref(None)  # the (file, columns) the picks were last suggested for
+    task = use_vector_table(ref, layer, lon, lat, date_col, date_order)
+    info = task.value if task.finished and task.value else None
+    shown = solara.use_ref(None)  # the last file read: the selects keep their items while a pick re-reads
+    if info is not None:
+        shown.current = info
+    elif not ref or task.error:
+        shown.current = None  # no file, or one that cannot be read: nothing of the previous one stays
+
+    def _suggest():
+        if info is None:
+            return
+        columns = info["columns"]
+        if layer != info["layer"]:
+            # the layer read (the first of several, named; None for one): its columns are these
+            set_layer(info["layer"])
+        if suggested_for.current == (ref, columns):
+            return  # a pick re-read the same file: the user's picks stay
+        suggested_for.current = (ref, columns)
+        if vec0 is not None and ref == src0.ref:
+            return  # an edit keeps its own picks until the file changes
+        picks = suggest_columns(columns)
+        set_lon(picks["lon"])
+        set_lat(picks["lat"])
+        set_date_col(picks["date"])
+        set_date_order(None)
+
+    solara.use_effect(_suggest, [info])
+
+    async def validate(project, name, editing):
+        return await validate_vector(project, name=name, ref=ref, layer=layer, lon=lon, lat=lat, date_col=date_col,
+                                     date_order=date_order, side_m=side, editing=editing)
+
+    def draw(busy):
+        if ref:
+            VectorFields(task=task, info=shown.current, layer=layer, set_layer=set_layer, lon=lon, set_lon=set_lon,
+                         lat=lat, set_lat=set_lat, date_col=date_col, set_date_col=set_date_col,
+                         date_order=date_order, set_date_order=set_date_order, side=side, set_side=set_side,
+                         disabled=busy)
+
+    return SimpleNamespace(validate=validate, save_blocked=bool(ref) and task.pending, draw=draw)
 
 
 def summary_text(info) -> str:

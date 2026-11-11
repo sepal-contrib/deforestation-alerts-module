@@ -1,7 +1,8 @@
 """The shared user-raster input (spec §6.2): an Earth Engine image or image
 collection, or a GeoTIFF in the user's SEPAL folder, and the list of its
 bands. Used by the source and mask modals, the visualization-layer modal and
-the attribute raster."""
+the attribute raster. The source modal also offers a points or polygons file
+(origin ``"vector"``)."""
 
 import asyncio
 from pathlib import Path
@@ -12,11 +13,14 @@ import solara
 from pysepal.solara.components.inputs import AssetSelectComponent, FileInputComponent
 
 from deforestation_alerts.engine import user_raster
+from deforestation_alerts.engine.vector_input import VECTOR_EXTENSIONS
 from gui.i18n import t
 from gui.scripts.error_text import error_text
 from gui.widget.text_style import MUTED
 
 EXTENSIONS = [".tif", ".tiff", ".vrt"]  # GDAL reads a VRT like the GeoTIFFs it points to
+#: both cases: the picker filters extensions case-sensitively (``PTS.SHP`` from Windows)
+VECTOR_PICKER = [*VECTOR_EXTENSIONS, *(e.upper() for e in VECTOR_EXTENSIONS)]
 
 
 def band_index(band) -> Optional[int]:
@@ -41,8 +45,11 @@ def RasterInput(gee_interface, origin, asset, path, asset_types=("IMAGE", "IMAGE
     with rv.Html(tag="div", style_="pointer-events:none;opacity:0.6;" if disabled else ""):
         if origin == "gee":
             AssetSelectComponent(types=list(asset_types), value=asset, gee_interface=gee_interface)
+        elif origin == "vector":  # keyed: the picker reads its extensions when it mounts
+            FileInputComponent(extensions=VECTOR_PICKER, value=path,
+                               label=t("steps.raster_input.vector_file")).key("vector")
         else:
-            FileInputComponent(extensions=EXTENSIONS, value=path, label=t("steps.raster_input.file"))
+            FileInputComponent(extensions=EXTENSIONS, value=path, label=t("steps.raster_input.file")).key("file")
 
 
 @solara.component
