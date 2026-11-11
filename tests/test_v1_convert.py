@@ -8,6 +8,7 @@ import pytest
 from deforestation_alerts.project import io, paths
 from deforestation_alerts.project.review_copy import read_only
 from deforestation_alerts.project.v1_migration import (
+    CONVERTING,
     RECIPE_FILE,
     TABLE_FILE,
     V1MigrationError,
@@ -16,6 +17,7 @@ from deforestation_alerts.project.v1_migration import (
     parse_vis,
 )
 from deforestation_alerts.scripts.alert_store import load_gdf_from_parquet
+from gui.i18n import t
 from tests._v1_helpers import write_recipe
 
 AOI_FC = {"type": "FeatureCollection", "features": [{
@@ -124,11 +126,39 @@ def test_reload_failure_leaves_nothing(tmp_path, monkeypatch):
 def test_existing_aoi_file_is_refused(tmp_path):
     folder = write_recipe(tmp_path / "r")
     (folder / "aoi.geojson").write_text("mine", encoding="utf-8")
+    before = _sha1(folder / "aoi.geojson")
     with pytest.raises(V1MigrationError) as exc:
         convert(folder, _resolve)
-    assert exc.value.key == "migrated.err_table"
-    assert (folder / "aoi.geojson").read_text(encoding="utf-8") == "mine"
+    assert exc.value.key == "migrated.err_leftover" and exc.value.values == {"files": "aoi.geojson"}
+    assert _sha1(folder / "aoi.geojson") == before
     assert sorted(os.listdir(folder)) == sorted([*V1_FILES, "aoi.geojson"])
+    text = t("migrated.err_leftover", files="aoi.geojson")
+    assert "aoi.geojson" in text and "was not changed" in text
+
+
+def test_interrupted_conversion_converts_again(tmp_path):
+    p, _ = _convert(tmp_path / "a")
+    rel = p.alert_sets[p.active_set].store_rel_path
+    folder = write_recipe(tmp_path / "r")
+    # what a kernel killed after the store and the sidecar, before the manifest, leaves
+    (folder / rel).parent.mkdir(parents=True)
+    (folder / rel).write_bytes(b"half")
+    (folder / "aoi.geojson").write_text("half", encoding="utf-8")
+    (folder / CONVERTING).touch()
+    assert is_v1_recipe(folder)
+    p = convert(folder, _resolve)
+    assert p.migrated_from is not None and not (folder / CONVERTING).exists()
+    assert len(load_gdf_from_parquet(folder / rel)) == 4 and (folder / "aoi.geojson").read_text() != "half"
+
+
+def test_no_marker_left(tmp_path, monkeypatch):
+    _, folder = _convert(tmp_path / "ok")
+    assert not (folder / CONVERTING).exists()
+    folder = write_recipe(tmp_path / "r")
+    monkeypatch.setattr(io, "save_project", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(V1MigrationError):
+        convert(folder, _resolve)
+    assert sorted(os.listdir(folder)) == V1_FILES
 
 
 def test_existing_store_is_refused(tmp_path):
@@ -140,7 +170,7 @@ def test_existing_store_is_refused(tmp_path):
     store.write_bytes(b"mine")
     with pytest.raises(V1MigrationError) as exc:
         convert(folder, _resolve)
-    assert exc.value.key == "migrated.err_table" and store.read_bytes() == b"mine"
+    assert exc.value.key == "migrated.err_leftover" and store.read_bytes() == b"mine"
     assert not (folder / "aoi.geojson").exists() and not (folder / paths.MANIFEST).exists()
 
 
@@ -215,7 +245,8 @@ def test_bad_layer_vis_falls_back_to_defaults(tmp_path):
     p, _ = _convert(tmp_path, aux_layer="users/a/aux", aux_layer_vis="{'bands': 'B4'}")
     layer = p.vis_layers["v1 layer"]
     assert layer.asset == "users/a/aux" and layer.bands == [] and (layer.min, layer.max) == (0.0, 1.0)
-    assert any("v1 layer" in n for n in p.migrated_from.notes)
+    notes = [n for n in p.migrated_from.notes if "v1 layer" in n]
+    assert len(notes) == 1 and "default display" in notes[0] and "not imported" not in notes[0]
 
 
 def test_unreadable_vis_text_uses_defaults():

@@ -933,7 +933,8 @@
   },
   "migrated": {
     "read_only": "Convertido de uma receita da versão 1. A configuração está bloqueada: revisão, salvamento e exportação continuam disponíveis.",
-    "err_aoi": "Não foi possível obter a área de interesse do Earth Engine: {error}. A receita não foi alterada.",
+    "err_aoi": "Não foi possível obter a área de interesse: {error}. A receita não foi alterada.",
+    "err_leftover": "Não foi possível converter: {files} já está na pasta da receita. A receita não foi alterada; remova {files} para convertê-la.",
     "err_table": "Não foi possível ler a tabela de alertas: {error}. A receita não foi alterada.",
     "err_params": "Não foi possível ler as configurações da receita: {error}. A receita não foi alterada."
   }

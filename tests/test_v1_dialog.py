@@ -129,6 +129,40 @@ def test_failed_conversion_installs_nothing(dialog, monkeypatch):  # noqa: F811
     run_rendered(lambda: dialog.render(), main)
 
 
+def test_long_notes_are_cut_to_three(dialog, monkeypatch):  # noqa: F811
+    write_recipe(dialog.root / NAME, rows=[{"bounding_box": "not wkt"}] * 5)
+    _resolver(monkeypatch, lambda params: AOI_FC)
+
+    async def main(rc):
+        await _settle(lambda: NAME in (_listed(dialog) or {}), "the recipe listed", rc=rc)
+        dialog.manage[-1]["on_select"](NAME)
+        dialog.manage[-1]["on_open"]()
+        await _settle(lambda: _toasts("warning"), "the notes toast")
+        notes = dialog.state.project.value.migrated_from.notes
+        assert len(notes) == 5 and _toasts("warning") == ["; ".join(notes[:3]) + " (+2)"]
+
+    run_rendered(lambda: dialog.render(), main)
+
+
+def test_unexpected_conversion_error_says_open_failed(dialog, monkeypatch):  # noqa: F811
+    write_recipe(dialog.root / NAME)
+
+    def stuck(name, root=None):
+        raise RuntimeError("lock timeout")
+
+    monkeypatch.setattr(pd, "ensure_converted", stuck)
+
+    async def main(rc):
+        await _settle(lambda: NAME in (_listed(dialog) or {}), "the recipe listed", rc=rc)
+        dialog.manage[-1]["on_select"](NAME)
+        dialog.manage[-1]["on_open"]()
+        await _settle(lambda: _toasts("error"), "the error toast")
+        assert _toasts("error") == [t("steps.project.open_failed", name=NAME, error="lock timeout")]
+        assert dialog.state.project.value is None and dialog.manage[-1]["converting"] is None
+
+    run_rendered(lambda: dialog.render(), main)
+
+
 def test_v2_open_unchanged(dialog, monkeypatch):  # noqa: F811
     io.save_project(pd.create_project("a"))
     _resolver(monkeypatch, lambda params: pytest.fail("a v2 project is never resolved"))

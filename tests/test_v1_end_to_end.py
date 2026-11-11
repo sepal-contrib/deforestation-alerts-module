@@ -1,6 +1,7 @@
 """A converted version 1 recipe reviews, saves, shows in Overview and exports,
 without raster files or a review copy (v1 migration, task 8)."""
 
+import hashlib
 import math
 import types
 from pathlib import Path
@@ -26,6 +27,13 @@ from tests._v1_helpers import write_recipe
 from tests.test_v1_open import AOI_FC, NAME
 
 
+V1_FILES = ("recipe_parameters.json", "alert_db.csv")
+
+
+def _sha1(path):
+    return hashlib.sha1(path.read_bytes()).hexdigest()
+
+
 class _Notes:
     def __init__(self):
         self.warnings = []
@@ -44,6 +52,7 @@ class _Map:
 
 def test_converted_recipe_reviews_saves_and_exports(data_root, monkeypatch):
     write_recipe(data_root / NAME)
+    v1_before = {f: _sha1(data_root / NAME / f) for f in V1_FILES}
     assert ensure_converted(NAME, resolve=lambda params: AOI_FC) is True
     p = io.load_project(NAME)
     state = AppState()
@@ -70,6 +79,7 @@ def test_converted_recipe_reviews_saves_and_exports(data_root, monkeypatch):
     stored = load_gdf_from_parquet(set_store.store_path(p, s))
     assert stored.loc[0, "status"] == "Confirmed" and stored.loc[0, "reviewed_by"] == "ana"
     assert stored.loc[0, "before_img"] == "Landsat 2026-08-15 " and stored.loc[0, "after_img_info"] == 1789430400000
+    assert {f: _sha1(data_root / NAME / f) for f in V1_FILES} == v1_before  # the Save leaves v1's files alone
     p = io.load_project(NAME)
     s = p.alert_sets[p.active_set]
     assert s.n_reviewed == 4

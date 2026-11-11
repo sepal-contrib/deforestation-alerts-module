@@ -46,6 +46,8 @@ from deforestation_alerts.scripts.image_sources import LANDSAT, S2
 
 RECIPE_FILE = "recipe_parameters.json"
 TABLE_FILE = "alert_db.csv"
+#: Written first and removed last by a conversion: its files are leftovers of one that was interrupted.
+CONVERTING = ".v1_converting"
 
 WGS84 = "EPSG:4326"
 #: v1 columns holding text; read_csv makes an all-blank one float, the store keeps them as objects.
@@ -139,6 +141,7 @@ def read_table(csv_path: Path) -> tuple[gpd.GeoDataFrame, list[str]]:
 ERR_AOI = "migrated.err_aoi"
 ERR_TABLE = "migrated.err_table"
 ERR_PARAMS = "migrated.err_params"
+ERR_LEFTOVER = "migrated.err_leftover"
 #: v1's CCDC alerts: the custom source a ``ccdc_layer`` becomes, on its v1 digit.
 CCDC = "CCDC"
 CCDC_DIGIT = 3
@@ -149,7 +152,8 @@ _VIS_KEYS = ("bands", "min", "max", "palette")
 
 class V1MigrationError(KeyedError):
     """The conversion failed and wrote nothing. ``key`` is ``migrated.err_aoi``,
-    ``migrated.err_table`` or ``migrated.err_params``; ``values`` hold ``error``."""
+    ``migrated.err_table`` or ``migrated.err_params`` (``values`` hold ``error``),
+    or ``migrated.err_leftover`` (``values`` hold ``files``)."""
 
 
 def is_v1_recipe(folder: Path) -> bool:
@@ -194,6 +198,18 @@ def _piece(notes: list[str], label: str, build):
         return None
 
 
+def _aux_layer(notes: list[str], asset, vis_text):
+    """v1's extra layer with its vis, or with the default display (and a note) when the vis does not validate."""
+    try:
+        return GeeVisLayer(name=LAYER_NAME, asset=asset, **parse_vis(vis_text))
+    except ValidationError as exc:
+        layer = _piece(notes, LAYER_NAME, lambda: GeeVisLayer(name=LAYER_NAME, asset=asset))
+        if layer is not None:
+            notes.append(f"{LAYER_NAME}: imported with the default display ({exc.errors()[0]['msg']})")
+        return layer
+
+
+# call under io.manifest_lock (as v1_open.ensure_converted does): its cleanup removes manifest temp files
 def convert(folder: Path, resolve_aoi: Callable[[dict], dict]) -> Project:
     """Turn the v1 recipe in ``folder`` into a locked project in the same
     folder and return it as saved. ``resolve_aoi(params)`` returns the AOI as
@@ -244,10 +260,7 @@ def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom
             masks_used = [{"name": MASK_NAME, "mode": "keep", "content_id": "v1"}]
             layers[MASK_NAME] = GeeVisLayer(name=MASK_NAME, asset=mask.ref)
     if params.get("aux_layer"):
-        layer = _piece(notes, LAYER_NAME, lambda: GeeVisLayer(name=LAYER_NAME, asset=params["aux_layer"],
-                                                              **parse_vis(params.get("aux_layer_vis"))))
-        if layer is None:  # its vis did not validate: the layer with default vis
-            layer = _piece(notes, LAYER_NAME, lambda: GeeVisLayer(name=LAYER_NAME, asset=params["aux_layer"]))
+        layer = _aux_layer(notes, params["aux_layer"], params.get("aux_layer_vis"))
         if layer is not None:
             layers[LAYER_NAME] = layer
     period = period.model_copy(update={
@@ -289,24 +302,35 @@ def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom
 
 
 def _write(folder: Path, p: Project, gdf, fc: dict) -> Project:
-    """The store, ``aoi.geojson``, then the manifest; returns the project read
-    back from it. Refused when the store or ``aoi.geojson`` is already there;
-    on failure, what this call wrote is removed."""
+    """The store, ``aoi.geojson``, then the manifest, between the writing and
+    the removal of the ``CONVERTING`` marker; returns the project read back.
+    Leftovers of an interrupted conversion (the marker is there) are removed
+    first; without the marker, an existing store or ``aoi.geojson`` refuses.
+    On failure, what this call wrote is removed."""
     s = p.alert_sets[p.active_set]
     store = paths.resolve(folder, s.store_rel_path)
     aoi_file = folder / paths.AOI_SIDECAR
-    for target in (store, aoi_file):
-        if target.exists():
-            raise V1MigrationError(key=ERR_TABLE, error=f"{target} already exists")
+    marker = folder / CONVERTING
+    if marker.exists():
+        store.unlink(missing_ok=True)
+        aoi_file.unlink(missing_ok=True)
+    else:
+        found = [target.relative_to(folder).as_posix() for target in (store, aoi_file) if target.exists()]
+        if found:
+            files = ", ".join(found)
+            raise V1MigrationError(f"{files} already in {folder}", key=ERR_LEFTOVER, files=files)
     # the highest folder of the store's path this call creates
     made = [d for d in store.parents if folder in d.parents and not d.exists()]
+    marker.touch()
     try:
         store.parent.mkdir(parents=True, exist_ok=True)
         gdf["set_id"] = s.id
         save_gdf_to_parquet(gdf, store)
         aoi_file.write_text(json.dumps(fc), encoding="utf-8")
         io.save_project(p, folder.parent)
-        return io.load_project(folder.name, folder.parent)
+        loaded = io.load_project(folder.name, folder.parent)
+        marker.unlink()
+        return loaded
     except BaseException:
         if made:
             shutil.rmtree(made[-1], ignore_errors=True)
@@ -317,4 +341,5 @@ def _write(folder: Path, p: Project, gdf, fc: dict) -> Project:
         (folder / paths.MANIFEST).unlink(missing_ok=True)
         for tmp in folder.glob(f".{paths.MANIFEST}.*.tmp"):
             tmp.unlink(missing_ok=True)
+        marker.unlink(missing_ok=True)
         raise

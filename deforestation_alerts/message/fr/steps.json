@@ -933,7 +933,8 @@
   },
   "migrated": {
     "read_only": "Converti depuis une recette de la version 1. La configuration est verrouillée : la revue, l'enregistrement et l'export restent disponibles.",
-    "err_aoi": "Impossible de récupérer la zone d'intérêt depuis Earth Engine : {error}. La recette n'a pas été modifiée.",
+    "err_aoi": "Impossible d'obtenir la zone d'intérêt : {error}. La recette n'a pas été modifiée.",
+    "err_leftover": "Conversion impossible : {files} est déjà dans le dossier de la recette. La recette n'a pas été modifiée ; supprimez {files} pour la convertir.",
     "err_table": "Impossible de lire la table des alertes : {error}. La recette n'a pas été modifiée.",
     "err_params": "Impossible de lire les paramètres de la recette : {error}. La recette n'a pas été modifiée."
   }

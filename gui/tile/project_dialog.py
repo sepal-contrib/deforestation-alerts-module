@@ -501,7 +501,7 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
         except V1MigrationError as exc:
             notifications.error(error_text(exc))
             return
-        except io.ProjectLoadError as exc:
+        except Exception as exc:  # noqa: BLE001 - a load error, or a lock timeout / OSError while converting
             notifications.error(t("steps.project.open_failed", name=name, error=error_text(exc)))
             return
         finally:
@@ -514,7 +514,8 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
             notifications.success(t("steps.project.v1_converted", name=name, reviewed=migrated.n_reviewed,
                                     alerts=migrated.n_alerts))
             if migrated.notes:  # once: only the open that converted shows them
-                notifications.warning("; ".join(migrated.notes))
+                more = len(migrated.notes) - 3
+                notifications.warning("; ".join(migrated.notes[:3]) + (f" (+{more})" if more > 0 else ""))
         else:
             notifications.success(t("steps.project.opened", name=name))
 
