@@ -56,7 +56,7 @@ from gui.store.navigation import (
     resolve_navigation,
 )
 from gui.i18n import app_available_locales, format_number, t
-from gui.scripts import alert_layers, set_store
+from gui.scripts import alert_layers, reviewer, set_store
 from gui.scripts.error_text import error_text
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.prepare_scope import PrepareJobs
@@ -762,6 +762,8 @@ def _AppShell():
     # committed change (spec D11).
     app_state = solara.use_memo(AppState, dependencies=[])
     solara.use_effect(lambda: install_autosave(app_state), dependencies=[])
+    # who reviews: read once, off the render thread (review Saves stamp it)
+    solara.use_effect(lambda: reviewer.start_lookup(app_state), dependencies=[])
 
     # Analysis keeps its review state in Solara reactives, one per session
     # (spec §10), and reads the active alert set through one SetContext, under

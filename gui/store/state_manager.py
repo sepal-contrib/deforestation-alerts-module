@@ -153,6 +153,9 @@ class AppState:
         # alert matches. ``_filter_set_id`` is the set the filter was made on.
         self._alert_filter = None
         self._filter_set_id = None
+        # the reviewer's SEPAL user name, set once per session by
+        # gui.scripts.reviewer.start_lookup; "" until known (or unknowable)
+        self.reviewer = ""
 
     # ---- project lifecycle ---------------------------------------------------
     @property
