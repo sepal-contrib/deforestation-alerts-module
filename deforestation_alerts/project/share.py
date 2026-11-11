@@ -41,6 +41,7 @@ from deforestation_alerts.project.store_schema import (
     REVIEW_AFTER,
     REVIEW_BEFORE,
     REVIEW_GROUP,
+    MERGE_IGNORED,
 )
 from deforestation_alerts.project.questions import column, is_answer_column
 from deforestation_alerts.project.review_copy import refuse_if_read_only
@@ -887,7 +888,7 @@ def classify_return(preview: ReturnPreview, store_gdf) -> ReturnPreview:
         elif statuses[k] == NOT_REVIEWED and (not detached[k]
                                               or _group_id(store_groups.iat[i], store_sizes) is None):
             kind[aid] = "unchanged"
-        elif all(same_value(_cell(store_gdf, i, c), rows.at[aid, c]) for c in preview.columns):
+        elif all(same_value(_cell(store_gdf, i, c), rows.at[aid, c]) for c in preview.columns if c not in MERGE_IGNORED):
             kind[aid] = "unchanged"
         elif is_reviewed(_cell(store_gdf, i, "status")):
             kind[aid] = "conflicts"

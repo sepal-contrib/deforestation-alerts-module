@@ -40,6 +40,8 @@ def convert_to_geopandas(vectorized_gdf, digit_map):
     if "area_ha" not in gdf.columns:
         gdf["area_ha"] = pd.Series([], dtype="float")
     gdf["description"] = pd.Series([], dtype="str")
+    gdf["reviewed_by"] = pd.Series([], dtype="str")
+    gdf["reviewed_at"] = pd.Series([], dtype="str")
     gdf["admin1"] = pd.Series([], dtype="str")
     gdf["admin2"] = pd.Series([], dtype="str")
     gdf["admin3"] = pd.Series([], dtype="str")

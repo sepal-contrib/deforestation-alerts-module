@@ -121,6 +121,12 @@ def _present(row, key) -> bool:
     return key in row and not pd.isna(row[key])
 
 
+def _review_date(row) -> str:
+    """The date part of ``reviewed_at``; today for alerts reviewed before it existed."""
+    at = row["reviewed_at"] if _present(row, "reviewed_at") else ""
+    return str(at)[:10] if str(at).strip() else datetime.now().strftime("%Y-%m-%d")
+
+
 def row_attributes(gdf_row) -> dict:
     """The placeholders the report fills from the alert's own row (the names
     ``project.questions.REPORT_PLACEHOLDERS`` reserves)."""
@@ -130,7 +136,8 @@ def row_attributes(gdf_row) -> dict:
         "admin3": gdf_row["admin3"],
         "detection_date1": convert_julian_to_date(gdf_row["alert_date_min"]),
         "detection_date2": convert_julian_to_date(gdf_row["alert_date_max"]),
-        "confirmation_date": datetime.now().strftime("%Y-%m-%d"),
+        "confirmation_date": _review_date(gdf_row),
+        "reviewed_by": str(gdf_row["reviewed_by"]) if _present(gdf_row, "reviewed_by") else "",
         "before_img": gdf_row["before_img"],
         "after_img": gdf_row["after_img"],
         "alert_system": gdf_row["alert_sources"],

@@ -104,3 +104,20 @@ def test_the_default_template_uses_only_placeholders_the_builder_fills(locale):
     assert set(re.findall(r"\{(\w+)\}", text)) == set(re.findall(r"\{(\w+)\}", english))
     assert report_builder.QR_MARKER in text
     assert all(f"[Placeholder for Image {n}]" in text for n in range(1, 7))
+
+
+def _row(**extra):
+    return pd.Series({"admin1": "a", "admin2": "b", "admin3": "c", "alert_date_min": 2026.001,
+                      "alert_date_max": 2026.010, "before_img": "x", "after_img": "y",
+                      "alert_sources": "s", "area_ha": 1.0, **extra})
+
+
+def test_confirmation_date_is_the_review_date():
+    attrs = report_builder.row_attributes(_row(reviewed_at="2026-10-02T23:10:00Z", reviewed_by="ana"))
+    assert attrs["confirmation_date"] == "2026-10-02" and attrs["reviewed_by"] == "ana"
+
+
+@pytest.mark.parametrize("extra", [{}, {"reviewed_at": ""}, {"reviewed_at": float("nan")}])
+def test_confirmation_date_without_review_time_is_today(extra):
+    from datetime import datetime
+    assert report_builder.row_attributes(_row(**extra))["confirmation_date"] == datetime.now().strftime("%Y-%m-%d")

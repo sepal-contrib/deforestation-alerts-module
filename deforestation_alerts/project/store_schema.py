@@ -35,8 +35,10 @@ IMAGE_AREA = "image_area"
 #: The Sentinel-1 pick of each side, beside the optical one in ``*_img``: a
 #: pinned pick is written, a following one is stored empty (spec 2026-11-09).
 RADAR_IMAGE_COLUMNS = ("before_radar_img", "before_radar_img_info", "after_radar_img", "after_radar_img_info")
+#: Who saved the review and when (ISO 8601 UTC, to the second); stamped by every Save.
+REVIEW_STAMP = ("reviewed_by", "reviewed_at")
 REVIEW_AFTER = ("before_img", "before_img_info", "after_img", "after_img_info", *RADAR_IMAGE_COLUMNS, IMAGE_AREA,
-                "admin1", "admin2", "admin3", "alert_polygon", "area_ha", GROWS_FROM, REVIEW_GROUP)
+                *REVIEW_STAMP, "admin1", "admin2", "admin3", "alert_polygon", "area_ha", GROWS_FROM, REVIEW_GROUP)
 
 #: The column an evaluator split writes (``project.split``, spec §3).
 EVALUATOR = "evaluator"
@@ -45,7 +47,9 @@ EVALUATOR = "evaluator"
 #: ``alert_table.convert_to_geopandas`` on the vectorizer's output, plus the ids.
 STORE_COLUMNS = (*VECTOR_COLUMNS, "bounding_box", "point", "status", "alert_sources",
                  "before_img", "before_img_info", "after_img", "after_img_info", *RADAR_IMAGE_COLUMNS,
-                 "alert_polygon", "description", "admin1", "admin2", "admin3", *ID_COLUMNS)
+                 "alert_polygon", "description", *REVIEW_STAMP, "admin1", "admin2", "admin3", *ID_COLUMNS)
+#: Carried by a merge with the winning row, never compared: a re-save moves them.
+MERGE_IGNORED = (*REVIEW_STAMP, "admin1", "admin2", "admin3")
 
 #: The names no attribute column and no question key may take.
 RESERVED_COLUMNS = frozenset({*STORE_COLUMNS, IMAGE_AREA, EVALUATOR, *GROWTH_COLUMNS, REVIEW_GROUP})

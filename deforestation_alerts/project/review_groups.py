@@ -310,6 +310,7 @@ def reset_values(gdf, p, crs=None) -> dict:
     values = {"status": NOT_REVIEWED}
     values.update({c: "" for c in gdf.columns if is_answer_column(c)})
     values.update({c: None for c in (*IMAGE_COLUMNS, *ADMIN_COLUMNS) if c in gdf.columns})
+    values.update(reviewed_by="", reviewed_at="")
     values["alert_polygon"] = None
     values["area_ha"] = own_area(gdf, p, crs)
     auto = store_schema.GROWS_FROM_AUTO

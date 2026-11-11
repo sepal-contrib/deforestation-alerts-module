@@ -9,6 +9,7 @@ writes nothing.
 """
 
 import ee
+from datetime import datetime, timezone
 
 from deforestation_alerts.errors import KeyedError
 import pandas as pd
@@ -21,6 +22,11 @@ from deforestation_alerts.project.store_schema import GROWS_FROM, IMAGE_AREA
 from deforestation_alerts.scripts.alert_store import save_gdf_to_parquet
 from gui.scripts import growth_index, questions
 from gui.scripts import set_store
+
+
+def stamp_now() -> str:
+    """The ``reviewed_at`` of a Save: ISO 8601 UTC to the second."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def save_target(app_tile_model):
@@ -259,7 +265,8 @@ def save_review(alert, app_tile_model):
     # the reviewer was told was rejected, sitting in the table Overview counts
     # from and the next save persists whole. Applied in one pass at the end,
     # once the store write has landed.
-    updates = {"status": status, **answer_updates}
+    updates = {"status": status, **answer_updates,
+               "reviewed_by": getattr(alert, "reviewer", "") or "", "reviewed_at": stamp_now()}
     links = kept_links(alert, app_tile_model, target)
 
     # before/after image name + info. Guarded (fix round 1): both are None

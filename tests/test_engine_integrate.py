@@ -1120,5 +1120,5 @@ _STORE_COLUMNS_BEFORE_GROWTH = [
     "geometry", "alert_type_unique", "count", "alert_date_min", "alert_date_max", "area_ha", "bounding_box", "point",
     "status", "alert_sources", "before_img", "before_img_info", "after_img", "after_img_info",
     "before_radar_img", "before_radar_img_info", "after_radar_img", "after_radar_img_info", "alert_polygon",
-    "description", "admin1", "admin2", "admin3", "alert_id", "set_id",
+    "description", "reviewed_by", "reviewed_at", "admin1", "admin2", "admin3", "alert_id", "set_id",
 ]

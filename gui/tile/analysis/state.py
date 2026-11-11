@@ -355,6 +355,7 @@ def capture_alert(analysis: AnalysisState, widgets, app_state, *, remove=False) 
             "grid": getattr(widgets, "actual_alert_grid", None),
             "bb": getattr(widgets, "actual_bb", None),
             "status": analysis.verdict.value,
+            "reviewer": getattr(app_state, "reviewer", "") or "",
             "answers": {k: list(v) for k, v in (analysis.answers.value or {}).items()},
             "questions": list(p.questions) if p is not None else [],
             "links": tuple(analysis.links.value),
