@@ -1179,6 +1179,8 @@ Sélectionnez **Intégrer et vectoriser**. Le bouton reste désactivé tant qu'a
 
 L'exécution passe par « Combinaison des sources », « Vectorisation des groupes », « Enregistrement des groupes », « Écriture de l'empreinte » et « Construction des tuiles de carte ». À la fin, un message indique « N groupes prêts à être examinés », suivi de « N groupes liés à des pertes antérieures (M sous la surface minimale) » quand elle a trouvé des `alertes d'extension <defo-integrate-growth_>`_, et le nouveau jeu devient le *jeu actif* : celui sur lequel travaillent `Questionnaire <defo-questionnaire_>`_, `Évaluation <defo-evaluation_>`_, `Analyse <defo-analysis_>`_ et `Aperçu <defo-overview_>`_. L'étape reste ouverte.
 
+L'exécution donne aussi à chaque alerte les noms des zones administratives qu'elle touche : ``admin1`` est le pays, ``admin2`` l'unité de premier niveau et ``admin3`` l'unité de second niveau, d'après les limites FAO GAUL 2024. Les limites sont téléchargées une fois pour l'AOI du projet et conservées dans le dossier du projet (``admin/``). Une alerte à cheval sur une frontière liste toutes les zones qu'elle touche, séparées par des virgules, celle qui en contient le plus d'abord. Si le téléchargement échoue, l'exécution se termine quand même, avec un avertissement, et les noms sont remplis à l'enregistrement d'une alerte.
+
 S'il ne reste aucun groupe, le jeu est tout de même créé, vide : le message indique « Aucun nouveau groupe dans cette période : le jeu d'alertes est vide. » et donne la raison pour chaque source (par exemple « GLAD-L : les 56 pixels d'alerte supprimés par les masques » ou « RADD : les alertes probables (non confirmées) ont été écartées »).
 
 .. _defo-integrate-replace:
@@ -1545,7 +1547,9 @@ La ligne **Modèle de rapport** nomme le modèle utilisé, avec une pastille : *
     *   -   ``{detection_date1}``, ``{detection_date2}``
         -   Les dates de première et de dernière détection de l'alerte.
     *   -   ``{confirmation_date}``
-        -   Le jour où le rapport est généré.
+        -   Le jour où l'alerte a été examinée. Pour une alerte examinée avant que l'application ne l'enregistre, le jour où le rapport est généré.
+    *   -   ``{reviewed_by}``
+        -   Le nom d'utilisateur SEPAL de la personne qui a enregistré la révision.
     *   -   ``{before_img}``, ``{after_img}``
         -   Les noms des images d'avant et d'après des vues optiques, telles que choisies pendant l'examen.
     *   -   ``{alert_system}``
@@ -1946,7 +1950,7 @@ De gauche à droite :
     *   -   **Précédente** / **Suivante**
         -   L'alerte précédente ou suivante dans l'ordre du jeu. Elles s'arrêtent à la première et à la dernière alerte.
     *   -   Compteur
-        -   Le numéro de l'alerte dans le jeu (« 13 / 48 »). Sélectionnez-le pour ouvrir **Aller au numéro d'alerte** : saisissez un numéro et sélectionnez **Aller**, ou appuyez sur **Entrée**.
+        -   La place de l'alerte dans le jeu (« 13 / 48 »). Sélectionnez-le pour ouvrir **Aller au numéro d'alerte** : saisissez un numéro et sélectionnez **Aller**, ou appuyez sur **Entrée**. Dans un jeu créé avec cette version, les alertes sont numérotées à partir de 1 et la place est le numéro de l'alerte. Un jeu créé avant garde ses numéros, qui commencent à 0.
     *   -   Icône **Prochaine alerte non révisée**
         -   Passe à l'alerte suivante sans verdict, en reprenant depuis le début après la dernière. Désactivée quand il ne reste aucune autre alerte à examiner.
 
@@ -2306,8 +2310,11 @@ Un enregistrement écrit dans le jeu d'alertes :
 -   les images d'avant et d'après choisies, pour que l'alerte se rouvre sur elles ;
 -   le polygone enregistré dans **Affiner le polygone**, avec sa superficie comme superficie de l'alerte ;
 -   les alertes antérieures cochées dans `Alertes précédentes <defo-analysis-earlier_>`_, comme liens de l'alerte ;
--   avec des alertes proches cochées, le groupe (voir `Alertes proches <defo-analysis-nearby_>`_) ; et
--   les noms des zones administratives sous l'alerte, d'après les limites FAO GAUL 2015 dans GEE (cela prend quelques secondes).
+-   avec des alertes proches cochées, le groupe (voir `Alertes proches <defo-analysis-nearby_>`_) ;
+-   qui l'a examinée et quand : ``reviewed_by`` (votre nom d'utilisateur SEPAL, recherché une fois par session ; laissé vide s'il est inconnu) et ``reviewed_at`` (l'heure, en UTC, par exemple ``2026-11-11T14:03:22Z``). Les membres d'un groupe les reçoivent aussi, et une alerte remise à non examinée les perd ; et
+-   les noms des zones administratives sous l'alerte, si `Intégrer et vectoriser <defo-integrate_>`_ n'a pas pu les remplir (d'après les limites FAO GAUL 2024). Les noms enregistrés par des révisions antérieures sont conservés.
+
+``admin1`` est le pays, ``admin2`` l'unité de premier niveau et ``admin3`` l'unité de second niveau. Dans un groupe, chaque alerte garde ses propres noms ; le fichier d'alerte unique du groupe et le rapport affichent tous les noms du groupe.
 
 Les révisions apparaissent aussitôt dans la barre d'avancement, dans le sélecteur de jeux et dans l'`Aperçu <defo-overview_>`_. Une révision peut changer à tout moment : ouvrez l'alerte, modifiez-la et enregistrez à nouveau.
 
@@ -2432,7 +2439,7 @@ Les chiffres clés
     *   -   **Examinées**
         -   La part des alertes qui ont un verdict, et « 16 alertes sur 48 ». Elle compte toujours des alertes.
     *   -   **Alerte la plus grande**
-        -   La superficie de la plus grande alerte, son numéro, son pays (une fois examinée) et sa date. Elle compte toujours des hectares. Le numéro est la ligne de l'alerte dans le jeu, c'est-à-dire le numéro du compteur d'Analyse moins un.
+        -   La superficie de la plus grande alerte, son numéro, son pays (une fois examinée) et sa date. Elle compte toujours des hectares. Le numéro est le numéro de l'alerte : dans un jeu créé avec cette version, le même que celui du compteur d'Analyse (un jeu créé avant numérote à partir de 0, c'est donc le numéro du compteur moins un).
 
 .. _defo-overview-layers:
 
@@ -2468,7 +2475,7 @@ Les chiffres sont regroupés en onglets, chacun avec deux cartes côte à côte.
     *   -   **Dans le temps**
         -   **Au fil des périodes de suivi** : une colonne par période de suivi du projet, découpée par statut, d'après son jeu d'alertes le plus récent ; une période encore en cours d'examen montre sa part non examinée hachurée. Avec une seule période, la carte indique « Ce projet n'a qu'une seule période de suivi. Ajoutez-en une seconde et sa tendance sera tracée ici. » **Quand la perte a été détectée** : les alertes par semaine de première détection, découpées par statut. Les semaines hachurées relèvent de la rétrospection : elles précèdent le début de la période (voir `Ce que les périodes antérieures ont déjà signalé <defo-integrate-earlier_>`_).
     *   -   **Lieu et source**
-        -   **Par zone administrative** : les alertes examinées par zone, jusqu'à huit, en commençant par la plus forte perte confirmée : leur **Superficie (ha)**, les hectares **Examinée : confirmée** et le nombre d'**Alertes**. **Pays** ou **Province / région** choisit le niveau ; une province est affichée avec son pays (« Peru › Madre de Dios »). Les zones viennent des limites FAO GAUL, enregistrées au moment où l'alerte est enregistrée, donc seules les alertes examinées comptent ; une alerte sans zone enregistrée est comptée comme **Non renseigné**, et une alerte à cheval sur une frontière est listée sous chaque zone où elle se trouve. **Par source d'alertes** : les alertes selon la combinaison de sources qui les a détectées.
+        -   **Par zone administrative** : les alertes examinées par zone, jusqu'à huit, en commençant par la plus forte perte confirmée : leur **Superficie (ha)**, les hectares **Examinée : confirmée** et le nombre d'**Alertes**. **Pays** ou **Province / région** choisit le niveau ; une province est affichée avec son pays (« Peru › Madre de Dios »). Les zones viennent des limites FAO GAUL 2024, enregistrées pour chaque alerte par `Intégrer et vectoriser <defo-integrate_>`_, mais seules les alertes examinées comptent ; une alerte sans zone enregistrée est comptée comme **Non renseigné**, et une alerte à cheval sur une frontière est listée sous chaque zone où elle se trouve. **Par source d'alertes** : les alertes selon la combinaison de sources qui les a détectées.
     *   -   **Réponses**
         -   Une carte par `question <defo-questionnaire_>`_, avec les réponses données aux alertes examinées : les cinq plus fréquentes, puis **Autres** et **Sans réponse**. Une alerte avec deux réponses compte pour chacune. Affiché seulement si le projet a des questions ; l'onglet indique leur nombre.
     *   -   **Pixels**
@@ -2594,7 +2601,7 @@ La section **Exporter cette alerte** se trouve en haut du dock du panneau d'exam
     *   -   **Timelapse**
         -   Crée et télécharge un GIF animé de l'alerte (voir plus bas). Pour une alerte qui n'est pas enregistrée comme alerte réelle, elle indique « Alertes réelles uniquement ».
 
-Les fichiers sont nommés d'après la ligne de l'alerte dans le jeu (le numéro du compteur moins un) :
+Les fichiers sont nommés d'après le numéro de l'alerte (``<n>``). Dans un jeu créé avec cette version, il commence à 1 et c'est le numéro du compteur. Un jeu créé avant garde ses numéros, qui commencent à 0, et ses noms de fichiers (``alert_0``…) :
 
 .. list-table::
     :header-rows: 1
@@ -2603,7 +2610,7 @@ Les fichiers sont nommés d'après la ligne de l'alerte dans le jeu (le numéro 
     *   -   Fichier
         -   Contenu
     *   -   ``alert_<n>.gpkg``
-        -   L'alerte sous forme d'une entité unique, avec ses attributs et ses réponses (les réponses dans la langue actuelle de l'application). Sa géométrie est le polygone dessiné dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut le rectangle englobant de l'alerte.
+        -   L'alerte sous forme d'une entité unique, avec ses attributs et ses réponses (les réponses dans la langue actuelle de l'application). Sa géométrie est le polygone dessiné dans `Affiner le polygone <defo-analysis-refine_>`_, ou à défaut le polygone du groupe de pixels de l'alerte, jamais le rectangle englobant. ``geometry_source`` indique lequel (``drawn`` ou ``detected`` ; ``group`` est expliqué plus bas), et ``detected_area_ha`` est la superficie du groupe de pixels telle que détectée, tandis que ``area_ha`` reste la superficie examinée. Une seconde couche, ``alert_<n>_detected``, contient le polygone du groupe de pixels.
     *   -   ``alert_<n>_<before>_<after>.tif``
         -   Les images d'avant et d'après, découpées selon la **Zone d'image**. Les deux parties de date indiquent la collection de chaque image (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendant/descendant) et sa date. Avec Sentinel-1 activé, il y en a deux : la paire optique et la paire radar, chacune telle que choisie.
     *   -   ``alert_<n>_<before>_<after>.gif``
@@ -2613,7 +2620,7 @@ Les fichiers sont nommés d'après la ligne de l'alerte dans le jeu (le numéro 
     *   -   ``alert_<n>.docx``
         -   Le rapport Word.
 
-Pour une alerte d'un groupe (voir `Alertes proches <defo-analysis-nearby_>`_), les fichiers décrivent tout le groupe : le GeoPackage contient une seule entité avec la superficie cumulée du groupe, ses dates de première et de dernière détection, ses sources, ``group_size`` (le nombre d'alertes) et ``group_alerts`` (leurs numéros, par exemple « 12, 15, 16 »), et le GIF trace le contour de chaque alerte du groupe.
+Pour une alerte d'un groupe (voir `Alertes proches <defo-analysis-nearby_>`_), les fichiers décrivent tout le groupe : le GeoPackage contient une seule entité avec la superficie cumulée du groupe, ses dates de première et de dernière détection, ses sources, ``group_size`` (le nombre d'alertes) et ``group_alerts`` (leurs numéros, par exemple « 12, 15, 16 »), et le GIF trace le contour de chaque alerte du groupe. Sa géométrie est le polygone dessiné du groupe ; à défaut, c'est l'union des groupes de pixels du groupe (``geometry_source`` ``detected``). La couche ``_detected`` contient cette union de groupes de pixels. Les noms administratifs du fichier et du rapport sont tous ceux des alertes du groupe.
 
 Les liens des tuiles valent pour la révision affichée. Choisir d'autres images, enregistrer à nouveau l'alerte ou changer le modèle de rapport les masque : générez à nouveau les fichiers.
 
@@ -2659,11 +2666,11 @@ Pour exporter le jeu :
     *   -   Tuile
         -   Contenu
     *   -   **GeoPackage**
-        -   Un polygone par alerte, avec ses attributs et ses réponses. La géométrie est le polygone de l'alerte issu d'`Intégrer et vectoriser <defo-integrate_>`_, pas celui dessiné dans Analyse.
+        -   Un polygone par alerte, avec ses attributs et ses réponses, dans une couche portant le nom du fichier. La géométrie est ce qu'a approuvé la personne qui a examiné l'alerte : le polygone dessiné dans Analyse s'il y en a un, sinon le polygone du groupe de pixels de l'alerte, jamais le rectangle englobant. Une seconde couche, ``<name>_detected``, contient les polygones des groupes de pixels.
     *   -   **Tableau CSV**
-        -   Une ligne par alerte avec toutes les colonnes, les géométries écrites sous forme de texte (WKT, *well-known text*), y compris le polygone dessiné dans Analyse.
+        -   Une ligne par alerte avec toutes les colonnes, les géométries écrites sous forme de texte (WKT, *well-known text*) : ``geometry`` est la forme examinée et ``detected_geometry``, à côté, le polygone du groupe de pixels.
 
-Les deux fichiers ajoutent trois colonnes sur l'`extension <defo-integrate-growth_>`_ :
+Les deux fichiers ajoutent les colonnes ``geometry_source`` (``drawn``, ``detected`` ou ``group``) et ``detected_area_ha`` (la superficie du groupe de pixels telle que détectée ; ``area_ha`` est la superficie examinée). Un membre d'un groupe dont l'alerte principale a un dessin n'a pas de forme propre : son ``geometry_source`` est ``group`` et son ``review_group`` nomme l'alerte principale dont le dessin le couvre. Les deux fichiers portent aussi ``reviewed_by`` et ``reviewed_at`` (voir `Enregistrer la révision <defo-analysis-save_>`_) et ajoutent trois colonnes sur l'`extension <defo-integrate-growth_>`_ :
 
 -   ``kind`` : ``new``, ``growth``, ``growth_small`` ou ``new_small`` (voir **Type** dans `Le panneau d'examen <defo-analysis-panel_>`_) ;
 -   ``grows_from`` : les liens de l'alerte, séparés par « ; », chacun écrit sous la forme *jeu*\ ``#``\ *numéro de l'alerte*\ ``@``\ *exécution de ce jeu* ; et
@@ -2890,7 +2897,7 @@ L'`Aperçu <defo-overview_>`_ résume le jeu d'octobre. En **Superficie (ha)** :
 -   **Perte confirmée** : 305 ha, avec « ▼ 780 de moins que 2026-09-01 → 2026-09-30 » ;
 -   **Détecté au total** : 1177 ha ;
 -   **Examinées** : 33 %, « 16 alertes sur 48 » ; et
--   **Alerte la plus grande** : 31,9 ha, l'« Alerte 0 » de la tuile. L'Aperçu numérote les alertes à partir de 0, dans l'ordre du jeu ; le compteur d'Analyse commence à 1 : c'est donc la première alerte dans Analyse.
+-   **Alerte la plus grande** : 31,9 ha, l'« Alerte 1 » de la tuile. Dans un jeu créé avec cette version, l'Aperçu et le compteur d'Analyse partagent les mêmes numéros : c'est donc la première alerte dans Analyse.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/use-case-overview.png
     :alt: Les chiffres clés du jeu d'octobre

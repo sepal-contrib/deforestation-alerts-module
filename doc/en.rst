@@ -1209,6 +1209,8 @@ Select **Integrate & vectorize**. The button stays disabled until at least one s
 
 The run goes through "Combining sources", "Vectorizing clusters", "Saving the clusters", "Writing the footprint" and "Building map tiles". When it ends, a message reads "N clusters ready for review", followed by "Linked N clusters to earlier loss (M under the minimum area)" when it found `growth alerts <defo-integrate-growth_>`_, and the new set becomes the *active set*: the one the `Questionnaire <defo-questionnaire_>`_, `Evaluation <defo-evaluation_>`_, `Analysis <defo-analysis_>`_ and `Overview <defo-overview_>`_ work on. The step stays open.
 
+The run also gives every alert the names of the administrative areas it touches: ``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit, from the FAO GAUL 2024 boundaries. The boundaries are downloaded once for the project's AOI and kept in the project folder (``admin/``). An alert across a border lists every area it touches, separated by commas, the one holding most of it first. If the download fails, the run still ends, with a warning, and the names are filled when an alert is saved.
+
 If no cluster is left, the set is still made, empty: the message reads "No new clusters in this period: the alert set is empty." and gives the reason for each source (e.g. "GLAD-L: all 56 alert pixels removed by masks" or "RADD: probable (unconfirmed) alerts were left out").
 
 .. _defo-integrate-replace:
@@ -1589,7 +1591,9 @@ The **Report template** line names the template in use, with a chip: **default**
     *   -   ``{detection_date1}``, ``{detection_date2}``
         -   The alert's first and last detection dates.
     *   -   ``{confirmation_date}``
-        -   The day the report is built.
+        -   The day the alert was reviewed. For an alert reviewed before the app recorded it, the day the report is built.
+    *   -   ``{reviewed_by}``
+        -   The SEPAL user name of the person who saved the review.
     *   -   ``{before_img}``, ``{after_img}``
         -   The names of the before and after images in the optical pictures, as picked in the review.
     *   -   ``{alert_system}``
@@ -2002,7 +2006,7 @@ From left to right:
     *   -   **Previous** / **Next**
         -   The previous or next alert in the set's order. They stop at the first and the last alert.
     *   -   Counter
-        -   The alert's number in the set ("13 / 48"). Select it to open **Jump to alert number**: enter a number and select **Go**, or press **Enter**.
+        -   The alert's place in the set ("13 / 48"). Select it to open **Jump to alert number**: enter a number and select **Go**, or press **Enter**. In a set made with this version, alerts are numbered from 1 and the place is the alert's number. A set made before keeps its numbers, which start at 0.
     *   -   **Next unreviewed alert** icon
         -   Goes to the next alert without a verdict, starting again from the top after the last one. Disabled when no other alert is left to review.
 
@@ -2370,8 +2374,11 @@ A save writes into the alert set:
 -   the before and after images chosen, so that the alert reopens on them;
 -   the polygon saved in **Refine polygon**, with its area as the alert's area;
 -   the earlier alerts ticked in `Earlier alerts <defo-analysis-earlier_>`_, as the alert's links;
--   with nearby alerts ticked, the group (see `Nearby alerts <defo-analysis-nearby_>`_); and
--   the names of the administrative areas under the alert, from the FAO GAUL 2015 boundaries in GEE (this takes a few seconds).
+-   with nearby alerts ticked, the group (see `Nearby alerts <defo-analysis-nearby_>`_);
+-   who reviewed it and when: ``reviewed_by`` (your SEPAL user name, looked up once per session; left empty if it is unknown) and ``reviewed_at`` (the time, in UTC, e.g. ``2026-11-11T14:03:22Z``). A group's members get them too, and an alert reset to not reviewed loses them; and
+-   the names of the administrative areas under the alert, if `Integrate & vectorize <defo-integrate_>`_ could not fill them (from the FAO GAUL 2024 boundaries). Names saved by earlier reviews are kept.
+
+``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit. In a group, each alert keeps its own names; the group's single-alert file and report show all the names of the group.
 
 Reviews show at once in the progress bar, in the set selector and in the `Overview <defo-overview_>`_. A review can change at any time: open the alert, change it and save again.
 
@@ -2457,7 +2464,7 @@ Open the Overview
 
 Select **Overview** in the left rail. It opens as a large dialog over the map; close it with its cross. It shows the active alert set, or "No alert set yet. Run Integrate & vectorize to produce one." when the project has none.
 
-.. shot: overview-dashboard | The Overview dialog of the demo project, on the newest set with about a third of its 48 alerts reviewed, measure Area (ha), Status tab open: the header with the Alert set selector, Area (ha) filled and Alert count outlined, Review alerts; the four key figures (Confirmed loss 305 ha with "▼ 780 less than 2026-09-01 → 2026-09-30", Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 0 · Peru · …"); the Map layers button; the tab row; the By review status card with its table and How big the alerts are. Crop to the dialog.
+.. shot: overview-dashboard | The Overview dialog of the demo project, on the newest set with about a third of its 48 alerts reviewed, measure Area (ha), Status tab open: the header with the Alert set selector, Area (ha) filled and Alert count outlined, Review alerts; the four key figures (Confirmed loss 305 ha with "▼ 780 less than 2026-09-01 → 2026-09-30", Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 1 · Peru ·…"); the Map layers button; the tab row; the By review status card with its table and How big the alerts are. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/overview-dashboard.png
     :alt: The Overview dashboard
@@ -2500,7 +2507,7 @@ The key figures
     *   -   **Reviewed**
         -   The share of alerts that have a verdict, and "16 of 48 alerts". It always counts alerts.
     *   -   **Largest alert**
-        -   The largest alert's area, its number, its country (once reviewed) and its date. It always counts hectares. The number is the alert's row in the set, which is the Analysis counter's number minus one.
+        -   The largest alert's area, its number, its country (once reviewed) and its date. It always counts hectares. The number is the alert's number: in a set made with this version, the same as the Analysis counter's number (a set made before numbers from 0, so it is the counter's number minus one).
 
 .. _defo-overview-layers:
 
@@ -2538,7 +2545,7 @@ The figures are grouped in tabs, each with two cards side by side.
     *   -   **Over time**
         -   **Across monitoring periods**: one column per monitoring period of the project, split by status, from its newest alert set; a period still under review shows its unreviewed share hatched. With one period only, it reads "This project has one monitoring period. Add a second one and its trend is charted here." **When the loss was detected**: the alerts by the week they were first detected, split by status. Hatched weeks are look-back weeks: they fall before the period started (see `What earlier periods already reported <defo-integrate-earlier_>`_).
     *   -   **Place & source**
-        -   **By administrative area**: the reviewed alerts by area, up to eight, the most confirmed loss first: their **Area (ha)**, the hectares **Reviewed: confirmed** and the number of **Alerts**. **Country** or **Province / state** sets the level; a province is shown with its country ("Peru › Madre de Dios"). The areas come from the FAO GAUL boundaries, recorded when an alert is saved, so only reviewed alerts are counted; an alert with none recorded is counted as **Not recorded**, and an alert across a border is listed under every area it falls in. **By alert source**: the alerts by the combination of sources that detected them.
+        -   **By administrative area**: the reviewed alerts by area, up to eight, the most confirmed loss first: their **Area (ha)**, the hectares **Reviewed: confirmed** and the number of **Alerts**. **Country** or **Province / state** sets the level; a province is shown with its country ("Peru › Madre de Dios"). The areas come from the FAO GAUL 2024 boundaries, recorded for every alert by `Integrate & vectorize <defo-integrate_>`_, but only reviewed alerts are counted; an alert with none recorded is counted as **Not recorded**, and an alert across a border is listed under every area it falls in. **By alert source**: the alerts by the combination of sources that detected them.
     *   -   **Answers**
         -   One card per `question <defo-questionnaire_>`_, with the answers given to reviewed alerts: the five most frequent, then **Other** and **No answer**. An alert with two answers counts under each. Only shown when the project has questions; the tab shows their number.
     *   -   **Pixels**
@@ -2666,7 +2673,7 @@ The **Export this alert** section sits at the top of the dock of the `Analysis <
     *   -   **Timelapse**
         -   Makes and downloads an animated GIF of the alert (see below). For an alert not saved as a true alert, it reads "True alerts only".
 
-The files are named after the alert's row in the set (the counter's number minus one):
+The files are named after the alert's number (``<n>``). In a set made with this version, it starts at 1 and is the counter's number. A set made before keeps its numbers, which start at 0, and its file names (``alert_0``…):
 
 .. list-table::
     :header-rows: 1
@@ -2675,7 +2682,7 @@ The files are named after the alert's row in the set (the counter's number minus
     *   -   File
         -   Content
     *   -   ``alert_<n>.gpkg``
-        -   The alert as one feature with its attributes and answers (the answers in the app's current language). Its geometry is the polygon drawn in `Refine the polygon <defo-analysis-refine_>`_, or else the alert's bounding box.
+        -   The alert as one feature with its attributes and answers (the answers in the app's current language). Its geometry is the polygon drawn in `Refine the polygon <defo-analysis-refine_>`_, or else the alert's cluster polygon, never the bounding box. ``geometry_source`` says which (``drawn`` or ``detected``; ``group`` is explained below), and ``detected_area_ha`` is the cluster's area as detected, while ``area_ha`` stays the reviewed area. A second layer, ``alert_<n>_detected``, holds the cluster polygon.
     *   -   ``alert_<n>_<before>_<after>.tif``
         -   The before and after images, cut to the **Image area**. The two date parts name each image's collection (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascending/descending) and date. With Sentinel-1 on there are two: the optical pair and the radar pair, each as picked.
     *   -   ``alert_<n>_<before>_<after>.gif``
@@ -2685,7 +2692,7 @@ The files are named after the alert's row in the set (the counter's number minus
     *   -   ``alert_<n>.docx``
         -   The Word report.
 
-For an alert of a group (see `Nearby alerts <defo-analysis-nearby_>`_), the files describe the whole group: the GeoPackage holds one feature with the group's summed area, its first and last detection dates, its sources, ``group_size`` (the number of alerts) and ``group_alerts`` (their numbers, e.g. "12, 15, 16"), and the GIF outlines every alert of the group.
+For an alert of a group (see `Nearby alerts <defo-analysis-nearby_>`_), the files describe the whole group: the GeoPackage holds one feature with the group's summed area, its first and last detection dates, its sources, ``group_size`` (the number of alerts) and ``group_alerts`` (their numbers, e.g. "12, 15, 16"), and the GIF outlines every alert of the group. Its geometry is the group's drawn polygon; without one, it is the union of the group's clusters (``geometry_source`` ``detected``). The ``_detected`` layer holds that union of clusters. The administrative names of the file and the report are all those of the group's alerts.
 
 The links of the tiles are for the review on screen. Choosing other images, saving the alert again or changing the report template hides them: build the files again.
 
@@ -2733,11 +2740,11 @@ To export the set:
     *   -   Tile
         -   Content
     *   -   **GeoPackage**
-        -   One polygon per alert, with its attributes and answers. The geometry is the alert's polygon from `Integrate & vectorize <defo-integrate_>`_, not the one drawn in Analysis.
+        -   One polygon per alert, with its attributes and answers, in a layer named after the file. The geometry is what the reviewer approved: the polygon drawn in Analysis if there is one, else the alert's cluster polygon, never the bounding box. A second layer, ``<name>_detected``, holds the cluster polygons.
     *   -   **CSV table**
-        -   One row per alert with every column, geometries written as well-known text (WKT), including the polygon drawn in Analysis.
+        -   One row per alert with every column, geometries written as well-known text (WKT): ``geometry`` is the reviewed shape and ``detected_geometry``, next to it, the cluster polygon.
 
-Both files add three columns on `growth <defo-integrate-growth_>`_:
+Both files add the columns ``geometry_source`` (``drawn``, ``detected`` or ``group``) and ``detected_area_ha`` (the cluster's area as detected; ``area_ha`` is the reviewed area). A member of a group whose main alert has a drawing has no shape of its own: its ``geometry_source`` is ``group`` and its ``review_group`` names the main alert whose drawing covers it. Both files also carry ``reviewed_by`` and ``reviewed_at`` (see `Save the review <defo-analysis-save_>`_) and add three columns on `growth <defo-integrate-growth_>`_:
 
 -   ``kind``: ``new``, ``growth``, ``growth_small`` or ``new_small`` (see **Kind** in `The review panel <defo-analysis-panel_>`_);
 -   ``grows_from``: the alert's links, separated by ";", each written as *set*\ ``#``\ *alert number*\ ``@``\ *run of that set*; and
@@ -2972,9 +2979,9 @@ The `Overview <defo-overview_>`_ sums up the October set. In **Area (ha)**:
 -   **Confirmed loss**: 305 ha, with "▼ 780 less than 2026-09-01 → 2026-09-30";
 -   **Detected in total**: 1177 ha;
 -   **Reviewed**: 33 %, "16 of 48 alerts"; and
--   **Largest alert**: 31.9 ha, the card's "Alert 0". The Overview numbers alerts from 0, in the set's order; the Analysis counter starts at 1, so this is the first alert there.
+-   **Largest alert**: 31.9 ha, the card's "Alert 1". In a set made with this version, the Overview and the Analysis counter share the same numbers, so this is the first alert there.
 
-.. shot: use-case-overview | The Overview dialog on the October set (2026-10-01 → 2026-10-20 · GLAD-L + GLAD-S2 + RADD · 48 alerts), measure Area (ha): the header, then the four key figures: Confirmed loss 305 with "▼ 780 less than 2026-09-01 → 2026-09-30", Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 0 · …". Crop to the dialog, down to the bottom of the key figures, without the tabs.
+.. shot: use-case-overview | The Overview dialog on the October set (2026-10-01 → 2026-10-20 · GLAD-L + GLAD-S2 + RADD · 48 alerts), measure Area (ha): the header, then the four key figures: Confirmed loss 305 with "▼ 780 less than 2026-09-01 → 2026-09-30", Detected in total 1,177, Reviewed 33 % "16 of 48 alerts", Largest alert 31.9 "Alert 1 · …". Crop to the dialog, down to the bottom of the key figures, without the tabs.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/use-case-overview.png
     :alt: The key figures of the October set

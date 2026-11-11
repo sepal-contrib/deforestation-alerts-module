@@ -2308,8 +2308,8 @@ msgstr "A primeira e a última data de detecção do alerta."
 msgid "``{confirmation_date}``"
 msgstr "``{confirmation_date}``"
 
-msgid "The day the report is built."
-msgstr "O dia em que o relatório é gerado."
+msgid "The day the alert was reviewed. For an alert reviewed before the app recorded it, the day the report is built."
+msgstr "O dia em que o alerta foi revisado. Para um alerta revisado antes de o app registrar isso, o dia em que o relatório é gerado."
 
 msgid "``{before_img}``, ``{after_img}``"
 msgstr "``{before_img}``, ``{after_img}``"
@@ -2893,8 +2893,8 @@ msgstr "O alerta anterior ou o próximo na ordem do conjunto. Eles param no prim
 msgid "Counter"
 msgstr "Contador"
 
-msgid "The alert's number in the set (\"13 / 48\"). Select it to open **Jump to alert number**: enter a number and select **Go**, or press **Enter**."
-msgstr "O número do alerta no conjunto (\"13 / 48\"). Selecione-o para abrir **Ir para o número do alerta**: digite um número e selecione **Ir**, ou pressione **Enter**."
+msgid "The alert's place in the set (\"13 / 48\"). Select it to open **Jump to alert number**: enter a number and select **Go**, or press **Enter**. In a set made with this version, alerts are numbered from 1 and the place is the alert's number. A set made before keeps its numbers, which start at 0."
+msgstr "O lugar do alerta no conjunto (\"13 / 48\"). Selecione-o para abrir **Ir para o número do alerta**: digite um número e selecione **Ir**, ou pressione **Enter**. Em um conjunto criado com esta versão, os alertas são numerados a partir de 1 e o lugar é o número do alerta. Um conjunto criado antes mantém os números dele, que começam em 0."
 
 msgid "**Next unreviewed alert** icon"
 msgstr "Ícone **Próximo alerta não revisado**"
@@ -3484,11 +3484,11 @@ msgstr "o polígono salvo em **Refinar polígono**, com a área dele como área 
 msgid "the earlier alerts ticked in `Earlier alerts <defo-analysis-earlier_>`_, as the alert's links;"
 msgstr "os alertas anteriores marcados em `Alertas anteriores <defo-analysis-earlier_>`_, como os vínculos do alerta;"
 
-msgid "with nearby alerts ticked, the group (see `Nearby alerts <defo-analysis-nearby_>`_); and"
-msgstr "com alertas próximos marcados, o grupo (veja `Alertas próximos <defo-analysis-nearby_>`_); e"
+msgid "with nearby alerts ticked, the group (see `Nearby alerts <defo-analysis-nearby_>`_);"
+msgstr "com alertas próximos marcados, o grupo (veja `Alertas próximos <defo-analysis-nearby_>`_);"
 
-msgid "the names of the administrative areas under the alert, from the FAO GAUL 2015 boundaries in GEE (this takes a few seconds)."
-msgstr "os nomes das áreas administrativas sob o alerta, a partir dos limites FAO GAUL 2015 no GEE (isso leva alguns segundos)."
+msgid "the names of the administrative areas under the alert, if `Integrate & vectorize <defo-integrate_>`_ could not fill them (from the FAO GAUL 2024 boundaries). Names saved by earlier reviews are kept."
+msgstr "os nomes das áreas administrativas sob o alerta, se `Integrar e vetorizar <defo-integrate_>`_ não conseguiu preenchê-los (a partir dos limites FAO GAUL 2024). Os nomes salvos por revisões anteriores são mantidos."
 
 msgid "Reviews show at once in the progress bar, in the set selector and in the `Overview <defo-overview_>`_. A review can change at any time: open the alert, change it and save again."
 msgstr "As revisões aparecem na hora na barra de progresso, no seletor de conjuntos e na `Visão geral <defo-overview_>`_. Uma revisão pode mudar a qualquer momento: abra o alerta, altere-a e salve de novo."
@@ -3685,8 +3685,8 @@ msgstr "A proporção de alertas que têm veredito, e \"16 de 48 alertas\". Cont
 msgid "**Largest alert**"
 msgstr "**Maior alerta**"
 
-msgid "The largest alert's area, its number, its country (once reviewed) and its date. It always counts hectares. The number is the alert's row in the set, which is the Analysis counter's number minus one."
-msgstr "A área do maior alerta, o número dele, o país (depois de revisado) e a data. Conta sempre hectares. O número é a linha do alerta no conjunto, que corresponde ao número do contador da Análise menos um."
+msgid "The largest alert's area, its number, its country (once reviewed) and its date. It always counts hectares. The number is the alert's number: in a set made with this version, the same as the Analysis counter's number (a set made before numbers from 0, so it is the counter's number minus one)."
+msgstr "A área do maior alerta, o número dele, o país (depois de revisado) e a data. Conta sempre hectares. O número é o número do alerta: em um conjunto criado com esta versão, o mesmo do contador da Análise (um conjunto criado antes numera a partir de 0, então é o número do contador menos um)."
 
 msgid "The figures"
 msgstr "Os gráficos"
@@ -3901,8 +3901,8 @@ msgstr "**Timelapse**"
 msgid "Makes and downloads an animated GIF of the alert (see below). For an alert not saved as a true alert, it reads \"True alerts only\"."
 msgstr "Cria e baixa um GIF animado do alerta (veja abaixo). Para um alerta não salvo como alerta verdadeiro, ele diz \"Apenas alertas verdadeiros\"."
 
-msgid "The files are named after the alert's row in the set (the counter's number minus one):"
-msgstr "Os arquivos levam o número da linha do alerta no conjunto (o número do contador menos um):"
+msgid "The files are named after the alert's number (``<n>``). In a set made with this version, it starts at 1 and is the counter's number. A set made before keeps its numbers, which start at 0, and its file names (``alert_0``…):"
+msgstr "Os arquivos levam o número do alerta (``<n>``). Em um conjunto criado com esta versão, ele começa em 1 e é o número do contador. Um conjunto criado antes mantém os números dele, que começam em 0, e os nomes de arquivo dele (``alert_0``…):"
 
 msgid "File"
 msgstr "Arquivo"
@@ -3910,8 +3910,8 @@ msgstr "Arquivo"
 msgid "``alert_<n>.gpkg``"
 msgstr "``alert_<n>.gpkg``"
 
-msgid "The alert as one feature with its attributes and answers (the answers in the app's current language). Its geometry is the polygon drawn in `Refine the polygon <defo-analysis-refine_>`_, or else the alert's bounding box."
-msgstr "O alerta como uma única feição, com os atributos e as respostas (as respostas no idioma atual do app). A geometria é o polígono desenhado em `Refinar o polígono <defo-analysis-refine_>`_ ou, se não houver, o retângulo envolvente do alerta."
+msgid "The alert as one feature with its attributes and answers (the answers in the app's current language). Its geometry is the polygon drawn in `Refine the polygon <defo-analysis-refine_>`_, or else the alert's cluster polygon, never the bounding box. ``geometry_source`` says which (``drawn`` or ``detected``; ``group`` is explained below), and ``detected_area_ha`` is the cluster's area as detected, while ``area_ha`` stays the reviewed area. A second layer, ``alert_<n>_detected``, holds the cluster polygon."
+msgstr "O alerta como uma única feição, com os atributos e as respostas (as respostas no idioma atual do app). A geometria é o polígono desenhado em `Refinar o polígono <defo-analysis-refine_>`_ ou, se não houver, o polígono do agrupamento do alerta, nunca o retângulo envolvente. ``geometry_source`` diz qual (``drawn`` ou ``detected``; ``group`` é explicado abaixo), e ``detected_area_ha`` é a área do agrupamento como detectada, enquanto ``area_ha`` continua sendo a área revisada. Uma segunda camada, ``alert_<n>_detected``, contém o polígono do agrupamento."
 
 msgid "``alert_<n>_<before>_<after>.tif``"
 msgstr "``alert_<n>_<before>_<after>.tif``"
@@ -3937,8 +3937,8 @@ msgstr "``alert_<n>.docx``"
 msgid "The Word report."
 msgstr "O relatório Word."
 
-msgid "For an alert of a group (see `Nearby alerts <defo-analysis-nearby_>`_), the files describe the whole group: the GeoPackage holds one feature with the group's summed area, its first and last detection dates, its sources, ``group_size`` (the number of alerts) and ``group_alerts`` (their numbers, e.g. \"12, 15, 16\"), and the GIF outlines every alert of the group."
-msgstr "Para um alerta de um grupo (veja `Alertas próximos <defo-analysis-nearby_>`_), os arquivos descrevem o grupo inteiro: o GeoPackage contém uma única feição com a área somada do grupo, a primeira e a última data de detecção, as fontes, ``group_size`` (o número de alertas) e ``group_alerts`` (os números deles, por exemplo \"12, 15, 16\"), e o GIF contorna todos os alertas do grupo."
+msgid "For an alert of a group (see `Nearby alerts <defo-analysis-nearby_>`_), the files describe the whole group: the GeoPackage holds one feature with the group's summed area, its first and last detection dates, its sources, ``group_size`` (the number of alerts) and ``group_alerts`` (their numbers, e.g. \"12, 15, 16\"), and the GIF outlines every alert of the group. Its geometry is the group's drawn polygon; without one, it is the union of the group's clusters (``geometry_source`` ``detected``). The ``_detected`` layer holds that union of clusters. The administrative names of the file and the report are all those of the group's alerts."
+msgstr "Para um alerta de um grupo (veja `Alertas próximos <defo-analysis-nearby_>`_), os arquivos descrevem o grupo inteiro: o GeoPackage contém uma única feição com a área somada do grupo, a primeira e a última data de detecção, as fontes, ``group_size`` (o número de alertas) e ``group_alerts`` (os números deles, por exemplo \"12, 15, 16\"), e o GIF contorna todos os alertas do grupo. A geometria dele é o polígono desenhado do grupo; sem ele, é a união dos agrupamentos do grupo (``geometry_source`` ``detected``). A camada ``_detected`` contém essa união de agrupamentos. Os nomes administrativos do arquivo e do relatório são todos os dos alertas do grupo."
 
 msgid "The links of the tiles are for the review on screen. Choosing other images, saving the alert again or changing the report template hides them: build the files again."
 msgstr "Os links dos blocos valem para a revisão que está na tela. Escolher outras imagens, salvar o alerta de novo ou mudar o modelo de relatório os esconde: gere os arquivos de novo."
@@ -3994,17 +3994,17 @@ msgstr "Selecione de novo o bloco, que agora é um link de download com a hora e
 msgid "**GeoPackage**"
 msgstr "**GeoPackage**"
 
-msgid "One polygon per alert, with its attributes and answers. The geometry is the alert's polygon from `Integrate & vectorize <defo-integrate_>`_, not the one drawn in Analysis."
-msgstr "Um polígono por alerta, com os atributos e as respostas. A geometria é o polígono do alerta gerado em `Integrar e vetorizar <defo-integrate_>`_, não o desenhado na Análise."
+msgid "One polygon per alert, with its attributes and answers, in a layer named after the file. The geometry is what the reviewer approved: the polygon drawn in Analysis if there is one, else the alert's cluster polygon, never the bounding box. A second layer, ``<name>_detected``, holds the cluster polygons."
+msgstr "Um polígono por alerta, com os atributos e as respostas, em uma camada com o nome do arquivo. A geometria é o que a pessoa que revisou aprovou: o polígono desenhado na Análise, se houver, ou, se não, o polígono do agrupamento do alerta, nunca o retângulo envolvente. Uma segunda camada, ``<name>_detected``, contém os polígonos dos agrupamentos."
 
 msgid "**CSV table**"
 msgstr "**Tabela CSV**"
 
-msgid "One row per alert with every column, geometries written as well-known text (WKT), including the polygon drawn in Analysis."
-msgstr "Uma linha por alerta com todas as colunas, com as geometrias escritas como texto bem conhecido (WKT, do inglês *well-known text*), incluindo o polígono desenhado na Análise."
+msgid "One row per alert with every column, geometries written as well-known text (WKT): ``geometry`` is the reviewed shape and ``detected_geometry``, next to it, the cluster polygon."
+msgstr "Uma linha por alerta com todas as colunas, com as geometrias escritas como texto bem conhecido (WKT, do inglês *well-known text*): ``geometry`` é a forma revisada e ``detected_geometry``, ao lado dela, o polígono do agrupamento."
 
-msgid "Both files add three columns on `growth <defo-integrate-growth_>`_:"
-msgstr "Os dois arquivos acrescentam três colunas sobre o `crescimento <defo-integrate-growth_>`_:"
+msgid "Both files add the columns ``geometry_source`` (``drawn``, ``detected`` or ``group``) and ``detected_area_ha`` (the cluster's area as detected; ``area_ha`` is the reviewed area). A member of a group whose main alert has a drawing has no shape of its own: its ``geometry_source`` is ``group`` and its ``review_group`` names the main alert whose drawing covers it. Both files also carry ``reviewed_by`` and ``reviewed_at`` (see `Save the review <defo-analysis-save_>`_) and add three columns on `growth <defo-integrate-growth_>`_:"
+msgstr "Os dois arquivos acrescentam as colunas ``geometry_source`` (``drawn``, ``detected`` ou ``group``) e ``detected_area_ha`` (a área do agrupamento como detectada; ``area_ha`` é a área revisada). Um membro de um grupo cujo alerta principal tem um desenho não tem uma forma própria: o ``geometry_source`` dele é ``group`` e o ``review_group`` dele nomeia o alerta principal cujo desenho o cobre. Os dois arquivos também levam ``reviewed_by`` e ``reviewed_at`` (veja `Salvar a revisão <defo-analysis-save_>`_) e acrescentam três colunas sobre o `crescimento <defo-integrate-growth_>`_:"
 
 msgid "``kind``: ``new``, ``growth``, ``growth_small`` or ``new_small`` (see **Kind** in `The review panel <defo-analysis-panel_>`_);"
 msgstr "``kind``: ``new``, ``growth``, ``growth_small`` ou ``new_small`` (veja **Tipo** em `O painel de revisão <defo-analysis-panel_>`_);"
@@ -4324,8 +4324,8 @@ msgstr "**Detectado no total**: 1177 ha;"
 msgid "**Reviewed**: 33 %, \"16 of 48 alerts\"; and"
 msgstr "**Revisados**: 33 %, \"16 de 48 alertas\"; e"
 
-msgid "**Largest alert**: 31.9 ha, the card's \"Alert 0\". The Overview numbers alerts from 0, in the set's order; the Analysis counter starts at 1, so this is the first alert there."
-msgstr "**Maior alerta**: 31,9 ha, o \"Alerta 0\" do cartão. A Visão geral numera os alertas a partir de 0, na ordem do conjunto; o contador da Análise começa em 1, então este é o primeiro alerta lá."
+msgid "**Largest alert**: 31.9 ha, the card's \"Alert 1\". In a set made with this version, the Overview and the Analysis counter share the same numbers, so this is the first alert there."
+msgstr "**Maior alerta**: 31,9 ha, o \"Alerta 1\" do cartão. Em um conjunto criado com esta versão, a Visão geral e o contador da Análise compartilham os mesmos números, então este é o primeiro alerta lá."
 
 msgid "The key figures of the October set"
 msgstr "Os números principais do conjunto de outubro"
@@ -4387,3 +4387,18 @@ msgstr "revisar também os alertas ainda **Não revisado** dos conjuntos anterio
 msgid "use **Duplicate** in the `Project <defo-project-duplicate_>`_ dialog to monitor a neighbouring area with the same sources, mask and layers."
 msgstr "usar **Duplicar** na janela `Projeto <defo-project-duplicate_>`_ para monitorar uma área vizinha com as mesmas fontes, máscara e camadas."
 
+
+msgid "``{reviewed_by}``"
+msgstr "``{reviewed_by}``"
+
+msgid "The SEPAL user name of the person who saved the review."
+msgstr "O nome de usuário do SEPAL de quem salvou a revisão."
+
+msgid "The run also gives every alert the names of the administrative areas it touches: ``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit, from the FAO GAUL 2024 boundaries. The boundaries are downloaded once for the project's AOI and kept in the project folder (``admin/``). An alert across a border lists every area it touches, separated by commas, the one holding most of it first. If the download fails, the run still ends, with a warning, and the names are filled when an alert is saved."
+msgstr "A execução também dá a cada alerta os nomes das áreas administrativas que ele toca: ``admin1`` é o país, ``admin2`` a unidade de primeiro nível e ``admin3`` a unidade de segundo nível, a partir dos limites FAO GAUL 2024. Os limites são baixados uma vez para a AOI do projeto e guardados na pasta do projeto (``admin/``). Um alerta que cruza uma fronteira lista todas as áreas que toca, separadas por vírgulas, a que contém a maior parte primeiro. Se o download falhar, a execução termina mesmo assim, com um aviso, e os nomes são preenchidos quando um alerta é salvo."
+
+msgid "who reviewed it and when: ``reviewed_by`` (your SEPAL user name, looked up once per session; left empty if it is unknown) and ``reviewed_at`` (the time, in UTC, e.g. ``2026-11-11T14:03:22Z``). A group's members get them too, and an alert reset to not reviewed loses them; and"
+msgstr "quem a revisou e quando: ``reviewed_by`` (seu nome de usuário do SEPAL, consultado uma vez por sessão; fica vazio se for desconhecido) e ``reviewed_at`` (o horário, em UTC, por exemplo ``2026-11-11T14:03:22Z``). Os membros de um grupo também os recebem, e um alerta voltado a não revisado os perde; e"
+
+msgid "``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit. In a group, each alert keeps its own names; the group's single-alert file and report show all the names of the group."
+msgstr "``admin1`` é o país, ``admin2`` a unidade de primeiro nível e ``admin3`` a unidade de segundo nível. Em um grupo, cada alerta mantém os próprios nomes; o arquivo de alerta único do grupo e o relatório mostram todos os nomes do grupo."

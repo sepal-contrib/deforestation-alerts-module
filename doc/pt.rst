@@ -1181,6 +1181,8 @@ Selecione **Integrar e vetorizar**. O botão fica desativado até que pelo menos
 
 A execução passa por "Combinando as fontes", "Vetorizando os agrupamentos", "Salvando os agrupamentos", "Gravando a pegada" e "Gerando os blocos do mapa". Ao terminar, uma mensagem diz "N agrupamentos prontos para revisão", seguida de "N agrupamentos vinculados a perdas anteriores (M abaixo da área mínima)" quando ela encontra `alertas de crescimento <defo-integrate-growth_>`_, e o novo conjunto passa a ser o *conjunto ativo*: aquele sobre o qual trabalham o `Questionário <defo-questionnaire_>`_, a `Avaliação <defo-evaluation_>`_, a `Análise <defo-analysis_>`_ e a `Visão geral <defo-overview_>`_. A etapa continua aberta.
 
+A execução também dá a cada alerta os nomes das áreas administrativas que ele toca: ``admin1`` é o país, ``admin2`` a unidade de primeiro nível e ``admin3`` a unidade de segundo nível, a partir dos limites FAO GAUL 2024. Os limites são baixados uma vez para a AOI do projeto e guardados na pasta do projeto (``admin/``). Um alerta que cruza uma fronteira lista todas as áreas que toca, separadas por vírgulas, a que contém a maior parte primeiro. Se o download falhar, a execução termina mesmo assim, com um aviso, e os nomes são preenchidos quando um alerta é salvo.
+
 Se não sobrar nenhum agrupamento, o conjunto é gerado mesmo assim, vazio: a mensagem diz "Nenhum agrupamento novo neste período: o conjunto de alertas está vazio." e dá o motivo para cada fonte (por exemplo "GLAD-L: todos os 56 pixels de alerta removidos pelas máscaras" ou "RADD: os alertas prováveis (não confirmados) ficaram de fora").
 
 .. _defo-integrate-replace:
@@ -1547,7 +1549,9 @@ A linha **Modelo do relatório** indica o modelo em uso, com uma etiqueta: **pad
     *   -   ``{detection_date1}``, ``{detection_date2}``
         -   A primeira e a última data de detecção do alerta.
     *   -   ``{confirmation_date}``
-        -   O dia em que o relatório é gerado.
+        -   O dia em que o alerta foi revisado. Para um alerta revisado antes de o app registrar isso, o dia em que o relatório é gerado.
+    *   -   ``{reviewed_by}``
+        -   O nome de usuário do SEPAL de quem salvou a revisão.
     *   -   ``{before_img}``, ``{after_img}``
         -   Os nomes das imagens de antes e depois das figuras ópticas, como escolhidas na revisão.
     *   -   ``{alert_system}``
@@ -1948,7 +1952,7 @@ Da esquerda para a direita:
     *   -   **Anterior** / **Próximo**
         -   O alerta anterior ou o próximo na ordem do conjunto. Eles param no primeiro e no último alerta.
     *   -   Contador
-        -   O número do alerta no conjunto ("13 / 48"). Selecione-o para abrir **Ir para o número do alerta**: digite um número e selecione **Ir**, ou pressione **Enter**.
+        -   O lugar do alerta no conjunto ("13 / 48"). Selecione-o para abrir **Ir para o número do alerta**: digite um número e selecione **Ir**, ou pressione **Enter**. Em um conjunto criado com esta versão, os alertas são numerados a partir de 1 e o lugar é o número do alerta. Um conjunto criado antes mantém os números dele, que começam em 0.
     *   -   Ícone **Próximo alerta não revisado**
         -   Vai para o próximo alerta sem veredito, recomeçando do início depois do último. Fica desativado quando não resta nenhum outro alerta a revisar.
 
@@ -2308,8 +2312,11 @@ Um salvamento grava no conjunto de alertas:
 -   as imagens de antes e depois escolhidas, para que o alerta reabra com elas;
 -   o polígono salvo em **Refinar polígono**, com a área dele como área do alerta;
 -   os alertas anteriores marcados em `Alertas anteriores <defo-analysis-earlier_>`_, como os vínculos do alerta;
--   com alertas próximos marcados, o grupo (veja `Alertas próximos <defo-analysis-nearby_>`_); e
--   os nomes das áreas administrativas sob o alerta, a partir dos limites FAO GAUL 2015 no GEE (isso leva alguns segundos).
+-   com alertas próximos marcados, o grupo (veja `Alertas próximos <defo-analysis-nearby_>`_);
+-   quem a revisou e quando: ``reviewed_by`` (seu nome de usuário do SEPAL, consultado uma vez por sessão; fica vazio se for desconhecido) e ``reviewed_at`` (o horário, em UTC, por exemplo ``2026-11-11T14:03:22Z``). Os membros de um grupo também os recebem, e um alerta voltado a não revisado os perde; e
+-   os nomes das áreas administrativas sob o alerta, se `Integrar e vetorizar <defo-integrate_>`_ não conseguiu preenchê-los (a partir dos limites FAO GAUL 2024). Os nomes salvos por revisões anteriores são mantidos.
+
+``admin1`` é o país, ``admin2`` a unidade de primeiro nível e ``admin3`` a unidade de segundo nível. Em um grupo, cada alerta mantém os próprios nomes; o arquivo de alerta único do grupo e o relatório mostram todos os nomes do grupo.
 
 As revisões aparecem na hora na barra de progresso, no seletor de conjuntos e na `Visão geral <defo-overview_>`_. Uma revisão pode mudar a qualquer momento: abra o alerta, altere-a e salve de novo.
 
@@ -2434,7 +2441,7 @@ Os números principais
     *   -   **Revisados**
         -   A proporção de alertas que têm veredito, e "16 de 48 alertas". Conta sempre alertas.
     *   -   **Maior alerta**
-        -   A área do maior alerta, o número dele, o país (depois de revisado) e a data. Conta sempre hectares. O número é a linha do alerta no conjunto, que corresponde ao número do contador da Análise menos um.
+        -   A área do maior alerta, o número dele, o país (depois de revisado) e a data. Conta sempre hectares. O número é o número do alerta: em um conjunto criado com esta versão, o mesmo do contador da Análise (um conjunto criado antes numera a partir de 0, então é o número do contador menos um).
 
 .. _defo-overview-layers:
 
@@ -2470,7 +2477,7 @@ Os números são agrupados em abas, cada uma com dois cartões lado a lado.
     *   -   **Ao longo do tempo**
         -   **Ao longo dos períodos de monitoramento**: uma coluna por período de monitoramento do projeto, dividida por status, a partir do conjunto de alertas mais recente de cada um; um período ainda em revisão mostra a parte não revisada hachurada. Com um único período, diz "Este projeto tem um único período de monitoramento. Adicione um segundo e a tendência aparecerá aqui." **Quando a perda foi detectada**: os alertas pela semana em que foram detectados pela primeira vez, divididos por status. As semanas hachuradas são semanas da busca retroativa: ficam antes do início do período (veja `O que os períodos anteriores já reportaram <defo-integrate-earlier_>`_).
     *   -   **Local e fonte**
-        -   **Por área administrativa**: os alertas revisados por área, até oito, começando pela maior perda confirmada: a **Área (ha)** deles, os hectares **Revisado: confirmado** e o número de **Alertas**. **País** ou **Estado / província** define o nível; uma província é mostrada com o seu país ("Peru › Madre de Dios"). As áreas vêm dos limites FAO GAUL, registradas quando um alerta é salvo, então só os alertas revisados são contados; um alerta sem área registrada é contado como **Não registrado**, e um alerta que cruza uma fronteira aparece em todas as áreas em que se encontra. **Por fonte de alertas**: os alertas pela combinação de fontes que os detectou.
+        -   **Por área administrativa**: os alertas revisados por área, até oito, começando pela maior perda confirmada: a **Área (ha)** deles, os hectares **Revisado: confirmado** e o número de **Alertas**. **País** ou **Estado / província** define o nível; uma província é mostrada com o seu país ("Peru › Madre de Dios"). As áreas vêm dos limites FAO GAUL 2024, registradas para cada alerta por `Integrar e vetorizar <defo-integrate_>`_, mas só os alertas revisados são contados; um alerta sem área registrada é contado como **Não registrado**, e um alerta que cruza uma fronteira aparece em todas as áreas em que se encontra. **Por fonte de alertas**: os alertas pela combinação de fontes que os detectou.
     *   -   **Respostas**
         -   Um cartão por `pergunta <defo-questionnaire_>`_, com as respostas dadas aos alertas revisados: as cinco mais frequentes e depois **Outros** e **Sem resposta**. Um alerta com duas respostas conta em cada uma. Só aparece quando o projeto tem perguntas; a aba mostra o número delas.
     *   -   **Pixels**
@@ -2596,7 +2603,7 @@ A seção **Exportar este alerta** fica no topo da barra inferior do painel de r
     *   -   **Timelapse**
         -   Cria e baixa um GIF animado do alerta (veja abaixo). Para um alerta não salvo como alerta verdadeiro, ele diz "Apenas alertas verdadeiros".
 
-Os arquivos levam o número da linha do alerta no conjunto (o número do contador menos um):
+Os arquivos levam o número do alerta (``<n>``). Em um conjunto criado com esta versão, ele começa em 1 e é o número do contador. Um conjunto criado antes mantém os números dele, que começam em 0, e os nomes de arquivo dele (``alert_0``…):
 
 .. list-table::
     :header-rows: 1
@@ -2605,7 +2612,7 @@ Os arquivos levam o número da linha do alerta no conjunto (o número do contado
     *   -   Arquivo
         -   Conteúdo
     *   -   ``alert_<n>.gpkg``
-        -   O alerta como uma única feição, com os atributos e as respostas (as respostas no idioma atual do app). A geometria é o polígono desenhado em `Refinar o polígono <defo-analysis-refine_>`_ ou, se não houver, o retângulo envolvente do alerta.
+        -   O alerta como uma única feição, com os atributos e as respostas (as respostas no idioma atual do app). A geometria é o polígono desenhado em `Refinar o polígono <defo-analysis-refine_>`_ ou, se não houver, o polígono do agrupamento do alerta, nunca o retângulo envolvente. ``geometry_source`` diz qual (``drawn`` ou ``detected``; ``group`` é explicado abaixo), e ``detected_area_ha`` é a área do agrupamento como detectada, enquanto ``area_ha`` continua sendo a área revisada. Uma segunda camada, ``alert_<n>_detected``, contém o polígono do agrupamento.
     *   -   ``alert_<n>_<before>_<after>.tif``
         -   As imagens de antes e depois, recortadas pela **Área da imagem**. As duas partes de data indicam a coleção de cada imagem (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendente/descendente) e a data. Com o Sentinel-1 ativado há dois: o par óptico e o par de radar, cada um como escolhido.
     *   -   ``alert_<n>_<before>_<after>.gif``
@@ -2615,7 +2622,7 @@ Os arquivos levam o número da linha do alerta no conjunto (o número do contado
     *   -   ``alert_<n>.docx``
         -   O relatório Word.
 
-Para um alerta de um grupo (veja `Alertas próximos <defo-analysis-nearby_>`_), os arquivos descrevem o grupo inteiro: o GeoPackage contém uma única feição com a área somada do grupo, a primeira e a última data de detecção, as fontes, ``group_size`` (o número de alertas) e ``group_alerts`` (os números deles, por exemplo "12, 15, 16"), e o GIF contorna todos os alertas do grupo.
+Para um alerta de um grupo (veja `Alertas próximos <defo-analysis-nearby_>`_), os arquivos descrevem o grupo inteiro: o GeoPackage contém uma única feição com a área somada do grupo, a primeira e a última data de detecção, as fontes, ``group_size`` (o número de alertas) e ``group_alerts`` (os números deles, por exemplo "12, 15, 16"), e o GIF contorna todos os alertas do grupo. A geometria dele é o polígono desenhado do grupo; sem ele, é a união dos agrupamentos do grupo (``geometry_source`` ``detected``). A camada ``_detected`` contém essa união de agrupamentos. Os nomes administrativos do arquivo e do relatório são todos os dos alertas do grupo.
 
 Os links dos blocos valem para a revisão que está na tela. Escolher outras imagens, salvar o alerta de novo ou mudar o modelo de relatório os esconde: gere os arquivos de novo.
 
@@ -2661,11 +2668,11 @@ Para exportar o conjunto:
     *   -   Bloco
         -   Conteúdo
     *   -   **GeoPackage**
-        -   Um polígono por alerta, com os atributos e as respostas. A geometria é o polígono do alerta gerado em `Integrar e vetorizar <defo-integrate_>`_, não o desenhado na Análise.
+        -   Um polígono por alerta, com os atributos e as respostas, em uma camada com o nome do arquivo. A geometria é o que a pessoa que revisou aprovou: o polígono desenhado na Análise, se houver, ou, se não, o polígono do agrupamento do alerta, nunca o retângulo envolvente. Uma segunda camada, ``<name>_detected``, contém os polígonos dos agrupamentos.
     *   -   **Tabela CSV**
-        -   Uma linha por alerta com todas as colunas, com as geometrias escritas como texto bem conhecido (WKT, do inglês *well-known text*), incluindo o polígono desenhado na Análise.
+        -   Uma linha por alerta com todas as colunas, com as geometrias escritas como texto bem conhecido (WKT, do inglês *well-known text*): ``geometry`` é a forma revisada e ``detected_geometry``, ao lado dela, o polígono do agrupamento.
 
-Os dois arquivos acrescentam três colunas sobre o `crescimento <defo-integrate-growth_>`_:
+Os dois arquivos acrescentam as colunas ``geometry_source`` (``drawn``, ``detected`` ou ``group``) e ``detected_area_ha`` (a área do agrupamento como detectada; ``area_ha`` é a área revisada). Um membro de um grupo cujo alerta principal tem um desenho não tem uma forma própria: o ``geometry_source`` dele é ``group`` e o ``review_group`` dele nomeia o alerta principal cujo desenho o cobre. Os dois arquivos também levam ``reviewed_by`` e ``reviewed_at`` (veja `Salvar a revisão <defo-analysis-save_>`_) e acrescentam três colunas sobre o `crescimento <defo-integrate-growth_>`_:
 
 -   ``kind``: ``new``, ``growth``, ``growth_small`` ou ``new_small`` (veja **Tipo** em `O painel de revisão <defo-analysis-panel_>`_);
 -   ``grows_from``: os vínculos do alerta, separados por ";", cada um escrito como *conjunto*\ ``#``\ *número do alerta*\ ``@``\ *execução desse conjunto*; e
@@ -2892,7 +2899,7 @@ A `Visão geral <defo-overview_>`_ resume o conjunto de outubro. Em **Área (ha)
 -   **Perda confirmada**: 305 ha, com "▼ 780 a menos que 2026-09-01 → 2026-09-30";
 -   **Detectado no total**: 1177 ha;
 -   **Revisados**: 33 %, "16 de 48 alertas"; e
--   **Maior alerta**: 31,9 ha, o "Alerta 0" do cartão. A Visão geral numera os alertas a partir de 0, na ordem do conjunto; o contador da Análise começa em 1, então este é o primeiro alerta lá.
+-   **Maior alerta**: 31,9 ha, o "Alerta 1" do cartão. Em um conjunto criado com esta versão, a Visão geral e o contador da Análise compartilham os mesmos números, então este é o primeiro alerta lá.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/use-case-overview.png
     :alt: Os números principais do conjunto de outubro
