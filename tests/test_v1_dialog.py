@@ -46,7 +46,10 @@ def test_legacy_row_has_the_mark_and_locked_icons():
         assert chips[0].attributes["title"] == t("steps.project.v1_hint")
         pencils = _icon_buttons(ns.rc, "mdi-pencil-outline")
         assert [p.disabled for p in pencils] == [False, True]
-        assert pencils[1].attributes["title"] == t("steps.project.v1_convert_first")
+        # the disabled button gets no hover (pointer-events:none): its wrapper carries the tooltip
+        wrappers = [h for h in ns.rc.find(v.Html, tag="span").widgets if pencils[1] in (h.children or [])]
+        assert len(wrappers) == 1 and wrappers[0].attributes["title"] == t("steps.project.v1_convert_first")
+        assert not any(pencils[0] in (h.children or []) for h in ns.rc.find(v.Html, tag="span").widgets)
         assert [b.disabled for b in _icon_buttons(ns.rc, "mdi-delete-outline")] == [False, False]
     finally:
         ns.rc.close()
@@ -101,7 +104,7 @@ def test_conversion_notes_are_shown_once_as_a_warning(dialog, monkeypatch):  # n
         dialog.manage[-1]["on_open"]()
         await _settle(lambda: _toasts("warning"), "the notes toast")
         notes = dialog.state.project.value.migrated_from.notes
-        assert notes and _toasts("warning") == ["\n".join(notes)]
+        assert notes and _toasts("warning") == ["; ".join(notes)]
 
     run_rendered(lambda: dialog.render(), main)
 

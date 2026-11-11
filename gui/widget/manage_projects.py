@@ -179,11 +179,16 @@ def ManageProjectsDialog(open, infos, selected, on_select, on_open, on_delete, o
                                         rv.Html(tag="span", children=[size_label(size)],
                                                 style_=_SIZE + ("opacity:0.5;" if size is None else ""),
                                                 attributes={"title": t("steps.project.size_on_disk")})
-                                        # a v1 folder is renamed once converted (an open converts it)
-                                        icon_button("mdi-pencil-outline",
-                                                    t("steps.project.v1_convert_first" if info.legacy
-                                                      else "steps.project.rename"),
-                                                    lambda n=info.name: on_rename(n), disabled=info.legacy)
+                                        if info.legacy:
+                                            # renamed once converted (an open converts it); the tooltip sits on
+                                            # a wrapper: a disabled v-btn has pointer-events:none
+                                            with rv.Html(tag="span",
+                                                         attributes={"title": t("steps.project.v1_convert_first")}):
+                                                icon_button("mdi-pencil-outline", t("steps.project.rename"),
+                                                            lambda: None, disabled=True)
+                                        else:
+                                            icon_button("mdi-pencil-outline", t("steps.project.rename"),
+                                                        lambda n=info.name: on_rename(n))
                                         icon_button("mdi-delete-outline", t("common.delete"),
                                                     lambda n=info.name: on_delete(n), color="error")
             rv.Divider()

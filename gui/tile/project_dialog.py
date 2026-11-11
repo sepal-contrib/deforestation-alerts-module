@@ -514,7 +514,7 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
             notifications.success(t("steps.project.v1_converted", name=name, reviewed=migrated.n_reviewed,
                                     alerts=migrated.n_alerts))
             if migrated.notes:  # once: only the open that converted shows them
-                notifications.warning("\n".join(migrated.notes))
+                notifications.warning("; ".join(migrated.notes))
         else:
             notifications.success(t("steps.project.opened", name=name))
 
