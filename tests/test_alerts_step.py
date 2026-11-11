@@ -15,6 +15,7 @@ tests/test_prepare_step.py's ``step`` fixture does.
 import asyncio
 import threading
 from datetime import date, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import ipyvuetify as v
@@ -39,6 +40,7 @@ from gui.i18n import t, tn
 from gui.scripts import aoi_io as aoi_io_mod
 from gui.scripts import prepare_scope
 from gui.scripts import raster_map as raster_map_mod
+from gui.scripts import source_layers
 from gui.scripts.coverage_ui import coverage_chips
 from gui.scripts.map_layers import MapLayers
 from gui.scripts.prepare_view import source_label
@@ -610,6 +612,50 @@ def test_a_geotiff_source_has_no_preview_until_it_is_harmonized(monkeypatch, tmp
         _act(_row(table_calls, "mine"), "map_toggle")["on_click"]()
         assert layers.on.value == frozenset() and map_.layers == {}
         assert _toasts(bus, "info", t("steps.alerts.file_preview_after_harmonize")) == 1
+    finally:
+        rc.close()
+
+
+def test_a_vector_source_shows_its_features_once_read(monkeypatch, tmp_path):
+    """Before Read file the map button says to read it; after, it draws the
+    period's features (PMTiles of the raw file) under ``vec:``, never ``src:``
+    (Download & harmonize shows the raster there)."""
+    from deforestation_alerts.engine import runner
+    from deforestation_alerts.project.models import VectorSpec
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path / "data"))
+    _sync_spawn(monkeypatch)
+    built, drawn = [], []
+    monkeypatch.setattr(source_layers, "local_scratch_dir", lambda: tmp_path / "scratch")
+    monkeypatch.setattr(source_layers, "vector_source_to_pmtiles",
+                        lambda raw, out, side_m: built.append((raw.name, out.name, side_m)))
+    monkeypatch.setattr(source_layers, "add_vector_pmtiles", lambda map_, path, key, name: drawn.append((key, name)))
+    table_calls, *_ = _stub_children(monkeypatch)
+    csv = tmp_path / "pts.csv"
+    csv.write_text("lon,lat,date\n0.5,0.5,2026-01-10\n0.6,0.5,2025-03-01\n")
+    p = _project_with_source("RADD")
+    add_custom_source(p, name="pts", origin="vector", ref=str(csv), asset_type="FILE", format="date_only",
+                      date_encoding="yyyyddd", band_map=BandMap(alert=None, date="date"), native=None,
+                      vector=VectorSpec(driver="csv", lon="lon", lat="lat", date="date", date_order="iso", side_m=30),
+                      period_id=PER.id)
+    state = _app_state(p)
+    layers = MapLayers(_FakeMap())
+    box, rc = _render(state, layers=layers)
+    try:
+        bus = get_current_bus()
+        _act(_row(table_calls, "pts"), "map_toggle")["on_click"]()
+        assert _toasts(bus, "info", t("steps.alerts.vector_read_first")) == 1 and built == []
+        pdir = paths.project_dir(p.name)
+        arts = runner.run_source_row(runner.SourceJob(project=p.model_copy(deep=True), pdir=pdir, period=PER,
+                                                      source="pts", meta=None, aoi=None, force=False))
+        state.update_project(p.name, lambda q: runner.apply_artifacts(q, arts))
+        raw = state.project.value.artifacts[raw_key(PER.id, "pts")]
+        assert raw.stats["features_in_window"] == 1
+        _act(_row(table_calls, "pts"), "map_toggle")["on_click"]()
+        name = t("legend.name.vector", source="pts", start="2026-01-01", end="2026-01-31")
+        assert built == [(Path(raw.rel_path).name, f"{raw.content_id}.pmtiles", 30.0)]
+        assert drawn == [("vec:pts", name)] and layers.on.value == frozenset({"vec:pts"})
+        assert _act(_row(table_calls, "pts"), "map_toggle")["is_on"] is True
     finally:
         rc.close()
 
@@ -1331,3 +1377,28 @@ def test_a_fast_double_click_add_only_adds_the_source_once():
             rc.close()
 
     asyncio.run(main())
+
+
+def test_a_file_read_again_redraws_its_features_or_hides_them_when_none_are_left(monkeypatch, tmp_path):
+    from deforestation_alerts.project.models import VectorSpec
+    from gui.scripts import prepare_jobs
+
+    p = _project_with_source("RADD")
+    add_custom_source(p, name="pts", origin="vector", ref="/x/pts.csv", asset_type="FILE", format="date_only",
+                      date_encoding="yyyyddd", band_map=BandMap(alert=None, date="date"), native=None,
+                      vector=VectorSpec(driver="csv", lon="lon", lat="lat", date="date", date_order="iso", side_m=30),
+                      period_id=PER.id)
+    calls = []
+    layers = SimpleNamespace(is_on=lambda key: key == "vec:pts",
+                             refresh=lambda key, build, cid, legend=None: calls.append(("refresh", key, cid)),
+                             hide=lambda key: calls.append(("hide", key)))
+    ctx = SimpleNamespace(app_state=_app_state(p), period=PER, layers=layers, map_=None, pdir=tmp_path)
+
+    def raw(n):
+        return Artifact(key=raw_key(PER.id, "pts"), kind="raw_alert", rel_path="raw/pts.parquet", fingerprint="f",
+                        inputs={}, content_id=f"c{n}", size_bytes=1, stats={"features_in_window": n},
+                        created_at=datetime.now())
+
+    prepare_jobs._refresh_layer(ctx, "source", "pts", {raw_key(PER.id, "pts"): raw(3)})
+    prepare_jobs._refresh_layer(ctx, "source", "pts", {raw_key(PER.id, "pts"): raw(0)})
+    assert calls == [("refresh", "vec:pts", "c3"), ("hide", "vec:pts")]

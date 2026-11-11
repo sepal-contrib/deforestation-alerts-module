@@ -222,7 +222,9 @@
       "dates_odd": "Les valeurs de {lo} à {hi} ne ressemblent pas à des dates. Vérifiez la bande de date.",
       "dates_none": "Aucun pixel daté dans l'AOI : choisissez l'encodage.",
       "dates_failed": "Impossible de lire les valeurs de date : {error}",
-      "encoding_help": "Comment la bande de date stocke ses dates."
+      "encoding_help": "Comment la bande de date stocke ses dates.",
+      "vector_read_first": "Lisez d'abord le fichier : ses points et polygones de cette période s'affichent une fois lus.",
+      "vector_none_in_window": "Aucun point ni polygone du fichier ne tombe dans la fenêtre de recherche de cette période."
     },
     "layers": {
       "instruction": "Ajoutez des couches qui aident à examiner les alertes.",

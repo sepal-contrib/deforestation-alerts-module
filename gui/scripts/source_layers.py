@@ -1,6 +1,8 @@
 """Names, builders and legends of the layers the steps draw on the shared map
 (spec §4.3, §9.4): ``src:<source>`` (a preview, then the harmonized raster
-under the same key) and ``mask:<mask>``, plus the Overview set's legend and
+under the same key), ``vec:<source>`` (a vector source's features as read for
+the period, in the Alerts step, so they can be compared with its harmonized
+raster) and ``mask:<mask>``, plus the Overview set's legend and
 the earlier sets' names and legends (``alerts:set:<set id>``).
 
 One builder per file layer for the Alerts and Harmonize steps and
@@ -9,8 +11,11 @@ The layer names are translated now (they are the ipyleaflet layer names); the
 legends carry language-neutral ``Label`` keys, translated at render.
 """
 
+from deforestation_alerts.engine.pmtiles import vector_source_to_pmtiles
+from deforestation_alerts.gdal_env import local_scratch_dir
 from gui.i18n import t
 from gui.scripts import legend_specs, raster_map
+from gui.scripts.pmtiles_map import add_vector_pmtiles
 from gui.scripts.legend_data import Label
 from gui.store.workflow_steps import active_period
 
@@ -21,6 +26,14 @@ def preview_name(source: str) -> str:
 
 def harmonized_name(source: str, period) -> str:
     return t("legend.name.harmonized", source=source, start=period.start.isoformat(), end=period.end.isoformat())
+
+
+def vector_key(source: str) -> str:
+    return f"vec:{source}"
+
+
+def vector_name(source: str, period) -> str:
+    return t("legend.name.vector", source=source, start=period.start.isoformat(), end=period.end.isoformat())
 
 
 def mask_name(mask: str) -> str:
@@ -36,6 +49,12 @@ def harmonized_legend(key, source, period):
     name = Label(key="legend.name.harmonized", args=(("source", source), ("start", period.start.isoformat()),
                                                      ("end", period.end.isoformat())))
     return legend_specs.alert_legend(key, name, legend_specs.harmonized_title(source, period.start, period.end))
+
+
+def vector_legend(key, source, period):
+    name = Label(key="legend.name.vector", args=(("source", source), ("start", period.start.isoformat()),
+                                                 ("end", period.end.isoformat())))
+    return legend_specs.vector_legend(key, name, name)
 
 
 def mask_layer_legend(project, mask: str):
@@ -91,6 +110,19 @@ def earlier_set_legend(key, alert_set):
 
 def harmonized_builder(map_, path, key: str, name: str):
     return lambda: raster_map.add_raster_layer(map_, path, key=key, name=name)
+
+
+def vector_builder(map_, raw_path, raw_content_id: str, side_m, key: str, name: str):
+    """A vector source's raw GeoParquet as PMTiles: built once per raw file
+    (its content id) on local scratch disk, outside the project."""
+    # shortcut: each re-read leaves its old tiles on scratch (KBs each); clean them if files get large
+    def build():
+        tiles = local_scratch_dir() / "vector_tiles" / f"{raw_content_id}.pmtiles"
+        if not tiles.exists():
+            vector_source_to_pmtiles(raw_path, tiles, side_m=side_m)
+        add_vector_pmtiles(map_, tiles, key=key, name=name)
+
+    return build
 
 
 def mask_builder(map_, path, key: str, name: str):

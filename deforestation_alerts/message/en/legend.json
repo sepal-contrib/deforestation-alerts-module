@@ -30,10 +30,12 @@
       "harmonized": "{source} · {start} → {end}",
       "mask": "Mask {name}",
       "earlier_set": "Alerts · {period} · {sources}",
-      "states": "Not analysable · {period}"
+      "states": "Not analysable · {period}",
+      "vector": "{source} · file features {start} → {end}"
     },
     "vis": {
       "rgb": "RGB composite of {bands}, {min}–{max}"
-    }
+    },
+    "vector_features": "Points and polygons as read from the file"
   }
 }

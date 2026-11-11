@@ -50,7 +50,7 @@ def _open_name(app_state):
     return p.name if p is not None else None
 
 
-AOI_LAYER_PREFIXES = ("src:", "mask:")  # every one is cut to the AOI
+AOI_LAYER_PREFIXES = ("src:", "vec:", "mask:")  # every one is drawn from files of the old AOI
 
 
 def hide_aoi_layers(layers, content_ids) -> None:

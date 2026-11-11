@@ -30,10 +30,12 @@
       "harmonized": "{source} · {start} → {end}",
       "mask": "Máscara {name}",
       "earlier_set": "Alertas · {period} · {sources}",
-      "states": "No analizable · {period}"
+      "states": "No analizable · {period}",
+      "vector": "{source} · elementos del archivo {start} → {end}"
     },
     "vis": {
       "rgb": "Compuesto RGB de {bands}, {min}–{max}"
-    }
+    },
+    "vector_features": "Puntos y polígonos tal como se leyeron del archivo"
   }
 }

@@ -222,7 +222,9 @@
       "dates_odd": "Os valores de {lo} a {hi} não parecem datas. Verifique a banda de data.",
       "dates_none": "Nenhum pixel com data na AOI: escolha a codificação.",
       "dates_failed": "Não foi possível ler os valores de data: {error}",
-      "encoding_help": "Como a banda de data armazena suas datas."
+      "encoding_help": "Como a banda de data armazena suas datas.",
+      "vector_read_first": "Leia o arquivo primeiro: seus pontos e polígonos deste período são exibidos depois de lidos.",
+      "vector_none_in_window": "Nenhum ponto ou polígono do arquivo cai na janela de busca deste período."
     },
     "layers": {
       "instruction": "Adicione camadas que ajudem a revisar os alertas.",

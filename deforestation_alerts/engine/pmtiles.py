@@ -1,4 +1,5 @@
-"""An alert set as a PMTiles archive for Overview (spec §9.2).
+"""An alert set as a PMTiles archive for Overview (spec §9.2), and a vector
+alert source's features read for a period, for the Alerts step's map.
 
 Two layers: ``alerts`` (polygons, from zoom 11) and ``points`` (centroids at
 every zoom; ``-r1`` stops tippecanoe's default rate-dropping of points).
@@ -19,6 +20,8 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Callable, Optional
+
+import numpy as np
 
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.gdal_env import local_scratch_dir
@@ -63,7 +66,13 @@ def _props(row) -> dict:
     }
 
 
-def _write_layers(gdf, folder: Path) -> tuple[Path, Path]:
+def _features_file(folder: Path, name: str, features: list) -> Path:
+    path = folder / f"{name}.geojson"
+    path.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    return path
+
+
+def _write_layers(gdf, folder: Path) -> dict:
     gdf = gdf.to_crs(epsg=4326)
     polys, points = [], []
     for _, row in gdf.iterrows():
@@ -73,10 +82,7 @@ def _write_layers(gdf, folder: Path) -> tuple[Path, Path]:
                       "tippecanoe": {"minzoom": POLYGON_MIN_ZOOM}})
         points.append({"type": "Feature", "properties": props,
                        "geometry": row.geometry.centroid.__geo_interface__})
-    a, b = folder / "alerts.geojson", folder / "points.geojson"
-    a.write_text(json.dumps({"type": "FeatureCollection", "features": polys}))
-    b.write_text(json.dumps({"type": "FeatureCollection", "features": points}))
-    return a, b
+    return {"alerts": _features_file(folder, "alerts", polys), "points": _features_file(folder, "points", points)}
 
 
 def alerts_to_pmtiles(alerts_gdf, out_path, *, guard: Optional[Callable[[], None]] = None) -> Path:
@@ -88,20 +94,64 @@ def alerts_to_pmtiles(alerts_gdf, out_path, *, guard: Optional[Callable[[], None
     nothing is moved into place, the staged copy is removed, and the
     exception propagates.
     """
+    return _build(lambda folder: _write_layers(alerts_gdf, folder), out_path, guard)
+
+
+def vector_shapes(raw, side_m: Optional[float]):
+    """The shapes a vector source burns, in EPSG:4326: a point becomes its
+    ``side_m`` square (in the local UTM zone), a polygon stays as drawn."""
+    import geopandas as gpd
+    import shapely
+
+    if raw.empty or not side_m:
+        return raw
+    utm = raw.to_crs(raw.estimate_utm_crs())
+    geoms = np.asarray(utm.geometry.values, dtype=object)
+    points = shapely.get_type_id(geoms) == shapely.GeometryType.POINT
+    h = float(side_m) / 2
+    x, y = shapely.get_x(geoms[points]), shapely.get_y(geoms[points])
+    geoms[points] = shapely.box(x - h, y - h, x + h, y + h)
+    return gpd.GeoDataFrame({"date": raw["date"].to_numpy()}, geometry=geoms, crs=utm.crs).to_crs(epsg=4326)
+
+
+def vector_source_to_pmtiles(raw_path, out_path, *, side_m: Optional[float]) -> Path:
+    """Build ``out_path`` from a vector source's raw GeoParquet (``date``,
+    EPSG:4326): ``shapes`` (polygons and point squares, from zoom 11) and
+    ``points`` (a point per feature at every zoom)."""
+    import geopandas as gpd
+
+    raw = gpd.read_parquet(raw_path)
+
+    def layers(folder):
+        shapes = vector_shapes(raw, side_m)
+        dates = [int(d) for d in raw["date"]]
+        return {
+            "shapes": _features_file(folder, "shapes", [
+                {"type": "Feature", "properties": {"date": d}, "geometry": g.__geo_interface__,
+                 "tippecanoe": {"minzoom": POLYGON_MIN_ZOOM}} for d, g in zip(dates, shapes.geometry)]),
+            "points": _features_file(folder, "points", [
+                {"type": "Feature", "properties": {"date": d}, "geometry": g.__geo_interface__}
+                for d, g in zip(dates, raw.geometry.representative_point())]),
+        }
+
+    return _build(layers, out_path)
+
+
+def _build(write_layers: Callable[[Path], dict], out_path, guard: Optional[Callable[[], None]] = None) -> Path:
+    """Run tippecanoe over the layers ``write_layers(folder)`` writes (layer
+    name -> GeoJSON file) on local disk and copy the archive onto ``out_path``
+    (``guard``: ``alerts_to_pmtiles``)."""
     tippecanoe = resolve_tippecanoe()
     if tippecanoe is None:
         raise TippecanoeMissing("tippecanoe not found on PATH or next to the interpreter")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=local_scratch_dir()) as td:
-        polys, points = _write_layers(alerts_gdf, Path(td))
         built = Path(td) / out_path.name
-        cmd = [
-            tippecanoe, "-o", str(built), "-t", td, "-Z", "0", "-z", "14", "-r1",
-            "--drop-densest-as-needed", "--force",
-            "-L", json.dumps({"file": str(polys), "layer": "alerts"}),
-            "-L", json.dumps({"file": str(points), "layer": "points"}),
-        ]
+        cmd = [tippecanoe, "-o", str(built), "-t", td, "-Z", "0", "-z", "14", "-r1",
+               "--drop-densest-as-needed", "--force"]
+        for layer, path in write_layers(Path(td)).items():
+            cmd += ["-L", json.dumps({"file": str(path), "layer": layer})]
         subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=TIPPECANOE_TIMEOUT_S)
         # Staged beside the target under a name of its own (two builders of
         # one set must not share it), created with the umask's default mode:

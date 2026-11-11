@@ -37,8 +37,19 @@ def build_alert_style(url: str, faded: bool = False) -> dict:
     return {"version": 8, "sources": {"alerts": {"type": "vector", "url": url}}, "layers": layers}
 
 
-def add_set_pmtiles(map_, path, *, key: str, name: str, faded: bool = False):
-    """Blocking (starts/reuses the tile server): call from a worker thread."""
+def build_vector_style(url: str) -> dict:
+    """A vector source's features: outlines and dots in one colour, no fill,
+    so the harmonized raster stays visible under them."""
+    c = legend_specs.VECTOR_COLOR
+    return {"version": 8, "sources": {"vector": {"type": "vector", "url": url}}, "layers": [
+        {"id": "shapes-line", "type": "line", "source": "vector", "source-layer": "shapes",
+         "paint": {"line-color": c, "line-width": 2}},
+        {"id": "points", "type": "circle", "source": "vector", "source-layer": "points",
+         "paint": {"circle-radius": 3, "circle-color": c, "circle-stroke-color": c, "circle-stroke-width": 1}},
+    ]}
+
+
+def _add_pmtiles(map_, path, style, *, key: str, name: str):
     from ipyleaflet import PMTilesLayer
     from vectortileserver.client import TileClient
 
@@ -47,11 +58,21 @@ def add_set_pmtiles(map_, path, *, key: str, name: str, faded: bool = False):
         client.enable_jupyter_loopback()  # no-op when a proxy prefix disabled the bridge
     except Exception:
         logger.warning("jupyter-loopback bridge unavailable for %s", path, exc_info=True)
-    layer = PMTilesLayer(url=client.pmtiles_url, style=build_alert_style(client.pmtiles_url, faded))
+    layer = PMTilesLayer(url=client.pmtiles_url, style=style(client.pmtiles_url))
     layer.name = name
     map_.remove_layer(key, none_ok=True)
     map_.add_layer(layer, key=key)
     return layer
+
+
+def add_set_pmtiles(map_, path, *, key: str, name: str, faded: bool = False):
+    """Blocking (starts/reuses the tile server): call from a worker thread."""
+    return _add_pmtiles(map_, path, lambda url: build_alert_style(url, faded), key=key, name=name)
+
+
+def add_vector_pmtiles(map_, path, *, key: str, name: str):
+    """Blocking, as ``add_set_pmtiles``."""
+    return _add_pmtiles(map_, path, build_vector_style, key=key, name=name)
 
 
 def remove_layer(map_, key: str) -> None:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pytest
-from shapely.geometry import box
+from shapely.geometry import Point, box
 
 from deforestation_alerts.engine import pmtiles
 from gui.scripts import pmtiles_map
@@ -137,4 +137,47 @@ def test_a_guard_that_raises_keeps_the_built_tiles_off_disk(monkeypatch, tmp_pat
 @pytest.mark.skipif(not pmtiles.tippecanoe_available(), reason="tippecanoe not installed")
 def test_real_tippecanoe(tmp_path):
     out = pmtiles.alerts_to_pmtiles(_alerts(), tmp_path / "alerts.pmtiles")
+    assert out.read_bytes()[:7] == b"PMTiles"
+
+
+def _raw(tmp_path):
+    raw = gpd.GeoDataFrame({"date": [2026010, 2026020]},
+                           geometry=[Point(-60.1, -21.4), box(-60.0, -21.5, -59.99, -21.49)], crs="EPSG:4326")
+    raw.to_parquet(tmp_path / "raw.parquet")
+    return tmp_path / "raw.parquet"
+
+
+def test_a_vector_source_builds_its_shapes_and_points(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_run(cmd, check, capture_output, text, timeout=None):
+        for arg in cmd:
+            if arg.startswith("{"):
+                spec = json.loads(arg)
+                seen[spec["layer"]] = json.loads(Path(spec["file"]).read_text())["features"]
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"PMTiles")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(pmtiles, "resolve_tippecanoe", lambda: "tippecanoe")
+    monkeypatch.setattr(pmtiles.subprocess, "run", fake_run)
+    pmtiles.vector_source_to_pmtiles(_raw(tmp_path), tmp_path / "v.pmtiles", side_m=30.0)
+    shapes, points = seen["shapes"], seen["points"]
+    assert [f["properties"]["date"] for f in shapes] == [2026010, 2026020]
+    assert [f["geometry"]["type"] for f in shapes] == ["Polygon", "Polygon"]  # the point is its square
+    assert all(f["tippecanoe"]["minzoom"] == 11 for f in shapes)
+    assert [f["geometry"]["type"] for f in points] == ["Point", "Point"]
+    square = pmtiles.vector_shapes(gpd.read_parquet(tmp_path / "raw.parquet"), 30.0).iloc[[0]]
+    assert round(float(square.to_crs(square.estimate_utm_crs()).area.iloc[0])) == 900
+
+
+def test_the_vector_style_draws_outlines_and_dots_only():
+    layers = pmtiles_map.build_vector_style("u")["layers"]
+    assert [(x["source-layer"], x["type"]) for x in layers] == [("shapes", "line"), ("points", "circle")]
+    for layer in layers:
+        assert all(not isinstance(v, (list, dict)) for v in layer["paint"].values())
+
+
+@pytest.mark.skipif(not pmtiles.tippecanoe_available(), reason="tippecanoe not installed")
+def test_real_tippecanoe_on_a_vector_source(tmp_path):
+    out = pmtiles.vector_source_to_pmtiles(_raw(tmp_path), tmp_path / "v.pmtiles", side_m=30.0)
     assert out.read_bytes()[:7] == b"PMTiles"

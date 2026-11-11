@@ -40,6 +40,8 @@ STATE_CLASSES = (
     (3, "#fb8c00", "legend.state_over_cap"),
 )
 MASK_COLOR = "#757575"  # keep and exclude masks alike
+#: a vector source's features as read: apart from the alert and status colours
+VECTOR_COLOR = "#00bcd4"
 MASK_OPACITY = 0.5
 _GREY_RAMP = ("#000000", "#ffffff")
 
@@ -94,6 +96,12 @@ def alert_legend(key: str, name, title: Label) -> LayerLegend:
     return LayerLegend(layer_id=key, label=_label(name), spec=LegendSpec(
         kind="chips", title=title, colors=tuple(c for _, c, _ in ALERT_CLASSES),
         labels=tuple(Label(key=k) for _, _, k in ALERT_CLASSES)))
+
+
+def vector_legend(key: str, name, title: Label) -> LayerLegend:
+    """One chip: a vector source's points and polygons as read from its file."""
+    return LayerLegend(layer_id=key, label=_label(name), spec=LegendSpec(
+        kind="chips", title=title, colors=(VECTOR_COLOR,), labels=(Label(key="legend.vector_features"),)))
 
 
 def status_legend(key: str, name, title: Label, faded: bool = False) -> LayerLegend:

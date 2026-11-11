@@ -55,7 +55,7 @@ from typing import Any, Optional
 import solara
 
 from deforestation_alerts.engine.coverage import UNCHECKED
-from deforestation_alerts.engine.fingerprint import harm_key, mask_key
+from deforestation_alerts.engine.fingerprint import harm_key, is_vector_source, mask_key, raw_key
 from deforestation_alerts.engine.runner import (
     CoverageRefused,
     HarmonizeFailed,
@@ -268,7 +268,8 @@ def _warn_if_covers_none(ctx: PrepareContext, name: str, arts: dict) -> None:
 def _refresh_layer(ctx: PrepareContext, kind: str, name: str, arts: dict) -> None:
     """Redraw a row's layer already on the map from its new file (spec §6.2,
     §9.1; ``refresh`` rebuilds on a new content id): a source's harmonized
-    file (``src:<source>``), a mask's aligned file (``mask:<name>``).
+    file (``src:<source>``), a vector source's features (``vec:<source>``),
+    a mask's aligned file (``mask:<name>``).
     ``refresh`` replaces the layer's legend too, so each passes its own
     (spec §9.4): a mask's names the live project's active-period choice. A
     source's layer is redrawn only while its run's period is still the active
@@ -285,6 +286,17 @@ def _refresh_layer(ctx: PrepareContext, kind: str, name: str, arts: dict) -> Non
     live = ctx.app_state.project.value
     if live is None or live.active_period != ctx.period.id:
         return  # the step now shows another period: its layer must not get this period's file
+    src, vkey = live.sources.get(name), source_layers.vector_key(name)
+    raw = arts.get(raw_key(ctx.period.id, name))
+    if src is not None and is_vector_source(src) and raw is not None and ctx.layers.is_on(vkey):
+        # the Alerts step's features of a file read again (none left in the window: nothing to draw)
+        if not raw.stats.get("features_in_window", 1):
+            ctx.layers.hide(vkey)
+        else:
+            ctx.layers.refresh(vkey, source_layers.vector_builder(
+                ctx.map_, paths.resolve(ctx.pdir, raw.rel_path), raw.content_id, src.vector.side_m, vkey,
+                source_layers.vector_name(name, ctx.period)), raw.content_id,
+                legend=source_layers.vector_legend(vkey, name, ctx.period))
     art, key = arts.get(harm_key(ctx.period.id, name)), f"src:{name}"
     if art is not None and ctx.layers.is_on(key):
         path = paths.resolve(ctx.pdir, art.rel_path)

@@ -120,7 +120,8 @@ def alert_rows(p, pdir, period, *, mine, errors, stages, progress, on, building,
             notes.append({"text": t("steps.prepare.file_missing", path=r.file_missing), "tone": "error"})
         if src.kind == "predefined" and src.catalogue_key == "RADD":
             notes.append({"text": t("coverage.radd_note"), "tone": "info"})
-        map_key = f"src:{r.source}"
+        # a vector source shows its features as read; Download & harmonize shows its raster
+        map_key = source_layers.vector_key(r.source) if is_vector_source(src) else f"src:{r.source}"
         out.append({"key": r.source, "cells": [title, state], "notes": notes, "error": errors.get(r.source),
                     "actions": [
                         # a layer already on can always be switched off
@@ -232,6 +233,7 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
             raise ValueError(error_text(exc)) from None
         if saved:
             layers.hide(f"src:{name}")  # its preview showed the previous definition
+            layers.hide(source_layers.vector_key(name))
 
     def _edit(name):
         if refuse_setup(app_state, notifications):
@@ -262,6 +264,7 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
             notifications.warning(t("steps.alerts.delete_busy"))
             return
         layers.hide(f"src:{name}")  # its layer reads this period's files
+        layers.hide(source_layers.vector_key(name))
         gone = []
 
         def _apply(live):
@@ -272,7 +275,8 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
             cleanup.delete_files(pdir, gone)
 
     def _toggle(name):
-        key = f"src:{name}"
+        src = p.sources[name]
+        key = source_layers.vector_key(name) if is_vector_source(src) else f"src:{name}"
         if layers.is_on(key):
             # Ruling #66: check is_on before building anything, and never hide
             # a build that is still in flight (ruling #10's toggle guard).
@@ -284,8 +288,20 @@ def AlertsStep(app_state, map_, gee_interface, layers, jobs):
         if reason:  # the toggle is disabled; a stale click builds nothing either
             notifications.info(reason)
             return
-        src = p.sources[name]
         row = by_source.get(name)
+        if is_vector_source(src):
+            raw = p.artifacts.get(raw_key(period.id, name))
+            if row is None or row.raw is not Status.CURRENT or raw is None:
+                notifications.info(t("steps.alerts.vector_read_first"))
+            elif not raw.stats.get("features_in_window", 1):
+                notifications.info(t("steps.alerts.vector_none_in_window"))
+            else:
+                layers.show(key, source_layers.vector_builder(
+                    map_, paths.resolve(pdir, raw.rel_path), raw.content_id, src.vector.side_m, key,
+                    source_layers.vector_name(name, period)),
+                    content_id=raw.content_id, notifier=notifications,
+                    legend=source_layers.vector_legend(key, name, period))
+            return
         if row is not None and row.ready:
             # spec §4.3: the harmonized raster under the preview's key, named by its period
             harm = p.artifacts[harm_key(period.id, name)]

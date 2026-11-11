@@ -222,7 +222,9 @@
       "dates_odd": "Los valores de {lo} a {hi} no parecen fechas. Revisa la banda de fecha.",
       "dates_none": "Ningún píxel con fecha en la AOI: elige la codificación.",
       "dates_failed": "No se pudieron leer los valores de fecha: {error}",
-      "encoding_help": "Cómo guarda sus fechas la banda de fecha."
+      "encoding_help": "Cómo guarda sus fechas la banda de fecha.",
+      "vector_read_first": "Lea primero el archivo: sus puntos y polígonos de este período se muestran una vez leídos.",
+      "vector_none_in_window": "Ningún punto ni polígono del archivo cae en la ventana de búsqueda de este período."
     },
     "layers": {
       "instruction": "Añade capas que ayuden a revisar las alertas.",
