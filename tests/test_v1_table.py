@@ -1,8 +1,12 @@
 """A version 1 ``alert_db.csv`` read as a version 2 store frame (v1 migration, task 2)."""
 
+import math
+
 import pandas as pd
 import pytest
+from shapely.geometry import box
 
+from deforestation_alerts.project.review_groups import polygon_area_ha
 from deforestation_alerts.project.review_status import CONFIRMED, FALSE_POSITIVE, NEED_REVISION, NOT_REVIEWED
 from deforestation_alerts.project.store_schema import STORE_COLUMNS
 from deforestation_alerts.project.v1_migration import TABLE_FILE, fill_areas, pixel_ha, read_table, v2_pick
@@ -49,11 +53,30 @@ def test_geometry_is_the_bounding_box(tmp_path):
     assert gdf.crs.to_epsg() == 4326
 
 
-def test_drawn_polygon_and_its_area_kept(tmp_path):
+def test_drawn_polygon_kept_and_measured_again(tmp_path):
     gdf, _ = _read(tmp_path)
-    assert gdf["area_ha"].iloc[1] == 1.5 and gdf["alert_polygon"].iloc[1] is not None
     assert gdf["alert_polygon"].iloc[1].geom_type == "Polygon"
     assert gdf["alert_polygon"].iloc[0] is None
+    # not v1's 1.5 (Web Mercator): the polygon's area, as a Save in v2 measures it
+    assert gdf["area_ha"].iloc[1] == pytest.approx(polygon_area_ha(gdf["alert_polygon"].iloc[1]))
+    assert gdf["area_ha"].iloc[1] > 1000
+
+
+def test_v1_area_kept_when_its_polygon_is_unreadable(tmp_path):
+    gdf, _ = _read(tmp_path, rows=[{"alert_polygon": "POLYGON((", "area_ha": 3.0}])
+    assert gdf["area_ha"].iloc[0] == 3.0
+
+
+def test_pixel_narrows_with_latitude(tmp_path):
+    south = box(-54.64, -24.45, -54.63, -24.44)
+    gdf, _ = _read(tmp_path, rows=[{"bounding_box": south.wkt, "point": south.centroid.wkt}])
+    assert gdf["detected_area_ha"].iloc[0] == pytest.approx(7.84 * math.cos(math.radians(-24.445)), rel=1e-4)
+
+
+def test_admin_names_lose_v1_trailing_comma(tmp_path):
+    gdf, _ = _read(tmp_path, rows=[{"admin1": "Paraguay,", "admin2": "Canindeyu, "}, {}])
+    assert gdf["admin1"].iloc[0] == "Paraguay" and gdf["admin2"].iloc[0] == "Canindeyu"
+    assert pd.isna(gdf["admin1"].iloc[1])
 
 
 def test_area_estimated_from_count(tmp_path):

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 from pydantic import ValidationError
 from shapely import wkt
@@ -38,6 +39,7 @@ from deforestation_alerts.project.models import (
     period_id,
     set_id,
 )
+from deforestation_alerts.project.review_groups import polygon_area_ha
 from deforestation_alerts.project.review_status import NOT_REVIEWED, reviewed_mask
 from deforestation_alerts.project.share import canonical_set_paths
 from deforestation_alerts.project.store_schema import DETECTED_AREA, GEOM_COLUMNS, STORE_COLUMNS
@@ -57,17 +59,23 @@ _PICK_SOURCES = (("COPERNICUS/S2", S2), ("LANDSAT/", LANDSAT))
 
 
 def pixel_ha(sources: list[str]) -> float:
-    """One alert pixel in hectares: 10 m when a Sentinel-2 based source
-    (RADD, GLAD-S2) is in the set, else Landsat's 28 m."""
+    """One alert pixel at the equator in hectares: 10 m when a Sentinel-2
+    based source (RADD, GLAD-S2) is in the set, else Landsat's 28 m."""
     return 0.01 if {"RADD", "GLAD-S2"} & set(sources) else 0.0784
 
 
 def fill_areas(gdf: gpd.GeoDataFrame, sources: list[str]) -> None:
-    """``detected_area_ha`` from the pixel count; ``area_ha`` keeps a v1
-    value above 0 (a reviewer's drawn polygon), else takes the detected one."""
-    gdf[DETECTED_AREA] = pd.to_numeric(gdf["count"], errors="coerce") * pixel_ha(sources)
+    """``detected_area_ha`` from the pixel count; ``area_ha`` is the area of
+    the reviewer's drawn polygon, else a v1 value above 0, else the detected one."""
+    # v1 counted pixels of a geographic grid: as wide as at the equator in degrees, so cos(latitude) narrower
+    bounds = gdf.geometry.bounds
+    cos_lat = np.cos(np.radians((bounds["miny"] + bounds["maxy"]) / 2)).fillna(1.0)
+    gdf[DETECTED_AREA] = pd.to_numeric(gdf["count"], errors="coerce") * pixel_ha(sources) * cos_lat
     area = pd.to_numeric(gdf["area_ha"], errors="coerce")
-    gdf["area_ha"] = area.where(area > 0, gdf[DETECTED_AREA])
+    # v1 measured a drawn polygon in Web Mercator (too large by 1/cos² latitude): measured again as a Save does
+    drawn = pd.Series([polygon_area_ha(g) if g is not None and not g.is_empty else np.nan for g in gdf["alert_polygon"]],
+                      index=gdf.index)
+    gdf["area_ha"] = drawn.where(drawn > 0, area.where(area > 0, gdf[DETECTED_AREA]))
 
 
 def v2_pick(value, millis) -> Optional[str]:
@@ -121,6 +129,9 @@ def read_table(csv_path: Path) -> tuple[gpd.GeoDataFrame, list[str]]:
     for col in STORE_COLUMNS:
         if col not in df.columns and col not in ("geometry", "set_id"):
             df[col] = pd.Series(None, index=df.index, dtype=object)
+    for col in ("admin1", "admin2", "admin3"):
+        # v1 wrote "Paraguay,"; a Save in v2 writes the name alone
+        df[col] = df[col].map(lambda v: v.strip().rstrip(", ") if isinstance(v, str) else v)
     for col in _TEXT_COLUMNS:
         df[col] = df[col].astype(object)
     status = df["status"]
