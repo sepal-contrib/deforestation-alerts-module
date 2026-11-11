@@ -11,7 +11,12 @@ dependencies:
   - numpy=1.26
   # Geospatial binaries — conda handles these correctly
   - cartopy>=0.24.0
-  - geopandas>=1.0
+  # -base and -core variants throughout: the full metapackages add a Qt/LLVM
+  # desktop stack (matplotlib), folium/mapclassify/scikit-learn (geopandas) and
+  # distributed/bokeh (dask) that a Voila app never uses; they kept the venv
+  # too big for the launcher's 30 s cache unpack (sepal-apps-catalog#130)
+  - geopandas-base>=1.0
+  - pyogrio  # geopandas' file IO engine; geopandas-base leaves it out
   # <1.5 (and rioxarray <0.20): on python 3.12 conda picks rasterio 1.5 /
   # rioxarray 0.20, whose metadata wants numpy>=2, so the pip pass swaps in a
   # rasterio wheel that bundles its own GDAL + PROJ (two GDALs, PROJ db errors)
@@ -24,9 +29,9 @@ dependencies:
   - odc-geo
   - rioxarray<0.20  # see rasterio above
   - xarray
-  - dask
+  - dask-core  # threads scheduler only (engine/align.py)
   # Scientific
-  - matplotlib>=3.9
+  - matplotlib-base>=3.9
   - pandas>=2.2
   - pillow>=10.1  # the alert GIF (scripts/alert_gif.py): load_default(size=) needs 10.1
   - pyarrow
@@ -79,7 +84,9 @@ dependencies:
       # variants while co-solving the conda geospatial stack, which never
       # converges in practice. The tested dev env installs tensorflow via pip
       # for the same reason. Do NOT move this back to the conda block.
-      - tensorflow==2.17.0
+      # -cpu: same 2.17.0 API without the CUDA kernels (half the files and
+      # ~770 MB less); SEPAL's app-launcher containers have no GPU.
+      - tensorflow-cpu==2.17.0
       # NOTE: no `-e .` — the app runs in place (ui.ipynb imports
       # gui.solara_app; gui/solara_app.py shims sys.path,
       # pytest uses pyproject's pythonpath=["."]).
@@ -91,7 +98,7 @@ dependencies:
 #   grpc-google-iam-v1 0.14.5 requires protobuf<8.0.0,>=6.33.5, but you have
 #   protobuf 4.25.9 which is incompatible.
 # grpcio-status and grpc-google-iam-v1 arrive transitively via conda
-# (pulled in transitively by google-api-python-client); tensorflow==2.17.0's
+# (pulled in transitively by google-api-python-client); tensorflow-cpu==2.17.0's
 # own ceiling (`protobuf<5,>=3.20.3`) forces protobuf down from conda's
 # 7.35.1 to 4.25.9 during the pip pass. Verified this does not break
 # anything the app touches:

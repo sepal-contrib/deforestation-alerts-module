@@ -15,12 +15,16 @@ ROOT = Path(__file__).resolve().parents[1]
 #: Import name -> the package name the environment file uses for it.
 PACKAGE = {
     "babel": "babel",
+    "dask": "dask-core",
     "docx": "python-docx",
     "ee": "earthengine-api",
+    "geopandas": "geopandas-base",
+    "matplotlib": "matplotlib-base",
     "matplotlib_scalebar": "matplotlib-scalebar",
     "odc": "odc-geo",
     "osgeo": "gdal",
     "PIL": "pillow",
+    "tensorflow": "tensorflow-cpu",
 }
 
 #: Imports that a declared package brings with it (import -> that package).
