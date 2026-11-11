@@ -39,6 +39,11 @@ def aoi_raster_path(pdir: Path) -> Path:
     return Path(pdir) / "masks" / "aoi.tif"
 
 
+def admin_boundaries_path(pdir: Path, aoi_digest: str) -> Path:
+    """GAUL 2024 L2 boundaries of the AOI: a new digest is a new file, so a changed AOI refetches."""
+    return Path(pdir) / "admin" / f"gaul2024_l2_{safe_token(aoi_digest)[:16]}.gpkg"
+
+
 def imagery_dir(pdir: Path) -> Path:
     """``<pdir>/imagery``: the project-wide scene index, shared by every period and set."""
     return Path(pdir) / "imagery"
