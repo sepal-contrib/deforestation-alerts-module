@@ -4,10 +4,11 @@ a merge does not compare them."""
 import pandas as pd
 
 from deforestation_alerts.project import review_groups
-from deforestation_alerts.project.share import read_return
+from deforestation_alerts.project.share import apply_return, read_return
+from deforestation_alerts.project.store_schema import REVIEW_STAMP
 from gui.tile.analysis import review_save
 from tests.test_analysis_group_save import _save, _setup, _stored
-from tests.test_review_return_merge import _creator, _return, _store
+from tests.test_review_return_merge import COPY_STATUSES, _creator, _return, _reviews, _store
 
 NOW = "2026-11-11T10:00:00Z"
 
@@ -53,3 +54,29 @@ def test_return_differing_only_in_stamps_is_unchanged(tmp_path, monkeypatch):
     zp = _return(tmp_path, columns=stamp("ana", "2026-02-02T00:00:00Z") | {"admin1": ["B"] * 4})
     preview = read_return(zp, p, _store(p))
     assert 1 in preview.unchanged and pd.Series(preview.columns).isin(["reviewed_at"]).any()
+
+
+def _stamp(by, at, **more):
+    return {"reviewed_by": [by] * 4, "reviewed_at": [at] * 4, **more}
+
+
+def test_a_review_change_is_a_conflict_while_the_stamps_differ_too(tmp_path, monkeypatch):
+    p, _ = _creator(tmp_path, monkeypatch, statuses=COPY_STATUSES,
+                    columns=_stamp("bo", "2026-01-01T00:00:00Z", description=["roads"] * 4))
+    zp = _return(tmp_path, columns=_stamp("ana", "2026-02-02T00:00:00Z", description=["fire", "roads", "roads", "roads"]))
+    preview = read_return(zp, p, _store(p))
+    assert preview.conflicts == [1]  # its answer differs; the stamps alone would leave it unchanged
+    assert {3, 4} <= set(preview.unchanged)
+
+
+def test_an_old_return_without_stamps_merges_and_the_store_keeps_its_own(tmp_path, monkeypatch):
+    p, _ = _creator(tmp_path, monkeypatch, columns=_stamp("bo", "2026-01-01T00:00:00Z"))
+    zp = _reviews(_return(tmp_path), tmp_path / "old.zip",
+                  lambda rows: rows.drop(columns=[c for c in REVIEW_STAMP if c in rows.columns]))
+    gdf = _store(p)
+    preview = read_return(zp, p, gdf)
+    assert (preview.new, preview.conflicts) == ([4], [3])
+    merged = apply_return(gdf, preview, "theirs")
+    assert merged["status"].tolist() == ["Confirmed", "Not reviewed", "False Positive", "Confirmed"]
+    assert merged["reviewed_by"].tolist() == ["bo"] * 4
+    assert merged["reviewed_at"].tolist() == ["2026-01-01T00:00:00Z"] * 4

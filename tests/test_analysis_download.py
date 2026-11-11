@@ -343,9 +343,9 @@ def test_the_download_labels_the_questions_and_fills_their_placeholders(download
         ctx.widgets, ctx.analysis, ctx.app_state, ctx.aux_model, ctx.app_tile_model, alert=alert
     )
 
-    row = gpd.read_file(ctx.folder / "alert_1.gpkg").iloc[0]
+    row = gpd.read_file(ctx.folder / "alert_1.gpkg", layer="alert_1").iloc[0]
     assert row["description"] == questions_mod.label(default_questions()[0], "logging, roads")
-    assert "q_gone" not in gpd.read_file(ctx.folder / "alert_1.gpkg").columns
+    assert "q_gone" not in gpd.read_file(ctx.folder / "alert_1.gpkg", layer="alert_1").columns
     text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
     assert f"PH True alert / {row['description']}" in text
 
@@ -366,7 +366,7 @@ def test_the_download_writes_the_links_joined_and_no_working_growth_columns(down
 
     _run(ctx)
 
-    back = gpd.read_file(ctx.folder / "alert_1.gpkg")
+    back = gpd.read_file(ctx.folder / "alert_1.gpkg", layer="alert_1")
     assert back.iloc[0]["grows_from"] == "sep#4@20261002080000000000;sep#9@20261002080000000000"
     assert "grows_from_auto" not in back.columns and "below_min" not in back.columns
 
@@ -401,7 +401,7 @@ def test_a_group_download_is_one_feature_with_the_group_outline(download_ctx):
     result = _run(ctx)
 
     assert result["zip_path"] == f"{ctx.folder}/alert_3.zip"  # position 2's stored id
-    back = gpd.read_file(ctx.folder / "alert_3.gpkg")
+    back = gpd.read_file(ctx.folder / "alert_3.gpkg", layer="alert_3")
     assert len(back) == 1 and back.crs.to_epsg() == 4326
     assert back.iloc[0]["area_ha"] == pytest.approx(3.75)
     assert back.iloc[0]["group_size"] == 3 and back.iloc[0]["group_alerts"] == "1, 2, 3"  # the stored ids
@@ -414,7 +414,7 @@ def test_a_group_download_without_a_drawing_is_the_union_of_its_alerts(download_
     ctx = download_ctx
     gdf = _grouped(ctx)
     _run(ctx)
-    back = gpd.read_file(ctx.folder / "alert_1.gpkg")
+    back = gpd.read_file(ctx.folder / "alert_1.gpkg", layer="alert_1")
     assert back.geometry.iloc[0].equals(gdf.geometry.union_all())
 
 
@@ -429,7 +429,7 @@ def test_a_single_download_is_unchanged_but_for_four_columns(download_ctx):
 
     _run(ctx)
 
-    back = gpd.read_file(ctx.folder / "alert_1.gpkg")
+    back = gpd.read_file(ctx.folder / "alert_1.gpkg", layer="alert_1")
     assert back.iloc[0]["grows_from"] == "sep#4@20261002080000000000;sep#9@20261002080000000000"
     assert back.iloc[0]["group_size"] == 1 and back.iloc[0]["group_alerts"] == "1"
     assert back.iloc[0]["area_ha"] == pytest.approx(1.25)

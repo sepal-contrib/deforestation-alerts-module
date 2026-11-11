@@ -7,10 +7,20 @@ from pathlib import Path
 import pandas as pd
 import geopandas as gpd
 import pytest
+import shapely
 from shapely.geometry import Polygon
 from deforestation_alerts import gdal_env
 from deforestation_alerts.scripts.alert_export import (
     EXPORT_FORMATS, SCOPES, export_alerts_gdf, export_name, scope_counts, scope_rows)
+
+
+_LAYER = "alerts_glad-l_2026-01-01_2026-06-12"  # the reviewed layer of the default export
+
+
+def _centroid(gdf):
+    # shapely's planar centroid: GeoSeries.centroid warns on a geographic CRS, and
+    # projecting a single point back warns in pyproj; a fixture needs neither
+    return gpd.GeoSeries(shapely.centroid(gdf.geometry.array), index=gdf.index, crs=gdf.crs)
 
 
 def _gdf():
@@ -20,7 +30,7 @@ def _gdf():
         geometry=gpd.GeoSeries([poly], crs="EPSG:4326"),
     )
     gdf["bounding_box"] = gdf.geometry.envelope
-    gdf["point"] = gdf.geometry.centroid
+    gdf["point"] = _centroid(gdf)
     return gdf
 
 
@@ -35,7 +45,7 @@ def _real_shape_gdf():
         {"area_ha": [1.0, 2.0]}, geometry=gpd.GeoSeries(polys, crs="EPSG:4326")
     )
     gdf["bounding_box"] = gdf.geometry.envelope
-    gdf["point"] = gdf.geometry.centroid
+    gdf["point"] = _centroid(gdf)
     gdf["alert_polygon"] = pd.Series([], dtype="object")
     return gdf
 
@@ -54,7 +64,7 @@ def test_export_gpkg_drops_secondary_geometries(data_root):
     path = export_alerts_gdf(_gdf(), folder, "gpkg",
                              ["GLAD-L", "RADD"], "2026-01-01", "2026-06-12")
     assert path == f"{folder}/alerts_glad-l-radd_2026-01-01_2026-06-12.gpkg"
-    back = gpd.read_file(path)
+    back = gpd.read_file(path, layer="alerts_glad-l-radd_2026-01-01_2026-06-12")
     assert "point" not in back.columns and "bounding_box" not in back.columns
     assert back.geometry.iloc[0].geom_type == "Polygon"
 
@@ -142,7 +152,7 @@ def test_export_writes_only_the_scoped_rows(data_root):
     path = export_alerts_gdf(_statuses("Confirmed", "Not reviewed"), folder, "gpkg",
                              ["GLAD-L"], "2026-01-01", "2026-06-12", scope="confirmed")
     assert path == f"{folder}/alerts_glad-l_2026-01-01_2026-06-12_confirmed.gpkg"
-    assert list(gpd.read_file(path)["status"]) == ["Confirmed"]
+    assert list(gpd.read_file(path, layer=f"{_LAYER}_confirmed")["status"]) == ["Confirmed"]
 
 
 def test_export_rejects_geojson(data_root):
@@ -158,7 +168,7 @@ def test_export_has_growth_columns(data_root, fmt):
     gdf["grows_from"] = pd.Series([["a#1@r", "b#2@r"]], dtype="object")
     gdf["history_area_ha"] = [2.5]
     path = export_alerts_gdf(gdf, data_root / "recipe_a", fmt, ["GLAD-L"], "2026-01-01", "2026-06-12")
-    back = gpd.read_file(path) if fmt == "gpkg" else pd.read_csv(path, keep_default_na=False)
+    back = gpd.read_file(path, layer=_LAYER) if fmt == "gpkg" else pd.read_csv(path, keep_default_na=False)
     assert back["kind"].iloc[0] == "growth"
     assert back["grows_from"].iloc[0] == "a#1@r;b#2@r"
     assert back["history_area_ha"].iloc[0] == 2.5
@@ -180,7 +190,7 @@ def _reviewed_store():
         geometry=gpd.GeoSeries(clusters, crs="EPSG:4326"),
     )
     gdf["bounding_box"] = gdf.geometry.envelope
-    gdf["point"] = gdf.geometry.centroid
+    gdf["point"] = _centroid(gdf)
     gdf["alert_polygon"] = gpd.GeoSeries([box(0, 0, 3, 2), None, None], crs="EPSG:4326")
     gdf["review_group"] = pd.array([1, 1, pd.NA], dtype="Int64")
     return gdf
@@ -257,3 +267,15 @@ def test_set_export_of_an_old_store(data_root, fmt):
     area = back["detected_area_ha"]
     assert area.iloc[0] > 10_000 and area.iloc[1] > 10_000  # measured: a degree square is ~1.2 Mha
     assert area.iloc[2] == 3.0  # the stored Integrate area, no drawing
+
+
+def test_detected_area_of_an_old_store_measures_drawn_and_zero_area_rows_like_own_area():
+    from deforestation_alerts.project import review_groups
+    from deforestation_alerts.scripts.alert_export import detected_area
+
+    gdf = _reviewed_store().drop(columns=["detected_area_ha"])  # row 0 drawn, row 1 a 0-area member
+    area = detected_area(gdf)
+    assert area.iloc[2] == 3.0
+    for p in (0, 1):  # the clusters, measured
+        assert area.iloc[p] == pytest.approx(review_groups.own_area(gdf, p), rel=1e-3)
+        assert area.iloc[p] == pytest.approx(review_groups.polygon_area_ha(gdf.geometry.iloc[p]), rel=1e-3)

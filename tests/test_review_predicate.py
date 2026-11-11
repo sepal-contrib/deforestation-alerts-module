@@ -141,3 +141,11 @@ def test_review_group_is_reserved():
     assert "review_group" in ALERT_RESERVED_COLUMNS
     assert REVIEW_AFTER[-1] == "review_group"
     assert "group_size" in RESERVED_KEYS and "group_alerts" in RESERVED_KEYS
+
+
+@pytest.mark.parametrize("name", ["geometry_source", "detected_geometry", "group_size", "group_alerts"])
+def test_an_attribute_band_never_takes_an_export_column(name):
+    from deforestation_alerts.scripts.raster_attribute import ALERT_RESERVED_COLUMNS, resolve_column_names
+
+    out = resolve_column_names([{"band": "b1", "column": name}], reserved=ALERT_RESERVED_COLUMNS)
+    assert out[0]["column"] == f"{name}_2"

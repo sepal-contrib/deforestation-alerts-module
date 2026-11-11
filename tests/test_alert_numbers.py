@@ -66,7 +66,7 @@ def test_alert_files_are_named_by_stored_id(download_ctx, alert_ids, n, members)
     for ext in ("gpkg", "zip", "docx"):
         assert (folder / f"alert_{n}.{ext}").exists()
     assert [path.name for path in folder.glob("*.tif")] == [f"alert_{n}_s_010124_s_020224.tif"]
-    assert gpd.read_file(folder / f"alert_{n}.gpkg").iloc[0]["group_alerts"] == members
+    assert gpd.read_file(folder / f"alert_{n}.gpkg", layer=f"alert_{n}").iloc[0]["group_alerts"] == members
 
 
 def test_old_store_keeps_its_numbers():

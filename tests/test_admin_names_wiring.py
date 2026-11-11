@@ -7,14 +7,17 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 
+from deforestation_alerts.engine import admin_names as an
 from deforestation_alerts.engine import integrate
 from deforestation_alerts.project import review_groups
 from deforestation_alerts.project.models import AlertSetParams
+from deforestation_alerts.project.paths import admin_boundaries_path
 from gui.scripts.integrate_jobs import _done_message
-from gui.tile.analysis import review_save
+from gui.tile.analysis import export, review_save
+from gui.tile.analysis.state import capture_alert
 from gui.i18n import t
 from tests._review_helpers import boundaries
-from tests.test_analysis_group_save import _alerts, _save, _setup, _stored
+from tests.test_analysis_group_save import WIDGETS, _alerts, _analysis, _save, _setup, _stored
 from tests.test_engine_integrate import _LONLAT_CENTROID, _job, JAN, ready_project  # noqa: F401 - fixture
 
 pytestmark = pytest.mark.usefixtures("english_locale")
@@ -101,6 +104,46 @@ def test_save_reads_the_cache_once_for_every_unnamed_row_of_a_group(tmp_path, mo
     h = _setup(tmp_path, monkeypatch, grouping=True)
     _save(h, 0, {1, 2})
     assert h.lookups.calls == 1 and _stored(h)["admin1"].tolist()[:3] == ["Brasil"] * 3
+
+
+def _cached_lookups(monkeypatch):
+    """The real per-project cache in place of the stub, with a fetch that needs
+    no Earth Engine; returns the project folders it was called with."""
+    calls = []
+
+    def load(pdir, aoi):
+        calls.append(pdir)
+        return an.load_boundaries(pdir, aoi, fetch=lambda bounds: boundaries(("Brasil", "Acre", "Rio Branco")))
+    monkeypatch.setattr(review_save, "load_boundaries", load)
+    return calls
+
+
+def _save_with_steps(h, alert_id):
+    steps = []
+    h.s.actual_alert_id.set(alert_id)
+    analysis = _analysis()
+    alert = capture_alert(analysis, WIDGETS, h.s)
+    wrote = export._save_attributes(WIDGETS, h.s, analysis, h.ctx, alert=alert,
+                                    on_fetch=lambda: steps.append("fetch"))
+    return wrote, steps
+
+
+def test_the_first_fetch_shows_a_step_only_while_the_file_is_missing(tmp_path, monkeypatch):
+    h = _setup(tmp_path, monkeypatch)
+    _cached_lookups(monkeypatch)
+    assert _save_with_steps(h, 0) == (True, ["fetch"])
+    assert _save_with_steps(h, 1) == (True, [])  # unnamed too, but the file is there now
+    assert _stored(h)["admin1"].tolist()[:2] == ["Brasil", "Brasil"]
+
+
+def test_a_review_copy_save_caches_the_boundaries_in_the_copy(tmp_path, monkeypatch):
+    h = _setup(tmp_path, monkeypatch, copy_of="ana", alerts=_alerts(evaluator=["ana"] * 4))
+    calls = _cached_lookups(monkeypatch)
+    wrote, _ = _save(h, 0)
+    pdir = h.s.project_dir
+    assert wrote is True and calls == [pdir]
+    assert _stored(h)["admin1"].iloc[0] == "Brasil"
+    assert admin_boundaries_path(pdir, h.s.project.value.aoi.digest).is_file()
 
 
 # ---- groups -----------------------------------------------------------------

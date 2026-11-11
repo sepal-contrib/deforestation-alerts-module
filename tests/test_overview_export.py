@@ -159,7 +159,7 @@ def test_a_click_writes_the_scoped_file_and_links_the_tile(data_root, feedback):
     join()
 
     path = folder / f"{NAME}_confirmed.gpkg"
-    assert path.exists() and len(gpd.read_file(path)) == 1
+    assert path.exists() and len(gpd.read_file(path, layer=path.stem)) == 1
     assert not list(folder.glob("*.part"))
     tile = card.tiles["gpkg"]
     assert tile.path == str(path) and tile.disabled is False and tile.warning is None
@@ -187,7 +187,7 @@ def test_a_click_writes_the_growth_columns_on_the_worker(data_root, feedback):
     card.tiles["gpkg"].fire_event("click", None)
     join()
 
-    back = gpd.read_file(folder / f"{NAME}_confirmed.gpkg")
+    back = gpd.read_file(folder / f"{NAME}_confirmed.gpkg", layer=f"{NAME}_confirmed")
     assert list(back["kind"]) == ["growth"] and list(back["grows_from"]) == ["a#1@r;b#2@r"]
     assert errors == [] and seen and seen[0] is not threading.main_thread()
 
@@ -246,7 +246,7 @@ def test_a_file_older_than_the_store_is_out_of_date(data_root, feedback):
 
     assert tile.path == str(old) and tile.warning is None
     assert card.update_btns["gpkg"].viz is False
-    assert len(gpd.read_file(old)) == 1  # rewritten from the alerts
+    assert len(gpd.read_file(old, layer=old.stem)) == 1  # rewritten from the alerts
 
 
 def test_a_failed_update_keeps_the_old_file(data_root, feedback, monkeypatch):
@@ -326,7 +326,7 @@ def test_the_export_labels_current_questions_and_drops_deleted_ones(data_root, f
     card.tiles["gpkg"].fire_event("click", None)
     join()
 
-    out = gpd.read_file(folder / f"{NAME}_confirmed.gpkg")
+    out = gpd.read_file(folder / f"{NAME}_confirmed.gpkg", layer=f"{NAME}_confirmed")
     assert out["description"][0] == questions_mod.label(default_questions()[0], "logging, roads")
     assert "q_gone" not in out.columns
     assert errors == []

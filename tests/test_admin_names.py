@@ -1,5 +1,6 @@
 """GAUL 2024 boundaries cached per project and joined to alerts locally."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import geopandas as gpd
@@ -92,7 +93,7 @@ def test_failed_fetch_writes_no_file(tmp_path):
 
 def test_failed_write_leaves_no_temp_file(tmp_path, monkeypatch):
     def broken_to_file(self, path, **kwargs):
-        open(path, "wb").write(b"half")
+        Path(path).write_bytes(b"half")
         raise OSError("disk full")
     monkeypatch.setattr(gpd.GeoDataFrame, "to_file", broken_to_file)
     fetch, _ = _counting_fetch()
@@ -130,14 +131,38 @@ def test_concurrent_loads_fetch_once(tmp_path):
     assert len(calls) == 1
 
 
+def test_a_slow_fetch_does_not_block_another_project(tmp_path):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    def blocked_fetch(bounds):
+        started.set()
+        release.wait(5)
+        return _boundaries()
+    fetch, _ = _counting_fetch()
+    an.load_boundaries(tmp_path / "b", _aoi("b"), fetch=fetch)  # B's file exists
+    a = threading.Thread(target=an.load_boundaries, args=(tmp_path / "a", _aoi("a")),
+                         kwargs={"fetch": blocked_fetch})
+    a.start()
+    try:
+        assert started.wait(5)
+        done = []
+        b = threading.Thread(target=lambda: done.append(an.load_boundaries(tmp_path / "b", _aoi("b"))))
+        b.start()
+        b.join(2)
+        assert done, "project B waited on project A's fetch"
+    finally:
+        release.set()
+        a.join()
+
+
 def test_path_helper():
-    from pathlib import Path
     p = admin_boundaries_path(Path("/p"), "abc/def")
     assert p.parent == Path("/p/admin") and p.name.startswith("gaul2024_l2_") and p.suffix == ".gpkg"
 
 
 def test_asset_digests_with_a_shared_prefix_get_different_paths():
-    from pathlib import Path
     one, two = "asset:projects/ee-user/assets/aoi_one", "asset:projects/ee-user/assets/aoi_two"
     assert admin_boundaries_path(Path("/p"), one) != admin_boundaries_path(Path("/p"), two)
     assert admin_boundaries_path(Path("/p"), one) == admin_boundaries_path(Path("/p"), one)
