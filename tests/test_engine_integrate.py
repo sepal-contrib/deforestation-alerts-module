@@ -182,6 +182,16 @@ def _job(p, pdir, period, params):
 
 
 @_LONLAT_CENTROID
+def test_integrate_writes_detected_area(ready_project):
+    """The cluster's area is kept beside the reviewed ``area_ha`` (critique task 8)."""
+    p, pdir = ready_project
+    res = integrate.run_integration(_job(p, pdir, JAN, AlertSetParams(min_size_ha=0.1)))
+    stored = gpd.read_parquet(pdir / res.alert_set.store_rel_path)
+    assert len(stored) == 2
+    assert list(stored["detected_area_ha"]) == list(stored["area_ha"])
+
+
+@_LONLAT_CENTROID
 def test_run_integration_end_to_end(ready_project):
     p, pdir = ready_project
     params = AlertSetParams(min_size_ha=0.1, sorting=1, max_alerts=1)  # keep only the bigger alert
@@ -1119,7 +1129,8 @@ def test_first_period_store_has_empty_growth_columns(ready_project):
 
 
 _STORE_COLUMNS_BEFORE_GROWTH = [
-    "geometry", "alert_type_unique", "count", "alert_date_min", "alert_date_max", "area_ha", "bounding_box", "point",
+    "geometry", "alert_type_unique", "count", "alert_date_min", "alert_date_max", "area_ha", "detected_area_ha",
+    "bounding_box", "point",
     "status", "alert_sources", "before_img", "before_img_info", "after_img", "after_img_info",
     "before_radar_img", "before_radar_img_info", "after_radar_img", "after_radar_img_info", "alert_polygon",
     "description", "reviewed_by", "reviewed_at", "admin1", "admin2", "admin3", "alert_id", "set_id",

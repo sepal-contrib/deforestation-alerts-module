@@ -292,12 +292,20 @@ def polygon_area_ha(geom, crs=None, *, source="EPSG:4326") -> float:
     return float(series.to_crs(crs or series.estimate_utm_crs()).area.iloc[0]) / 10_000.0
 
 
+def _number(gdf, column, p) -> float:
+    value = gdf[column].iloc[p] if column in gdf.columns else None
+    return pd.to_numeric(pd.Series([value], dtype=object), errors="coerce").iloc[0]
+
+
 def own_area(gdf, p, crs=None) -> float:
-    """The row's Integrate area (§4.3): its stored ``area_ha`` while that is
+    """The row's Integrate area (§4.3): its ``detected_area_ha`` when positive,
+    else (a store from before that column) its stored ``area_ha`` while that is
     still Integrate's (no drawing stored, a positive number), else the area
     of its Integrate geometry in ``crs``."""
-    stored = gdf["area_ha"].iloc[p] if "area_ha" in gdf.columns else None
-    stored = pd.to_numeric(pd.Series([stored], dtype=object), errors="coerce").iloc[0]
+    detected = _number(gdf, store_schema.DETECTED_AREA, p)
+    if pd.notna(detected) and detected > 0:
+        return float(detected)
+    stored = _number(gdf, "area_ha", p)
     drawn = gdf["alert_polygon"].iloc[p] if "alert_polygon" in gdf.columns else None
     if not _is_geometry(drawn) and pd.notna(stored) and stored > 0:
         return float(stored)

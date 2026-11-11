@@ -162,3 +162,98 @@ def test_export_has_growth_columns(data_root, fmt):
     assert back["kind"].iloc[0] == "growth"
     assert back["grows_from"].iloc[0] == "a#1@r;b#2@r"
     assert back["history_area_ha"].iloc[0] == 2.5
+
+
+# ---- reviewed geometry, detected beside it (critique 2026-11-11, task 8) ----
+_STEM = "alerts_glad-l_2026-01-01_2026-06-12"
+
+
+def _reviewed_store():
+    """Three alerts: 1 drawn and grouping 2 (stored area 0), 3 alone with no drawing."""
+    from shapely.geometry import box
+
+    clusters = [box(0, 0, 1, 1), box(2, 0, 3, 1), box(4, 0, 5, 1)]
+    gdf = gpd.GeoDataFrame(
+        {"area_ha": [7.0, 0.0, 3.0], "detected_area_ha": [1.0, 2.0, 3.0],
+         "status": ["Confirmed", "Confirmed", "Not reviewed"],
+         "alert_id": [1, 2, 3], "set_id": ["s"] * 3},
+        geometry=gpd.GeoSeries(clusters, crs="EPSG:4326"),
+    )
+    gdf["bounding_box"] = gdf.geometry.envelope
+    gdf["point"] = gdf.geometry.centroid
+    gdf["alert_polygon"] = gpd.GeoSeries([box(0, 0, 3, 2), None, None], crs="EPSG:4326")
+    gdf["review_group"] = pd.array([1, 1, pd.NA], dtype="Int64")
+    return gdf
+
+
+def _export(gdf, data_root, fmt, scope="all"):
+    return export_alerts_gdf(gdf, data_root / "recipe_a", fmt, ["GLAD-L"], "2026-01-01", "2026-06-12", scope)
+
+
+def test_set_export_uses_the_drawing(data_root):
+    gdf = _reviewed_store()
+    back = gpd.read_file(_export(gdf, data_root, "gpkg"), layer=_STEM)
+    assert back.geometry.iloc[0].equals(gdf["alert_polygon"].iloc[0])
+    assert back["geometry_source"].iloc[0] == "drawn"
+    assert back["area_ha"].iloc[0] == 7.0 and back["detected_area_ha"].iloc[0] == 1.0
+
+
+def test_set_export_never_a_box(data_root):
+    from shapely.geometry import Polygon as P
+
+    gdf = _reviewed_store()
+    gdf.loc[2, "geometry"] = P([(4, 0), (5, 0), (4, 1)])  # a triangle: its box differs
+    back = gpd.read_file(_export(gdf, data_root, "gpkg"), layer=_STEM)
+    assert back.geometry.iloc[2].equals(gdf.geometry.iloc[2])
+    assert back["geometry_source"].iloc[2] == "detected"
+
+
+def test_set_export_drawn_group_members_have_no_shape(data_root):
+    back = gpd.read_file(_export(_reviewed_store(), data_root, "gpkg"), layer=_STEM)
+    member = back.geometry.iloc[1]
+    assert member is None or member.is_empty
+    assert back["geometry_source"].iloc[1] == "group" and back["area_ha"].iloc[1] == 0
+    assert back["review_group"].iloc[1] == 1 and back["detected_area_ha"].iloc[1] == 2.0
+
+
+def test_set_export_member_scope_keeps_the_rule(data_root):
+    """The rule is decided over the whole store: a scope without the main still says ``group``."""
+    gdf = _reviewed_store()
+    gdf.loc[0, "status"] = "False positive"
+    back = gpd.read_file(_export(gdf, data_root, "gpkg", "confirmed"), layer=f"{_STEM}_confirmed")
+    assert list(back["geometry_source"]) == ["group"]
+
+
+def test_set_export_has_a_detected_layer(data_root):
+    gdf = _reviewed_store()
+    detected = gpd.read_file(_export(gdf, data_root, "gpkg"), layer=f"{_STEM}_detected")
+    assert list(detected.columns) == ["alert_id", "set_id", "detected_area_ha", "geometry"]
+    assert all(a.equals(b) for a, b in zip(detected.geometry, gdf.geometry))
+    assert list(detected["detected_area_ha"]) == [1.0, 2.0, 3.0]
+
+
+def test_csv_has_reviewed_and_detected_geometry(data_root):
+    from shapely import wkt
+
+    gdf = _reviewed_store()
+    back = pd.read_csv(_export(gdf, data_root, "csv"), keep_default_na=False)
+    columns = list(back.columns)
+    assert columns[columns.index("geometry") + 1] == "detected_geometry"
+    assert wkt.loads(back["geometry"].iloc[0]).equals(gdf["alert_polygon"].iloc[0])
+    assert wkt.loads(back["detected_geometry"].iloc[0]).equals(gdf.geometry.iloc[0])
+    assert back["geometry"].iloc[1] == "" and back["geometry_source"].iloc[1] == "group"
+    assert list(back["detected_area_ha"]) == [1.0, 2.0, 3.0]
+
+
+@pytest.mark.parametrize("fmt", ["gpkg", "csv"])
+def test_set_export_of_an_old_store(data_root, fmt):
+    """No ``detected_area_ha``, 0-based ids, no stamps: the detected area is ``own_area``'s."""
+    gdf = _reviewed_store().drop(columns=["detected_area_ha"])
+    gdf["alert_id"] = [0, 1, 2]
+    gdf["review_group"] = pd.array([0, 0, pd.NA], dtype="Int64")
+    path = _export(gdf, data_root, fmt)
+    back = gpd.read_file(path, layer=_STEM) if fmt == "gpkg" else pd.read_csv(path, keep_default_na=False)
+    assert list(back["geometry_source"]) == ["drawn", "group", "detected"]
+    area = back["detected_area_ha"]
+    assert area.iloc[0] > 10_000 and area.iloc[1] > 10_000  # measured: a degree square is ~1.2 Mha
+    assert area.iloc[2] == 3.0  # the stored Integrate area, no drawing

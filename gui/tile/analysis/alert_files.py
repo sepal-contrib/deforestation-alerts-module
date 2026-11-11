@@ -10,15 +10,18 @@ from typing import Optional
 
 import geopandas as gpd
 import pandas as pd
+import shapely
 from pysepal.i18n import current_locale
+from shapely.geometry.base import BaseGeometry
 
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
-from deforestation_alerts.project.review_groups import group_record, number
+from deforestation_alerts.project.review_groups import group_of, group_record, number
 from deforestation_alerts.project.review_status import CONFIRMED, VERDICT_LABEL_KEYS, is_reviewed
-from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
+from deforestation_alerts.project.store_schema import BELOW_MIN, DETECTED_AREA, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts import local_files
+from deforestation_alerts.scripts.alert_export import detected_area
 from deforestation_alerts.scripts.gee_progress import geedim_tile_progress
 from deforestation_alerts.scripts.mosaics_helper import add_files_to_zip
 from deforestation_alerts.scripts.report_builder import generate_deforestation_report_with_word_template
@@ -224,33 +227,44 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
     # A grouped alert is described as its group (spec §9): the main's row with
     # the summed area, plus ``group_size`` / ``group_alerts``, and the group's
     # outline as the one geometry. A single alert is its own row.
+    # The geometry is what the reviewer approved: the drawing, else the
+    # cluster (never its box); the cluster (the group's union) goes beside it.
     selected_element, outline = group_record(alertas_gdf, actual_alert_id)
     grouped = selected_element["group_size"] > 1
+    main, members = group_of(alertas_gdf, actual_alert_id)
+    rows = [main, *members]
+    drawn = selected_element.get("alert_polygon")
+    selected_element[DETECTED_AREA] = float(detected_area(alertas_gdf.iloc[rows]).sum())
+    selected_element["geometry_source"] = "drawn" if isinstance(drawn, BaseGeometry) and not drawn.is_empty \
+        else "detected"
+    cluster = shapely.union_all(alertas_gdf.geometry.iloc[rows].to_numpy()) if grouped \
+        else alertas_gdf.geometry.iloc[main]
     if grouped:
         selected_element["alert_polygon"] = outline
     # The answers in the language of the download (stored as codes); the
     # columns of deleted questions are left out.
+    extra = [c for c in (DETECTED_AREA, "group_size", "group_alerts", "geometry_source") if c not in alertas_gdf.columns]
     selected_gdf = questions.with_labels(
-        gpd.GeoDataFrame([selected_element], columns=[*alertas_gdf.columns, "group_size", "group_alerts"]),
+        gpd.GeoDataFrame([selected_element], columns=[*alertas_gdf.columns, *extra]),
         alert.questions or [],
     )
     active = (
         "alert_polygon"
         if not selected_gdf["alert_polygon"].isnull().all()
-        else "bounding_box"
+        else "geometry"
     )
     selected_gdf.set_geometry(active, inplace=True)
     # PRE-EXISTING BUG, fixed here because the migrated path is otherwise
     # untestable: ``alerts_gdf`` carries three geometry columns (polygon +
     # ``bounding_box`` + ``point``), and GPKG accepts exactly one — so
     # ``to_file`` raised "GeoDataFrame contains multiple geometry columns" on
-    # EVERY download. Drop the inactive ones, the same way ``alert_export`` does
-    # for its single-geometry formats; the report only reads attribute columns.
+    # EVERY download. Drop the inactive ones (a one-row frame may hold them as
+    # object columns), as ``alert_export`` does; the report only reads attributes.
     selected_gdf = selected_gdf.drop(
         columns=[
             c
             for c in selected_gdf.columns
-            if c != active and selected_gdf[c].dtype == "geometry"
+            if c != active and (c in ("bounding_box", "point") or selected_gdf[c].dtype == "geometry")
         ]
     )
     # The growth columns as the main export writes them (spec §6.7): the
@@ -267,8 +281,11 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
     with local_files.scratch_dir() as stage:
         gpkg_local = stage / gpkg_dest.name
         selected_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_file(
-            str(gpkg_local), driver="GPKG"
+            str(gpkg_local), driver="GPKG", layer=gpkg_local.stem
         )
+        keep = [c for c in ("alert_id", "set_id", DETECTED_AREA) if c in selected_gdf.columns]
+        gpd.GeoDataFrame(selected_gdf[keep], geometry=[cluster], crs="EPSG:4326").to_file(
+            str(gpkg_local), driver="GPKG", layer=f"{gpkg_local.stem}_detected", mode="a")
 
         # Before/after image GeoTIFF (downloaded only if not already in the set
         # folder). Built via the shared helper so it resolves to the same file

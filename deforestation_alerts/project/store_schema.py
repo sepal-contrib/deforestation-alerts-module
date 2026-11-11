@@ -5,6 +5,10 @@ use it."""
 #: What ``engine.vectorize.vectorize_alerts`` writes for each alert cluster.
 VECTOR_COLUMNS = ("geometry", "alert_type_unique", "count", "alert_date_min", "alert_date_max", "area_ha")
 
+#: The cluster's own area, as Integrate measured it (``area_ha`` at Integrate);
+#: a review never writes it. Older stores lack it: ``review_groups.own_area``.
+DETECTED_AREA = "detected_area_ha"
+
 #: The shapes stored beside the active geometry (the alert's polygon): its
 #: envelope, its centroid and the polygon a reviewer drew. Parquet keeps
 #: only one geometry column, so the store writes these as WKB.
@@ -45,7 +49,7 @@ EVALUATOR = "evaluator"
 
 #: Every column a store carries before its attribute layers and its questions:
 #: ``alert_table.convert_to_geopandas`` on the vectorizer's output, plus the ids.
-STORE_COLUMNS = (*VECTOR_COLUMNS, "bounding_box", "point", "status", "alert_sources",
+STORE_COLUMNS = (*VECTOR_COLUMNS, DETECTED_AREA, "bounding_box", "point", "status", "alert_sources",
                  "before_img", "before_img_info", "after_img", "after_img_info", *RADAR_IMAGE_COLUMNS,
                  "alert_polygon", "description", *REVIEW_STAMP, "admin1", "admin2", "admin3", *ID_COLUMNS)
 #: Carried by a merge with the winning row, never compared: a re-save moves them.

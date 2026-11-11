@@ -257,7 +257,7 @@ def generate_deforestation_report_with_word_template(
     """
     # Load Word template
     doc = Document(template_path)
-    geodataframe = gpd.read_file(geodataframe_path)
+    geodataframe = gpd.read_file(geodataframe_path, layer=0)  # the reviewed layer; ``_detected`` follows it
 
     # The first row's attributes from the GeoDataFrame (one alert per file)
     attributes = row_attributes(geodataframe.iloc[0])

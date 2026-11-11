@@ -418,7 +418,7 @@ def test_a_group_download_without_a_drawing_is_the_union_of_its_alerts(download_
     assert back.geometry.iloc[0].equals(gdf.geometry.union_all())
 
 
-def test_a_single_download_is_unchanged_but_for_two_columns(download_ctx):
+def test_a_single_download_is_unchanged_but_for_four_columns(download_ctx):
     import geopandas as gpd
 
     ctx = download_ctx
@@ -433,10 +433,53 @@ def test_a_single_download_is_unchanged_but_for_two_columns(download_ctx):
     assert back.iloc[0]["grows_from"] == "sep#4@20261002080000000000;sep#9@20261002080000000000"
     assert back.iloc[0]["group_size"] == 1 and back.iloc[0]["group_alerts"] == "1"
     assert back.iloc[0]["area_ha"] == pytest.approx(1.25)
-    assert back.geometry.iloc[0].equals(gdf["bounding_box"].iloc[0])  # no drawing: the box, as before
-    assert sorted(set(back.columns) - {"group_size", "group_alerts"}) == sorted(
+    assert back.geometry.iloc[0].equals(gdf.geometry.iloc[0])  # no drawing: the cluster
+    assert sorted(set(back.columns) - {"group_size", "group_alerts", "geometry_source", "detected_area_ha"}) == sorted(
         set(gpd.GeoDataFrame(gdf).drop(columns=["geometry", "grows_from_auto", "below_min"], errors="ignore").columns)
         - {"bounding_box"} | {"geometry"})
+
+
+def test_alert_file_is_the_cluster_not_the_box(download_ctx):
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+
+    ctx = download_ctx
+    gdf = ctx.app_state.alerts_gdf.value.copy()
+    gdf.geometry = [Polygon([(0, 0), (1, 0), (0, 1)])]  # a triangle: its box differs
+    gdf["bounding_box"] = gdf.geometry.envelope
+    ctx.app_state.alerts_gdf.value = gdf
+
+    _run(ctx)
+
+    path = ctx.folder / "alert_1.gpkg"
+    back = gpd.read_file(path, layer="alert_1")
+    assert back.geometry.iloc[0].equals(gdf.geometry.iloc[0])
+    assert back.iloc[0]["geometry_source"] == "detected" and back.iloc[0]["detected_area_ha"] == pytest.approx(1.25)
+    detected = gpd.read_file(path, layer="alert_1_detected")
+    assert list(detected.columns) == ["alert_id", "detected_area_ha", "geometry"]
+    assert detected.geometry.iloc[0].equals(gdf.geometry.iloc[0])
+
+
+def test_group_file_keeps_the_outline(download_ctx):
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    ctx = download_ctx
+    drawing = box(0, 0, 5, 1)
+    gdf = _grouped(ctx, drawing)
+    gdf["detected_area_ha"] = [1.0, 2.0, 4.0]
+    gdf["area_ha"] = [9.0, 0.0, 0.0]
+
+    _run(ctx)
+
+    path = ctx.folder / "alert_1.gpkg"
+    back = gpd.read_file(path, layer="alert_1")
+    assert back.geometry.iloc[0].equals(drawing)
+    assert back.iloc[0]["geometry_source"] == "drawn" and back.iloc[0]["detected_area_ha"] == 7.0
+    assert back.iloc[0]["area_ha"] == 9.0
+    detected = gpd.read_file(path, layer="alert_1_detected")
+    assert detected.geometry.iloc[0].equals(gdf.geometry.union_all())
+    assert detected.iloc[0]["detected_area_ha"] == 7.0
 
 
 def test_the_report_fills_group_size_and_group_alerts(download_ctx):

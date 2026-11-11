@@ -3,6 +3,7 @@
 import pandas as pd
 
 from deforestation_alerts.project.review_status import NOT_REVIEWED
+from deforestation_alerts.project.store_schema import DETECTED_AREA
 
 from deforestation_alerts.scripts.alert_codes import format_list, get_unique_alerts
 
@@ -20,6 +21,9 @@ def convert_to_geopandas(vectorized_gdf, digit_map):
     in ``alert_sources``: see ``alert_codes.get_unique_alerts``.
     """
     gdf = vectorized_gdf.copy()
+    if "area_ha" not in gdf.columns:
+        gdf["area_ha"] = pd.Series([], dtype="float")
+    gdf[DETECTED_AREA] = gdf["area_ha"]  # the cluster's area; a review changes only area_ha
 
     # geometry stays the true polygon; derive back-compat shapes
     gdf["bounding_box"] = gdf.geometry.envelope          # D2 back-compat bbox
@@ -37,8 +41,6 @@ def convert_to_geopandas(vectorized_gdf, digit_map):
         gdf[f"{side}_radar_img"] = pd.Series([], dtype="str")
         gdf[f"{side}_radar_img_info"] = pd.Series([], dtype="object")
     gdf["alert_polygon"] = pd.Series([], dtype="object")
-    if "area_ha" not in gdf.columns:
-        gdf["area_ha"] = pd.Series([], dtype="float")
     gdf["description"] = pd.Series([], dtype="str")
     gdf["reviewed_by"] = pd.Series([], dtype="str")
     gdf["reviewed_at"] = pd.Series([], dtype="str")
