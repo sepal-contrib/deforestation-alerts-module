@@ -15,7 +15,7 @@ from pysepal.i18n import current_locale
 from deforestation_alerts.errors import KeyedError
 from deforestation_alerts.project.growth import links_of
 from deforestation_alerts.project.questions import column
-from deforestation_alerts.project.review_groups import group_record
+from deforestation_alerts.project.review_groups import group_record, number
 from deforestation_alerts.project.review_status import CONFIRMED, VERDICT_LABEL_KEYS, is_reviewed
 from deforestation_alerts.project.store_schema import BELOW_MIN, GROWS_FROM, GROWS_FROM_AUTO
 from deforestation_alerts.scripts import local_files
@@ -259,9 +259,11 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
         selected_gdf[GROWS_FROM] = [";".join(links_of(cell)) for cell in selected_gdf[GROWS_FROM]]
     selected_gdf = selected_gdf.drop(columns=[c for c in (GROWS_FROM_AUTO, BELOW_MIN) if c in selected_gdf.columns])
 
-    gpkg_dest = folder / f"alert_{actual_alert_id}.gpkg"
-    zip_dest = folder / f"alert_{actual_alert_id}.zip"
-    report_dest = folder / f"alert_{actual_alert_id}.docx"
+    # Files are named by the stored id, the number a person reads; the row is still found by position.
+    n = number(alertas_gdf, actual_alert_id)
+    gpkg_dest = folder / f"alert_{n}.gpkg"
+    zip_dest = folder / f"alert_{n}.zip"
+    report_dest = folder / f"alert_{n}.docx"
     with local_files.scratch_dir() as stage:
         gpkg_local = stage / gpkg_dest.name
         selected_gdf.set_crs(epsg="4326", allow_override=True, inplace=True).to_file(
@@ -274,7 +276,7 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
         on_tiles = tile_progress_reporter(task) if task is not None else None
         area = getattr(alert, "image_area", "normal")
         with geedim_tile_progress(on_tiles):
-            image_local = stage_alert_image(folder, actual_alert_id, *picked, alert.grid, area)
+            image_local = stage_alert_image(folder, n, *picked, alert.grid, area)
             radar_local, missing, image_text = stage_report_images(alert, folder, area)
         if task is not None:
             task.set_progress(None)  # zip + report: back to indeterminate
@@ -286,7 +288,7 @@ def build_alert_files(alert, folder, template=None, *, task=None, gif=None):
         if gif is not None and saved_status(alertas_gdf, actual_alert_id) == CONFIRMED:
             try:
                 gif_local = gif_mod.build_gif(
-                    gif, Path(alert_gif_name(str(folder), actual_alert_id, gif.before_info, gif.after_info)))
+                    gif, Path(alert_gif_name(str(folder), n, gif.before_info, gif.after_info)))
             except Exception:  # noqa: BLE001 - logged; the build goes on without it
                 logger.exception("Analysis: the GIF for the zip could not be made")
                 gif_warning = True

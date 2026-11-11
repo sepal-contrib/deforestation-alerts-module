@@ -326,7 +326,7 @@ def _run_cnn_model(
     with geedim_tile_progress(on_tiles):
         image_local = stage_alert_image(
             app_tile_model.recipe_folder_path,
-            alert.alert_id,
+            review_groups.number(alert.alerts, alert.alert_id),
             alert.before_info,
             alert.after_info,
             alert.before_image,

@@ -1174,7 +1174,10 @@ def test_cnn_composite_download_drives_the_progress_ring(monkeypatch):
         def set_progress(self, value):
             order.append(value)
 
+    from tests.conftest import _alerts_gdf
+
     app_state = AppState()
+    app_state.alerts_gdf.value = _alerts_gdf()
     app_state.actual_alert_id.value = 0
     widgets = type("W", (), {"actual_alert_grid": None})()
 

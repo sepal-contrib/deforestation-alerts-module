@@ -86,6 +86,13 @@ def ids(gdf) -> np.ndarray:
     return np.arange(len(gdf), dtype="int64")
 
 
+def number(gdf, position: int) -> int:
+    """The alert number a person reads for the row at ``position``: its stored
+    ``alert_id`` (from 1 since 2026-11-11, from 0 in older sets), or the
+    position in a store without the column."""
+    return int(ids(gdf)[position])
+
+
 def _positions_by_id(gdf) -> dict:
     return {int(i): p for p, i in enumerate(ids(gdf))}
 
@@ -404,7 +411,7 @@ def group_record(gdf, p) -> tuple:
     row: the main's row with the group's summed ``area_ha``, its first and
     last detection dates and its distinct sources (the main's first). A
     single row is itself. Either row carries ``group_size``, ``group_alerts``
-    (the 1-based alert numbers, comma separated) and, in a store with links,
+    (the stored alert ids, ``number``, comma separated) and, in a store with links,
     ``grows_from`` as the main's links joined by ``";"``. The outline is
     ``group_shape``."""
     main, members = group_of(gdf, p)
@@ -423,7 +430,7 @@ def group_record(gdf, p) -> tuple:
     if store_schema.GROWS_FROM in gdf.columns:
         row[store_schema.GROWS_FROM] = ";".join(_links(gdf[store_schema.GROWS_FROM].iloc[main]))
     row["group_size"] = len(rows)
-    row["group_alerts"] = ", ".join(str(q + 1) for q in sorted(rows))
+    row["group_alerts"] = ", ".join(str(n) for n in sorted(ids(gdf)[rows]))
     return row, group_shape(gdf, p)
 
 

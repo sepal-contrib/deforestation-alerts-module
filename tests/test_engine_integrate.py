@@ -191,7 +191,7 @@ def test_run_integration_end_to_end(ready_project):
     assert s.n_alerts == 1 and len(res.alerts) == 1
     assert res.alerts.crs.to_epsg() == 4326
     assert res.alerts.iloc[0]["alert_sources"] == "GLAD-L"
-    assert list(res.alerts["alert_id"]) == [0] and set(res.alerts["set_id"]) == {s.id}
+    assert list(res.alerts["alert_id"]) == [1] and set(res.alerts["set_id"]) == {s.id}
     assert s.fingerprint == fp.fingerprint(fp.set_inputs(p, JAN, ["GLAD-L", "RADD"], params))
     # the footprint holds only the stored alert (the RADD cluster was cut by max_alerts)
     with rasterio.open(pdir / s.footprint_rel_path) as src:
@@ -1049,7 +1049,7 @@ def test_small_growth_cluster_kept_next_to_confirmed_parent(tmp_path):
     _january(p, tmp_path, jan)
     res = _run(p, tmp_path, jan, AlertSetParams(min_size_ha=0.1))  # 10 px minimum
     stored = gpd.read_parquet(tmp_path / res.alert_set.store_rel_path)
-    link = f"{dec_set.id}#0@{run_id_of(dec_set)}"
+    link = f"{dec_set.id}#1@{run_id_of(dec_set)}"
     assert len(stored) == 1 and bool(stored.iloc[0]["below_min"])
     assert list(stored.iloc[0]["grows_from_auto"]) == [link] == list(stored.iloc[0]["grows_from"])
     assert res.n_growth == 1 and res.n_growth_small == 1

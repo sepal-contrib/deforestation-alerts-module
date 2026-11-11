@@ -4,6 +4,7 @@ screen at the click (``state.capture``), pinned or following, staged as it is
 
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from tests.test_alert_gif_job import _info
@@ -22,7 +23,7 @@ def staged(monkeypatch, tmp_path):
 
 
 def _alert(before=None, after=None, pinned=(False, False), images=("img_b", "img_a")):
-    return SimpleNamespace(alert_id=3, grid="grid", before_radar_info=before, after_radar_info=after,
+    return SimpleNamespace(alerts=pd.DataFrame({"alert_id": [1, 2, 3, 4]}), alert_id=3, grid="grid", before_radar_info=before, after_radar_info=after,
                            before_radar_image=images[0], after_radar_image=images[1],
                            radar_pinned={"before": pinned[0], "after": pinned[1]})
 

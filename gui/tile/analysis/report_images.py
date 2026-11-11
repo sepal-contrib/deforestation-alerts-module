@@ -7,6 +7,7 @@ from the optical pair, as they always did. Runs on the build's worker.
 from pathlib import Path
 from typing import Optional
 
+from deforestation_alerts.project.review_groups import number
 from gui.i18n import t
 from gui.tile.analysis.paths import stage_alert_image
 
@@ -48,7 +49,7 @@ def stage_report_images(alert, folder, area="normal") -> tuple[Optional[Path], d
     radar = None
     if present:
         (before, image_b), (after, image_a) = present[0], present[-1]
-        radar = stage_alert_image(folder, alert.alert_id, before, after, image_b, image_a, alert.grid, area)
+        radar = stage_alert_image(folder, number(alert.alerts, alert.alert_id), before, after, image_b, image_a, alert.grid, area)
     missing = {}
     for image, markers in zip(images, _RADAR_MARKERS):
         if image is None:

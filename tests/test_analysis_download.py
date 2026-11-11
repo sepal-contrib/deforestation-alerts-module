@@ -403,7 +403,7 @@ def test_a_group_download_is_one_feature_with_the_group_outline(download_ctx):
     back = gpd.read_file(ctx.folder / "alert_2.gpkg")
     assert len(back) == 1 and back.crs.to_epsg() == 4326
     assert back.iloc[0]["area_ha"] == pytest.approx(3.75)
-    assert back.iloc[0]["group_size"] == 3 and back.iloc[0]["group_alerts"] == "1, 2, 3"
+    assert back.iloc[0]["group_size"] == 3 and back.iloc[0]["group_alerts"] == "0, 1, 2"  # no alert_id: the positions
     assert back.geometry.iloc[0].equals(drawing)
 
 
@@ -430,7 +430,7 @@ def test_a_single_download_is_unchanged_but_for_two_columns(download_ctx):
 
     back = gpd.read_file(ctx.folder / "alert_0.gpkg")
     assert back.iloc[0]["grows_from"] == "sep#4@20261002080000000000;sep#9@20261002080000000000"
-    assert back.iloc[0]["group_size"] == 1 and back.iloc[0]["group_alerts"] == "1"
+    assert back.iloc[0]["group_size"] == 1 and back.iloc[0]["group_alerts"] == "0"
     assert back.iloc[0]["area_ha"] == pytest.approx(1.25)
     assert back.geometry.iloc[0].equals(gdf["bounding_box"].iloc[0])  # no drawing: the box, as before
     assert sorted(set(back.columns) - {"group_size", "group_alerts"}) == sorted(
@@ -452,7 +452,7 @@ def test_the_report_fills_group_size_and_group_alerts(download_ctx):
     result = _run(ctx)
 
     text = "\n".join(p.text for p in docx.Document(result["report_path"]).paragraphs)
-    assert "GROUP 3 / 1, 2, 3" in text
+    assert "GROUP 3 / 0, 1, 2" in text
 
 
 # ---------------------------------------------------------------------------

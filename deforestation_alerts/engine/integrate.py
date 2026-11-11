@@ -421,7 +421,7 @@ def run_integration(job: IntegrationJob, *, on_step: Optional[Callable[[str], No
         alerts = convert_to_geopandas(vgdf.to_crs(epsg=4326), digit_map=digit_map)
         alerts[GROWS_FROM] = [list(links) for links in alerts[GROWS_FROM_AUTO]]
         alerts[BELOW_MIN] = alerts[BELOW_MIN].astype(bool)
-        alerts["alert_id"] = range(len(alerts))
+        alerts["alert_id"] = range(1, len(alerts) + 1)  # the number a person reads; older sets start at 0
         alerts["set_id"] = sid
         if layers:
             # One export region serves every Earth Engine layer; a GeoTIFF needs none.

@@ -340,7 +340,7 @@ def test_group_shape_is_the_drawing_else_the_union():
     assert rg.group_shape(gdf, 2).equals(DRAWING)
 
 
-def test_group_record_sums_the_group_and_numbers_its_alerts_from_one():
+def test_group_record_sums_the_group_and_lists_its_stored_ids():
     gdf = _alerts(4, statuses=["Confirmed"] * 3 + [NR], groups=[101] * 3 + [None])
     gdf["alert_sources"] = ["GLAD-L", "RADD and GLAD-L", "RADD, GLAD-L and GLAD-S2", "GLAD-S2"]
     gdf["grows_from"] = pd.Series([[], ["s#1@r", "s#2@r"], [], []], dtype="object")
@@ -350,10 +350,10 @@ def test_group_record_sums_the_group_and_numbers_its_alerts_from_one():
     assert row["alert_date_max"] == pytest.approx(2026.022)
     assert row["alert_sources"] == "RADD, GLAD-L and GLAD-S2"  # the main's first, each once
     assert row["grows_from"] == "s#1@r;s#2@r"
-    assert row["group_size"] == 3 and row["group_alerts"] == "1, 2, 3"
+    assert row["group_size"] == 3 and row["group_alerts"] == "100, 101, 102"
     assert outline.equals(shapely.union_all(gdf.geometry.iloc[[0, 1, 2]].to_numpy()))
     row, outline = rg.group_record(gdf, 3)
-    assert row["group_size"] == 1 and row["group_alerts"] == "4" and row["grows_from"] == ""
+    assert row["group_size"] == 1 and row["group_alerts"] == "103" and row["grows_from"] == ""
     assert outline.equals(gdf.geometry.iloc[3])
 
 
