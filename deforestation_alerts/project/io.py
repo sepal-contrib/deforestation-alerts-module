@@ -142,9 +142,10 @@ def list_projects(root: Optional[Path] = None) -> list[ProjectInfo]:
                 except (OSError, ValueError):
                     continue
                 aoi_name = params.get("aoi_name")
+                sources = params.get("selected_alert_sources")
                 infos.append(ProjectInfo(
                     name=folder.name,
-                    n_sources=len(params.get("selected_alert_sources") or []),
+                    n_sources=len(sources) if isinstance(sources, list) else 0,
                     n_periods=1, n_sets=1, updated_at=updated,
                     aoi_name=aoi_name if isinstance(aoi_name, str) else None,
                     legacy=True,

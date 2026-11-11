@@ -125,6 +125,14 @@ def test_picks_rewritten_unknown_kept(tmp_path):
     assert gdf["after_img"].iloc[0] == planet
 
 
+def test_blank_picks_take_text(tmp_path):
+    # read_csv makes an all-blank column float: a review Save then writes a pick's text into it
+    gdf, _ = _read(tmp_path)
+    for col in ("before_img", "after_img"):
+        assert gdf[col].dtype == object and gdf[col].isna().all()
+        gdf.loc[0, col] = "Landsat 2026-10-07 "
+
+
 def test_frame_survives_the_store(tmp_path):
     gdf, _ = _read(tmp_path)
     gdf["set_id"] = "s"

@@ -109,6 +109,50 @@ def test_late_failure_removes_written_files(tmp_path, monkeypatch):
     assert sorted(os.listdir(folder)) == V1_FILES
 
 
+def test_reload_failure_leaves_nothing(tmp_path, monkeypatch):
+    folder = write_recipe(tmp_path / "r")
+
+    def fail(*a, **k):
+        raise ValueError("manifest does not validate")
+
+    monkeypatch.setattr(io, "load_project", fail)
+    with pytest.raises(V1MigrationError):
+        convert(folder, _resolve)
+    assert sorted(os.listdir(folder)) == V1_FILES and is_v1_recipe(folder)
+
+
+def test_existing_aoi_file_is_refused(tmp_path):
+    folder = write_recipe(tmp_path / "r")
+    (folder / "aoi.geojson").write_text("mine", encoding="utf-8")
+    with pytest.raises(V1MigrationError) as exc:
+        convert(folder, _resolve)
+    assert exc.value.key == "migrated.err_table"
+    assert (folder / "aoi.geojson").read_text(encoding="utf-8") == "mine"
+    assert sorted(os.listdir(folder)) == sorted([*V1_FILES, "aoi.geojson"])
+
+
+def test_existing_store_is_refused(tmp_path):
+    p, _ = _convert(tmp_path / "a")
+    rel = p.alert_sets[p.active_set].store_rel_path
+    folder = write_recipe(tmp_path / "r")
+    store = folder / rel
+    store.parent.mkdir(parents=True)
+    store.write_bytes(b"mine")
+    with pytest.raises(V1MigrationError) as exc:
+        convert(folder, _resolve)
+    assert exc.value.key == "migrated.err_table" and store.read_bytes() == b"mine"
+    assert not (folder / "aoi.geojson").exists() and not (folder / paths.MANIFEST).exists()
+
+
+def test_late_failure_keeps_an_existing_periods_folder(tmp_path, monkeypatch):
+    folder = write_recipe(tmp_path / "r")
+    (folder / "periods").mkdir()
+    monkeypatch.setattr(io, "save_project", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(V1MigrationError):
+        convert(folder, _resolve)
+    assert sorted(os.listdir(folder)) == sorted([*V1_FILES, "periods"]) and os.listdir(folder / "periods") == []
+
+
 def test_unreadable_table_and_params(tmp_path):
     folder = write_recipe(tmp_path / "r")
     (folder / TABLE_FILE).write_text("", encoding="utf-8")
@@ -167,9 +211,10 @@ def test_ccdc_without_layer_is_noted(tmp_path):
     assert any("CCDC" in n for n in p.migrated_from.notes)
 
 
-def test_bad_layer_is_skipped_with_a_note(tmp_path):
+def test_bad_layer_vis_falls_back_to_defaults(tmp_path):
     p, _ = _convert(tmp_path, aux_layer="users/a/aux", aux_layer_vis="{'bands': 'B4'}")
-    assert "v1 layer" not in p.vis_layers
+    layer = p.vis_layers["v1 layer"]
+    assert layer.asset == "users/a/aux" and layer.bands == [] and (layer.min, layer.max) == (0.0, 1.0)
     assert any("v1 layer" in n for n in p.migrated_from.notes)
 
 

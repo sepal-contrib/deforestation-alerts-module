@@ -1,11 +1,13 @@
 """Opening a version 1 recipe converts it once, under the manifest lock (v1 migration, task 5)."""
 
+import json
 import threading
 import time
 
 import geopandas as gpd
+import pandas as pd
 import pytest
-from shapely.geometry import box
+from shapely.geometry import box, shape
 
 from deforestation_alerts.project import io
 from gui.scripts.v1_open import ensure_converted, resolve_v1_aoi
@@ -78,9 +80,12 @@ def test_empty_drawing_raises():
 
 def test_vector_file_filtered_by_column(tmp_path):
     path = tmp_path / "aoi.gpkg"
-    gpd.GeoDataFrame({"name": ["a", "b"]}, geometry=[box(0, 0, 1, 1), box(5, 5, 6, 6)], crs="EPSG:4326").to_file(path)
+    gpd.GeoDataFrame({"name": ["a", "b"], "when": pd.to_datetime(["2020-01-01", "2021-01-01"])},
+                     geometry=[box(0, 0, 1, 1), box(5, 5, 6, 6)], crs="EPSG:4326").to_file(path)
     fc = resolve_v1_aoi({"aoi_method": "SHAPE", "aoi_vector_json": {"pathname": str(path), "column": "name", "value": "b"}})
-    assert len(fc["features"]) == 1 and fc["features"][0]["properties"]["name"] == "b"
+    assert len(fc["features"]) == 1 and fc["features"][0]["properties"] == {}
+    assert shape(fc["features"][0]["geometry"]).bounds == (5.0, 5.0, 6.0, 6.0)
+    json.dumps(fc)  # a date attribute would not serialise: only the geometry is kept
     all_fc = resolve_v1_aoi({"aoi_method": "SHAPE", "aoi_vector_json": {"pathname": str(path), "column": "ALL", "value": None}})
     assert len(all_fc["features"]) == 2
 

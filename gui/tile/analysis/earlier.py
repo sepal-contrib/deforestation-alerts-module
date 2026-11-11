@@ -32,7 +32,7 @@ import shapely
 
 from deforestation_alerts.engine.fingerprint import earlier_sets
 from deforestation_alerts.project import grouping as grouping_rules
-from deforestation_alerts.project import growth, review_copy, review_groups
+from deforestation_alerts.project import growth, review_groups
 from deforestation_alerts.project.review_status import CONFIRMED, FALSE_POSITIVE
 from gui.i18n import format_date, format_number, t, tn
 from gui.scripts import growth_index
@@ -67,7 +67,7 @@ def has_earlier_sets(p) -> bool:
     holds one set and brings its earlier alerts in the package (spec §6.6):
     there the section always shows, and says when the package has none."""
     s = active_set(p) if p is not None else None
-    if s is not None and review_copy.read_only(p):
+    if s is not None and getattr(p, "review_copy", None) is not None:  # not a converted v1 recipe: no package
         return True
     period = p.periods.get(s.period_id) if s is not None else None
     return period is not None and bool(earlier_sets(p, period))

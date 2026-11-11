@@ -247,8 +247,10 @@
 
 ### Removed
 
-- **Recipes**: the Recipes dialog and the recipe save and load. Old recipes are not
-  converted; start a project instead.
+- **Recipes**: the Recipes dialog and the recipe save and load. Recipes saved with
+  version 1 are listed in the Project dialog and converted the first time they are
+  opened, into a project locked to review and export (its alerts are shown as
+  bounding boxes). The old files are kept.
 - The **Optional files** dialog. Its inputs moved into the workflow: custom alert
   sources (CCDC is now one of their format presets) into Alerts, masks into
   Download & harmonize, NICFI and other visualization layers into Optional layers,

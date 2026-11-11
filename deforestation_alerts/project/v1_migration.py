@@ -125,7 +125,9 @@ def read_table(csv_path: Path) -> tuple[gpd.GeoDataFrame, list[str]]:
     df["status"] = status.where(status.notna() & (status.astype(str).str.strip() != ""), NOT_REVIEWED)
     df["alert_type_unique"] = [_codes(v, i, notes) for i, v in enumerate(df["alert_type_unique"])]
     for side in ("before", "after"):
-        df[f"{side}_img"] = [v2_pick(v, ms) or v for v, ms in zip(df[f"{side}_img"], df[f"{side}_img_info"])]
+        # object: a list of NaN would make the column float, which a Save's pick text cannot go in
+        df[f"{side}_img"] = pd.Series([v2_pick(v, ms) or v for v, ms in zip(df[f"{side}_img"], df[f"{side}_img_info"])],
+                                      index=df.index, dtype=object)
     geoms = {col: gpd.GeoSeries([_parse_wkt(v, col, i, notes) for i, v in enumerate(df[col])], index=df.index, crs=WGS84)
              for col in GEOM_COLUMNS[1:]}
     gdf = gpd.GeoDataFrame(df.drop(columns=list(geoms)), geometry=geoms["bounding_box"].copy())
@@ -215,8 +217,7 @@ def convert(folder: Path, resolve_aoi: Callable[[dict], dict]) -> Project:
     with _failing_as(ERR_PARAMS):
         p = _project(folder, params, (start, end), selected, gdf, geom, notes)
     with _failing_as(ERR_TABLE):
-        _write(folder, p, gdf, fc)
-    return io.load_project(folder.name, folder.parent)
+        return _write(folder, p, gdf, fc)
 
 
 def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom, notes: list[str]) -> Project:
@@ -245,6 +246,8 @@ def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom
     if params.get("aux_layer"):
         layer = _piece(notes, LAYER_NAME, lambda: GeeVisLayer(name=LAYER_NAME, asset=params["aux_layer"],
                                                               **parse_vis(params.get("aux_layer_vis"))))
+        if layer is None:  # its vis did not validate: the layer with default vis
+            layer = _piece(notes, LAYER_NAME, lambda: GeeVisLayer(name=LAYER_NAME, asset=params["aux_layer"]))
         if layer is not None:
             layers[LAYER_NAME] = layer
     period = period.model_copy(update={
@@ -285,25 +288,33 @@ def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom
     )
 
 
-def _write(folder: Path, p: Project, gdf, fc: dict) -> None:
-    """The store, ``aoi.geojson``, then the manifest; on failure, what this call wrote is removed."""
+def _write(folder: Path, p: Project, gdf, fc: dict) -> Project:
+    """The store, ``aoi.geojson``, then the manifest; returns the project read
+    back from it. Refused when the store or ``aoi.geojson`` is already there;
+    on failure, what this call wrote is removed."""
     s = p.alert_sets[p.active_set]
-    periods_dir = paths.period_dir(folder, s.period_id).parent
-    made_periods = not periods_dir.exists()
+    store = paths.resolve(folder, s.store_rel_path)
     aoi_file = folder / paths.AOI_SIDECAR
-    made_aoi = not aoi_file.exists()
+    for target in (store, aoi_file):
+        if target.exists():
+            raise V1MigrationError(key=ERR_TABLE, error=f"{target} already exists")
+    # the highest folder of the store's path this call creates
+    made = [d for d in store.parents if folder in d.parents and not d.exists()]
     try:
-        store = paths.resolve(folder, s.store_rel_path)
         store.parent.mkdir(parents=True, exist_ok=True)
         gdf["set_id"] = s.id
         save_gdf_to_parquet(gdf, store)
         aoi_file.write_text(json.dumps(fc), encoding="utf-8")
         io.save_project(p, folder.parent)
+        return io.load_project(folder.name, folder.parent)
     except BaseException:
-        if made_periods:
-            shutil.rmtree(periods_dir, ignore_errors=True)
-        if made_aoi:
-            aoi_file.unlink(missing_ok=True)
+        if made:
+            shutil.rmtree(made[-1], ignore_errors=True)
+        else:
+            store.unlink(missing_ok=True)
+        aoi_file.unlink(missing_ok=True)
+        # convert ran on a folder without a manifest: any there now is this call's
+        (folder / paths.MANIFEST).unlink(missing_ok=True)
         for tmp in folder.glob(f".{paths.MANIFEST}.*.tmp"):
             tmp.unlink(missing_ok=True)
         raise

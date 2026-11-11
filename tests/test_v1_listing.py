@@ -20,6 +20,11 @@ def test_v1_folder_is_listed_as_legacy(tmp_path):
     assert info.updated_at == datetime.fromtimestamp((folder / TABLE_FILE).stat().st_mtime)
 
 
+def test_non_list_sources_count_none(tmp_path):
+    write_recipe(tmp_path / "old", selected_alert_sources=5)
+    assert _by_name(tmp_path)["old"].n_sources == 0
+
+
 def test_recipe_without_table_is_not_listed(tmp_path):
     folder = write_recipe(tmp_path / "old")
     (folder / TABLE_FILE).unlink()

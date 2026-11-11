@@ -454,6 +454,9 @@ def test_has_earlier_sets(monkeypatch):
     # a review copy holds one set: its earlier alerts come with the package
     copy = SimpleNamespace(periods=periods, alert_sets={"s2": s2}, review_copy=object())
     assert earlier.has_earlier_sets(copy)
+    # a converted version 1 recipe is read-only too, but has no package: nothing earlier
+    migrated = SimpleNamespace(periods=periods, alert_sets={"s2": s2}, review_copy=None, migrated_from=object())
+    assert not earlier.has_earlier_sets(migrated)
     monkeypatch.setattr(earlier, "active_set", lambda p: s1)
     assert not earlier.has_earlier_sets(both)
     assert not earlier.has_earlier_sets(None)

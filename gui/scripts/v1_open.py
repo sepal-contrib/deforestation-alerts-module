@@ -27,7 +27,7 @@ def _vector_fc(vector_json: Optional[dict]) -> dict:
     column, value = vector_json.get("column"), vector_json.get("value")
     if _filtered(column, value):
         gdf = gdf[gdf[column] == value]
-    return gdf.__geo_interface__
+    return gdf[["geometry"]].__geo_interface__  # geometry only: any attribute could fail to serialise
 
 
 def aoi_collection(params: dict):
