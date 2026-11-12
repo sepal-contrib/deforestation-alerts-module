@@ -15,5 +15,5 @@ def ReviewCopyBanner(app_state):
         return
     # Inline on purpose: a persistent state description (as the AOI step's
     # locked hint), not the outcome of an action.
-    rv.Alert(type="info", dense=True, text=True, icon="mdi-lock-outline", class_="ma-2 mb-0",
+    rv.Alert(type="info", dense=True, text=True, icon="mdi-lock-outline", class_="mx-0 mt-3 mb-4",
              children=[banner_text(p)])

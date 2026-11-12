@@ -23,7 +23,7 @@ from deforestation_alerts.engine.integrate import IntegrationJob
 from deforestation_alerts.engine.plan import MaskRow, PrepareRow
 from deforestation_alerts.project import paths
 from deforestation_alerts.project.models import (
-    AlertSet, AlertSetParams, AoiRecord, GeeVisLayer, NativeGrid, Period, Project, ReviewCopy, add_mask,
+    AlertSet, AlertSetParams, AoiRecord, GeeVisLayer, MigratedFrom, NativeGrid, Period, Project, ReviewCopy, add_mask,
     add_predefined_source,
 )
 from deforestation_alerts.project.review_copy import ReadOnlyProject, read_only, refuse_if_read_only
@@ -314,6 +314,37 @@ def test_layers_step_disables_and_refuses_layer_changes(tmp_path, monkeypatch):
         seen["ConfirmDialog"][-1]["on_confirm"]()
         seen["VisLayerModal"][-1]["on_save"](GeeVisLayer(name="new", asset="y", bands=["B1"]), None)
         assert list(s.project.value.vis_layers) == ["s2"] and BANNER in _warnings()
+    finally:
+        rc.close()
+
+
+def test_a_converted_v1_project_edits_its_layers(tmp_path, monkeypatch):
+    from gui.tile import layers_step
+
+    monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    p = _project(copy=False)
+    p.migrated_from = MigratedFrom(migrated_at=datetime.now(), n_alerts=1, n_reviewed=0)
+    s = AppState()
+    s.new_project_state(p)
+    seen = _recorders(monkeypatch, layers_step, "ProductTable", "ConfirmDialog", "VisLayerModal")
+
+    @solara.component
+    def Page():
+        NotificationProvider()
+        layers_step.LayersStep(app_state=s, map_=SimpleNamespace(), gee_interface=None, layers=MapLayers(_Map()))
+
+    _box, rc = reacton.render(Page(), handle_error=False)
+    try:
+        assert not _button(rc, t("steps.layers.add")).disabled
+        assert not _action(seen["ProductTable"][-1]["rows"], "s2", "edit")["disabled"]
+        seen["VisLayerModal"][-1]["on_save"](GeeVisLayer(name="new", asset="y", bands=["B1"]), None)
+        assert sorted(s.project.value.vis_layers) == ["new", "s2"]
+        _action(seen["ProductTable"][-1]["rows"], "s2", "delete")["on_click"]()
+        seen["ConfirmDialog"][-1]["on_confirm"]()
+        assert list(s.project.value.vis_layers) == ["new"]
+        # the rest of the setup stays locked
+        assert update_setup(s, "c", lambda live: setattr(live, "report_template", "/x.docx"),
+                            SimpleNamespace(warning=lambda m: None)) is False
     finally:
         rc.close()
 

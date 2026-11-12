@@ -946,7 +946,9 @@ def EvaluatorsStep(app_state, app_tile_model, analysis, gee_interface):
         if p is None:
             solara.Info(t("workflow.lock_project"))
         elif is_migrated(p):
-            solara.Info(t("steps.evaluators.v1_locked"))
+            # a card, as the step's other settings: the header's banner is already the blue box
+            with rv.Card(outlined=True, class_="pa-3"):
+                solara.Text(t("steps.evaluators.v1_locked"), style=MUTED + "font-size:0.875rem;")
         elif s is not None and read_only(p):
             # A review copy neither splits nor builds packages (§6.3): it returns.
             _ReturnPanel(app_state=app_state)

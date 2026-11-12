@@ -5,7 +5,6 @@ legend (§9.4) under ``vis:<name>``."""
 import solara
 from pysepal.solara.notifications import use_notifications
 
-from deforestation_alerts.project.review_copy import read_only
 from gui.i18n import t
 from gui.scripts import legend_specs, vis_layers
 from gui.scripts.setup_guard import refuse_setup, update_setup
@@ -56,17 +55,17 @@ def LayersStep(app_state, map_, gee_interface, layers):
             kept = {k: v for k, v in live.vis_layers.items() if k != previous}
             live.vis_layers = {**kept, layer.name: layer}
 
-        if update_setup(app_state, p.name, _apply, notifications) and previous and layers.is_on(_key(previous)):
+        if update_setup(app_state, p.name, _apply, notifications, migrated_ok=True) and previous and layers.is_on(_key(previous)):
             layers.hide(_key(previous))  # it showed the previous definition
 
     def _delete():
         name = pending_delete
         set_pending_delete(None)
-        if refuse_setup(app_state, notifications):
+        if refuse_setup(app_state, notifications, migrated_ok=True):
             return  # a review copy keeps its layers, shown or not
         layers.hide(_key(name))
         update_setup(app_state, p.name, lambda live: setattr(
-            live, "vis_layers", {k: v for k, v in live.vis_layers.items() if k != name}), notifications)
+            live, "vis_layers", {k: v for k, v in live.vis_layers.items() if k != name}), notifications, migrated_ok=True)
 
     def _toggle(name):
         key = _key(name)
@@ -79,18 +78,19 @@ def LayersStep(app_state, map_, gee_interface, layers):
                     notifier=notifications, legend=legend_specs.vis_legend(key, layer))
 
     def _edit(name):
-        if refuse_setup(app_state, notifications):
+        if refuse_setup(app_state, notifications, migrated_ok=True):
             return
         set_editing(name)
         modal_open.set(True)
 
     def _open_add():
-        if refuse_setup(app_state, notifications):
+        if refuse_setup(app_state, notifications, migrated_ok=True):
             return
         set_editing(None)
         modal_open.set(True)
 
-    ro = read_only(p)  # a review copy: its layers are shown, never changed (spec §6.3)
+    # a review copy: its layers are shown, never changed (spec §6.3); a converted v1 project edits them
+    ro = p.review_copy is not None
 
     rows = []
     for name, layer in sorted(p.vis_layers.items(), key=lambda kv: kv[0].casefold()):

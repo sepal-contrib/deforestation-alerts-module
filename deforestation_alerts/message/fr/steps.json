@@ -932,7 +932,7 @@
     "read_only": "Copie de revue pour {evaluator}, issue de {origin_project}. La configuration est verrouillée."
   },
   "migrated": {
-    "read_only": "Converti depuis une recette de la version 1. La configuration est verrouillée : la revue, l'enregistrement et l'export restent disponibles.",
+    "read_only": "Ce projet provient d'une recette de la version 1. Seules les couches supplémentaires peuvent être modifiées ; la revue, l'enregistrement et l'export fonctionnent comme d'habitude.",
     "err_aoi": "Impossible d'obtenir la zone d'intérêt : {error}. La recette n'a pas été modifiée.",
     "err_leftover": "Conversion impossible : {files} est déjà dans le dossier de la recette. La recette n'a pas été modifiée ; supprimez {files} pour la convertir.",
     "err_table": "Impossible de lire la table des alertes : {error}. La recette n'a pas été modifiée.",

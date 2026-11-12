@@ -893,7 +893,7 @@
     "read_only": "Review copy for {evaluator}, from {origin_project}. Setup is locked."
   },
   "migrated": {
-    "read_only": "Converted from a version 1 recipe. Setup is locked: review, save and export stay available.",
+    "read_only": "This project comes from a version 1 recipe. Only additional layers can be changed; review, save and export work as usual.",
     "err_aoi": "Could not get the area of interest: {error}. The recipe was not changed.",
     "err_leftover": "Could not convert: {files} is already in the recipe folder. The recipe was not changed; remove {files} to convert it.",
     "err_table": "Could not read the alert table: {error}. The recipe was not changed.",

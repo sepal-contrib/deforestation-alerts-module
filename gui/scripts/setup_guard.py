@@ -21,16 +21,22 @@ def banner_text(p) -> str:
     return t("review_copy.read_only", evaluator=rc.evaluator, origin_project=rc.origin_project)
 
 
-def refuse_setup(app_state, notifier=None) -> bool:
+def _locked(p, migrated_ok: bool) -> bool:
+    """``read_only``, except a converted v1 project when ``migrated_ok`` (its
+    additional layers stay editable: they are display only)."""
+    return read_only(p) and not (migrated_ok and p.review_copy is None)
+
+
+def refuse_setup(app_state, notifier=None, migrated_ok=False) -> bool:
     """True, after a warning, when the open project is a review copy."""
     p = app_state.project.value
-    if not read_only(p):
+    if not _locked(p, migrated_ok):
         return False
     (notifier or current_notifier()).warning(banner_text(p))
     return True
 
 
-def update_setup(app_state, name: str, fn, notifier=None) -> bool:
+def update_setup(app_state, name: str, fn, notifier=None, migrated_ok=False) -> bool:
     """``app_state.update_project(name, fn)`` for a setup change: refused, with
     nothing published and a warning, when the live project is a review copy.
     Returns what ``update_project`` returns, False when refused. Every other
@@ -38,10 +44,10 @@ def update_setup(app_state, name: str, fn, notifier=None) -> bool:
     refused = []
 
     def _guarded(live):
-        if read_only(live):
+        if _locked(live, migrated_ok):
             # read under the lock: the project may be closed once it is released
             refused.append(banner_text(live))
-        refuse_if_read_only(live)  # raised inside the lock: nothing is published
+            refuse_if_read_only(live)  # raised inside the lock: nothing is published
         fn(live)
 
     try:
