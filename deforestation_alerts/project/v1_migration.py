@@ -94,17 +94,22 @@ def v2_pick(value, millis) -> Optional[str]:
     return f"{source} {datetime.fromtimestamp(ms / 1000, tz=timezone.utc).date().isoformat()} "
 
 
-def _parse_wkt(text, col: str, i: int, notes: list[str]):
+def _note(notes: list, key: str, **values) -> None:
+    """A conversion note as its message key and values: the dialog shows it in the user's language."""
+    notes.append({"key": key, "values": values})
+
+
+def _parse_wkt(text, col: str, i: int, notes: list):
     if not isinstance(text, str) or not text.strip():
         return None
     try:
         return wkt.loads(text)
     except ShapelyError:
-        notes.append(f"alert {i}: unreadable {col}, left empty")
+        _note(notes, "migrated.note_unreadable", alert=i, column=col)
         return None
 
 
-def _codes(value, i: int, notes: list[str]):
+def _codes(value, i: int, notes: list):
     """``alert_type_unique`` as v1 wrote it (``"[1, 2]"``) back to the list v2
     stores. An unreadable cell is left empty and its text kept in the note:
     the store's list column cannot hold it."""
@@ -113,15 +118,15 @@ def _codes(value, i: int, notes: list[str]):
     try:
         return json.loads(value)
     except ValueError:
-        notes.append(f"alert {i}: unreadable alert_type_unique {value!r}, left empty")
+        _note(notes, "migrated.note_unreadable_codes", alert=i, value=value)
         return None
 
 
-def read_table(csv_path: Path) -> tuple[gpd.GeoDataFrame, list[str]]:
+def read_table(csv_path: Path) -> tuple[gpd.GeoDataFrame, list[dict]]:
     """v1's ``alert_db.csv`` as the frame a v2 store holds (``alert_id`` from
     0, ``geometry`` = the bounding box, every store column but ``set_id``),
     and notes on what could not be read. Call ``fill_areas`` before saving it."""
-    notes: list[str] = []
+    notes: list[dict] = []
     df = pd.read_csv(csv_path)
     df = df.drop(columns=[c for c in df.columns if c.startswith("Unnamed:")] + ["gee_id"], errors="ignore")
     df["alert_id"] = range(len(df))
@@ -200,23 +205,23 @@ def _failing_as(key: str):
         raise V1MigrationError(f"{key}: {exc}", key=key, error=str(exc)) from exc
 
 
-def _piece(notes: list[str], label: str, build):
+def _piece(notes: list, label: str, build):
     """A mask, layer or source model, or None with a note when it does not validate."""
     try:
         return build()
     except ValidationError as exc:
-        notes.append(f"{label}: not imported ({exc.errors()[0]['msg']})")
+        _note(notes, "migrated.note_not_imported", label=label, error=exc.errors()[0]["msg"])
         return None
 
 
-def _aux_layer(notes: list[str], asset, vis_text):
+def _aux_layer(notes: list, asset, vis_text):
     """v1's extra layer with its vis, or with the default display (and a note) when the vis does not validate."""
     try:
         return GeeVisLayer(name=LAYER_NAME, asset=asset, **parse_vis(vis_text))
     except ValidationError as exc:
         layer = _piece(notes, LAYER_NAME, lambda: GeeVisLayer(name=LAYER_NAME, asset=asset))
         if layer is not None:
-            notes.append(f"{LAYER_NAME}: imported with the default display ({exc.errors()[0]['msg']})")
+            _note(notes, "migrated.note_default_display", label=LAYER_NAME, error=exc.errors()[0]["msg"])
         return layer
 
 
@@ -247,7 +252,7 @@ def convert(folder: Path, resolve_aoi: Callable[[dict], dict]) -> Project:
         return _write(folder, p, gdf, fc)
 
 
-def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom, notes: list[str]) -> Project:
+def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom, notes: list) -> Project:
     now = datetime.now()
     period = Period(id=period_id(*dates), start=dates[0], end=dates[1])
     sources, masks, layers, masks_used = {}, {}, {}, []
@@ -262,7 +267,7 @@ def _project(folder: Path, params: dict, dates: tuple, selected: list, gdf, geom
             if src is not None:
                 sources[CCDC] = src
         if name not in sources:
-            notes.append(f"source {name}: not imported as a source, kept in the alert set only")
+            _note(notes, "migrated.note_source_kept", name=name)
     if params.get("mask_layer"):
         mask = _piece(notes, MASK_NAME, lambda: MaskLayer(name=MASK_NAME, origin="gee", ref=params["mask_layer"],
                                                           asset_type="IMAGE"))

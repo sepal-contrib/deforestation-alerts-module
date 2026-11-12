@@ -99,7 +99,7 @@ def test_alert_codes_are_a_list(tmp_path):
 def test_bad_codes_keep_the_row(tmp_path):
     gdf, notes = _read(tmp_path, rows=[{}, {"alert_type_unique": "[1,"}])
     assert len(gdf) == 2 and gdf["alert_type_unique"].iloc[1] is None
-    assert any("alert 1" in n and "alert_type_unique" in n and "[1," in n for n in notes)
+    assert notes == [{"key": "migrated.note_unreadable_codes", "values": {"alert": 1, "value": "[1,"}}]
 
 
 def test_v1_index_column_is_dropped(tmp_path):
@@ -114,7 +114,7 @@ def test_bad_polygon_keeps_the_row(tmp_path):
     assert len(gdf) == 4
     assert gdf["alert_polygon"].iloc[2] is None
     assert gdf["status"].iloc[2] == FALSE_POSITIVE
-    assert any("alert 2" in n and "alert_polygon" in n for n in notes)
+    assert notes == [{"key": "migrated.note_unreadable", "values": {"alert": 2, "column": "alert_polygon"}}]
 
 
 def test_store_columns_present(tmp_path):

@@ -515,7 +515,8 @@ def ProjectDialog(app_state, dismiss=lambda: None, analysis=None):
                                     alerts=migrated.n_alerts))
             if migrated.notes:  # once: only the open that converted shows them
                 more = len(migrated.notes) - 3
-                notifications.warning("; ".join(migrated.notes[:3]) + (f" (+{more})" if more > 0 else ""))
+                shown = [t(n["key"], **n["values"]) if isinstance(n, dict) else n for n in migrated.notes[:3]]
+                notifications.warning("; ".join(shown) + (f" (+{more})" if more > 0 else ""))
         else:
             notifications.success(t("steps.project.opened", name=name))
 

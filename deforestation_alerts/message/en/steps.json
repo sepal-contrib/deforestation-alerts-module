@@ -897,6 +897,11 @@
     "err_aoi": "Could not get the area of interest: {error}. The recipe was not changed.",
     "err_leftover": "Could not convert: {files} is already in the recipe folder. The recipe was not changed; remove {files} to convert it.",
     "err_table": "Could not read the alert table: {error}. The recipe was not changed.",
-    "err_params": "Could not read the recipe settings: {error}. The recipe was not changed."
+    "err_params": "Could not read the recipe settings: {error}. The recipe was not changed.",
+    "note_unreadable": "alert {alert}: unreadable {column}, left empty",
+    "note_unreadable_codes": "alert {alert}: unreadable alert_type_unique {value}, left empty",
+    "note_not_imported": "{label}: not imported ({error})",
+    "note_default_display": "{label}: imported with the default display ({error})",
+    "note_source_kept": "source {name}: not imported as a source, kept in the alert set only"
   }
 }

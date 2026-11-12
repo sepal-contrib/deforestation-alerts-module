@@ -936,6 +936,11 @@
     "err_aoi": "Não foi possível obter a área de interesse: {error}. A receita não foi alterada.",
     "err_leftover": "Não foi possível converter: {files} já está na pasta da receita. A receita não foi alterada; remova {files} para convertê-la.",
     "err_table": "Não foi possível ler a tabela de alertas: {error}. A receita não foi alterada.",
-    "err_params": "Não foi possível ler as configurações da receita: {error}. A receita não foi alterada."
+    "err_params": "Não foi possível ler as configurações da receita: {error}. A receita não foi alterada.",
+    "note_unreadable": "alerta {alert}: {column} ilegível, deixado vazio",
+    "note_unreadable_codes": "alerta {alert}: alert_type_unique {value} ilegível, deixado vazio",
+    "note_not_imported": "{label}: não importado ({error})",
+    "note_default_display": "{label}: importado com a exibição padrão ({error})",
+    "note_source_kept": "fonte {name}: não importada como fonte, mantida apenas no conjunto de alertas"
   }
 }

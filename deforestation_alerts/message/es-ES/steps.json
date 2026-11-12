@@ -936,6 +936,11 @@
     "err_aoi": "No se pudo obtener el área de interés: {error}. La receta no se modificó.",
     "err_leftover": "No se pudo convertir: {files} ya está en la carpeta de la receta. La receta no se modificó; elimina {files} para convertirla.",
     "err_table": "No se pudo leer la tabla de alertas: {error}. La receta no se modificó.",
-    "err_params": "No se pudo leer la configuración de la receta: {error}. La receta no se modificó."
+    "err_params": "No se pudo leer la configuración de la receta: {error}. La receta no se modificó.",
+    "note_unreadable": "alerta {alert}: {column} ilegible, se dejó vacío",
+    "note_unreadable_codes": "alerta {alert}: alert_type_unique {value} ilegible, se dejó vacío",
+    "note_not_imported": "{label}: no se importó ({error})",
+    "note_default_display": "{label}: se importó con la visualización predeterminada ({error})",
+    "note_source_kept": "fuente {name}: no se importó como fuente, solo se conserva en el conjunto de alertas"
   }
 }

@@ -356,7 +356,8 @@ class MigratedFrom(BaseModel):
     migrated_at: datetime
     n_alerts: int
     n_reviewed: int
-    notes: list[str] = []
+    #: ``{"key", "values"}`` of a ``migrated.note_*`` message; plain text in a project converted before those
+    notes: list[Union[dict, str]] = []
 
 
 class AlertSet(BaseModel):

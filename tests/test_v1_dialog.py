@@ -104,7 +104,8 @@ def test_conversion_notes_are_shown_once_as_a_warning(dialog, monkeypatch):  # n
         dialog.manage[-1]["on_open"]()
         await _settle(lambda: _toasts("warning"), "the notes toast")
         notes = dialog.state.project.value.migrated_from.notes
-        assert notes and _toasts("warning") == ["; ".join(notes)]
+        assert notes and _toasts("warning") == ["; ".join(t(n["key"], **n["values"]) for n in notes)]
+        assert "migrated." not in _toasts("warning")[0]  # the message, not its key
 
     run_rendered(lambda: dialog.render(), main)
 
@@ -139,7 +140,7 @@ def test_long_notes_are_cut_to_three(dialog, monkeypatch):  # noqa: F811
         dialog.manage[-1]["on_open"]()
         await _settle(lambda: _toasts("warning"), "the notes toast")
         notes = dialog.state.project.value.migrated_from.notes
-        assert len(notes) == 5 and _toasts("warning") == ["; ".join(notes[:3]) + " (+2)"]
+        assert len(notes) == 5 and _toasts("warning") == ["; ".join(t(n["key"], **n["values"]) for n in notes[:3]) + " (+2)"]
 
     run_rendered(lambda: dialog.render(), main)
 

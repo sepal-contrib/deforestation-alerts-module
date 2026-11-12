@@ -238,15 +238,15 @@ def test_ccdc_without_layer_is_noted(tmp_path):
     p, _ = _convert(tmp_path, selected_alert_sources=["GLAD-L", "CCDC"])
     s = p.alert_sets[p.active_set]
     assert s.digit_map == {0: "GLAD-L", 3: "CCDC"} and "CCDC" not in p.sources
-    assert any("CCDC" in n for n in p.migrated_from.notes)
+    assert {"key": "migrated.note_source_kept", "values": {"name": "CCDC"}} in p.migrated_from.notes
 
 
 def test_bad_layer_vis_falls_back_to_defaults(tmp_path):
     p, _ = _convert(tmp_path, aux_layer="users/a/aux", aux_layer_vis="{'bands': 'B4'}")
     layer = p.vis_layers["v1 layer"]
     assert layer.asset == "users/a/aux" and layer.bands == [] and (layer.min, layer.max) == (0.0, 1.0)
-    notes = [n for n in p.migrated_from.notes if "v1 layer" in n]
-    assert len(notes) == 1 and "default display" in notes[0] and "not imported" not in notes[0]
+    notes = [n for n in p.migrated_from.notes if n["values"].get("label") == "v1 layer"]
+    assert [n["key"] for n in notes] == ["migrated.note_default_display"]
 
 
 def test_unreadable_vis_text_uses_defaults():
@@ -267,7 +267,7 @@ def test_report_template_kept_when_it_exists(tmp_path):
 def test_malformed_codes_cell_converts(tmp_path):
     p, folder = _convert(tmp_path, rows=[{}, {"alert_type_unique": "[1,"}])
     assert p.alert_sets[p.active_set].n_alerts == 2
-    assert any("alert 1" in n and "alert_type_unique" in n for n in p.migrated_from.notes)
+    assert {"key": "migrated.note_unreadable_codes", "values": {"alert": 1, "value": "[1,"}} in p.migrated_from.notes
 
 
 def test_is_v1_recipe(tmp_path):

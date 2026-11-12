@@ -936,6 +936,11 @@
     "err_aoi": "Impossible d'obtenir la zone d'intérêt : {error}. La recette n'a pas été modifiée.",
     "err_leftover": "Conversion impossible : {files} est déjà dans le dossier de la recette. La recette n'a pas été modifiée ; supprimez {files} pour la convertir.",
     "err_table": "Impossible de lire la table des alertes : {error}. La recette n'a pas été modifiée.",
-    "err_params": "Impossible de lire les paramètres de la recette : {error}. La recette n'a pas été modifiée."
+    "err_params": "Impossible de lire les paramètres de la recette : {error}. La recette n'a pas été modifiée.",
+    "note_unreadable": "alerte {alert} : {column} illisible, laissé vide",
+    "note_unreadable_codes": "alerte {alert} : alert_type_unique {value} illisible, laissé vide",
+    "note_not_imported": "{label} : non importé ({error})",
+    "note_default_display": "{label} : importé avec l'affichage par défaut ({error})",
+    "note_source_kept": "source {name} : non importée comme source, conservée uniquement dans le jeu d'alertes"
   }
 }
