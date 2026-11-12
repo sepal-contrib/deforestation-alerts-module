@@ -336,6 +336,7 @@
       "bands_failed": "Impossible de lire les bandes : {error}",
       "field_source": "Source",
       "source_hint": "Une image Earth Engine, ou un GeoTIFF ou VRT dans votre dossier SEPAL.",
+      "source_hint_vector": "Une image Earth Engine, ou un GeoTIFF, un VRT ou un fichier de points ou de polygones dans votre dossier SEPAL.",
       "source_gee": "Earth Engine",
       "source_file": "GeoTIFF / VRT",
       "source_vector": "Fichier de points ou de polygones (CSV, GPKG, SHP)",

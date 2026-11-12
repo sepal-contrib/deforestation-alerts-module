@@ -62,7 +62,8 @@ def SourceSelect(origin: str, on_origin: Callable[[str], None], disabled: bool =
     ``steps.raster_input.source_<origin>``."""
     rv.Select(label=t("steps.raster_input.field_source"), v_model=origin, on_v_model=on_origin,
               items=[{"text": t(f"steps.raster_input.source_{o}"), "value": o} for o in origins],
-              hint=t("steps.raster_input.source_hint"), persistent_hint=True, dense=True, outlined=True,
+              hint=t("steps.raster_input.source_hint_vector" if "vector" in origins
+                     else "steps.raster_input.source_hint"), persistent_hint=True, dense=True, outlined=True,
               disabled=disabled)
 
 
