@@ -101,9 +101,11 @@ The map fills the window. The **Workflow** panel on the right side holds the ste
 
 The header of the **Workflow** panel stays in view while the step under it scrolls:
 
--   One strip shows both levels side by side, **Prepare alerts** and **Set up review**, each with its name over one bar per step. A filled bar has outputs (an AOI, periods, sources…), a grey bar is still empty and a striped bar is locked: hover over it to read why (e.g. "Build an alert set first."). The two optional steps, **Additional layers** and **Questionnaire**, have a dashed bar. A level's name gets a check mark once its last required step has outputs. Select a bar to open its step.
--   Under the strip, the step's position in its level (e.g. "3 / 5"), its name and what it holds ("3 sources"). An optional step that is still empty shows no count: its dashed bar already marks it as optional. Select the name to jump to another step from a list, or use the arrows on each side to go to the step before or after.
+-   One title row shows the step's position among all the steps (e.g. "3 / 8"), its name and what it holds ("3 sources"). An optional step that is still empty shows no count. The arrows on each side go to the step before or after.
+-   Select the name to open the list of steps, grouped under the two levels, **Prepare alerts** and **Set up review**. Each step has a numbered dot: filled when the step has outputs (an AOI, periods, sources…), a grey ring when it is still empty. The two optional steps, **Additional layers** and **Questionnaire**, have a dashed dot. A locked step is greyed out and says why (e.g. "Build an alert set first."). A level's name gets a check mark once its last required step has outputs. Select a step to open it.
 -   Under the name, one line says what to do in the step (e.g. "Set the monitoring period."). The information button at the right side of that line opens the step's help.
+
+At the bottom of the panel, **Back** and **Next** go to the step before or after, skipping locked steps. Hover over one to see the name of the step it opens.
 
 To use the left rail:
 
@@ -206,7 +208,7 @@ The new project opens on the `AOI <defo-aoi_>`_ step, always the first step of t
 Open, search and delete projects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. shot: project-manage | The "Manage projects" dialog with three saved projects listed, the demo project selected and marked with the outlined "open" chip, each row showing its count chips (sources, periods, alert sets), its AOI and "modified … ago", and on the right its size, a pencil and a red bin, the Search projects field empty, the Open button enabled. Crop to the dialog.
+.. shot: project-manage | The "Manage projects" dialog with three saved projects and a version 1 recipe (recipe_2026-08-12-101500, its outlined "version 1" chip first, its pencil greyed) listed, the demo project selected and marked with the outlined "open" chip, each row showing its count chips (sources, periods, alert sets), its AOI and "modified … ago", and on the right its size, a pencil and a red bin, the Search projects field empty, the Open button enabled. Crop to the dialog.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/project-manage.png
     :alt: The Manage projects dialog
@@ -217,6 +219,8 @@ Open, search and delete projects
 -   its AOI (or "no AOI yet") and when it was last changed (e.g. "modified 2 days ago");
 -   its size on disk, measured when the dialog opens; and
 -   an **open** chip on the project that is open now.
+
+A recipe saved with the previous version of the app is listed too, with a **version 1** chip (see `Open a version 1 recipe <defo-project-v1_>`_).
 
 To open a project:
 
@@ -282,6 +286,29 @@ If the same package was already imported, the **Already imported** dialog offers
 .. important::
 
     A *reviewed copy* (the file an evaluator sends back) cannot be imported here. The project's creator merges it in the `Evaluation <defo-evaluation_>`_ step of the original project.
+
+.. _defo-project-v1:
+
+Open a version 1 recipe
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Recipes saved with the previous version of the app (version 1) stay in their folders under ``module_results/deforestation_alerts/``. **Manage projects** lists them among the projects, marked with a **version 1** chip. Hover over the chip to read: "Saved with the previous version. It is converted the first time you open it; the old files are kept."
+
+To open a recipe, select it, then select **Open**, as for a project (or **Continue**, when the dialog offers it). The first time, the app converts it into a project in the same folder: the row reads "Converting (name)…" while the app gets the recipe's AOI (from GEE for an administrative area or an asset) and reads its alerts. The project then opens on the `Analysis <defo-analysis_>`_ screen, and the app confirms, e.g. "recipe_2026-08-12-101500 was converted from version 1. 5 of 40 alerts reviewed." Later opens skip the conversion.
+
+The converted project keeps:
+
+-   the recipe's period, sources and alerts;
+-   every review: the status, the description, the drawn polygon, the area, the administrative names, the before and after images, and the alert the review stopped at; and
+-   the recipe's mask and extra layer, as the additional layers ``v1 mask`` and ``v1 layer``, and its report template when the file is still there.
+
+The alerts are drawn as rectangles (the boxes version 1 drew around them), with the polygon drawn in a review on top. They keep their version 1 numbers, which start at 0. An alert without a drawn polygon gets an area estimated from its number of alert pixels. When part of the recipe cannot be converted, a warning lists it once, after the conversion (e.g. "source CCDC: not imported as a source, kept in the alert set only").
+
+A converted project is locked, and a banner reads: "This project comes from a version 1 recipe. Only additional layers can be changed; review, save and export work as usual." Its AOI, period, sources, Harmonize, Integrate & vectorize, questionnaire and report template cannot change, and it cannot be duplicated. The `Evaluation <defo-evaluation_>`_ step is not available: one person reviews the project. The `Additional layers <defo-layers_>`_ can be added, edited and deleted.
+
+The recipe's own files (``recipe_parameters.json``, ``alert_db.csv`` and the files made for each alert) are never changed. A recipe cannot be renamed before it is converted: its pencil icon reads "Open it once to convert it first."
+
+If the conversion fails, nothing is written, and the message gives the cause, e.g. "Could not get the area of interest: (error). The recipe was not changed."
 
 Where the files are
 ^^^^^^^^^^^^^^^^^^^
@@ -601,10 +628,12 @@ Each row of **Sources** shows:
 
             -   **AOI**: the share of the AOI inside the source's footprint, e.g. "AOI 100 %". A source that covers only part of the AOI gets no alerts over the rest of it.
             -   The dates: "✓ data to 2026-10-30" (green) when the source has data up to the end of the search window, "data to … only" (orange) when its data stop inside the window, or "✗ data ends …" (red) when it has none in the window.
+
+            A points or polygons source has one chip instead, "clipped to the AOI": its coverage is not checked.
     *   -   **Status**
         -   The row's state, or a button to download it (see `Download the sources <defo-alerts-download_>`_).
     *   -   Map icon
-        -   Shows the source on the map: the alerts of the active period's search window. A GeoTIFF source is shown only once it is harmonized.
+        -   Shows the source on the map: the alerts of the active period's search window. A GeoTIFF source is shown only once it is harmonized. A points or polygons source shows its features as read from the file, once its row is read (see `Points or polygons file <defo-alerts-vector_>`_).
     *   -   Information icon
         -   Opens the source's **Details** (see `The Details dialog <defo-harmonize-details_>`_), with the **Add to new periods** checkbox and, for a custom source, the **Edit** button.
     *   -   **Download again**
@@ -620,7 +649,7 @@ Add a source
 Select **Add source** to open the **Add an alert source** dialog, then choose the **Source type**:
 
 -   **Predefined or project source**: one of the catalogue sources, or a source of the project that is not in this period (e.g. one used in an earlier period); or
--   **Custom (0 of 6)**: your own GEE image, image collection or GeoTIFF. The count shows how many of the period's six custom slots are in use.
+-   **Custom (0 of 6)**: your own GEE image, image collection or GeoTIFF, or a file of dated points or polygons. The count shows how many of the period's six custom slots are in use.
 
 A period holds at most three predefined and six custom sources. The project keeps every source it has used, with no limit.
 
@@ -678,7 +707,7 @@ A custom source reads your own alert raster through one of four format presets. 
         -   The source's name in lists, legends and file names.
         -   Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique in the project. GLAD-L, RADD and GLAD-S2 are reserved.
     *   -   **Source**
-        -   Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF / VRT** (a file in your SEPAL folder: a GeoTIFF, or a VRT, a GDAL virtual raster read like the GeoTIFFs it points to).
+        -   Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF / VRT** (a file in your SEPAL folder: a GeoTIFF, or a VRT, a GDAL virtual raster read like the GeoTIFFs it points to). The third choice, **Points or polygons file (CSV, GPKG, SHP)**, is not a raster (see `Points or polygons file <defo-alerts-vector_>`_).
         -   **Earth Engine**.
     *   -   Asset or **GeoTIFF / VRT**
         -   The GEE image or image collection, or the .tif file.
@@ -717,6 +746,55 @@ The four formats:
 
 When **Add source** is selected, the app checks the raster: the bands exist and are numeric, the dates can be read and the source covers the AOI. A problem is shown in red inside the dialog, which stays open for corrections. While the check runs, the button reads **Cancel** and stops it.
 
+.. _defo-alerts-vector:
+
+Points or polygons file
+"""""""""""""""""""""""
+
+.. shot: alerts-add-vector | The "Add an alert source" dialog with Source type = Custom (0 of 6), Source = Points or polygons file (CSV, GPKG, SHP), the capture's points CSV (_fixtures/field_alerts.csv) picked in Vector file, Name suggested from it; under it Longitude column = lon, Latitude column = lat, Date column = date, Dates are written = Day first (dd/mm/yyyy), Square side (m) = 30 with its hint, and the summary line "Dates read as day/month/year · 12 points, 0 polygons · … → … · 0 skipped". Crop to the dialog.
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/alerts-add-vector.png
+    :alt: Adding a custom source from a file of points
+
+A custom source can also be a file of dated points or polygons, such as alerts reported from the field or by another system. Choose **Points or polygons file (CSV, GPKG, SHP)** in **Source**, then pick the file in **Vector file**: a .csv table, a GeoPackage (.gpkg) or a Shapefile (.shp, with its .shx and .dbf files next to it). The file is read at once ("Reading the file…"), and the fields that depend on it appear:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
+
+    *   -   Field
+        -   Description
+        -   Default and limits
+    *   -   **Layer**
+        -   The GeoPackage layer to read.
+        -   Only for a GeoPackage with several layers. Starts on the first one.
+    *   -   **Longitude column** and **Latitude column**
+        -   The columns holding the coordinates of each point, in degrees (WGS84).
+        -   Only for a CSV. Suggested from the column names (e.g. ``lon``, ``latitude``).
+    *   -   **Date column**
+        -   The column holding the date of each alert.
+        -   Suggested from the column names (e.g. ``date``, ``fecha``).
+    *   -   **Dates are written**
+        -   **Day first (dd/mm/yyyy)** or **Month first (mm/dd/yyyy)**.
+        -   Only when the dates read either way (e.g. 03/04/2026).
+    *   -   **Square side (m)**
+        -   Each point becomes a square of this side, centred on the point.
+        -   Only when the file has points. 30 m by default.
+
+A line under the fields sums up what is read, for example "Dates read as day/month/year · 12 points, 0 polygons · 2026-06-12 → 2026-09-11 · 0 skipped". Rows without a point or polygon, or without a date, are skipped.
+
+How the file is read:
+
+-   A CSV's columns can be separated by commas, semicolons or tabs. With semicolons, decimal commas are read too.
+-   A GeoPackage or a Shapefile needs a coordinate system, which can be any one.
+-   A date can be a date field, year-month-day (``2026-09-14``), ``yyyymmdd`` (``20260914``) or day and month in either order (``14/09/2026``).
+-   Every point or polygon is a confirmed alert. A polygon keeps its shape; a polygon or a square smaller than a pixel still gives one pixel.
+-   Where features overlap, the earliest date is kept.
+
+The source needs no GEE: its coverage is not checked, and only the features inside the AOI become alert pixels. Its row in `Alerts <defo-alerts-download_>`_ reads the features of the period's search window (**Read file**); its map icon then shows them as read, points as dots and polygons as outlines. `Harmonize <defo-harmonize_>`_ turns them into alert pixels on the project grid, and its map icon shows that raster, to compare with the features.
+
+**Read file** reads the file again when it was edited after the source was added. If the edit no longer fits the source (for example, a chosen column is gone, or the dates now read in the other day/month order), the row shows "The alert file changed since it was added. Edit the source to check it again."
+
 Edit a custom source
 """"""""""""""""""""
 
@@ -729,7 +807,7 @@ Once an alert set uses the source, it can no longer be edited: remove it and add
 Download the sources
 ^^^^^^^^^^^^^^^^^^^^
 
-Each source is downloaded over the period's search window, in its own projection and cut to the AOI. A GeoTIFF source is not downloaded: it is read from its file. Downloading does not harmonize the source: that is the next step, `Harmonize <defo-harmonize_>`_, which runs only when you start it there.
+Each source is downloaded over the period's search window, in its own projection and cut to the AOI. A GeoTIFF source is not downloaded: it is read from its file. What this guide says of a GeoTIFF source holds for a points or polygons source too; the line under its name reads "Points/polygons file". Downloading does not harmonize the source: that is the next step, `Harmonize <defo-harmonize_>`_, which runs only when you start it there.
 
 The **Status** column reads:
 
@@ -787,6 +865,18 @@ Common messages
 
 "This period already has 6 custom sources."
     Remove a custom source from the period before adding another one.
+
+"This file cannot be read as CSV, GeoPackage or Shapefile."
+    The file is not a .csv, .gpkg or .shp file, or it could not be read as one.
+
+"The Shapefile is missing its .shx or .dbf file."
+    Put the .shx and .dbf files with the same name as the .shp in its folder.
+
+"The date column cannot be read: mixed day/month orders or no valid date."
+    Some dates are written day first and others month first, or no value reads as a date. Choose another **Date column**, or write the dates in one format.
+
+"No dated point or polygon in this file."
+    No row has both a point or polygon and a date. Line features and rows without coordinates are skipped.
 
 "A job is writing into this project; …"
     Sources cannot change during a download or an **Integrate & vectorize** run. Wait for it to end.
@@ -995,7 +1085,7 @@ In `Alerts <defo-alerts_>`_, the information icon of a source opens the same dia
     *   -   Section
         -   What it lists
     *   -   **Source**
-        -   A predefined source: its **Catalogue** and **Coverage** of the AOI, with the last date of data and the day it was checked. A custom source: its **Kind**, **Reference**, **Format**, **Date encoding**, **Bands** and **Native grid**. A mask: its **Reference**, **Band**, **Native grid** and the periods it is **Used in**.
+        -   A predefined source: its **Catalogue** and **Coverage** of the AOI, with the last date of data and the day it was checked. A custom source: its **Kind**, **Reference**, **Format**, **Date encoding**, **Bands** and **Native grid**. A points or polygons source: its **Kind**, **Reference**, **Layer**, **Date column** (with how its dates are read) and **Square side (m)**. A mask: its **Reference**, **Band**, **Native grid** and the periods it is **Used in**.
     *   -   **Download** (**Read from file** for a GeoTIFF source)
         -   The **Search window**, the **Native grid** the file was downloaded in, its **Size** and its **File** in the project folder.
     *   -   **Harmonize** (**Align** for a mask)
@@ -1293,7 +1383,9 @@ Visualization layers support the review of the alerts: a land-cover map, a fores
 
 Open the **Additional layers** step of the **Workflow** panel, the first step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_).
 
-The step is optional: skip it and come back at any time. Its bar in the header is dashed, and the step shows no count until it has a layer.
+The step is optional: skip it and come back at any time. Its dot in the list of steps is dashed, and the step shows no count until it has a layer.
+
+In a project converted from a `version 1 recipe <defo-project-v1_>`_, this is the only step whose settings can change.
 
 .. note::
 
@@ -1673,6 +1765,8 @@ This step decides who reviews the alerts of the active set:
 -   split them among several evaluators. Each evaluator gets a *review package*, reviews their own alerts in their own SEPAL account, and sends back a *reviewed copy*, which is then merged into the project.
 
 Open the **Evaluation** step of the **Workflow** panel, the last step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). It works on the active set: a split belongs to one alert set.
+
+In a project converted from a `version 1 recipe <defo-project-v1_>`_, the step reads "Not available for a project converted from version 1: it is reviewed by one person."
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/evaluators.gif
     :alt: The alert set is split into packages, each evaluator reviews theirs, and the reviews are merged back
@@ -2376,7 +2470,7 @@ A save writes into the alert set:
 -   the earlier alerts ticked in `Earlier alerts <defo-analysis-earlier_>`_, as the alert's links;
 -   with nearby alerts ticked, the group (see `Nearby alerts <defo-analysis-nearby_>`_);
 -   who reviewed it and when: ``reviewed_by`` (your SEPAL user name, looked up once per session; left empty if it is unknown) and ``reviewed_at`` (the time, in UTC, e.g. ``2026-11-11T14:03:22Z``). A group's members get them too, and an alert reset to not reviewed loses them; and
--   the names of the administrative areas under the alert, if `Integrate & vectorize <defo-integrate_>`_ could not fill them (from the FAO GAUL 2024 boundaries). Names saved by earlier reviews are kept.
+-   the names of the administrative areas under the alert, if `Integrate & vectorize <defo-integrate_>`_ could not fill them (from the FAO GAUL 2024 boundaries). Names saved by earlier reviews are kept. If the project has no boundaries yet, the first such save downloads them once, and its progress reads "Fetching administrative boundaries for this project (once)…" meanwhile.
 
 ``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit. In a group, each alert keeps its own names; the group's single-alert file and report show all the names of the group.
 
@@ -2966,7 +3060,7 @@ Then:
 
 The team reviews them as in September; 16 are reviewed so far, 11 of them as true alerts. With **Show these alerts on the map** and **Show earlier sets** both on, the map shows the October alerts next to September's, which are drawn in fainter colours. The October alerts lie in the same parts of the department as September's.
 
-.. shot: use-case-periods-map | The main map over Madre de Dios with Integrate & vectorize's "Show these alerts on the map" and "Show earlier sets" both on: the October set's alerts coloured by status, the September set's alerts in faded colours, and the legend with its selector showing the earlier set's legend ("Earlier set · 2026-09-01_2026-09-30 · …"). Crop to the map, between the left rail and the Workflow panel.
+.. shot: use-case-periods-map | The main map over Madre de Dios with Integrate & vectorize's "Show these alerts on the map" and "Show earlier sets" both on: the October set's alerts coloured by status, the September set's alerts in faded colours, and the legend with its selector showing the earlier set's legend ("Alerts · 2026-09-01 → 2026-09-30 · …"). Crop to the map, between the left rail and the Workflow panel.
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/en/img/use-case-periods-map.png
     :alt: The October alerts and the September alerts on the map

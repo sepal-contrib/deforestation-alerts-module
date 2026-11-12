@@ -26,12 +26,14 @@ it.
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
 import time
 import traceback
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -96,6 +98,14 @@ def copy_demo(src: Path, data_dir: Path) -> Path:
         shutil.copytree(fixtures, data_dir / "_fixtures", ignore=shutil.ignore_patterns("review_copy"))
         for copy in sorted((fixtures / "review_copy").glob("*/project.json")):
             shutil.copytree(copy.parent, data_dir / copy.parent.name)
+            # The review copy was saved seconds after the demo: date it before, so the
+            # Project dialog's Continue card offers the demo (``project-empty``).
+            copied = data_dir / copy.parent.name / "project.json"
+            raw = json.loads(copied.read_text(encoding="utf-8"))
+            demo_at = json.loads((project / "project.json").read_text(encoding="utf-8")).get("updated_at")
+            if demo_at and raw.get("updated_at") and raw["updated_at"] >= demo_at:
+                raw["updated_at"] = (datetime.fromisoformat(demo_at) - timedelta(minutes=1)).isoformat()
+                copied.write_text(json.dumps(raw, indent=2), encoding="utf-8")
     return data_dir / project.name
 
 
@@ -209,7 +219,11 @@ def assert_language(page, lang: str) -> None:
     own = _leaves(LANGS[lang])
     english = _leaves("en")
     wrong = [h for h in heads if h not in own]
-    if not heads or wrong or (lang != "en" and all(h in english for h in heads)):
+    shared = lang != "en" and all(h in english for h in heads)
+    if shared:  # "AOI" alone on step 1 reads the same everywhere: the footer or the title's count tells instead
+        text = page.evaluate("() => document.body.innerText").casefold()
+        shared = not any(T(k).casefold() in text for k in ("workflow.next", "workflow.count_empty"))
+    if not heads or wrong or shared:
         raise AssertionError(f"the app is not in {lang!r}: its pipeline header reads {heads!r}")
 
 
@@ -315,10 +329,26 @@ def modal_shot(page, shot_id):
     normal(page)
 
 
+SEPAL_HOME = "/home/sepal-user"
+_MASK_HOME = """home => {
+  let n = 0;
+  const fix = s => s.split(home).join('%s');
+  for (const el of document.querySelectorAll('input, textarea'))
+    if (el.value.includes(home)) { el.value = fix(el.value); n++; }
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let t; (t = walk.nextNode());)
+    if (t.nodeValue.includes(home)) { t.nodeValue = fix(t.nodeValue); n++; }
+  return n;
+}""" % SEPAL_HOME
+
+
 def save(page, shot_id, clip=None, pad=0):
     """Check the language, take the window (or ``clip`` grown by ``pad``,
     kept inside the window) and write the optimized PNG."""
     assert_language(page, RUN.lang)
+    # The guide is public: a path under the capturing user's home reads as SEPAL's.
+    if page.evaluate(_MASK_HOME, str(Path.home())):
+        w.log(f"shot {shot_id}: home path shown as {SEPAL_HOME}")
     path = RUN.out / f"{shot_id}.png"
     RUN.out.mkdir(parents=True, exist_ok=True)
     kw = {}
@@ -725,6 +755,38 @@ def shot_alerts_add_custom(page):
     w.wait_for(lambda: has_select(page, T("steps.alerts.format_label")), 180, "the bands and the Alert format")
     wait(page, 2500)
     modal_shot(page, "alerts-add-custom")
+    cancel_modal(page)
+
+
+#: Field-reported alerts west of Puerto Maldonado, dated day first with every day up to 12,
+#: so the form asks for the day/month order.
+VECTOR_CSV = "id,lon,lat,date\n" + "".join(
+    f"{i},{lon},{lat},{d}\n" for i, (lon, lat, d) in enumerate((
+        (-70.412, -12.951, "12/06/2026"), (-70.398, -12.944, "03/07/2026"), (-70.371, -12.962, "09/07/2026"),
+        (-70.305, -12.903, "01/08/2026"), (-70.288, -12.911, "05/08/2026"), (-70.246, -12.874, "11/08/2026"),
+        (-70.181, -12.866, "02/09/2026"), (-70.164, -12.851, "04/09/2026"), (-70.102, -12.833, "07/09/2026"),
+        (-70.087, -12.829, "08/09/2026"), (-69.998, -12.811, "10/09/2026"), (-69.982, -12.805, "11/09/2026"),
+    ), start=1))
+
+
+def shot_alerts_add_vector(page):
+    """The custom form on a points CSV of the demo's AOI, read with day first; cancelled."""
+    ensure_open(page)
+    csv = RUN.data / "_fixtures" / "field_alerts.csv"
+    csv.parent.mkdir(exist_ok=True)
+    csv.write_text(VECTOR_CSV, encoding="utf-8")
+    step(page, "alerts")
+    open_add_source(page)
+    choose(page, T("steps.alerts.mode_label"), T("steps.alerts.mode_custom", n=0))
+    wait(page, 1200)
+    choose_source(page, "vector")
+    pick_file(page, T("steps.raster_input.vector_file"), csv, scope=w.MODAL)
+    w.wait_for(lambda: has_select(page, T("steps.alerts.vector_date_order")), 60, "the file read")
+    choose(page, T("steps.alerts.vector_date_order"), T("steps.alerts.vector_dmy"), exact=True)
+    summary = T("steps.alerts.vector_summary").split("{")[0]
+    w.wait_for(lambda: summary in modal(page).inner_text(), 60, "the summary line")
+    wait(page, 1000)
+    modal_shot(page, "alerts-add-vector")
     cancel_modal(page)
 
 
@@ -1689,10 +1751,29 @@ def ensure_later_period(page):
 
 
 # ---------------------------------------------------------------- shots: manage, split
+#: A version 1 recipe as the old app left it, listed only: never opened, so never converted.
+V1_RECIPE = "recipe_2026-08-12-101500"
+
+
+def ensure_v1_recipe():
+    """The two files that make a folder a version 1 recipe, dated before the
+    demo so the Project dialog's Continue card keeps offering the demo."""
+    folder = RUN.data / V1_RECIPE
+    folder.mkdir(exist_ok=True)
+    params = {"aoi_name": "PER_Madre_De_Dios", "aoi_method": "ADMIN1", "start_date": "2026-08-01",
+              "end_date": "2026-08-31", "selected_alert_sources": ["GLAD-L", "RADD"], "recipe_name": V1_RECIPE}
+    (folder / "recipe_parameters.json").write_text(json.dumps(params), encoding="utf-8")
+    (folder / "alert_db.csv").write_text("alert_date_min,alert_date_max,status,bounding_box\n", encoding="utf-8")
+    stamp = datetime(2026, 8, 12, 10, 15).timestamp()
+    for f in folder.iterdir():
+        os.utime(f, (stamp, stamp))
+
+
 def shot_project_manage(page):
-    """Manage projects with the demo, the second project and the review copy."""
+    """Manage projects with the demo, the second project, the review copy and a version 1 recipe."""
     ensure_side(page)
     review_copy_name()
+    ensure_v1_recipe()
     ensure_open(page)
     w.back_to_workflow(page)
     w.open_manage(page)
@@ -1787,13 +1868,21 @@ def open_overview(page, height=None):
     if height:
         tall(page, height)
     page.locator('[data-step-id="3"]').first.click()
-    w.wait_for(lambda: w.dialog_visible(page) and T("overview_tile.card_numbers") in w.dialog_text(page), 120,
+    w.wait_for(lambda: w.dialog_visible(page) and T("overview_tile.kpi_confirmed") in w.dialog_text(page), 120,
                "the Overview")
     w.wait_for(lambda: T("overview_tile.loading") not in w.dialog_text(page), 120, "the Overview read")
     exact_btn(page, T("overview_tile.measure_area"), ".dialog-card").click()
     wait(page, 4000)
     page.evaluate("() => document.querySelectorAll('.dialog-card .dialog-content').forEach(e => e.scrollTop = 0)")
     quiet(page)
+
+
+def overview_tab(page, key):
+    """Open the Overview tab ``key`` (status, time, place, answers, pixels, clusters, files)."""
+    label = T(f"overview_tile.tab_{key}")
+    page.locator(".dialog-card .v-tab:visible",
+                 has_text=re.compile(rf"^\s*{re.escape(label)}(\s*\(\d[\d,. ]*\))?\s*$", re.IGNORECASE)).first.click()
+    wait(page, 1500)
 
 
 def close_overview(page):
@@ -1803,22 +1892,20 @@ def close_overview(page):
 
 def shot_overview_dashboard(page):
     open_overview(page, 1500)
+    overview_tab(page, "status")
     dialog = box(page, ".dialog-card")
-    history = card_box(page, T("overview_tile.card_history"))
-    save(page, "overview-dashboard", [dialog[0], dialog[1], dialog[2], history[1] + history[3] + 12 - dialog[1]])
+    sizes = card_box(page, T("overview_tile.card_sizes"))
+    save(page, "overview-dashboard", [dialog[0], dialog[1], dialog[2], sizes[1] + sizes[3] + 12 - dialog[1]])
     close_overview(page)
 
 
 def shot_overview_figures(page):
-    """The figures, the admin card on its first level below the country."""
-    open_overview(page, 3000)
-    exact_btn(page, T("overview_tile.admin_level_1"), ".dialog-card").click()
-    wait(page, 1500)
+    """The Pixels tab: the pixel funnel and the By source card."""
+    open_overview(page, 2000)
+    overview_tab(page, "pixels")
     dialog = box(page, ".dialog-card")
-    top = card_box(page, T("overview_tile.card_status"))[1]
-    bottom = max(card_box(page, T(f"overview_tile.{k}"))[1] + card_box(page, T(f"overview_tile.{k}"))[3]
-                 for k in ("card_admin", "card_sources"))
-    save(page, "overview-figures", [dialog[0], top - 12, dialog[2], bottom + 12 - (top - 12)])
+    by_source = card_box(page, T("overview_tile.card_by_source"))
+    save(page, "overview-figures", [dialog[0], dialog[1], dialog[2], by_source[1] + by_source[3] + 12 - dialog[1]])
     close_overview(page)
 
 
@@ -1826,6 +1913,7 @@ def shot_export_overview_card(page):
     """The Overview's Export alerts card: Confirmed chosen, its GeoPackage
     written (the tile clicked), the CSV table not."""
     open_overview(page, 2600)
+    overview_tab(page, "files")
     page.locator(".dialog-card .v-chip:visible",
                  has_text=re.compile(rf"^\s*{re.escape(T('overview_tile.export_scope_confirmed'))}\s*\d")).first.click()
     wait(page, 1500)
@@ -1883,8 +1971,9 @@ def map_switches(page, on, earlier=False):
 
 def set_legends(alert_sets, earlier=()) -> list[str]:
     """The legend titles of the active set and of earlier sets."""
-    def args(s):
-        return {"period": s["period_id"], "sources": " + ".join(s["sources"])}
+    def args(s):  # as gui/scripts/source_layers.period_text says the period
+        start, _, end = s["period_id"].partition("_")
+        return {"period": T("steps.period.range", start=start, end=end), "sources": " + ".join(s["sources"])}
     return ([T("legend.title.set", **args(s)) for s in alert_sets]
             + [T("legend.name.earlier_set", **args(s)) for s in earlier])
 
@@ -1960,9 +2049,8 @@ def shot_use_case_overview(page):
     comparison with September."""
     open_overview(page, 1500)
     dialog = box(page, ".dialog-card")
-    tiles = card_box(page, T("overview_tile.kpi_confirmed"))
-    # the next row of cards starts about 10 px below the key figures
-    save(page, "use-case-overview", [dialog[0], dialog[1], dialog[2], tiles[1] + tiles[3] + 5 - dialog[1]])
+    tabs = box(page, ".dialog-card .v-tabs")  # the key figures end just above the tab row
+    save(page, "use-case-overview", [dialog[0], dialog[1], dialog[2], tabs[1] - 4 - dialog[1]])
     close_overview(page)
 
 
@@ -2004,6 +2092,7 @@ SHOTS: dict[str, Callable] = {
     "aoi-admin": shot_aoi_admin,
     "alerts-add-predefined": shot_alerts_add_predefined,
     "alerts-add-custom": shot_alerts_add_custom,
+    "alerts-add-vector": shot_alerts_add_vector,
     "evaluation-return": shot_evaluation_return,
     "use-case-ana-copy": shot_use_case_ana_copy,
     "evaluation-merge": shot_evaluation_merge,

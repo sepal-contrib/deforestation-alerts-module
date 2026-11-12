@@ -172,14 +172,17 @@ msgstr "El mapa ocupa toda la ventana. El panel **Flujo de trabajo**, a la derec
 msgid "The header of the **Workflow** panel stays in view while the step under it scrolls:"
 msgstr "La cabecera del panel **Flujo de trabajo** queda a la vista mientras el paso de debajo se desplaza:"
 
-msgid "One strip shows both levels side by side, **Prepare alerts** and **Set up review**, each with its name over one bar per step. A filled bar has outputs (an AOI, periods, sources…), a grey bar is still empty and a striped bar is locked: hover over it to read why (e.g. \"Build an alert set first.\"). The two optional steps, **Additional layers** and **Questionnaire**, have a dashed bar. A level's name gets a check mark once its last required step has outputs. Select a bar to open its step."
-msgstr "Una franja muestra los dos niveles uno al lado del otro, **Preparar alertas** y **Preparar la revisión**, cada uno con su nombre sobre una barra por paso. Una barra rellena tiene resultados (una AOI, períodos, fuentes…), una barra gris sigue vacía y una barra rayada está bloqueada: pasa el cursor sobre ella para leer el motivo (por ejemplo, \"Crea primero un conjunto de alertas.\"). Los dos pasos opcionales, **Capas adicionales** y **Cuestionario**, tienen una barra discontinua. El nombre de un nivel recibe una marca de verificación en cuanto su último paso obligatorio tiene resultados. Selecciona una barra para abrir su paso."
+msgid "One title row shows the step's position among all the steps (e.g. \"3 / 8\"), its name and what it holds (\"3 sources\"). An optional step that is still empty shows no count. The arrows on each side go to the step before or after."
+msgstr "Una fila de título muestra la posición del paso entre todos los pasos (por ejemplo, \"3 / 8\"), su nombre y lo que contiene (\"3 fuentes\"). Un paso opcional que sigue vacío no muestra ningún recuento. Las flechas de cada lado van al paso anterior o al siguiente."
 
-msgid "Under the strip, the step's position in its level (e.g. \"3 / 5\"), its name and what it holds (\"3 sources\"). An optional step that is still empty shows no count: its dashed bar already marks it as optional. Select the name to jump to another step from a list, or use the arrows on each side to go to the step before or after."
-msgstr "Bajo la franja, la posición del paso en su nivel (por ejemplo, \"3 / 5\"), su nombre y lo que contiene (\"3 fuentes\"). Un paso opcional que sigue vacío no muestra ningún recuento: su barra discontinua ya lo marca como opcional. Selecciona el nombre para saltar a otro paso desde una lista, o usa las flechas de cada lado para ir al paso anterior o al siguiente."
+msgid "Select the name to open the list of steps, grouped under the two levels, **Prepare alerts** and **Set up review**. Each step has a numbered dot: filled when the step has outputs (an AOI, periods, sources…), a grey ring when it is still empty. The two optional steps, **Additional layers** and **Questionnaire**, have a dashed dot. A locked step is greyed out and says why (e.g. \"Build an alert set first.\"). A level's name gets a check mark once its last required step has outputs. Select a step to open it."
+msgstr "Selecciona el nombre para abrir la lista de pasos, agrupados bajo los dos niveles, **Preparar alertas** y **Preparar la revisión**. Cada paso tiene un punto numerado: relleno cuando el paso tiene resultados (una AOI, períodos, fuentes…), un anillo gris cuando sigue vacío. Los dos pasos opcionales, **Capas adicionales** y **Cuestionario**, tienen un punto discontinuo. Un paso bloqueado aparece en gris e indica el motivo (por ejemplo, \"Crea primero un conjunto de alertas.\"). El nombre de un nivel recibe una marca de verificación en cuanto su último paso obligatorio tiene resultados. Selecciona un paso para abrirlo."
 
 msgid "Under the name, one line says what to do in the step (e.g. \"Set the monitoring period.\"). The information button at the right side of that line opens the step's help."
 msgstr "Bajo el nombre, una línea indica qué hacer en el paso (por ejemplo, \"Define el período de monitoreo.\"). El botón de información a la derecha de esa línea abre la ayuda del paso."
+
+msgid "At the bottom of the panel, **Back** and **Next** go to the step before or after, skipping locked steps. Hover over one to see the name of the step it opens."
+msgstr "Al pie del panel, **Atrás** y **Siguiente** van al paso anterior o al siguiente, saltando los pasos bloqueados. Pasa el cursor sobre uno de ellos para ver el nombre del paso que abre."
 
 msgid "To use the left rail:"
 msgstr "Para usar la barra lateral izquierda:"
@@ -238,8 +241,8 @@ msgstr "Cuando no hay ningún proyecto abierto"
 msgid "The Project dialog with no project open"
 msgstr "El diálogo Proyecto sin ningún proyecto abierto"
 
-msgid "The dialog reads **No project open** and offers three buttons:"
-msgstr "El diálogo indica **Ningún proyecto abierto** y ofrece tres botones:"
+msgid "With saved projects, the dialog offers the one changed last under **Continue where you left off**, with its counts, its AOI and when it was changed: select **Continue** to open it. With no saved project, it reads **No project open**. Below are three buttons:"
+msgstr "Si hay proyectos guardados, el diálogo ofrece el último modificado bajo **Continuar donde lo dejaste**, con sus números, su AOI y cuándo se modificó: selecciona **Continuar** para abrirlo. Si no hay ningún proyecto guardado, indica **Ningún proyecto abierto**. Debajo hay tres botones:"
 
 msgid "Button"
 msgstr "Botón"
@@ -286,8 +289,8 @@ msgstr "un resumen: la AOI (o \"sin AOI todavía\") y el número de fuentes, per
 msgid "when the project was last saved (e.g. \"Saved 3 minutes ago\")."
 msgstr "cuándo se guardó el proyecto por última vez (por ejemplo, \"Guardado hace 3 minutos\")."
 
-msgid "Its buttons are **New project**, **Manage**, **Import** and **Duplicate**."
-msgstr "Sus botones son **Nuevo proyecto**, **Gestionar**, **Importar** y **Duplicar**."
+msgid "The pencil icon next to the name renames the project and the copy icon duplicates it. The buttons below are the same as when no project is open: **New project**, **Manage projects** and **Import**."
+msgstr "El icono de lápiz junto al nombre renombra el proyecto y el icono de copia lo duplica. Los botones de debajo son los mismos que cuando no hay ningún proyecto abierto: **Nuevo proyecto**, **Gestionar proyectos** e **Importar**."
 
 msgid "Create a project"
 msgstr "Crear un proyecto"
@@ -322,17 +325,23 @@ msgstr "Abrir, buscar y eliminar proyectos"
 msgid "The Manage projects dialog"
 msgstr "El diálogo Gestionar proyectos"
 
-msgid "**Manage** (or **Manage projects** when nothing is open) lists every saved project with:"
-msgstr "**Gestionar** (o **Gestionar proyectos** cuando no hay nada abierto) muestra cada proyecto guardado con:"
+msgid "**Manage projects** lists every saved project with:"
+msgstr "**Gestionar proyectos** muestra cada proyecto guardado con:"
 
 msgid "small chips for its number of sources, periods and alert sets (the alert-set chip is coloured when the project has results to review);"
 msgstr "pequeñas etiquetas con su número de fuentes, períodos y conjuntos de alertas (la de conjuntos de alertas aparece en color cuando el proyecto tiene resultados por revisar);"
 
-msgid "when it was last changed (e.g. \"modified 2 days ago\"); and"
-msgstr "cuándo se modificó por última vez (por ejemplo, \"modificado hace 2 días\"); y"
+msgid "its AOI (or \"no AOI yet\") and when it was last changed (e.g. \"modified 2 days ago\");"
+msgstr "su AOI (o \"sin AOI todavía\") y cuándo se modificó por última vez (por ejemplo, \"modificado hace 2 días\");"
+
+msgid "its size on disk, measured when the dialog opens; and"
+msgstr "su tamaño en disco, medido al abrir el diálogo; y"
 
 msgid "an **open** chip on the project that is open now."
 msgstr "una etiqueta **abierto** en el proyecto que está abierto en ese momento."
+
+msgid "A recipe saved with the previous version of the app is listed too, with a **version 1** chip (see `Open a version 1 recipe <defo-project-v1_>`_)."
+msgstr "Una receta guardada con la versión anterior de la aplicación también aparece en la lista, con una etiqueta **versión 1** (consulta `Abrir una receta de la versión 1 <defo-project-v1_>`_)."
 
 msgid "To open a project:"
 msgstr "Para abrir un proyecto:"
@@ -345,6 +354,21 @@ msgstr "Selecciona un proyecto."
 
 msgid "Select **Open**."
 msgstr "Selecciona **Abrir**."
+
+msgid "To rename a project:"
+msgstr "Para renombrar un proyecto:"
+
+msgid "Select the pencil icon on its row (or next to the name of the open project)."
+msgstr "Selecciona el icono de lápiz de su fila (o junto al nombre del proyecto abierto)."
+
+msgid "Enter the new name. It follows the same rules as a new project's name."
+msgstr "Escribe el nuevo nombre. Sigue las mismas reglas que el nombre de un proyecto nuevo."
+
+msgid "Select **Rename**."
+msgstr "Selecciona **Renombrar**."
+
+msgid "A project cannot be renamed while a task is still writing into it."
+msgstr "No se puede renombrar un proyecto mientras una tarea sigue escribiendo en él."
 
 msgid "To delete a project:"
 msgstr "Para eliminar un proyecto:"
@@ -417,6 +441,39 @@ msgstr "**Importar como copia nueva**: vuelve a importar el paquete como un proy
 
 msgid "A *reviewed copy* (the file an evaluator sends back) cannot be imported here. The project's creator merges it in the `Evaluation <defo-evaluation_>`_ step of the original project."
 msgstr "Una *copia revisada* (el archivo que devuelve un evaluador) no se puede importar aquí. El creador del proyecto la integra en el paso `Evaluación <defo-evaluation_>`_ del proyecto original."
+
+msgid "Open a version 1 recipe"
+msgstr "Abrir una receta de la versión 1"
+
+msgid "Recipes saved with the previous version of the app (version 1) stay in their folders under ``module_results/deforestation_alerts/``. **Manage projects** lists them among the projects, marked with a **version 1** chip. Hover over the chip to read: \"Saved with the previous version. It is converted the first time you open it; the old files are kept.\""
+msgstr "Las recetas guardadas con la versión anterior de la aplicación (la versión 1) se quedan en sus carpetas dentro de ``module_results/deforestation_alerts/``. **Gestionar proyectos** las muestra entre los proyectos, marcadas con una etiqueta **versión 1**. Pasa el cursor sobre la etiqueta para leer: \"Guardado con la versión anterior. Se convierte la primera vez que lo abre; los archivos antiguos se conservan.\""
+
+msgid "To open a recipe, select it, then select **Open**, as for a project (or **Continue**, when the dialog offers it). The first time, the app converts it into a project in the same folder: the row reads \"Converting (name)…\" while the app gets the recipe's AOI (from GEE for an administrative area or an asset) and reads its alerts. The project then opens on the `Analysis <defo-analysis_>`_ screen, and the app confirms, e.g. \"recipe_2026-08-12-101500 was converted from version 1. 5 of 40 alerts reviewed.\" Later opens skip the conversion."
+msgstr "Para abrir una receta, selecciónala y luego selecciona **Abrir**, como para un proyecto (o **Continuar**, cuando el diálogo lo ofrece). La primera vez, la aplicación la convierte en un proyecto en la misma carpeta: la fila indica \"Convirtiendo (nombre)…\" mientras la aplicación obtiene la AOI de la receta (desde GEE para un área administrativa o un recurso) y lee sus alertas. El proyecto se abre entonces en la pantalla de `Análisis <defo-analysis_>`_ y la aplicación lo confirma, por ejemplo: \"recipe_2026-08-12-101500 se convirtió desde la versión 1. 5 de 40 alertas revisadas.\" Las aperturas siguientes se saltan la conversión."
+
+msgid "The converted project keeps:"
+msgstr "El proyecto convertido conserva:"
+
+msgid "the recipe's period, sources and alerts;"
+msgstr "el período, las fuentes y las alertas de la receta;"
+
+msgid "every review: the status, the description, the drawn polygon, the area, the administrative names, the before and after images, and the alert the review stopped at; and"
+msgstr "cada revisión: el estado, la descripción, el polígono dibujado, el área, los nombres administrativos, las imágenes de antes y después, y la alerta en la que se detuvo la revisión; y"
+
+msgid "the recipe's mask and extra layer, as the additional layers ``v1 mask`` and ``v1 layer``, and its report template when the file is still there."
+msgstr "la máscara y la capa adicional de la receta, como las capas adicionales ``v1 mask`` y ``v1 layer``, y su plantilla de informe si el archivo sigue ahí."
+
+msgid "The alerts are drawn as rectangles (the boxes version 1 drew around them), with the polygon drawn in a review on top. They keep their version 1 numbers, which start at 0. An alert without a drawn polygon gets an area estimated from its number of alert pixels. When part of the recipe cannot be converted, a warning lists it once, after the conversion (e.g. \"source CCDC: not imported as a source, kept in the alert set only\")."
+msgstr "Las alertas se dibujan como rectángulos (los recuadros que la versión 1 dibujaba a su alrededor), con el polígono dibujado en una revisión encima. Conservan sus números de la versión 1, que empiezan en 0. Una alerta sin polígono dibujado recibe un área estimada a partir de su número de píxeles de alerta. Cuando una parte de la receta no se puede convertir, un aviso la indica una vez, tras la conversión (por ejemplo, \"fuente CCDC: no se importó como fuente, solo se conserva en el conjunto de alertas\")."
+
+msgid "A converted project is locked, and a banner reads: \"This project comes from a version 1 recipe. Only additional layers can be changed; review, save and export work as usual.\" Its AOI, period, sources, Harmonize, Integrate & vectorize, questionnaire and report template cannot change, and it cannot be duplicated. The `Evaluation <defo-evaluation_>`_ step is not available: one person reviews the project. The `Additional layers <defo-layers_>`_ can be added, edited and deleted."
+msgstr "Un proyecto convertido está bloqueado, y un aviso indica: \"Este proyecto proviene de una receta de la versión 1. Solo se pueden cambiar las capas adicionales; la revisión, el guardado y la exportación funcionan como siempre.\" Su AOI, su período, sus fuentes, Armonizar, Integrar y vectorizar, el cuestionario y la plantilla del informe no pueden cambiar, y no se puede duplicar. El paso `Evaluación <defo-evaluation_>`_ no está disponible: una sola persona revisa el proyecto. Las `Capas adicionales <defo-layers_>`_ se pueden añadir, editar y eliminar."
+
+msgid "The recipe's own files (``recipe_parameters.json``, ``alert_db.csv`` and the files made for each alert) are never changed. A recipe cannot be renamed before it is converted: its pencil icon reads \"Open it once to convert it first.\""
+msgstr "Los archivos propios de la receta (``recipe_parameters.json``, ``alert_db.csv`` y los archivos generados para cada alerta) nunca se modifican. Una receta no se puede renombrar antes de convertirla: su icono de lápiz indica \"Ábralo una vez para convertirlo primero.\""
+
+msgid "If the conversion fails, nothing is written, and the message gives the cause, e.g. \"Could not get the area of interest: (error). The recipe was not changed.\""
+msgstr "Si la conversión falla, no se escribe nada y el mensaje indica la causa, por ejemplo: \"No se pudo obtener el área de interés: (error). La receta no se modificó.\""
 
 msgid "Where the files are"
 msgstr "Dónde están los archivos"
@@ -871,6 +928,9 @@ msgstr "**AOI**: la parte de la AOI dentro de la huella de la fuente, por ejempl
 msgid "The dates: \"✓ data to 2026-10-30\" (green) when the source has data up to the end of the search window, \"data to … only\" (orange) when its data stop inside the window, or \"✗ data ends …\" (red) when it has none in the window."
 msgstr "Las fechas: \"✓ datos hasta 2026-10-30\" (verde) cuando la fuente tiene datos hasta el final de la ventana de búsqueda, \"datos solo hasta …\" (naranja) cuando sus datos terminan dentro de la ventana, o \"✗ los datos terminan el …\" (rojo) cuando no tiene ninguno en la ventana."
 
+msgid "A points or polygons source has one chip instead, \"clipped to the AOI\": its coverage is not checked."
+msgstr "Una fuente de puntos o polígonos tiene en su lugar un solo chip, \"recortada a la AOI\": su cobertura no se comprueba."
+
 msgid "**Status**"
 msgstr "**Estado**"
 
@@ -880,8 +940,8 @@ msgstr "El estado de la fila, o un botón para descargarla (consulta `Descargar 
 msgid "Map icon"
 msgstr "Icono de mapa"
 
-msgid "Shows the source on the map: the alerts of the active period's search window. A GeoTIFF source is shown only once it is harmonized."
-msgstr "Muestra la fuente en el mapa: las alertas de la ventana de búsqueda del período activo. Una fuente GeoTIFF solo se muestra una vez armonizada."
+msgid "Shows the source on the map: the alerts of the active period's search window. A GeoTIFF source is shown only once it is harmonized. A points or polygons source shows its features as read from the file, once its row is read (see `Points or polygons file <defo-alerts-vector_>`_)."
+msgstr "Muestra la fuente en el mapa: las alertas de la ventana de búsqueda del período activo. Una fuente GeoTIFF solo se muestra una vez armonizada. Una fuente de puntos o polígonos muestra sus elementos tal como se leen del archivo, una vez leída su fila (consulta `Archivo de puntos o polígonos <defo-alerts-vector_>`_)."
 
 msgid "Information icon"
 msgstr "Icono de información"
@@ -913,8 +973,8 @@ msgstr "Selecciona **Añadir fuente** para abrir el diálogo **Añadir una fuent
 msgid "**Predefined or project source**: one of the catalogue sources, or a source of the project that is not in this period (e.g. one used in an earlier period); or"
 msgstr "**Predefinida o del proyecto**: una de las fuentes del catálogo, o una fuente del proyecto que no está en este período (por ejemplo, una usada en un período anterior); o"
 
-msgid "**Custom (0 of 6)**: your own GEE image, image collection or GeoTIFF. The count shows how many of the period's six custom slots are in use."
-msgstr "**Personalizada (0 de 6)**: tu propia imagen de GEE, colección de imágenes o GeoTIFF. El contador indica cuántos de los seis espacios personalizados del período están en uso."
+msgid "**Custom (0 of 6)**: your own GEE image, image collection or GeoTIFF, or a file of dated points or polygons. The count shows how many of the period's six custom slots are in use."
+msgstr "**Personalizada (0 de 6)**: tu propia imagen de GEE, colección de imágenes o GeoTIFF, o un archivo de puntos o polígonos con fecha. El contador indica cuántos de los seis espacios personalizados del período están en uso."
 
 msgid "A period holds at most three predefined and six custom sources. The project keeps every source it has used, with no limit."
 msgstr "Un período admite como máximo tres fuentes predefinidas y seis personalizadas. El proyecto conserva todas las fuentes que ha usado, sin límite."
@@ -988,8 +1048,8 @@ msgstr "El nombre de la fuente en listas, leyendas y nombres de archivo."
 msgid "Suggested from the asset or file name. At most 24 characters, at least one letter or digit, unique in the project. GLAD-L, RADD and GLAD-S2 are reserved."
 msgstr "Se sugiere a partir del nombre del recurso o del archivo. Como máximo 24 caracteres, al menos una letra o cifra, único en el proyecto. GLAD-L, RADD y GLAD-S2 están reservados."
 
-msgid "Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF / VRT** (a file in your SEPAL folder: a GeoTIFF, or a VRT, a GDAL virtual raster read like the GeoTIFFs it points to)."
-msgstr "De dónde se lee el raster: **Earth Engine** (un recurso) o **GeoTIFF / VRT** (un archivo de tu carpeta de SEPAL: un GeoTIFF, o un VRT, un raster virtual de GDAL que se lee como los GeoTIFF a los que apunta)."
+msgid "Where the raster is read from: **Earth Engine** (an asset) or **GeoTIFF / VRT** (a file in your SEPAL folder: a GeoTIFF, or a VRT, a GDAL virtual raster read like the GeoTIFFs it points to). The third choice, **Points or polygons file (CSV, GPKG, SHP)**, is not a raster (see `Points or polygons file <defo-alerts-vector_>`_)."
+msgstr "De dónde se lee el raster: **Earth Engine** (un recurso) o **GeoTIFF / VRT** (un archivo de tu carpeta de SEPAL: un GeoTIFF, o un VRT, un raster virtual de GDAL que se lee como los GeoTIFF a los que apunta). La tercera opción, **Archivo de puntos o polígonos (CSV, GPKG, SHP)**, no es un raster (consulta `Archivo de puntos o polígonos <defo-alerts-vector_>`_)."
 
 msgid "**Earth Engine**."
 msgstr "**Earth Engine**."
@@ -1078,6 +1138,87 @@ msgstr "Una banda de fecha con la codificación elegida. Cada píxel con fecha e
 msgid "When **Add source** is selected, the app checks the raster: the bands exist and are numeric, the dates can be read and the source covers the AOI. A problem is shown in red inside the dialog, which stays open for corrections. While the check runs, the button reads **Cancel** and stops it."
 msgstr "Al seleccionar **Añadir fuente**, la aplicación comprueba el raster: que las bandas existen y son numéricas, que las fechas se pueden leer y que la fuente cubre la AOI. Cualquier problema se muestra en rojo dentro del diálogo, que sigue abierto para hacer correcciones. Mientras se hace la comprobación, el botón indica **Cancelar** y la detiene."
 
+msgid "Points or polygons file"
+msgstr "Archivo de puntos o polígonos"
+
+msgid "Adding a custom source from a file of points"
+msgstr "Añadir una fuente personalizada desde un archivo de puntos"
+
+msgid "A custom source can also be a file of dated points or polygons, such as alerts reported from the field or by another system. Choose **Points or polygons file (CSV, GPKG, SHP)** in **Source**, then pick the file in **Vector file**: a .csv table, a GeoPackage (.gpkg) or a Shapefile (.shp, with its .shx and .dbf files next to it). The file is read at once (\"Reading the file…\"), and the fields that depend on it appear:"
+msgstr "Una fuente personalizada también puede ser un archivo de puntos o polígonos con fecha, como alertas reportadas desde el terreno o por otro sistema. Elige **Archivo de puntos o polígonos (CSV, GPKG, SHP)** en **Fuente** y luego elige el archivo en **Archivo vectorial**: una tabla .csv, un GeoPackage (.gpkg) o un Shapefile (.shp, con sus archivos .shx y .dbf al lado). El archivo se lee en el acto (\"Leyendo el archivo…\") y aparecen los campos que dependen de él:"
+
+msgid "**Layer**"
+msgstr "**Capa**"
+
+msgid "The GeoPackage layer to read."
+msgstr "La capa del GeoPackage que se lee."
+
+msgid "Only for a GeoPackage with several layers. Starts on the first one."
+msgstr "Solo para un GeoPackage con varias capas. Empieza en la primera."
+
+msgid "**Longitude column** and **Latitude column**"
+msgstr "**Columna de longitud** y **Columna de latitud**"
+
+msgid "The columns holding the coordinates of each point, in degrees (WGS84)."
+msgstr "Las columnas que contienen las coordenadas de cada punto, en grados (WGS84)."
+
+msgid "Only for a CSV. Suggested from the column names (e.g. ``lon``, ``latitude``)."
+msgstr "Solo para un CSV. Se sugieren a partir de los nombres de las columnas (por ejemplo, ``lon``, ``latitude``)."
+
+msgid "**Date column**"
+msgstr "**Columna de fecha**"
+
+msgid "The column holding the date of each alert."
+msgstr "La columna que contiene la fecha de cada alerta."
+
+msgid "Suggested from the column names (e.g. ``date``, ``fecha``)."
+msgstr "Se sugiere a partir de los nombres de las columnas (por ejemplo, ``date``, ``fecha``)."
+
+msgid "**Dates are written**"
+msgstr "**Las fechas se escriben**"
+
+msgid "**Day first (dd/mm/yyyy)** or **Month first (mm/dd/yyyy)**."
+msgstr "**Día primero (dd/mm/aaaa)** o **Mes primero (mm/dd/aaaa)**."
+
+msgid "Only when the dates read either way (e.g. 03/04/2026)."
+msgstr "Solo cuando las fechas se pueden leer de las dos maneras (por ejemplo, 03/04/2026)."
+
+msgid "**Square side (m)**"
+msgstr "**Lado del cuadrado (m)**"
+
+msgid "Each point becomes a square of this side, centred on the point."
+msgstr "Cada punto se convierte en un cuadrado de este lado, centrado en el punto."
+
+msgid "Only when the file has points. 30 m by default."
+msgstr "Solo cuando el archivo tiene puntos. 30 m por defecto."
+
+msgid "A line under the fields sums up what is read, for example \"Dates read as day/month/year · 12 points, 0 polygons · 2026-06-12 → 2026-09-11 · 0 skipped\". Rows without a point or polygon, or without a date, are skipped."
+msgstr "Una línea bajo los campos resume lo que se ha leído, por ejemplo \"Fechas leídas como día/mes/año · 12 puntos, 0 polígonos · 2026-06-12 → 2026-09-11 · 0 omitidos\". Las filas sin punto ni polígono, o sin fecha, se omiten."
+
+msgid "How the file is read:"
+msgstr "Cómo se lee el archivo:"
+
+msgid "A CSV's columns can be separated by commas, semicolons or tabs. With semicolons, decimal commas are read too."
+msgstr "Las columnas de un CSV pueden estar separadas por comas, puntos y comas o tabulaciones. Con puntos y comas, también se leen las comas decimales."
+
+msgid "A GeoPackage or a Shapefile needs a coordinate system, which can be any one."
+msgstr "Un GeoPackage o un Shapefile necesita un sistema de referencia de coordenadas, que puede ser cualquiera."
+
+msgid "A date can be a date field, year-month-day (``2026-09-14``), ``yyyymmdd`` (``20260914``) or day and month in either order (``14/09/2026``)."
+msgstr "Una fecha puede ser un campo de fecha, año-mes-día (``2026-09-14``), ``yyyymmdd`` (``20260914``) o día y mes en cualquier orden (``14/09/2026``)."
+
+msgid "Every point or polygon is a confirmed alert. A polygon keeps its shape; a polygon or a square smaller than a pixel still gives one pixel."
+msgstr "Cada punto o polígono es una alerta confirmada. Un polígono conserva su forma; un polígono o un cuadrado más pequeño que un píxel da igualmente un píxel."
+
+msgid "Where features overlap, the earliest date is kept."
+msgstr "Donde los elementos se solapan, se conserva la fecha más temprana."
+
+msgid "The source needs no GEE: its coverage is not checked, and only the features inside the AOI become alert pixels. Its row in `Alerts <defo-alerts-download_>`_ reads the features of the period's search window (**Read file**); its map icon then shows them as read, points as dots and polygons as outlines. `Harmonize <defo-harmonize_>`_ turns them into alert pixels on the project grid, and its map icon shows that raster, to compare with the features."
+msgstr "La fuente no necesita GEE: su cobertura no se comprueba, y solo los elementos dentro de la AOI se convierten en píxeles de alerta. Su fila en `Alertas <defo-alerts-download_>`_ lee los elementos de la ventana de búsqueda del período (**Leer archivo**); su icono de mapa los muestra entonces tal como se han leído, los puntos como puntos y los polígonos como contornos. `Armonizar <defo-harmonize_>`_ los convierte en píxeles de alerta en la cuadrícula del proyecto, y su icono de mapa muestra ese raster, para compararlo con los elementos."
+
+msgid "**Read file** reads the file again when it was edited after the source was added. If the edit no longer fits the source (for example, a chosen column is gone, or the dates now read in the other day/month order), the row shows \"The alert file changed since it was added. Edit the source to check it again.\""
+msgstr "**Leer archivo** vuelve a leer el archivo cuando se ha editado después de añadir la fuente. Si la edición ya no encaja con la fuente (por ejemplo, una columna elegida ha desaparecido, o las fechas se leen ahora en el otro orden día/mes), la fila indica \"El archivo de alertas cambió desde que se añadió. Edita la fuente para comprobarlo de nuevo.\""
+
 msgid "Edit a custom source"
 msgstr "Editar una fuente personalizada"
 
@@ -1090,8 +1231,8 @@ msgstr "En cuanto un conjunto de alertas usa la fuente, ya no se puede editar: q
 msgid "Download the sources"
 msgstr "Descargar las fuentes"
 
-msgid "Each source is downloaded over the period's search window, in its own projection and cut to the AOI. A GeoTIFF source is not downloaded: it is read from its file. Downloading does not harmonize the source: that is the next step, `Harmonize <defo-harmonize_>`_, which runs only when you start it there."
-msgstr "Cada fuente se descarga en la ventana de búsqueda del período, en su propia proyección y recortada a la AOI. Una fuente GeoTIFF no se descarga: se lee de su archivo. Descargar no armoniza la fuente: eso es el paso siguiente, `Armonizar <defo-harmonize_>`_, que solo se ejecuta cuando lo inicias allí."
+msgid "Each source is downloaded over the period's search window, in its own projection and cut to the AOI. A GeoTIFF source is not downloaded: it is read from its file. What this guide says of a GeoTIFF source holds for a points or polygons source too; the line under its name reads \"Points/polygons file\". Downloading does not harmonize the source: that is the next step, `Harmonize <defo-harmonize_>`_, which runs only when you start it there."
+msgstr "Cada fuente se descarga en la ventana de búsqueda del período, en su propia proyección y recortada a la AOI. Una fuente GeoTIFF no se descarga: se lee de su archivo. Lo que esta guía dice de una fuente GeoTIFF vale también para una fuente de puntos o polígonos; la línea bajo su nombre indica \"Archivo de puntos/polígonos\". Descargar no armoniza la fuente: eso es el paso siguiente, `Armonizar <defo-harmonize_>`_, que solo se ejecuta cuando lo inicias allí."
 
 msgid "The **Status** column reads:"
 msgstr "La columna **Estado** indica:"
@@ -1150,8 +1291,8 @@ msgstr "Un botón azul ejecuta una fila por primera vez; uno naranja rehace un a
 msgid "A downloaded row has no button: a source already downloaded for the period's search window is not downloaded again by itself. To fetch the latest alerts of a catalogue that keeps adding alerts to past dates, use **Download again**. The app asks first, with the window and the date of the file it replaces. It is not offered for a GeoTIFF source (\"Nothing to download again: read from a file\")."
 msgstr "Una fila descargada no tiene botón: una fuente ya descargada para la ventana de búsqueda del período no se vuelve a descargar por sí sola. Para obtener las últimas alertas de un catálogo que sigue añadiendo alertas a fechas pasadas, usa **Descargar de nuevo**. La aplicación pregunta antes, indicando la ventana y la fecha del archivo que reemplaza. No se ofrece para una fuente GeoTIFF (\"Nada que descargar de nuevo: se lee de un archivo\")."
 
-msgid "The footer under the table downloads in batch. Select **Download … pending** (e.g. **Download 3 pending**) to download every source that needs it, one row at a time. Rows that read \"not covered\" or \"no data\" are skipped; a row that fails shows its error in red under it, and the run goes on with the next row. While it lasts, the footer counts its rows (\"1 running · 2 queued\", then \"1 of 3 done\"; the running row shows its own progress bar) and the button turns into **Stop**, which stops after the row in progress (\"Stopping…\"). The arrow beside the button (**More batch actions**) opens **Download all again (…)**: every source that is not blocked and is not a GeoTIFF is downloaded again, after you confirm."
-msgstr "El pie bajo la tabla descarga en lote. Selecciona **Descargar … pendientes** (por ejemplo, **Descargar 3 pendientes**) para descargar cada fuente que lo necesite, una fila tras otra. Las filas que indican \"no cubierta\" o \"sin datos\" se omiten; una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente. Mientras dura, el pie cuenta sus filas (\"1 en curso · 2 en cola\", luego \"1 de 3 terminadas\"; la fila en curso muestra su propia barra de progreso) y el botón se convierte en **Detener**, que se detiene después de la fila en curso (\"Deteniendo…\"). La flecha junto al botón (**Más acciones por lotes**) abre **Descargar todo de nuevo (…)**: cada fuente que no está bloqueada y no es un GeoTIFF se descarga de nuevo, después de confirmar."
+msgid "Each row is downloaded with its own button. Select the buttons of several rows to download them all: each starts its own job, and they queue, one row at a time. Rows that read \"not covered\" or \"no data\" have no button; a row that fails shows its error in red under it. The running row shows its own progress bar; a started row cannot be stopped."
+msgstr "Cada fila se descarga con su propio botón. Selecciona los botones de varias filas para descargarlas todas: cada uno inicia su propio trabajo, y se ponen en cola, una fila tras otra. Las filas que indican \"no cubierta\" o \"sin datos\" no tienen botón; una fila que falla muestra su error en rojo debajo. La fila en curso muestra su propia barra de progreso; una fila iniciada no se puede detener."
 
 msgid "The download also shows as a task notification titled **Download**, with the source it is on and its percentage."
 msgstr "La descarga también aparece como una notificación de tarea titulada **Descarga**, con la fuente en la que está y su porcentaje."
@@ -1191,6 +1332,30 @@ msgstr "\"Este período ya tiene 6 fuentes personalizadas.\""
 
 msgid "Remove a custom source from the period before adding another one."
 msgstr "Quita una fuente personalizada del período antes de añadir otra."
+
+msgid "\"This file cannot be read as CSV, GeoPackage or Shapefile.\""
+msgstr "\"Este archivo no se puede leer como CSV, GeoPackage o Shapefile.\""
+
+msgid "The file is not a .csv, .gpkg or .shp file, or it could not be read as one."
+msgstr "El archivo no es un archivo .csv, .gpkg o .shp, o no se pudo leer como tal."
+
+msgid "\"The Shapefile is missing its .shx or .dbf file.\""
+msgstr "\"Al Shapefile le falta su archivo .shx o .dbf.\""
+
+msgid "Put the .shx and .dbf files with the same name as the .shp in its folder."
+msgstr "Pon los archivos .shx y .dbf con el mismo nombre que el .shp en su carpeta."
+
+msgid "\"The date column cannot be read: mixed day/month orders or no valid date.\""
+msgstr "\"No se puede leer la columna de fecha: órdenes día/mes mezclados o ninguna fecha válida.\""
+
+msgid "Some dates are written day first and others month first, or no value reads as a date. Choose another **Date column**, or write the dates in one format."
+msgstr "Algunas fechas se escriben con el día primero y otras con el mes primero, o ningún valor se lee como fecha. Elige otra **Columna de fecha**, o escribe las fechas en un solo formato."
+
+msgid "\"No dated point or polygon in this file.\""
+msgstr "\"Ningún punto ni polígono con fecha en este archivo.\""
+
+msgid "No row has both a point or polygon and a date. Line features and rows without coordinates are skipped."
+msgstr "Ninguna fila tiene a la vez un punto o polígono y una fecha. Los elementos de línea y las filas sin coordenadas se omiten."
 
 msgid "\"A job is writing into this project; …\""
 msgstr "\"Un trabajo está escribiendo en este proyecto; …\""
@@ -1282,8 +1447,8 @@ msgstr "**Excluir**"
 msgid "Alerts *inside* the mask are removed (e.g. drop alerts in plantations or water)."
 msgstr "Se eliminan las alertas *dentro* de la máscara (por ejemplo, para descartar las alertas en plantaciones o en agua)."
 
-msgid "When several masks are on, all of them apply. Masks act on the harmonized sources, so a change of **Mode** makes the period's sources out of date. **Harmonize … pending** then harmonizes them again without downloading them. A new period starts with the mask choices of the latest period."
-msgstr "Cuando hay varias máscaras activas, se aplican todas. Las máscaras actúan sobre las fuentes armonizadas, así que un cambio de **Modo** deja desactualizadas las fuentes del período. **Armonizar … pendientes** las vuelve a armonizar sin descargarlas. Un período nuevo empieza con las opciones de máscara del último período."
+msgid "When several masks are on, all of them apply. Masks act on the harmonized sources, so a change of **Mode** makes the period's sources out of date. The **Harmonize** of each row then harmonizes them again without downloading them. A new period starts with the mask choices of the latest period."
+msgstr "Cuando hay varias máscaras activas, se aplican todas. Las máscaras actúan sobre las fuentes armonizadas, así que un cambio de **Modo** deja desactualizadas las fuentes del período. El botón **Armonizar** de cada fila las vuelve a armonizar sin descargarlas. Un período nuevo empieza con las opciones de máscara del último período."
 
 msgid "Add a mask"
 msgstr "Añadir una máscara"
@@ -1441,8 +1606,8 @@ msgstr "Sección"
 msgid "What it lists"
 msgstr "Lo que enumera"
 
-msgid "A predefined source: its **Catalogue** and **Coverage** of the AOI, with the last date of data and the day it was checked. A custom source: its **Kind**, **Reference**, **Format**, **Date encoding**, **Bands** and **Native grid**. A mask: its **Reference**, **Band**, **Native grid** and the periods it is **Used in**."
-msgstr "Una fuente predefinida: su **Catálogo** y su **Cobertura** de la AOI, con la última fecha de datos y el día en que se comprobó. Una fuente personalizada: su **Tipo**, **Referencia**, **Formato**, **Codificación de fechas**, **Bandas** y **Cuadrícula nativa**. Una máscara: su **Referencia**, **Banda**, **Cuadrícula nativa** y los períodos en que se usa (**Usada en**)."
+msgid "A predefined source: its **Catalogue** and **Coverage** of the AOI, with the last date of data and the day it was checked. A custom source: its **Kind**, **Reference**, **Format**, **Date encoding**, **Bands** and **Native grid**. A points or polygons source: its **Kind**, **Reference**, **Layer**, **Date column** (with how its dates are read) and **Square side (m)**. A mask: its **Reference**, **Band**, **Native grid** and the periods it is **Used in**."
+msgstr "Una fuente predefinida: su **Catálogo** y su **Cobertura** de la AOI, con la última fecha de datos y el día en que se comprobó. Una fuente personalizada: su **Tipo**, **Referencia**, **Formato**, **Codificación de fechas**, **Bandas** y **Cuadrícula nativa**. Una fuente de puntos o polígonos: su **Tipo**, **Referencia**, **Capa**, **Columna de fecha** (con cómo se leen sus fechas) y **Lado del cuadrado (m)**. Una máscara: su **Referencia**, **Banda**, **Cuadrícula nativa** y los períodos en que se usa (**Usada en**)."
 
 msgid "**Download** (**Read from file** for a GeoTIFF source)"
 msgstr "**Descarga** (**Lectura del archivo** para una fuente GeoTIFF)"
@@ -1459,20 +1624,23 @@ msgstr "La **Cuadrícula usada**, con la cuadrícula actual cuando cambió desde
 msgid "Each section gives the date and time its file was written, or reads \"Not run yet\". Select **Close**, or press **Esc**, to close the dialog."
 msgstr "Cada sección indica la fecha y la hora en que se escribió su archivo, o \"Aún no ejecutado\". Selecciona **Cerrar**, o pulsa **Esc**, para cerrar el diálogo."
 
-msgid "Run everything"
-msgstr "Ejecutarlo todo"
+msgid "Run several rows"
+msgstr "Ejecutar varias filas"
 
-msgid "The footer under the table runs the rows in batch. Select **Harmonize … pending** (e.g. **Harmonize 4 pending**). It first aligns the masks on in the period that need it, then harmonizes every downloaded source that needs it, one row at a time:"
-msgstr "El pie de la tabla ejecuta las filas en lote. Selecciona **Armonizar … pendientes** (por ejemplo, **Armonizar 4 pendientes**). Primero alinea las máscaras activas en el período que lo necesitan y luego armoniza cada fuente descargada que lo necesite, una fila tras otra:"
+msgid "Each row runs with its own button. A source's **Harmonize** first aligns the masks on in the period that need it, then harmonizes the source; a mask's **Align** aligns only that mask. Select the buttons of several rows to run them all: each starts its own job, and they queue, one row at a time:"
+msgstr "Cada fila se ejecuta con su propio botón. El **Armonizar** de una fuente primero alinea las máscaras activas en el período que lo necesitan y luego armoniza la fuente; el **Alinear** de una máscara alinea solo esa máscara. Selecciona los botones de varias filas para ejecutarlas todas: cada uno inicia su propio trabajo, y se ponen en cola, una fila tras otra:"
 
-msgid "rows that read \"not covered\" or \"no data\", and rows still to download, are skipped;"
-msgstr "las filas que indican \"no cubierta\" o \"sin datos\", y las filas que faltan por descargar, se omiten;"
+msgid "rows that read \"not covered\" or \"no data\", and rows still to download, have no button;"
+msgstr "las filas que indican \"no cubierta\" o \"sin datos\", y las filas que faltan por descargar, no tienen botón;"
 
-msgid "a row that fails shows its error in red under it, and the run goes on with the next row."
-msgstr "una fila que falla muestra su error en rojo debajo, y la ejecución sigue con la fila siguiente."
+msgid "a row that fails shows its error in red under it, and the next row goes on;"
+msgstr "una fila que falla muestra su error en rojo debajo, y la fila siguiente continúa;"
 
-msgid "While the run lasts, the footer counts its rows (\"1 running · 3 queued\", then \"2 of 4 done\"; the running row shows its own progress bar, which moves without an end while it has no percentage) and the button turns into **Stop**, which stops the run after the row in progress. Until that row has finished, the button reads \"Stopping…\". The rows already done stay done. This **Stop** stops only the harmonizing: a download running in `Alerts <defo-alerts-download_>`_ goes on, and the **Stop** of Alerts does not stop a harmonize run."
-msgstr "Mientras dura la ejecución, el pie cuenta sus filas (\"1 en curso · 3 en cola\", luego \"2 de 4 terminadas\"; la fila en curso muestra su propia barra de progreso, que avanza sin fin mientras no tiene porcentaje) y el botón pasa a ser **Detener**, que detiene la ejecución después de la fila en curso. Hasta que esa fila termina, el botón indica \"Deteniendo…\". Las filas ya hechas quedan hechas. Este **Detener** solo detiene la armonización: una descarga en curso en `Alertas <defo-alerts-download_>`_ continúa, y el **Detener** de Alertas no detiene una armonización."
+msgid "while one source's run aligns a mask, another source's **Harmonize** that needs the same mask reads \"Queued\" and starts once the mask is aligned."
+msgstr "mientras el trabajo de una fuente alinea una máscara, el **Armonizar** de otra fuente que necesita la misma máscara muestra \"En cola\" y empieza cuando la máscara esté alineada."
+
+msgid "The running row shows its own progress bar, which moves without an end while it has no percentage. A started row cannot be stopped; the rows already done stay done."
+msgstr "La fila en curso muestra su propia barra de progreso, que avanza sin fin mientras no tiene porcentaje. Una fila iniciada no se puede detener; las filas ya hechas quedan hechas."
 
 msgid "The run also shows as a task notification titled **Harmonize**, with the row it is on (e.g. \"Harmonizing GLAD-L\")."
 msgstr "La ejecución también aparece como una notificación de tarea titulada **Armonizar**, con la fila en la que está (por ejemplo, \"Armonizando GLAD-L\")."
@@ -1489,8 +1657,8 @@ msgstr "Libera espacio en tu carpeta de SEPAL o usa una cuadrícula más gruesa.
 msgid "\"A row of this run is already being prepared …\""
 msgstr "\"Ya se está preparando una fila de esta ejecución …\""
 
-msgid "A mask is being aligned by another period's run, or the row is still running. Run it again once that has finished."
-msgstr "El trabajo de otro período está alineando una máscara, o la fila todavía está en curso. Vuelve a ejecutarla cuando termine."
+msgid "The mask whose **Align** you selected is being aligned by another run (another period's, or a source's **Harmonize**), or the row is still running. Run it again once that has finished."
+msgstr "Otro trabajo está alineando la máscara cuyo **Alinear** seleccionaste (el de otro período, o el **Armonizar** de una fuente), o la fila todavía está en curso. Vuelve a ejecutarla cuando termine."
 
 msgid "\"The AOI's geometry is still being fetched; run this row again in a moment.\""
 msgstr "\"La geometría de la AOI todavía se está obteniendo; ejecuta esta fila de nuevo en un momento.\""
@@ -1516,11 +1684,11 @@ msgstr "\"Sin archivo\", con \"falta: archivo no encontrado: …\" bajo la fila,
 msgid "A GeoTIFF source or mask was moved, renamed or deleted from your SEPAL folder. Put the file back at the path shown, or edit the source or mask to point at its new place."
 msgstr "Una fuente o máscara GeoTIFF se movió, se renombró o se eliminó de tu carpeta de SEPAL. Vuelve a poner el archivo en la ruta indicada, o edita la fuente o la máscara para que apunte a su nueva ubicación."
 
-msgid "\"A mask on in this period is not aligned on the current grid yet; Harmonize … pending aligns the masks first.\""
-msgstr "\"Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Armonizar … pendientes alinea primero las máscaras.\""
+msgid "\"A mask on in this period is not aligned on the current grid yet; a source's Harmonize aligns the masks first.\""
+msgstr "\"Una máscara activa en este período todavía no está alineada con la cuadrícula actual; Armonizar en una fuente alinea primero las máscaras.\""
 
-msgid "A source cannot be harmonized before the period's masks are aligned. Select **Harmonize … pending**, or the mask's **Align** button first."
-msgstr "Una fuente no se puede armonizar antes de que las máscaras del período estén alineadas. Selecciona **Armonizar … pendientes**, o primero el botón **Alinear** de la máscara."
+msgid "A source cannot be harmonized before the period's masks are aligned. Select the source's **Harmonize**, or the mask's **Align** button first."
+msgstr "Una fuente no se puede armonizar antes de que las máscaras del período estén alineadas. Selecciona el **Armonizar** de la fuente, o primero el botón **Alinear** de la máscara."
 
 msgid "\"Mask …: its native grid (projection and scale) is unknown; edit the mask.\""
 msgstr "\"Máscara …: se desconoce su cuadrícula nativa (proyección y escala); edita la máscara.\""
@@ -1783,6 +1951,9 @@ msgstr "Selecciona **Integrar y vectorizar**. El botón sigue desactivado hasta 
 msgid "The run goes through \"Combining sources\", \"Vectorizing clusters\", \"Saving the clusters\", \"Writing the footprint\" and \"Building map tiles\". When it ends, a message reads \"N clusters ready for review\", followed by \"Linked N clusters to earlier loss (M under the minimum area)\" when it found `growth alerts <defo-integrate-growth_>`_, and the new set becomes the *active set*: the one the `Questionnaire <defo-questionnaire_>`_, `Evaluation <defo-evaluation_>`_, `Analysis <defo-analysis_>`_ and `Overview <defo-overview_>`_ work on. The step stays open."
 msgstr "La ejecución pasa por \"Combinando fuentes\", \"Vectorizando grupos\", \"Guardando los grupos\", \"Escribiendo la huella\" y \"Generando las teselas del mapa\". Al terminar, un mensaje indica \"N grupos listos para revisar\", seguido de \"Se vincularon N grupos a pérdidas anteriores (M por debajo del área mínima)\" cuando encontró `alertas de crecimiento <defo-integrate-growth_>`_, y el nuevo conjunto pasa a ser el *conjunto activo*: aquel con el que trabajan `Cuestionario <defo-questionnaire_>`_, `Evaluación <defo-evaluation_>`_, `Análisis <defo-analysis_>`_ y `Resumen <defo-overview_>`_. El paso sigue abierto."
 
+msgid "The run also gives every alert the names of the administrative areas it touches: ``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit, from the FAO GAUL 2024 boundaries. The boundaries are downloaded once for the project's AOI and kept in the project folder (``admin/``). An alert across a border lists every area it touches, separated by commas, the one holding most of it first. If the download fails, the run still ends, with a warning, and the names are filled when an alert is saved."
+msgstr "La ejecución también da a cada alerta los nombres de las áreas administrativas que toca: ``admin1`` es el país, ``admin2`` la unidad de primer nivel y ``admin3`` la unidad de segundo nivel, a partir de los límites FAO GAUL 2024. Los límites se descargan una vez para el AOI del proyecto y se guardan en la carpeta del proyecto (``admin/``). Una alerta que cruza una frontera enumera todas las áreas que toca, separadas por comas, la que contiene la mayor parte primero. Si la descarga falla, la ejecución termina igualmente, con una advertencia, y los nombres se rellenan al guardar una alerta."
+
 msgid "If no cluster is left, the set is still made, empty: the message reads \"No new clusters in this period: the alert set is empty.\" and gives the reason for each source (e.g. \"GLAD-L: all 56 alert pixels removed by masks\" or \"RADD: probable (unconfirmed) alerts were left out\")."
 msgstr "Si no queda ningún grupo, el conjunto se genera igualmente, vacío: el mensaje indica \"No hay grupos nuevos en este período: el conjunto de alertas está vacío.\" y da el motivo para cada fuente (por ejemplo, \"GLAD-L: los 56 píxeles de alerta eliminados por máscaras\" o \"RADD: se dejaron fuera las alertas probables (no confirmadas)\")."
 
@@ -1888,8 +2059,11 @@ msgstr "Las capas de visualización ayudan a revisar las alertas: un mapa de cob
 msgid "Open the **Additional layers** step of the **Workflow** panel, the first step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_)."
 msgstr "Abre el paso **Capas adicionales** del panel **Flujo de trabajo**, el primer paso de **Preparar la revisión**. Se desbloquea en cuanto el proyecto tiene un conjunto de alertas (consulta `Integrar y vectorizar <defo-integrate_>`_)."
 
-msgid "The step is optional: skip it and come back at any time. Its bar in the header is dashed, and the step shows no count until it has a layer."
-msgstr "El paso es opcional: sáltalo y vuelve en cualquier momento. Su barra en la cabecera es discontinua, y el paso no muestra ningún recuento hasta que tiene una capa."
+msgid "The step is optional: skip it and come back at any time. Its dot in the list of steps is dashed, and the step shows no count until it has a layer."
+msgstr "El paso es opcional: sáltalo y vuelve en cualquier momento. Su punto en la lista de pasos es discontinuo, y el paso no muestra ningún recuento hasta que tiene una capa."
+
+msgid "In a project converted from a `version 1 recipe <defo-project-v1_>`_, this is the only step whose settings can change."
+msgstr "En un proyecto convertido desde una `receta de la versión 1 <defo-project-v1_>`_, este es el único paso cuya configuración puede cambiar."
 
 msgid "Planet NICFI mosaics are not an additional layer: with NICFI access in your GEE account, they come with the *Planet* images of the `Analysis timeline <defo-analysis-timeline_>`_."
 msgstr "Los mosaicos de Planet NICFI no son una capa adicional: si tu cuenta de GEE tiene acceso a NICFI, llegan con las imágenes *Planet* de la `línea de tiempo de Análisis <defo-analysis-timeline_>`_."
@@ -2281,8 +2455,8 @@ msgstr "La plantilla del informe y sus marcadores"
 msgid "The **Report template** line names the template in use, with a chip: **default** (the app's own template), **custom** (your file) or **missing** (your file was moved or deleted). Open it with the arrow on the right side:"
 msgstr "La línea **Plantilla del informe** indica la plantilla en uso, con una etiqueta: **predeterminada** (la plantilla propia de la aplicación), **propia** (tu archivo) o **no encontrada** (tu archivo se movió o se eliminó). Despliégala con la flecha de la derecha:"
 
-msgid "**Report template (.docx)**: choose a Word file in your SEPAL folder. Every report of this project is then built from it. Clear the field to go back to the default template."
-msgstr "**Plantilla de informe (.docx)**: elige un archivo de Word de tu carpeta de SEPAL. A partir de entonces, todos los informes de este proyecto se generan con él. Vacía el campo para volver a la plantilla predeterminada."
+msgid "**Report template (.docx)**: choose a Word file in your SEPAL folder. Every report of this project is then built from it. Clear the field to go back to the default template, which is in the app's language (English, Spanish, French or Portuguese)."
+msgstr "**Plantilla de informe (.docx)**: elige un archivo de Word de tu carpeta de SEPAL. A partir de entonces, todos los informes de este proyecto se generan con él. Vacía el campo para volver a la plantilla predeterminada, que está en el idioma de la aplicación (inglés, español, francés o portugués)."
 
 msgid "**Placeholders the template can use (click to copy):** select a chip to copy its placeholder, then paste it into the template."
 msgstr "**Marcadores que puede usar la plantilla (clic para copiar):** selecciona una etiqueta para copiar su marcador y luego pégalo en la plantilla."
@@ -2311,11 +2485,17 @@ msgstr "``{confirmation_date}``"
 msgid "The day the alert was reviewed. For an alert reviewed before the app recorded it, the day the report is built."
 msgstr "El día en que se revisó la alerta. Para una alerta revisada antes de que la aplicación lo registrara, el día en que se genera el informe."
 
+msgid "``{reviewed_by}``"
+msgstr "``{reviewed_by}``"
+
+msgid "The SEPAL user name of the person who saved the review."
+msgstr "El nombre de usuario de SEPAL de la persona que guardó la revisión."
+
 msgid "``{before_img}``, ``{after_img}``"
 msgstr "``{before_img}``, ``{after_img}``"
 
-msgid "The names of the before and after images chosen in the review."
-msgstr "Los nombres de las imágenes de antes y después elegidas en la revisión."
+msgid "The names of the before and after images in the optical pictures, as picked in the review."
+msgstr "Los nombres de las imágenes de antes y después de las imágenes ópticas, tal como se eligieron en la revisión."
 
 msgid "``{alert_system}``"
 msgstr "``{alert_system}``"
@@ -2328,6 +2508,36 @@ msgstr "``{area_loss}``"
 
 msgid "The alert's area, in hectares (the group's, for a group)."
 msgstr "La superficie de la alerta, en hectáreas (la del grupo, para un grupo)."
+
+msgid "``{centroid}``"
+msgstr "``{centroid}``"
+
+msgid "The centre of the alert (of the group's outline, for a group) as latitude, longitude in decimal degrees (\"-12.345678, -69.123456\")."
+msgstr "El centro de la alerta (del contorno del grupo, para un grupo) como latitud, longitud en grados decimales (\"-12.345678, -69.123456\")."
+
+msgid "``{centroid_lat}``, ``{centroid_lon}``"
+msgstr "``{centroid_lat}``, ``{centroid_lon}``"
+
+msgid "The same latitude and longitude, each on its own (\"-12.345678\", \"-69.123456\")."
+msgstr "La misma latitud y longitud, cada una por separado (\"-12.345678\", \"-69.123456\")."
+
+msgid "``{before_radar}``, ``{after_radar}``"
+msgstr "``{before_radar}``, ``{after_radar}``"
+
+msgid "With Sentinel-1 on and a radar pair: the names of the before and after radar images. A radar image that follows the optical pick (not placed by hand) is marked \"(nearest radar image)\", or \"(nearest radar image, other pass)\" when it comes from the other pass. Empty otherwise."
+msgstr "Con Sentinel-1 activado y un par de radar: los nombres de las imágenes de radar de antes y después. Una imagen de radar que sigue a la elección óptica (no colocada a mano) se marca \"(imagen de radar más cercana)\", o \"(imagen de radar más cercana, otra órbita)\" si viene de la otra órbita. Vacío en otro caso."
+
+msgid "``{radar_summary}``"
+msgstr "``{radar_summary}``"
+
+msgid "With a radar pair: \"Radar images: … (before) and … (after).\", the two radar image names, for the summary. Empty otherwise."
+msgstr "Con un par de radar: \"Imágenes de radar: … (antes) y … (después).\", los nombres de las dos imágenes de radar, para el resumen. Vacío en otro caso."
+
+msgid "``{image_note}``"
+msgstr "``{image_note}``"
+
+msgid "Always empty. Kept so that older templates still work; a paragraph holding only this placeholder is removed."
+msgstr "Siempre vacío. Se conserva para que las plantillas antiguas sigan funcionando; un párrafo que solo contiene esta etiqueta se elimina."
 
 msgid "``{group_size}``, ``{group_alerts}``"
 msgstr "``{group_size}``, ``{group_alerts}``"
@@ -2347,14 +2557,14 @@ msgstr "Uno por pregunta (verde)"
 msgid "The answer to that question; empty when the question is not asked for the alert's verdict."
 msgstr "La respuesta a esa pregunta; vacío cuando la pregunta no se hace para el veredicto de la alerta."
 
-msgid "The green placeholders come from the review. Placeholders are replaced in the document's paragraphs, not inside tables, headers or footers."
-msgstr "Los marcadores verdes provienen de la revisión. Los marcadores se sustituyen en los párrafos del documento, no dentro de tablas, encabezados ni pies de página."
+msgid "The green placeholders come from the review. Placeholders are replaced in the document's paragraphs and tables, not in headers or footers."
+msgstr "Los marcadores verdes provienen de la revisión. Los marcadores se sustituyen en los párrafos y las tablas del documento, no en encabezados ni pies de página."
 
 msgid "Images in the report"
 msgstr "Imágenes en el informe"
 
-msgid "The report also holds six pictures of the alert, cut from the before and after images chosen in the review. They are not in the chip list: the template marks where each one goes with a paragraph holding only its marker, from ``[Placeholder for Image 1]`` to ``[Placeholder for Image 6]``. That whole paragraph is replaced by the picture (250 pt wide), so put nothing else in it."
-msgstr "El informe también contiene seis imágenes de la alerta, recortadas de las imágenes de antes y después elegidas en la revisión. No están en la lista de etiquetas: la plantilla indica dónde va cada una con un párrafo que solo contiene su marca, de ``[Placeholder for Image 1]`` a ``[Placeholder for Image 6]``. Ese párrafo entero se sustituye por la imagen (de 250 pt de ancho), así que no pongas nada más en él."
+msgid "The report also holds six pictures of the alert, cut from the before and after images chosen in the review. They are not in the chip list: the template marks where each one goes with a paragraph holding only its marker, from ``[Placeholder for Image 1]`` to ``[Placeholder for Image 6]``. That whole paragraph is replaced by the picture (250 pt wide, or narrower to fit its table cell), so put nothing else in it."
+msgstr "El informe también contiene seis imágenes de la alerta, recortadas de las imágenes de antes y después elegidas en la revisión. No están en la lista de etiquetas: la plantilla indica dónde va cada una con un párrafo que solo contiene su marca, de ``[Placeholder for Image 1]`` a ``[Placeholder for Image 6]``. Ese párrafo entero se sustituye por la imagen (de 250 pt de ancho, o menos para caber en su celda de tabla), así que no pongas nada más en él."
 
 msgid "Marker"
 msgstr "Marca"
@@ -2380,11 +2590,35 @@ msgstr "``[Placeholder for Image 3]``, ``[Placeholder for Image 6]``"
 msgid "The after image with the alert's outline in red."
 msgstr "La imagen de después con el contorno de la alerta en rojo."
 
-msgid "Images 1–3 show the images in one band combination, and images 4–6 in another. The default template places them under its captions (\"Image 1: Pre-deforestation …\", \"Image 2: Post-deforestation …\" and \"Image 3: Deforestation alert generated.\"), two pictures per caption. A template without these markers gets a report with no pictures."
-msgstr "Las imágenes 1 a 3 muestran las imágenes en una combinación de bandas, y las imágenes 4 a 6 en otra. La plantilla predeterminada las coloca bajo sus leyendas, en inglés (\"Image 1: Pre-deforestation …\", \"Image 2: Post-deforestation …\" e \"Image 3: Deforestation alert generated.\"), dos imágenes por leyenda. Una plantilla sin estas marcas genera un informe sin imágenes."
+msgid "``[Placeholder for Radar 1]``"
+msgstr "``[Placeholder for Radar 1]``"
 
-msgid "To make a custom template, lay it out like the default one: the text with the placeholders above, then each caption followed by its image markers, every marker alone in its paragraph."
-msgstr "Para crear una plantilla propia, organízala como la predeterminada: el texto con los marcadores de arriba y, después, cada leyenda seguida de sus marcas de imagen, cada marca sola en su párrafo."
+msgid "The before radar image."
+msgstr "La imagen de radar de antes."
+
+msgid "``[Placeholder for Radar 2]``"
+msgstr "``[Placeholder for Radar 2]``"
+
+msgid "The after radar image."
+msgstr "La imagen de radar de después."
+
+msgid "``[Placeholder for Radar 3]``"
+msgstr "``[Placeholder for Radar 3]``"
+
+msgid "The after radar image with the alert's outline in red."
+msgstr "La imagen de radar de después con el contorno de la alerta en rojo."
+
+msgid "``[Placeholder for Centroid QR]``"
+msgstr "``[Placeholder for Centroid QR]``"
+
+msgid "A QR code that opens the alert's centroid in Google Maps (80 pt wide, or narrower to fit its table cell). Without a centroid, the marker is removed."
+msgstr "Un código QR que abre el centroide de la alerta en Google Maps (de 80 pt de ancho, o menos para caber en su celda de tabla). Sin centroide, la marca se elimina."
+
+msgid "Images 1–3 are in false colour (near-infrared, red, green) and images 4–6 in true colour (red, green, blue). Images 1–6 show the optical pair as picked. The radar pictures show the radar pair as picked on the timeline (a handle that follows the optical pick gives the nearest radar image to its date, from the same pass as the other radar handle when one is within 30 days, otherwise from either pass), as VV, VH and the VV/VH ratio in red, green and blue. A picture with no image is replaced by a short note. The pictures keep the resolution of the finer of the two images (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4.77 m). The default template lays them out in a grid of three columns (before, after, after with the outline) and two rows (true colour, false colour), and puts the QR code beside the alert details. Its *Radar evidence* row (before, after, after with the outline) is removed from a report without a radar pair. A template without these markers gets a report with no pictures."
+msgstr "Las imágenes 1 a 3 están en falso color (infrarrojo cercano, rojo, verde) y las imágenes 4 a 6 en color verdadero (rojo, verde, azul). Las imágenes 1 a 6 muestran el par óptico tal como se eligió. Las imágenes de radar muestran el par de radar elegido en la línea de tiempo (un control que sigue a la elección óptica da la imagen de radar más cercana a su fecha, de la misma órbita que el otro control de radar si hay una a menos de 30 días; si no, de cualquiera de las dos), como VV, VH y la razón VV/VH en rojo, verde y azul. Una imagen sin imagen disponible se sustituye por una nota breve. Conservan la resolución de la más fina de las dos imágenes (Sentinel-2 10 m, Sentinel-1 10 m, Landsat 15 m, Planet 4,77 m). La plantilla predeterminada las organiza en una cuadrícula de tres columnas (antes, después, después con el contorno) y dos filas (color verdadero, falso color), y coloca el código QR junto a los detalles de la alerta. Su fila *Evidencia de radar* (antes, después, después con el contorno) se elimina de un informe sin par de radar. Una plantilla sin estas marcas genera un informe sin imágenes."
+
+msgid "To make a custom template, start from a copy of the default one. Keep every marker alone in its paragraph; in a table cell, a caption can follow it in a paragraph of its own."
+msgstr "Para crear una plantilla propia, parte de una copia de la predeterminada. Deja cada marca sola en su párrafo; en una celda de tabla, una leyenda puede seguirla en su propio párrafo."
 
 msgid "The template can show two messages:"
 msgstr "La plantilla puede mostrar dos mensajes:"
@@ -2415,6 +2649,9 @@ msgstr "repartirlas entre varios evaluadores. Cada evaluador recibe un *paquete 
 
 msgid "Open the **Evaluation** step of the **Workflow** panel, the last step of **Set up review**. It unlocks once the project has an alert set (see `Integrate & vectorize <defo-integrate_>`_). It works on the active set: a split belongs to one alert set."
 msgstr "Abre el paso **Evaluación** del panel **Flujo de trabajo**, el último paso de **Preparar la revisión**. Se desbloquea en cuanto el proyecto tiene un conjunto de alertas (consulta `Integrar y vectorizar <defo-integrate_>`_). Trabaja sobre el conjunto activo: un reparto pertenece a un conjunto de alertas."
+
+msgid "In a project converted from a `version 1 recipe <defo-project-v1_>`_, the step reads \"Not available for a project converted from version 1: it is reviewed by one person.\""
+msgstr "En un proyecto convertido desde una `receta de la versión 1 <defo-project-v1_>`_, el paso indica \"No disponible para un proyecto convertido desde la versión 1: lo revisa una sola persona.\""
 
 msgid "The alert set is split into packages, each evaluator reviews theirs, and the reviews are merged back"
 msgstr "El conjunto de alertas se reparte en paquetes, cada evaluador revisa el suyo y las revisiones se vuelven a integrar"
@@ -3061,11 +3298,14 @@ msgstr "Haz clic en una franja: el control adecuado más cercano se mueve a ella
 msgid "With the keyboard: press **Tab** to reach a handle, move along the dates with the left and right arrow keys, jump to the first or last image with **Home** and **End**, and choose with **Enter**."
 msgstr "Con el teclado: pulsa **Tab** para llegar a un control, recorre las fechas con las flechas izquierda y derecha, salta a la primera o la última imagen con **Inicio** y **Fin**, y elige con **Intro**."
 
-msgid "When an alert opens, the app chooses the image nearest *before* the alert window and the image nearest *after* it, among the images under the cloud limit. It never chooses an image inside the alert window (it would show only part of the clearing), a Planet mosaic or a Sentinel-1 radar image, but all of them can be chosen by hand. A side with no image under the cloud limit is left \"not set\". A reviewed alert opens on the images it was saved with. If one of them is no longer available, its map title reads \"Saved image not available; picked automatically\"."
-msgstr "Cuando se abre una alerta, la aplicación elige la imagen más cercana *antes* de la ventana de alerta y la imagen más cercana *después* de ella, entre las imágenes por debajo del límite de nubes. Nunca elige una imagen dentro de la ventana de alerta (solo mostraría parte del desmonte), un mosaico de Planet ni una imagen de radar Sentinel-1, pero todos se pueden elegir a mano. Un lado sin ninguna imagen por debajo del límite de nubes queda \"sin definir\". Una alerta revisada se abre con las imágenes con las que se guardó. Si una de ellas ya no está disponible, el título de su mapa indica \"La imagen guardada no está disponible; se eligió automáticamente\"."
+msgid "When an alert opens, the app chooses the image nearest *before* the alert window and the image nearest *after* it, among the images under the cloud limit. It never chooses an image inside the alert window (it would show only part of the clearing) or a Planet mosaic, but both can be chosen by hand. A side with no image under the cloud limit gets the least cloudy image within 30 days of the alert window, or the nearest one if there is none, even over the cloud limit (its map title shows its cloud cover); a side with no image at all is left \"not set\". A reviewed alert opens on the images it was saved with. If one of them is no longer available, its map title reads \"Saved image not available; picked automatically\"."
+msgstr "Cuando se abre una alerta, la aplicación elige la imagen más cercana *antes* de la ventana de alerta y la imagen más cercana *después* de ella, entre las imágenes por debajo del límite de nubes. Nunca elige una imagen dentro de la ventana de alerta (solo mostraría parte del desmonte) ni un mosaico de Planet, pero ambos se pueden elegir a mano. Un lado sin ninguna imagen por debajo del límite de nubes recibe la imagen menos nublada a menos de 30 días de la ventana de alerta o, si no hay, la más cercana, aunque supere el límite de nubes (el título de su mapa indica su nubosidad); un lado sin ninguna imagen queda \"sin definir\". Una alerta revisada se abre con las imágenes con las que se guardó. Si una de ellas ya no está disponible, el título de su mapa indica \"La imagen guardada no está disponible; se eligió automáticamente\"."
 
-msgid "Each map's title names its image: \"Before image · Sentinel-2 2026-07-28 · 3%\" (collection, date, cloud cover). When the other collection has an image of the same day, a button in the title (\"⇄ Landsat\") switches to it."
-msgstr "El título de cada mapa nombra su imagen: \"Imagen Anterior · Sentinel-2 2026-07-28 · 3%\" (colección, fecha y nubosidad). Cuando la otra colección tiene una imagen del mismo día, un botón en el título (\"⇄ Landsat\") cambia a ella."
+msgid "Each map's title names its image in an **Optical** chip: \"Before image · Optical · Sentinel-2 2026-07-28 · 3%\" (collection, date, cloud cover). When the other collection has an image of the same day, a button in the title (\"⇄ Landsat\") switches to it."
+msgstr "El título de cada mapa nombra su imagen en una etiqueta **Óptica**: \"Imagen Anterior · Óptica · Sentinel-2 2026-07-28 · 3%\" (colección, fecha y nubosidad). Cuando la otra colección tiene una imagen del mismo día, un botón en el título (\"⇄ Landsat\") cambia a ella."
+
+msgid "When Sentinel-1 is on, a thin strip under the optical lane holds its images as dots, with two diamond-shaped handles. The arrow at the left of the strip unfolds it into a lane with one band per pass, and folds it again. The radar handles are hollow while they follow the optical picks: each sits on the radar image nearest to the date of its optical handle (from the same pass as the other radar handle when one is within 30 days, otherwise from either pass) and moves with it. Hollow handles are not saved: they are placed again when the alert opens. Drag one, or click a radar stripe in the unfolded lane, and it becomes filled: it is yours and stays where you put it, and saving the alert saves it. The chain icon at the left of the strip is linked while both handles follow the optical picks. Once you move one, the chain is broken: select it (**Follow optical**) to hand both handles back to the optical picks. A map whose side has a radar image gets a **Radar** chip next to the **Optical** one in its title: click a chip to choose what that map shows."
+msgstr "Cuando Sentinel-1 está activado, una franja delgada bajo el carril óptico contiene sus imágenes como puntos, con dos controles en forma de rombo. La flecha a la izquierda de la franja la despliega en un carril con una banda por órbita, y la vuelve a plegar. Los controles de radar están huecos mientras siguen a las elecciones ópticas: cada uno se coloca en la imagen de radar más cercana a la fecha de su control óptico (de la misma órbita que el otro control de radar si hay una a menos de 30 días; si no, de cualquiera de las dos) y se mueve con él. Los controles huecos no se guardan: se vuelven a colocar al abrir la alerta. Arrastra uno, o haz clic en una banda de radar del carril desplegado, y se rellena: es tuyo y se queda donde lo pusiste, y al guardar la alerta se guarda. El icono de cadena a la izquierda de la franja está unido mientras ambos controles siguen a las elecciones ópticas. Cuando mueves uno, la cadena se rompe: selecciónala (**Seguir la óptica**) para devolver ambos controles a las elecciones ópticas. Un mapa cuyo lado tiene una imagen de radar recibe en su título una etiqueta **Radar** junto a la **Óptica**: haz clic en una etiqueta para elegir qué muestra ese mapa."
 
 msgid "The toolbar above the track:"
 msgstr "La barra de herramientas sobre la pista:"
@@ -3085,8 +3325,8 @@ msgstr "Sentinel-2 y Landsat activadas; Planet y Sentinel-1 desactivadas."
 msgid "**?** button"
 msgstr "Botón **?**"
 
-msgid "Shows or hides a legend of the timeline."
-msgstr "Muestra u oculta una leyenda de la línea de tiempo."
+msgid "Shows or hides a short legend of the timeline. This section describes the timeline in full."
+msgstr "Muestra u oculta una leyenda breve de la línea de tiempo. Esta sección la describe por completo."
 
 msgid "Hidden."
 msgstr "Oculta."
@@ -3109,8 +3349,8 @@ msgstr "Despliega todos los meses."
 msgid "**Max cloud**"
 msgstr "**Nubes máx.**"
 
-msgid "The cloud limit, from 0 to 100 % in steps of 5. Images over it are faded and never chosen automatically. Planet mosaics and Sentinel-1 radar images have no cloud figure, so the limit never hides them."
-msgstr "El límite de nubes, de 0 a 100 % en pasos de 5. Las imágenes que lo superan aparecen atenuadas y nunca se eligen automáticamente. Los mosaicos de Planet y las imágenes de radar Sentinel-1 no tienen cifra de nubes, así que el límite nunca los oculta."
+msgid "The cloud limit, chosen in a menu of presets (10, 20, 40, 60 or 80 %, or **All images**), each with the number of images it keeps on the timeline. Images over it are faded and never chosen automatically. Planet mosaics and Sentinel-1 radar images have no cloud figure, so the limit never hides them."
+msgstr "El límite de nubes, elegido en un menú de valores (10, 20, 40, 60 u 80 %, o **Todas las imágenes**), cada uno con el número de imágenes que conserva en la línea de tiempo. Las imágenes que lo superan aparecen atenuadas y nunca se eligen automáticamente. Los mosaicos de Planet y las imágenes de radar Sentinel-1 no tienen cifra de nubes, así que el límite nunca los oculta."
 
 msgid "40 %."
 msgstr "40 %."
@@ -3118,8 +3358,8 @@ msgstr "40 %."
 msgid "**Image area**"
 msgstr "**Área de imagen**"
 
-msgid "How far around the alert the images reach: **Normal**, **Large** or **Extra large** (100 m, 1 km or 2.5 km around it). Larger areas take longer to load and export. It goes back to **Normal** on the next alert."
-msgstr "Hasta dónde llegan las imágenes alrededor de la alerta: **Estándar**, **Grande** o **Muy grande** (100 m, 1 km o 2,5 km a su alrededor). Las áreas más grandes tardan más en cargarse y exportarse. Vuelve a **Estándar** en la siguiente alerta."
+msgid "How far around the alert the images reach: **Normal**, **Large** or **Extra large** (100 m, 1 km or 2.5 km around it). Larger areas take longer to load and export. Saving the review saves the area: the alert opens on it again, and its files and GIF are made on it. An alert never saved opens on **Normal**."
+msgstr "Hasta dónde llegan las imágenes alrededor de la alerta: **Estándar**, **Grande** o **Muy grande** (100 m, 1 km o 2,5 km a su alrededor). Las áreas más grandes tardan más en cargarse y exportarse. Guardar la revisión guarda el área: la alerta vuelve a abrirse con ella, y sus archivos y su GIF se hacen con ella. Una alerta nunca guardada se abre en **Estándar**."
 
 msgid "**Normal**."
 msgstr "**Estándar**."
@@ -3142,11 +3382,11 @@ msgstr "Se muestran las dos pasadas, una banda por pasada, rotuladas \"Sentinel-
 msgid "They are shown raw, with no speckle filter, as VV, VH and the VV/VH ratio in red, green and blue. In the map pane, a radar image has a single \"Radar\" layer, with no true/false colour switch."
 msgstr "Se muestran sin procesar, sin filtro de moteado (speckle), como VV, VH y la razón VV/VH en rojo, verde y azul. En el panel del mapa, una imagen de radar tiene una sola capa \"Radar\", sin conmutador de color verdadero y falso color."
 
-msgid "Radar sees through clouds, so the cloud limit never hides these images, and the automatic pick never chooses them. Select one by hand."
-msgstr "El radar ve a través de las nubes, así que el límite de nubes nunca oculta estas imágenes, y la elección automática nunca las elige. Selecciona una a mano."
+msgid "Radar sees through clouds, so the cloud limit never hides these images. They have their own lane and handles (see above): the radar handles follow the optical picks until you move them."
+msgstr "El radar ve a través de las nubes, así que el límite de nubes nunca oculta estas imágenes. Tienen su propio carril y controles (véase arriba): los controles de radar siguen a las elecciones ópticas hasta que los mueves."
 
-msgid "With a Sentinel-1 image picked, the files and the report are built from the radar image (10 m). The model needs optical images on both sides, so it refuses and asks for a Sentinel-2, Landsat or Planet image instead. The GIF uses only the optical images around the radar pick (Planet picks still appear in GIFs); if there are none, the GIF is skipped and the warning under **Build files** gives the reason."
-msgstr "Con una imagen Sentinel-1 elegida, los archivos y el informe se generan a partir de la imagen de radar (10 m). El modelo necesita imágenes ópticas en ambos lados, así que la rechaza y pide una imagen de Sentinel-2, Landsat o Planet. El GIF usa solo las imágenes ópticas alrededor de la imagen de radar elegida (las imágenes de Planet elegidas sí aparecen en los GIF); si no hay ninguna, el GIF se omite y la advertencia bajo **Generar archivos** indica el motivo."
+msgid "Both pairs are used as picked. With Sentinel-1 on, the zip holds two composites, the optical one and the radar one, and the report adds a *Radar evidence* row; the radar images that were not placed by hand are marked in the report. The model and the GIF use the optical pair, whatever the radar handles show. **Build files** waits until the radar images are drawn and any radar handle you moved is saved."
+msgstr "Se usan ambos pares tal como se eligieron. Con Sentinel-1 activado, el zip contiene dos composiciones, la óptica y la de radar, y el informe añade una fila *Evidencia de radar*; las imágenes de radar no colocadas a mano se marcan en el informe. El modelo y el GIF usan el par óptico, sea cual sea la elección de radar. **Generar archivos** espera a que las imágenes de radar estén dibujadas y a que se guarde cualquier control de radar que hayas movido."
 
 msgid "The images come from an index of the images over the project's area, kept on disk and refreshed after 24 hours. While it loads, the toolbar reads \"Loading the image index…\"; an index older than a day reads \"Index from (date)\". If a refresh fails, the index on screen keeps working, and **Try again** retries."
 msgstr "Las imágenes provienen de un índice de las imágenes sobre el área del proyecto, guardado en disco y actualizado pasadas 24 horas. Mientras se carga, la barra de herramientas indica \"Cargando el índice de imágenes…\"; un índice de más de un día indica \"Índice del (fecha)\". Si una actualización falla, el índice en pantalla sigue funcionando, y **Intentar de nuevo** vuelve a intentarlo."
@@ -3463,6 +3703,9 @@ msgstr "El botón relleno muestra el paso siguiente: **Guardar** mientras la ale
 msgid "With unsaved changes, **Next**, the icon and the top bar's **Previous**, **Next**, **Go** and icon ask first. The buttons give way to \"This alert has unsaved changes\": **Discard** drops the changes and moves on, **Stay** keeps you on the alert."
 msgstr "Con cambios sin guardar, **Siguiente**, el icono y los botones **Anterior**, **Siguiente**, **Ir** e icono de la barra superior preguntan primero. Los botones dejan paso a \"Esta alerta tiene cambios sin guardar\": **Descartar** desecha los cambios y avanza, **Quedarse** te mantiene en la alerta."
 
+msgid "A change started somewhere else (a **Go** in **Overview** or in a map popup, the alert set picked in **Overview**, or opening, creating, renaming or deleting the open project in **Project**) asks in the **Unsaved changes in Analysis** dialog, over the window you are in. **Continue anyway** drops the changes and does what you selected; **Open Analysis** cancels it and shows the alert, so you can save it. Closing the dialog does nothing."
+msgstr "Un cambio iniciado en otro lugar (un **Ir** en **Resumen** o en una ventana emergente del mapa, el conjunto de alertas elegido en **Resumen**, o abrir, crear, renombrar o eliminar el proyecto abierto en **Proyecto**) pregunta en el diálogo **Cambios sin guardar en Análisis**, sobre la ventana en la que estás. **Continuar igualmente** desecha los cambios y hace lo que seleccionaste; **Abrir Análisis** lo cancela y muestra la alerta, para que puedas guardarla. Cerrar el diálogo no hace nada."
+
 msgid "The state line reads \"Unsaved changes on this alert\", \"Save your drawing before saving this review\" or \"Saved 14:32\"."
 msgstr "La línea de estado indica \"Cambios sin guardar en esta alerta\", \"Guarde su dibujo antes de guardar esta revisión\" o \"Guardada a las 14:32\"."
 
@@ -3487,8 +3730,14 @@ msgstr "las alertas anteriores marcadas en `Alertas anteriores <defo-analysis-ea
 msgid "with nearby alerts ticked, the group (see `Nearby alerts <defo-analysis-nearby_>`_);"
 msgstr "con alertas cercanas marcadas, el grupo (consulta `Alertas cercanas <defo-analysis-nearby_>`_);"
 
-msgid "the names of the administrative areas under the alert, if `Integrate & vectorize <defo-integrate_>`_ could not fill them (from the FAO GAUL 2024 boundaries). Names saved by earlier reviews are kept."
-msgstr "los nombres de las áreas administrativas bajo la alerta, si `Integrar y vectorizar <defo-integrate_>`_ no pudo rellenarlos (a partir de los límites FAO GAUL 2024). Se conservan los nombres guardados por revisiones anteriores."
+msgid "who reviewed it and when: ``reviewed_by`` (your SEPAL user name, looked up once per session; left empty if it is unknown) and ``reviewed_at`` (the time, in UTC, e.g. ``2026-11-11T14:03:22Z``). A group's members get them too, and an alert reset to not reviewed loses them; and"
+msgstr "quién la revisó y cuándo: ``reviewed_by`` (tu nombre de usuario de SEPAL, consultado una vez por sesión; queda vacío si se desconoce) y ``reviewed_at`` (la hora, en UTC, por ejemplo ``2026-11-11T14:03:22Z``). Los miembros de un grupo también los reciben, y una alerta devuelta a sin revisar los pierde; y"
+
+msgid "the names of the administrative areas under the alert, if `Integrate & vectorize <defo-integrate_>`_ could not fill them (from the FAO GAUL 2024 boundaries). Names saved by earlier reviews are kept. If the project has no boundaries yet, the first such save downloads them once, and its progress reads \"Fetching administrative boundaries for this project (once)…\" meanwhile."
+msgstr "los nombres de las áreas administrativas bajo la alerta, si `Integrar y vectorizar <defo-integrate_>`_ no pudo rellenarlos (a partir de los límites FAO GAUL 2024). Se conservan los nombres guardados por revisiones anteriores. Si el proyecto aún no tiene los límites, el primer guardado de este tipo los descarga una sola vez, y mientras tanto su progreso indica \"Descargando los límites administrativos de este proyecto (una sola vez)…\"."
+
+msgid "``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit. In a group, each alert keeps its own names; the group's single-alert file and report show all the names of the group."
+msgstr "``admin1`` es el país, ``admin2`` la unidad de primer nivel y ``admin3`` la unidad de segundo nivel. En un grupo, cada alerta conserva sus propios nombres; el archivo de alerta única del grupo y el informe muestran todos los nombres del grupo."
 
 msgid "Reviews show at once in the progress bar, in the set selector and in the `Overview <defo-overview_>`_. A review can change at any time: open the alert, change it and save again."
 msgstr "Las revisiones aparecen de inmediato en la barra de progreso, en el selector de conjuntos y en el `Resumen <defo-overview_>`_. Una revisión puede cambiar en cualquier momento: abre la alerta, cámbiala y vuelve a guardar."
@@ -3610,8 +3859,8 @@ msgstr "Vuelve a elegir la imagen, u otra."
 msgid "Overview"
 msgstr "Resumen"
 
-msgid "The Overview sums up an alert set: how many alerts it holds, how many are reviewed, and how much loss was confirmed, where and when. It also writes the set's alerts to a GeoPackage or a CSV table. Its figures follow the reviews as they are saved."
-msgstr "El Resumen sintetiza un conjunto de alertas: cuántas alertas contiene, cuántas están revisadas y cuánta pérdida se confirmó, dónde y cuándo. También escribe las alertas del conjunto en un GeoPackage o una tabla CSV. Sus cifras siguen las revisiones a medida que se guardan."
+msgid "The Overview sums up an alert set, or every period at once: how many alerts it holds, how many are reviewed, and how much loss was confirmed, where and when; how the source pixels became alerts; and the files to download. Its figures follow the reviews as they are saved."
+msgstr "El Resumen sintetiza un conjunto de alertas, o todos los períodos a la vez: cuántas alertas contiene, cuántas están revisadas y cuánta pérdida se confirmó, dónde y cuándo; cómo los píxeles de las fuentes se convirtieron en alertas; y los archivos que se pueden descargar. Sus cifras siguen las revisiones a medida que se guardan."
 
 msgid "Open the Overview"
 msgstr "Abrir el Resumen"
@@ -3625,8 +3874,8 @@ msgstr "El panel del Resumen"
 msgid "The header"
 msgstr "El encabezado"
 
-msgid "The set summed up. Choosing another one makes it the project's active set, as in `Analysis <defo-analysis-topbar_>`_."
-msgstr "El conjunto resumido. Elegir otro lo convierte en el conjunto activo del proyecto, como en `Análisis <defo-analysis-topbar_>`_."
+msgid "The set summed up. Choosing another one makes it the project's active set, as in `Analysis <defo-analysis-topbar_>`_. Its first item, \"All periods · 3 sets · 133 alerts\", sums the newest set of every period instead, and leaves the active set as it is."
+msgstr "El conjunto resumido. Elegir otro lo convierte en el conjunto activo del proyecto, como en `Análisis <defo-analysis-topbar_>`_. Su primer elemento, \"Todos los períodos · 3 conjuntos · 133 alertas\", suma en cambio el conjunto más reciente de cada período, y deja el conjunto activo como está."
 
 msgid "The active set."
 msgstr "El conjunto activo."
@@ -3643,17 +3892,8 @@ msgstr "**Superficie (ha)**."
 msgid "**Review alerts**"
 msgstr "**Revisar alertas**"
 
-msgid "Closes the Overview and opens `Analysis <defo-analysis_>`_ on this set. Disabled when the set has no alerts."
-msgstr "Cierra el Resumen y abre `Análisis <defo-analysis_>`_ en este conjunto. Desactivado cuando el conjunto no tiene alertas."
-
-msgid "Draws the set's alerts on the main map, coloured by status, as in `Integrate & vectorize <defo-integrate-map_>`_."
-msgstr "Dibuja las alertas del conjunto en el mapa principal, coloreadas según su estado, como en `Integrar y vectorizar <defo-integrate-map_>`_."
-
-msgid "Draws the alerts of the earlier periods' sets on the main map. Only shown when there are earlier sets."
-msgstr "Dibuja en el mapa principal las alertas de los conjuntos de períodos anteriores. Solo aparece cuando hay conjuntos anteriores."
-
-msgid "The two map switches are shown only when the set has alerts. Turning one on closes the Overview, to show the map."
-msgstr "Los dos interruptores de mapa solo aparecen cuando el conjunto tiene alertas. Al activar uno, el Resumen se cierra para mostrar el mapa."
+msgid "Closes the Overview and opens `Analysis <defo-analysis_>`_ on this set. Disabled when the set has no alerts, and for **All periods** (\"Pick one period to review its alerts\")."
+msgstr "Cierra el Resumen y abre `Análisis <defo-analysis_>`_ en este conjunto. Desactivado cuando el conjunto no tiene alertas, y con **Todos los períodos** (\"Elija un período para revisar sus alertas\")."
 
 msgid "If the set is out of date or its files are missing, an orange line says so (\"This set was built from inputs that have changed since…\" or \"This set's files are missing from the project folder…\"). The figures still show what the set holds. Run `Integrate & vectorize <defo-integrate-outdated_>`_ again to rebuild it, which discards its reviews."
 msgstr "Si el conjunto está desactualizado o faltan sus archivos, una línea naranja lo indica (\"Este conjunto se generó a partir de entradas que han cambiado desde entonces…\" o \"Faltan los archivos de este conjunto en la carpeta del proyecto…\"). Las cifras siguen mostrando lo que contiene el conjunto. Vuelve a ejecutar `Integrar y vectorizar <defo-integrate-outdated_>`_ para reconstruirlo, lo que descarta sus revisiones."
@@ -3661,14 +3901,14 @@ msgstr "Si el conjunto está desactualizado o faltan sus archivos, una línea na
 msgid "The key figures"
 msgstr "Las cifras clave"
 
-msgid "Tile"
-msgstr "Mosaico"
+msgid "Figure"
+msgstr "Cifra"
 
 msgid "**Confirmed loss**"
 msgstr "**Pérdida confirmada**"
 
-msgid "The area (or number) of alerts reviewed as **Reviewed: confirmed**. With an earlier period, it compares with that period, in the page's measure (\"▼ 780 less than 2026-09-01 → 2026-09-30\", or \"▲ … more than …\"), and draws a small line across the periods."
-msgstr "La superficie (o el número) de las alertas revisadas como **Revisada: confirmada**. Si hay un período anterior, compara con ese período, en la medida de la página (\"▼ 780 menos que 2026-09-01 → 2026-09-30\", o \"▲ … más que …\"), y dibuja una pequeña línea a lo largo de los períodos."
+msgid "The area (or number) of alerts reviewed as **Reviewed: confirmed**. With an earlier period, it compares with that period, in the page's measure (\"▼ 780 less than 2026-09-01 → 2026-09-30\", or \"▲ … more than …\"). **All periods** has no comparison."
+msgstr "La superficie (o el número) de las alertas revisadas como **Revisada: confirmada**. Si hay un período anterior, compara con ese período, en la medida de la página (\"▼ 780 menos que 2026-09-01 → 2026-09-30\", o \"▲ … más que …\"). **Todos los períodos** no tiene comparación."
 
 msgid "**Detected in total**"
 msgstr "**Detectado en total**"
@@ -3688,89 +3928,128 @@ msgstr "**Alerta más grande**"
 msgid "The largest alert's area, its number, its country and its date. It always counts hectares. The country shows for every alert of a set made with this version; in a set made before, once the alert is saved. The number is the alert's number: in a set made with this version, the same as the Analysis counter's number (a set made before numbers from 0, so it is the counter's number minus one)."
 msgstr "La superficie de la alerta más grande, su número, su país y su fecha. Siempre cuenta hectáreas. El país aparece para todas las alertas de un conjunto creado con esta versión; en un conjunto creado antes, una vez guardada la alerta. El número es el número de la alerta: en un conjunto creado con esta versión, el mismo que el del contador de Análisis (un conjunto creado antes numera desde 0, así que es el número del contador menos uno)."
 
-msgid "The figures"
-msgstr "Las figuras"
+msgid "Map layers"
+msgstr "Capas del mapa"
+
+msgid "The **Map layers** button beside **Review alerts** opens a list of the layers the Overview can draw on the main map, grouped by period. Tick a layer to draw it: the Overview closes, to show the map. Clear it to take the layer off. Every layer is named with its period (\"Alerts · 2026-01-01 → 2026-01-31\"), in the list, on the map and in the legend."
+msgstr "El botón **Capas del mapa**, junto a **Revisar alertas**, abre la lista de las capas que el Resumen puede dibujar en el mapa principal, agrupadas por período. Marca una capa para dibujarla: el Resumen se cierra para mostrar el mapa. Desmárcala para quitar la capa. Cada capa lleva su período en el nombre (\"Alertas · 2026-01-01 → 2026-01-31\"), en la lista, en el mapa y en la leyenda."
+
+msgid "**This set**: the selected set's **Alerts**, coloured by status, and its not-analysable pixels (too small, or over the alert cap), when the set's run recorded them."
+msgstr "**Este conjunto**: las **Alertas** del conjunto seleccionado, coloreadas según su estado, y sus píxeles no analizables (demasiado pequeños o sobre el límite de alertas), cuando la ejecución del conjunto los registró."
+
+msgid "**Other periods**: the alerts of every other period's newest set, newest period first, each on its own. When there are several, **Show all** and **Hide all** draw or clear them together."
+msgstr "**Otros períodos**: las alertas del conjunto más reciente de cada uno de los demás períodos, del más reciente al más antiguo, cada una por separado. Cuando hay varias, **Mostrar todo** y **Ocultar todo** las dibujan o las quitan juntas."
+
+msgid "With **All periods** selected, **Every period** lists the alerts and the not-analysable pixels of each period's newest set."
+msgstr "Con **Todos los períodos** seleccionado, **Todos los períodos** lista las alertas y los píxeles no analizables del conjunto más reciente de cada período."
+
+msgid "A layer's box is greyed while the layer is being built."
+msgstr "La casilla de una capa queda en gris mientras se construye la capa."
+
+msgid "The tabs"
+msgstr "Las pestañas"
+
+msgid "The figures are grouped in tabs, each with two cards side by side."
+msgstr "Las cifras se agrupan en pestañas, cada una con dos tarjetas una al lado de la otra."
 
 msgid "The Overview figures"
 msgstr "Las figuras del Resumen"
 
-msgid "Left column:"
-msgstr "Columna izquierda:"
+msgid "Tab"
+msgstr "Pestaña"
 
-msgid "Card"
-msgstr "Tarjeta"
+msgid "Cards"
+msgstr "Tarjetas"
 
-msgid "**By review status**"
-msgstr "**Por estado de revisión**"
+msgid "**By review status**: one bar split by status, then a table with, per status, the number of alerts, their area, their share of the measure and the median alert size, and a **Total** row. **How big the alerts are**: the alerts by size, from under 0.5 ha to 25 ha or more."
+msgstr "**Por estado de revisión**: una barra dividida por estado y, debajo, una tabla con, por estado, el número de alertas, su superficie, su proporción de la medida y el tamaño mediano de las alertas, y una fila **Total**. **Tamaño de las alertas**: las alertas por tamaño, de menos de 0,5 ha a 25 ha o más."
 
-msgid "One bar split by status, and the value of each status."
-msgstr "Una barra dividida por estado y el valor de cada estado."
+msgid "**Over time**"
+msgstr "**En el tiempo**"
 
-msgid "**Across monitoring periods**"
-msgstr "**A lo largo de los períodos de seguimiento**"
+msgid "**Across monitoring periods**: one column per monitoring period of the project, split by status, from its newest alert set; a period still under review shows its unreviewed share hatched. With one period only, it reads \"This project has one monitoring period. Add a second one and its trend is charted here.\" **When the loss was detected**: the alerts by the week they were first detected, split by status. Hatched weeks are look-back weeks: they fall before the period started (see `What earlier periods already reported <defo-integrate-earlier_>`_)."
+msgstr "**A lo largo de los períodos de seguimiento**: una columna por período de monitoreo del proyecto, dividida por estado, a partir de su conjunto de alertas más reciente; un período que aún está en revisión muestra rayada su parte sin revisar. Con un solo período, indica \"Este proyecto tiene un solo período de seguimiento. Añade otro y aquí se dibujará su tendencia.\" **Cuándo se detectó la pérdida**: las alertas según la semana en que se detectaron por primera vez, divididas por estado. Las semanas rayadas son semanas de retrospección: caen antes del inicio del período (consulta `Lo que ya reportaron los períodos anteriores <defo-integrate-earlier_>`_)."
 
-msgid "One column per monitoring period of the project, split by status, from its newest alert set. A period still under review shows its unreviewed share hatched. With one period only, it reads \"This project has one monitoring period. Add a second one and its trend is charted here.\""
-msgstr "Una columna por período de monitoreo del proyecto, dividida por estado, a partir de su conjunto de alertas más reciente. Un período que aún está en revisión muestra rayada su parte sin revisar. Con un solo período, indica \"Este proyecto tiene un solo período de seguimiento. Añade otro y aquí se dibujará su tendencia.\""
-
-msgid "**How big the alerts are**"
-msgstr "**Tamaño de las alertas**"
-
-msgid "The alerts by size: under 0.5 ha, 0.5–1 ha, 1–2 ha, 2–5 ha, 5–10 ha, 10–25 ha, and 25 ha or more."
-msgstr "Las alertas por tamaño: menos de 0,5 ha, 0,5–1 ha, 1–2 ha, 2–5 ha, 5–10 ha, 10–25 ha y 25 ha o más."
-
-msgid "**By administrative area**"
-msgstr "**Por área administrativa**"
+msgid "**Place & source**"
+msgstr "**Lugar y fuente**"
 
 msgid "**By administrative area**: the reviewed alerts by area, up to eight, the most confirmed loss first: their **Area (ha)**, the hectares **Reviewed: confirmed** and the number of **Alerts**. **Country** or **Province / state** sets the level; a province is shown with its country (\"Peru › Madre de Dios\"). The areas come from the FAO GAUL 2024 boundaries, recorded for every alert by `Integrate & vectorize <defo-integrate_>`_, but only reviewed alerts are counted; an alert with none recorded is counted as **Not recorded**, and an alert across a border is listed under every area it falls in. **By alert source**: the alerts by the combination of sources that detected them."
 msgstr "**Por área administrativa**: las alertas revisadas por área, hasta ocho, primero la de mayor pérdida confirmada: su **Superficie (ha)**, las hectáreas **Revisada: confirmada** y el número de **Alertas**. **País** o **Provincia / departamento** fija el nivel; una provincia se muestra con su país (\"Peru › Madre de Dios\"). Las áreas proceden de los límites FAO GAUL 2024, registradas para cada alerta por `Integrar y vectorizar <defo-integrate_>`_, pero solo se cuentan las alertas revisadas; una alerta sin ninguna registrada se cuenta como **Sin registrar**, y una alerta que cruza un límite aparece en todas las áreas en las que cae. **Por fuente de alertas**: las alertas según la combinación de fuentes que las detectaron."
 
-msgid "Right column:"
-msgstr "Columna derecha:"
+msgid "**Answers**"
+msgstr "**Respuestas**"
 
-msgid "**The numbers**"
-msgstr "**Las cifras**"
+msgid "One card per `question <defo-questionnaire_>`_, with the answers given to reviewed alerts: the five most frequent, then **Other** and **No answer**. An alert with two answers counts under each. Only shown when the project has questions; the tab shows their number."
+msgstr "Una tarjeta por `pregunta <defo-questionnaire_>`_, con las respuestas dadas a las alertas revisadas: las cinco más frecuentes, luego **Otros** y **Sin respuesta**. Una alerta con dos respuestas cuenta en cada una. Solo aparece cuando el proyecto tiene preguntas; la pestaña muestra su número."
 
-msgid "A table: per status, the number of alerts, their area, their share of the measure and the median alert size, with a **Total** row."
-msgstr "Una tabla: por estado, el número de alertas, su superficie, su proporción de la medida y el tamaño mediano de las alertas, con una fila **Total**."
+msgid "**Pixels**"
+msgstr "**Píxeles**"
 
-msgid "**History of growing clearings**"
-msgstr "**Historial de talas que crecen**"
+msgid "How the pixels of the sources became the pixels of the alerts (see below)."
+msgstr "Cómo los píxeles de las fuentes se convirtieron en los píxeles de las alertas (ver más abajo)."
 
-msgid "Only when the set has `growth alerts <defo-integrate-growth_>`_ (see below)."
-msgstr "Solo cuando el conjunto tiene `alertas de crecimiento <defo-integrate-growth_>`_ (ver más abajo)."
+msgid "**Clusters**"
+msgstr "**Grupos de píxeles**"
 
-msgid "**Nearby alerts**"
-msgstr "**Alertas cercanas**"
+msgid "How those pixels became alerts, the nearby alerts and the alerts linked to earlier loss (see below). The tab shows the number of alerts."
+msgstr "Cómo esos píxeles se convirtieron en alertas, las alertas cercanas y las alertas vinculadas a pérdidas anteriores (ver más abajo). La pestaña muestra el número de alertas."
 
-msgid "How the set's alerts gather into groups of nearby alerts (see below)."
-msgstr "Cómo se reúnen las alertas del conjunto en grupos de alertas cercanas (ver más abajo)."
+msgid "**Files**"
+msgstr "**Archivos**"
 
-msgid "**When the loss was detected**"
-msgstr "**Cuándo se detectó la pérdida**"
-
-msgid "The alerts by the week they were first detected. Greyed weeks are look-back weeks: they fall before the period started (see `What earlier periods already reported <defo-integrate-earlier_>`_)."
-msgstr "Las alertas según la semana en que se detectaron por primera vez. Las semanas en gris son semanas de retrospección: caen antes del inicio del período (consulta `Lo que ya reportaron los períodos anteriores <defo-integrate-earlier_>`_)."
-
-msgid "One card per question"
-msgstr "Una tarjeta por pregunta"
-
-msgid "The answers given to each `question <defo-questionnaire_>`_, for reviewed alerts only: the five most frequent, then **Other** and **No answer**. An alert with two answers counts under each."
-msgstr "Las respuestas dadas a cada `pregunta <defo-questionnaire_>`_, solo para las alertas revisadas: las cinco más frecuentes, luego **Otros** y **Sin respuesta**. Una alerta con dos respuestas cuenta en cada una."
-
-msgid "**By alert source**"
-msgstr "**Por fuente de alertas**"
-
-msgid "The alerts by the combination of sources that detected them."
-msgstr "Las alertas según la combinación de fuentes que las detectaron."
+msgid "The **Export alerts** card (see `The whole set, from the Overview <defo-export-set_>`_) and, with **All periods** selected, the **Summary of all periods** (see below)."
+msgstr "La tarjeta **Exportar alertas** (consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_) y, con **Todos los períodos** seleccionado, el **Resumen de todos los períodos** (ver más abajo)."
 
 msgid "When a figure cannot be drawn, its card reads \"This figure could not be drawn; its numbers are below.\" and lists them."
 msgstr "Cuando una figura no se puede dibujar, su tarjeta indica \"No se pudo dibujar esta figura; sus cifras están abajo.\" y las enumera."
 
-msgid "Growing clearings"
-msgstr "Desmontes que crecen"
+msgid "Pixels"
+msgstr "Píxeles"
 
-msgid "The **History of growing clearings** card follows the clearings that this set's growth alerts extend. Its headline gives the set's growth alerts and their area (\"3 growth alerts · 4.2 ha\", or only the number with **Alert count**). The line under it splits them (\"Growth: 2 · Under minimum area: 1\") and says how many are reviewed."
-msgstr "La tarjeta **Historial de talas que crecen** sigue los desmontes que amplían las alertas de crecimiento de este conjunto. Su titular indica las alertas de crecimiento del conjunto y su superficie (\"3 alertas de crecimiento · 4,2 ha\", o solo el número con **Número de alertas**). La línea de debajo las desglosa (\"Crecimiento: 2 · Bajo el área mínima: 1\") e indica cuántas están revisadas."
+msgid "The **From source pixels to alert pixels** card follows the pixels step by step, each with a bar, a number and its hectares:"
+msgstr "La tarjeta **De los píxeles de las fuentes a los píxeles de alerta** sigue los píxeles paso a paso, cada uno con una barra, un número y sus hectáreas:"
+
+msgid "**Source alert pixels**: the pixels the sources flagged in the period, all sources together;"
+msgstr "**Píxeles de alerta de las fuentes**: los píxeles que las fuentes marcaron en el período, todas las fuentes juntas;"
+
+msgid "**Removed by masks** and **Kept by the masks**: what the masks of `Harmonize <defo-harmonize_>`_ took out and left;"
+msgstr "**Quitados por las máscaras** y **Conservados por las máscaras**: lo que las máscaras de `Armonizar <defo-harmonize_>`_ quitaron y dejaron;"
+
+msgid "**Combined, overlaps once**: the pixels once the sources are combined, a pixel flagged by two sources counted once;"
+msgstr "**Combinados, solapes una vez**: los píxeles una vez combinadas las fuentes, contando una sola vez un píxel marcado por dos fuentes;"
+
+msgid "**Too small to analyse** and **Over the alert limit**: the pixels of clusters below the minimum area, and of clusters left out by the alert limit of `Integrate & vectorize <defo-integrate_>`_; and"
+msgstr "**Demasiado pequeños para analizar** y **Por encima del límite de alertas**: los píxeles de los grupos por debajo del área mínima, y de los grupos que el límite de alertas de `Integrar y vectorizar <defo-integrate_>`_ dejó fuera; y"
+
+msgid "**In alerts**: the pixels of the set's alerts."
+msgstr "**En alertas**: los píxeles de las alertas del conjunto."
+
+msgid "The **By source** card gives the same counts per source (**Alert px**, **Masked**, **Kept**), each with an eye that draws the source's raster on the map, and the **Masks used** with their **Mode**."
+msgstr "La tarjeta **Por fuente** da los mismos recuentos por fuente (**Px de alerta**, **Enmascarados**, **Conservados**), cada uno con un ojo que dibuja el raster de la fuente en el mapa, y las **Máscaras usadas** con su **Modo**."
+
+msgid "A count shows \"—\" when the set was made before the app recorded it: \"—: not recorded for this set. Run Integrate & vectorize again to count it.\""
+msgstr "Un recuento muestra \"—\" cuando el conjunto se generó antes de que la aplicación lo registrara: \"—: no registrado para este conjunto. Vuelva a ejecutar Integrar y vectorizar para contarlo.\""
+
+msgid "Clusters"
+msgstr "Grupos de píxeles"
+
+msgid "The **From clusters to alerts** card counts the **Clusters formed** by connected alert pixels, those **Under the minimum size** and **Over the alert limit**, the **Alerts** made from the rest, and how many are **Reviewed**."
+msgstr "La tarjeta **De los grupos de píxeles a las alertas** cuenta los **Grupos formados** por píxeles de alerta conectados, los que están **Bajo el tamaño mínimo** y **Por encima del límite de alertas**, las **Alertas** generadas con el resto y cuántas están **Revisadas**."
+
+msgid "Under it, **Nearby alerts** shows how the set's alerts chain into groups: alerts within the distance of **Review nearby alerts together** (see `Evaluation <defo-evaluation-group_>`_), edge to edge, form one group. Its table has two rows:"
+msgstr "Debajo, **Alertas cercanas** muestra cómo se encadenan en grupos las alertas del conjunto: las alertas que están a la distancia de **Revisar juntas las alertas cercanas** (consulta `Evaluación <defo-evaluation-group_>`_), de borde a borde, forman un grupo. Su tabla tiene dos filas:"
+
+msgid "**Found by distance**: the groups the distance makes, and their alerts (\"20 of 48 · largest 5\"); and"
+msgstr "**Encontradas por distancia**: los grupos que forma la distancia, y sus alertas (\"20 de 48 · el mayor 5\"); y"
+
+msgid "**Saved as a review group**: the groups saved in Analysis, and their alerts."
+msgstr "**Guardadas como grupo de revisión**: los grupos guardados en Análisis, y sus alertas."
+
+msgid "When grouping is off, the card uses the project's distance and adds \"Reviewing together is off · turn it on in Evaluation.\""
+msgstr "Cuando la agrupación está desactivada, la tarjeta usa la distancia del proyecto y añade \"La revisión conjunta está desactivada · actívela en Evaluación.\""
+
+msgid "The **Linked to earlier loss** card follows the `growth alerts <defo-integrate-growth_>`_: new alerts that touch a clearing confirmed in an earlier period (draw the earlier sets from `Map layers <defo-overview-layers_>`_). Its headline gives the growth alerts and their area (\"3 growth alerts · 4.2 ha\", or only the number with **Alert count**); the line under it splits them (\"Growth: 2 · Under minimum area: 1\") and says how many are reviewed. Without any, it reads \"No alert is linked to earlier loss.\""
+msgstr "La tarjeta **Vinculadas a pérdidas anteriores** sigue las `alertas de crecimiento <defo-integrate-growth_>`_: alertas nuevas que tocan un desmonte confirmado en un período anterior (dibuja los conjuntos anteriores desde `Capas del mapa <defo-overview-layers_>`_). Su titular indica las alertas de crecimiento y su superficie (\"3 alertas de crecimiento · 4,2 ha\", o solo el número con **Número de alertas**); la línea de debajo las desglosa (\"Crecimiento: 2 · Bajo el área mínima: 1\") e indica cuántas están revisadas. Si no hay ninguna, indica \"Ninguna alerta está vinculada a pérdidas anteriores.\""
 
 msgid "Its table lists the histories that include an alert of this set, the largest confirmed area first:"
 msgstr "Su tabla enumera los historiales que incluyen una alerta de este conjunto, primero el de mayor superficie confirmada:"
@@ -3802,26 +4081,17 @@ msgstr "**Revisar**"
 msgid "Closes the Overview and opens this set's alert of the history in `Analysis <defo-analysis_>`_."
 msgstr "Cierra el Resumen y abre la alerta de este conjunto del historial en `Análisis <defo-analysis_>`_."
 
-msgid "The **Nearby alerts** card shows how the set's alerts chain into groups: alerts within the distance of **Review nearby alerts together** (see `Evaluation <defo-evaluation-group_>`_), edge to edge, form one group. A split gives each group to one evaluator."
-msgstr "La tarjeta **Alertas cercanas** muestra cómo se encadenan en grupos las alertas del conjunto: las alertas que están a la distancia de **Revisar juntas las alertas cercanas** (consulta `Evaluación <defo-evaluation-group_>`_), de borde a borde, forman un grupo. Al repartir, cada grupo va a un solo evaluador."
+msgid "Summary of all periods"
+msgstr "Resumen de todos los períodos"
 
-msgid "The headline counts the groups (\"6 groups of nearby alerts\"), or reads \"No alert within 300 m of another\"."
-msgstr "El titular cuenta los grupos (\"6 grupos de alertas cercanas\"), o indica \"Ninguna alerta a menos de 300 m de otra\"."
+msgid "With **All periods** selected, the **Files** tab ends with a table of every period, one row each: its **Alerts**, **Confirmed ha**, **Reviewed** share, **Source px**, **Clusters**, review **Groups** and alerts **Linked** to earlier loss. The **Summary CSV** tile under it writes the same table to ``periods_summary.csv`` in the project folder; select it again to download the file. When the numbers have changed since (reviews saved, a set rebuilt), the tile reads \"Numbers changed since\" and an **Update** button writes it again."
+msgstr "Con **Todos los períodos** seleccionado, la pestaña **Archivos** termina con una tabla de todos los períodos, una fila por período: sus **Alertas**, **ha confirmadas**, la proporción de **Revisadas**, **Px de fuentes**, **Grupos de píxeles**, **Grupos** de revisión y alertas **Vinculadas** a pérdidas anteriores. El mosaico **CSV de resumen** de debajo escribe la misma tabla en ``periods_summary.csv`` en la carpeta del proyecto; vuelve a seleccionarlo para descargar el archivo. Cuando las cifras han cambiado desde entonces (revisiones guardadas, un conjunto reconstruido), el mosaico indica \"Las cifras cambiaron desde entonces\" y un botón **Actualizar** lo vuelve a escribir."
 
-msgid "The line under it reads, for example, \"In a group: 20 of 48 alerts · Alone: 28 · Largest: 5 alerts\"."
-msgstr "La línea de debajo indica, por ejemplo, \"En un grupo: 20 de 48 alertas · Solas: 28 · El mayor: 5 alertas\"."
+msgid "All periods"
+msgstr "Todos los períodos"
 
-msgid "The last line counts the groups saved in Analysis (\"2 groups saved in Analysis (7 alerts)\"), or reads \"No group saved in Analysis yet\"."
-msgstr "La última línea cuenta los grupos guardados en Análisis (\"2 grupos guardados en Análisis (7 alertas)\"), o indica \"Aún no hay ningún grupo guardado en Análisis\"."
-
-msgid "When grouping is off, the card uses the project's distance and adds \"Reviewing nearby alerts together is off: turn it on in the Evaluation step.\""
-msgstr "Cuando la agrupación está desactivada, la tarjeta usa la distancia del proyecto y añade \"Revisar juntas las alertas cercanas está desactivado: actívalo en el paso Evaluación.\""
-
-msgid "Export the set"
-msgstr "Exportar el conjunto"
-
-msgid "The **Export alerts** card, at the bottom, writes the set's alerts to a file for a geographic information system (GIS) or a spreadsheet. See `The whole set, from the Overview <defo-export-set_>`_."
-msgstr "La tarjeta **Exportar alertas**, en la parte inferior, escribe las alertas del conjunto en un archivo para un sistema de información geográfica (SIG) o una hoja de cálculo. Consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_."
+msgid "Choose **All periods** in the **Alert set** selector to sum the newest set of every period: the key figures, the tabs and the export then cover them all. Hectares and alerts are added up; a pixel count that one set did not record shows \"—\". **Map layers** lists every period's layers (see `Map layers <defo-overview-layers_>`_); **Review alerts** needs one set, so it is disabled. In the **Files** tab, the **Export alerts** card writes every period's alerts to one file, with a ``period`` column (see `The whole set, from the Overview <defo-export-set_>`_)."
+msgstr "Elige **Todos los períodos** en el selector **Conjunto de alertas** para sumar el conjunto más reciente de cada período: las cifras clave, las pestañas y la exportación los abarcan entonces a todos. Las hectáreas y las alertas se suman; un recuento de píxeles que un conjunto no registró muestra \"—\". **Capas del mapa** lista las capas de todos los períodos (consulta `Capas del mapa <defo-overview-layers_>`_); **Revisar alertas** necesita un solo conjunto, así que se desactiva. En la pestaña **Archivos**, la tarjeta **Exportar alertas** escribe las alertas de todos los períodos en un solo archivo, con una columna ``period`` (consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_)."
 
 msgid "\"No alert set yet. Run Integrate & vectorize to produce one.\""
 msgstr "\"Todavía no hay ningún conjunto de alertas. Ejecuta Integrar y vectorizar para generar uno.\""
@@ -3856,11 +4126,11 @@ msgstr "La aplicación exporta las alertas de dos maneras:"
 msgid "the files of one reviewed alert, from the Analysis screen; and"
 msgstr "los archivos de una alerta revisada, desde la pantalla de Análisis; y"
 
-msgid "the alerts of a whole set, from the Overview."
-msgstr "las alertas de todo un conjunto, desde el Resumen."
+msgid "the alerts of a whole set, or of every period, from the Overview."
+msgstr "las alertas de todo un conjunto, o de todos los períodos, desde el Resumen."
 
-msgid "Every file is written into the alert set's folder in the project (``periods/<start>_<end>/sets/<set>/``, see `Project <defo-project_>`_), so it can also be found there later, in SEPAL's file browser."
-msgstr "Cada archivo se escribe en la carpeta del conjunto de alertas dentro del proyecto (``periods/<start>_<end>/sets/<set>/``, consulta `Proyecto <defo-project_>`_), así que también se puede encontrar allí más tarde, en el explorador de archivos de SEPAL."
+msgid "Every file is written into the alert set's folder in the project (``periods/<start>_<end>/sets/<set>/``, see `Project <defo-project_>`_), so it can also be found there later, in SEPAL's file browser. The files of **All periods** go to the project folder."
+msgstr "Cada archivo se escribe en la carpeta del conjunto de alertas dentro del proyecto (``periods/<start>_<end>/sets/<set>/``, consulta `Proyecto <defo-project_>`_), así que también se puede encontrar allí más tarde, en el explorador de archivos de SEPAL. Los archivos de **Todos los períodos** van a la carpeta del proyecto."
 
 msgid "One alert, from Analysis"
 msgstr "Una alerta, desde Análisis"
@@ -3871,6 +4141,9 @@ msgstr "La sección **Exportar esta alerta** está en la parte superior de la ba
 msgid "The alert's files, ready to download"
 msgstr "Los archivos de la alerta, listos para descargar"
 
+msgid "Tile"
+msgstr "Mosaico"
+
 msgid "**Build files**"
 msgstr "**Generar archivos**"
 
@@ -3880,8 +4153,8 @@ msgstr "Genera los datos y el informe de la alerta a partir de la revisión guar
 msgid "**Alert data**"
 msgstr "**Datos de la alerta**"
 
-msgid "Downloads a .zip file: the alert's GeoPackage, its before and after images as one GeoTIFF and, for a true alert, its GIF."
-msgstr "Descarga un archivo .zip: el GeoPackage de la alerta, sus imágenes de antes y de después en un solo GeoTIFF y, para una alerta verdadera, su GIF."
+msgid "Downloads a .zip file: the alert's GeoPackage, its before and after images as one GeoTIFF (two with Sentinel-1 on: optical and radar) and, for a true alert, its GIF."
+msgstr "Descarga un archivo .zip: el GeoPackage de la alerta, sus imágenes de antes y de después en un solo GeoTIFF (dos con Sentinel-1 activado: óptico y radar) y, para una alerta verdadera, su GIF."
 
 msgid "**Alert report**"
 msgstr "**Informe de la alerta**"
@@ -3916,8 +4189,8 @@ msgstr "La alerta como una entidad con sus atributos y respuestas (las respuesta
 msgid "``alert_<n>_<before>_<after>.tif``"
 msgstr "``alert_<n>_<before>_<after>.tif``"
 
-msgid "The before and after images, cut to the **Image area**. The two date parts name each image's collection (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet) and date."
-msgstr "Las imágenes de antes y de después, recortadas al **Área de imagen**. Las dos partes de fecha indican la colección de cada imagen (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet) y su fecha."
+msgid "The before and after images, cut to the **Image area**. The two date parts name each image's collection (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascending/descending) and date. With Sentinel-1 on there are two: the optical pair and the radar pair, each as picked."
+msgstr "Las imágenes de antes y de después, recortadas al **Área de imagen**. Las dos partes de fecha indican la colección de cada imagen (``s`` Sentinel-2, ``l`` Landsat, ``p`` Planet, ``a``/``d`` Sentinel-1 ascendente/descendente) y su fecha. Con Sentinel-1 activado hay dos: el par óptico y el par de radar, cada uno tal como se eligió."
 
 msgid "``alert_<n>_<before>_<after>.gif``"
 msgstr "``alert_<n>_<before>_<after>.gif``"
@@ -3928,8 +4201,8 @@ msgstr "La secuencia temporal, si se creó, con un nombre como el del GeoTIFF."
 msgid "``alert_<n>.zip``"
 msgstr "``alert_<n>.zip``"
 
-msgid "The GeoPackage, the GeoTIFF and, for a true alert, the GIF."
-msgstr "El GeoPackage, el GeoTIFF y, para una alerta verdadera, el GIF."
+msgid "The GeoPackage, the GeoTIFF (or the two) and, for a true alert, the GIF."
+msgstr "El GeoPackage, el GeoTIFF (o los dos) y, para una alerta verdadera, el GIF."
 
 msgid "``alert_<n>.docx``"
 msgstr "``alert_<n>.docx``"
@@ -3946,8 +4219,8 @@ msgstr "Los enlaces de los mosaicos corresponden a la revisión en pantalla. Ele
 msgid "The report"
 msgstr "El informe"
 
-msgid "The report is built from the project's Word template, chosen in the `Questionnaire <defo-questionnaire-template_>`_ step, or from the app's default template when the project has none. The template's placeholders are filled with the alert's attributes, its answers and its images. See `The report template <defo-questionnaire-template_>`_ for the list."
-msgstr "El informe se genera a partir de la plantilla de Word del proyecto, elegida en el paso `Cuestionario <defo-questionnaire-template_>`_, o a partir de la plantilla predeterminada de la aplicación cuando el proyecto no tiene ninguna. Los marcadores de la plantilla se rellenan con los atributos de la alerta, sus respuestas y sus imágenes. Consulta la lista en `La plantilla del informe <defo-questionnaire-template_>`_."
+msgid "The report is built from the project's Word template, chosen in the `Questionnaire <defo-questionnaire-template_>`_ step, or from the app's default template when the project has none. The template's placeholders are filled with the alert's attributes, its answers and its images. With Sentinel-1 on, the pictures show the optical pair as picked, a *Radar evidence* row shows the radar pair, and the summary names both the optical and the radar images. See `The report template <defo-questionnaire-template_>`_ for the list."
+msgstr "El informe se genera a partir de la plantilla de Word del proyecto, elegida en el paso `Cuestionario <defo-questionnaire-template_>`_, o a partir de la plantilla predeterminada de la aplicación cuando el proyecto no tiene ninguna. Los marcadores de la plantilla se rellenan con los atributos de la alerta, sus respuestas y sus imágenes. Con Sentinel-1 activado, las imágenes muestran el par óptico tal como se eligió, una fila *Evidencia de radar* muestra el par de radar y el resumen nombra tanto las imágenes ópticas como las de radar. Consulta la lista en `La plantilla del informe <defo-questionnaire-template_>`_."
 
 msgid "The timelapse"
 msgstr "La secuencia temporal"
@@ -3973,8 +4246,8 @@ msgstr "El GIF se guarda junto a los demás archivos y, cuando se generan los ar
 msgid "The whole set, from the Overview"
 msgstr "Todo el conjunto, desde el Resumen"
 
-msgid "The **Export alerts** card, at the bottom of the `Overview <defo-overview_>`_, writes the alerts of the set shown to a single file. Its top line sums up the alerts that the chosen **Alerts** chip writes, with the set's sources and dates (e.g. \"11 alerts · 304.9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20\" for **Confirmed**). The folder chip next to it copies the folder's path when selected."
-msgstr "La tarjeta **Exportar alertas**, en la parte inferior del `Resumen <defo-overview_>`_, escribe las alertas del conjunto mostrado en un único archivo. Su primera línea resume las alertas que escribe la etiqueta **Alertas** elegida, con las fuentes y las fechas del conjunto (por ejemplo, \"11 alertas · 304,9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20\" para **Confirmadas**). La etiqueta de carpeta que hay al lado copia la ruta de la carpeta al seleccionarla."
+msgid "The **Export alerts** card, in the **Files** tab of the `Overview <defo-overview_>`_, writes the alerts of the set shown to a single file. Its top line sums up the alerts that the chosen **Alerts** chip writes, with the set's sources and dates (e.g. \"11 alerts · 304.9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20\" for **Confirmed**). The folder chip next to it copies the folder's path when selected."
+msgstr "La tarjeta **Exportar alertas**, en la pestaña **Archivos** del `Resumen <defo-overview_>`_, escribe las alertas del conjunto mostrado en un único archivo. Su primera línea resume las alertas que escribe la etiqueta **Alertas** elegida, con las fuentes y las fechas del conjunto (por ejemplo, \"11 alertas · 304,9 ha · GLAD-L + GLAD-S2 + RADD · 2026-10-01 – 2026-10-20\" para **Confirmadas**). La etiqueta de carpeta que hay al lado copia la ruta de la carpeta al seleccionarla."
 
 msgid "The Export alerts card of the Overview"
 msgstr "La tarjeta Exportar alertas del Resumen"
@@ -4017,6 +4290,9 @@ msgstr "``history_area_ha``: la superficie confirmada del historial de la alerta
 
 msgid "The file is named after the set's sources, its period and the chosen alerts (e.g. ``alerts_glad-l-glad-s2-radd_2026-08-01_2026-09-30_confirmed.gpkg``): ``_reviewed`` for **All reviewed**, ``_unreviewed`` for **Not reviewed**, and no suffix for **All**. The card's last line shows the name. Answers are written in the app's current language."
 msgstr "El archivo lleva el nombre de las fuentes del conjunto, su período y las alertas elegidas (por ejemplo, ``alerts_glad-l-glad-s2-radd_2026-08-01_2026-09-30_confirmed.gpkg``): ``_reviewed`` para **Todas revisadas**, ``_unreviewed`` para **Sin revisar**, y sin sufijo para **Todas**. La última línea de la tarjeta muestra el nombre. Las respuestas se escriben en el idioma actual de la aplicación."
+
+msgid "With **All periods** chosen in the **Alert set** selector, the card writes every period's alerts to one file in the project folder, with a ``period`` column giving each alert's period. Its name joins the sources of every set and runs from the first period's start to the last period's end (e.g. ``alerts_glad-l_2026-08-01_2026-10-23.gpkg``)."
+msgstr "Con **Todos los períodos** elegido en el selector **Conjunto de alertas**, la tarjeta escribe las alertas de todos los períodos en un solo archivo en la carpeta del proyecto, con una columna ``period`` que indica el período de cada alerta. Su nombre une las fuentes de todos los conjuntos y va del inicio del primer período al final del último (por ejemplo, ``alerts_glad-l_2026-08-01_2026-10-23.gpkg``)."
 
 msgid "When reviews are saved after a file was written, its tile reads **Reviews changed since**, with an **Update** button. Select it to write the file again."
 msgstr "Cuando se guardan revisiones después de escribir un archivo, su mosaico indica **Revisiones cambiadas desde entonces**, con un botón **Actualizar**. Selecciónalo para volver a escribir el archivo."
@@ -4120,8 +4396,8 @@ msgstr "La ventana de búsqueda va del 2026-06-03 al 2026-09-30, así que tambi�
 msgid "Alerts"
 msgstr "Alertas"
 
-msgid "In `Alert sources <defo-alerts_>`_, the coordinator adds the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**, each with **Add to new periods** left selected, so that the next periods start with them. Each one covers the whole AOI. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts. Then **Download 3 pending** in the footer downloads the three sources over the search window."
-msgstr "En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos períodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, **Descargar 3 pendientes** en el pie descarga las tres fuentes en la ventana de búsqueda."
+msgid "In `Alert sources <defo-alerts_>`_, the coordinator adds the three predefined sources: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** and **GLAD-S2 (Sentinel-2, 10 m)**, each with **Add to new periods** left selected, so that the next periods start with them. Each one covers the whole AOI. Under RADD, the app notes that it detects only in primary humid tropical forest: elsewhere in the department, only GLAD-L and GLAD-S2 can report alerts. Then the **Download** of each row downloads the three sources over the search window."
+msgstr "En `Fuentes de alertas <defo-alerts_>`_, la coordinadora añade las tres fuentes predefinidas: **GLAD-L (Landsat, 30 m)**, **RADD (Sentinel-1, 10 m)** y **GLAD-S2 (Sentinel-2, 10 m)**, cada una con **Añadir a los nuevos períodos** marcado, para que los períodos siguientes empiecen con ellas. Cada una cubre toda la AOI. Bajo RADD, la aplicación indica que solo detecta en bosque tropical húmedo primario: en el resto del departamento, solo GLAD-L y GLAD-S2 pueden reportar alertas. Después, el botón **Descargar** de cada fila descarga las tres fuentes en la ventana de búsqueda."
 
 msgid "In `Harmonize <defo-harmonize_>`_, the coordinator:"
 msgstr "En `Armonizar <defo-harmonize_>`_, la coordinadora:"
@@ -4132,8 +4408,8 @@ msgstr "conserva la cuadrícula sugerida, la zona UTM del departamento (``EPSG:3
 msgid "adds a mask so that only alerts in forest count: **Add mask**, the Hansen Global Forest Change image ``UMD/hansen/global_forest_change_2025_v1_13``, band ``treecover2000``, named ``forest_2000``, mode **Keep**; and"
 msgstr "añade una máscara para que solo cuenten las alertas en bosque: **Añadir máscara**, la imagen Hansen Global Forest Change ``UMD/hansen/global_forest_change_2025_v1_13``, banda ``treecover2000``, llamada ``forest_2000``, modo **Conservar**; y"
 
-msgid "selects **Harmonize … pending** in the footer of the table, which aligns the mask, then harmonizes the three sources."
-msgstr "selecciona **Armonizar … pendientes** en el pie de la tabla, que alinea la máscara y luego armoniza las tres fuentes."
+msgid "selects the mask's **Align** and, once the mask reads \"Ready\", **Harmonize** on each source's row, which harmonizes the three sources."
+msgstr "selecciona el **Alinear** de la máscara y, cuando la máscara indica \"Lista\", **Armonizar** en la fila de cada fuente, que armoniza las tres fuentes."
 
 msgid "Downloading and harmonizing took about 15 minutes. The mask and each source then read \"Ready\": GLAD-L with 2362718 alert pixels, RADD with 1508527 and GLAD-S2 with 1462458."
 msgstr "La descarga y la armonización tardaron unos 15 minutos. Después, la máscara y cada fuente indican \"Lista\": GLAD-L con 2362718 píxeles de alerta, RADD con 1508527 y GLAD-S2 con 1462458."
@@ -4297,8 +4573,8 @@ msgstr "Al empezar la ronda siguiente, la coordinadora selecciona **Nuevo perío
 msgid "Then:"
 msgstr "Después:"
 
-msgid "**Download 3 pending** in `Alerts <defo-alerts_>`_ downloads the three sources for the new window, and **Harmonize … pending** in `Harmonize <defo-harmonize_>`_ harmonizes them; the grid and the mask are already there."
-msgstr "**Descargar 3 pendientes** en `Alertas <defo-alerts_>`_ descarga las tres fuentes para la nueva ventana, y **Armonizar … pendientes** en `Armonizar <defo-harmonize_>`_ las armoniza; la cuadrícula y la máscara ya están listas."
+msgid "each row's **Download** in `Alerts <defo-alerts_>`_ downloads the three sources for the new window, and each row's **Harmonize** in `Harmonize <defo-harmonize_>`_ harmonizes them; the grid and the mask are already there."
+msgstr "el **Descargar** de cada fila en `Alertas <defo-alerts_>`_ descarga las tres fuentes para la nueva ventana, y el **Armonizar** de cada fila en `Armonizar <defo-harmonize_>`_ las armoniza; la cuadrícula y la máscara ya están listas."
 
 msgid "In `Integrate & vectorize <defo-integrate_>`_, the coordinator uses the same settings as in September (1 ha, the 48 biggest alerts). Before grouping the pixels into alerts, the run removes every pixel inside September's 48 alerts, so that nothing is reported twice. The new set holds 48 alerts again, for 1177 ha. None of them touches an alert confirmed in September, so the run links none to earlier loss (see `Growth of earlier loss <defo-integrate-growth_>`_)."
 msgstr "En `Integrar y vectorizar <defo-integrate_>`_, la coordinadora usa los mismos ajustes que en septiembre (1 ha, las 48 alertas más grandes). Antes de agrupar los píxeles en alertas, la ejecución elimina todos los píxeles que caen dentro de las 48 alertas de septiembre, para que nada se reporte dos veces. El nuevo conjunto vuelve a contener 48 alertas, con 1177 ha. Ninguna toca una alerta confirmada en septiembre, así que la ejecución no vincula ninguna a una pérdida anterior (consulta `Crecimiento de una pérdida anterior <defo-integrate-growth_>`_)."
@@ -4333,11 +4609,11 @@ msgstr "Las cifras clave del conjunto de octubre"
 msgid "The comparison needs care. **Confirmed loss** counts only the alerts reviewed as true alerts, and only a third of the October alerts are reviewed; the September figure, too, covers only the September alerts reviewed so far. The arrow means that less loss is *confirmed* so far, not that less forest was lost: the figure grows as the team goes on reviewing."
 msgstr "La comparación requiere cuidado. **Pérdida confirmada** solo cuenta las alertas revisadas como alertas verdaderas, y solo un tercio de las alertas de octubre están revisadas; la cifra de septiembre también cubre solo las alertas de septiembre revisadas hasta ahora. La flecha significa que por ahora se ha *confirmado* menos pérdida, no que se haya perdido menos bosque: la cifra crece a medida que el equipo sigue revisando."
 
-msgid "**Across monitoring periods** shows the two periods side by side, with the share still under review hatched (2870 ha detected in September, 1177 ha in October)."
-msgstr "**A lo largo de los períodos de seguimiento** muestra los dos períodos uno al lado del otro, con la parte aún en revisión rayada (2870 ha detectadas en septiembre, 1177 ha en octubre)."
+msgid "In the **Over time** tab, **Across monitoring periods** shows the two periods side by side, with the share still under review hatched (2870 ha detected in September, 1177 ha in October)."
+msgstr "En la pestaña **En el tiempo**, **A lo largo de los períodos de seguimiento** muestra los dos períodos uno al lado del otro, con la parte aún en revisión rayada (2870 ha detectadas en septiembre, 1177 ha en octubre)."
 
-msgid "Further down:"
-msgstr "Más abajo:"
+msgid "In the **Answers** tab:"
+msgstr "En la pestaña **Respuestas**:"
 
 msgid "the card of the loss-driver question splits the reviewed area by answer (in October: Mining first, then Agriculture expansion); and"
 msgstr "la tarjeta de la pregunta sobre la causa de la pérdida divide la superficie revisada por respuesta (en octubre: primero Minería, luego Expansión agrícola); y"
@@ -4345,8 +4621,8 @@ msgstr "la tarjeta de la pregunta sobre la causa de la pérdida divide la superf
 msgid "the card of the new question splits it by its answers (in October: all \"No\", 358 ha, with 81.2 ha under \"No answer\")."
 msgstr "la tarjeta de la nueva pregunta la divide por sus respuestas (en octubre: todo \"No\", 358 ha, con 81,2 ha en \"Sin respuesta\")."
 
-msgid "See `The figures <defo-overview-figures_>`_ for every card."
-msgstr "Consulta `Las figuras <defo-overview-figures_>`_ para ver todas las tarjetas."
+msgid "See `The tabs <defo-overview-figures_>`_ for every card."
+msgstr "Consulta `Las pestañas <defo-overview-figures_>`_ para ver todas las tarjetas."
 
 msgid "Share the results"
 msgstr "Compartir los resultados"
@@ -4354,8 +4630,8 @@ msgstr "Compartir los resultados"
 msgid "The whole set"
 msgstr "Todo el conjunto"
 
-msgid "At the bottom of the Overview, the **Export alerts** card writes the October set to a file. The coordinator chooses **Confirmed** (11 alerts, 304.9 ha) and selects the **GeoPackage** tile. The file ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` holds one polygon per confirmed alert with its attributes and both answers, ready for a GIS. The **CSV table** tile writes the same alerts as a table for a spreadsheet. See `The whole set, from the Overview <defo-export-set_>`_."
-msgstr "En la parte inferior del Resumen, la tarjeta **Exportar alertas** escribe el conjunto de octubre en un archivo. La coordinadora elige **Confirmadas** (11 alertas, 304,9 ha) y selecciona el mosaico **GeoPackage**. El archivo ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` contiene un polígono por alerta confirmada con sus atributos y las dos respuestas, listo para un SIG. El mosaico **Tabla CSV** escribe las mismas alertas como una tabla para una hoja de cálculo. Consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_."
+msgid "In the **Files** tab of the Overview, the **Export alerts** card writes the October set to a file. The coordinator chooses **Confirmed** (11 alerts, 304.9 ha) and selects the **GeoPackage** tile. The file ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` holds one polygon per confirmed alert with its attributes and both answers, ready for a GIS. The **CSV table** tile writes the same alerts as a table for a spreadsheet. See `The whole set, from the Overview <defo-export-set_>`_."
+msgstr "En la pestaña **Archivos** del Resumen, la tarjeta **Exportar alertas** escribe el conjunto de octubre en un archivo. La coordinadora elige **Confirmadas** (11 alertas, 304,9 ha) y selecciona el mosaico **GeoPackage**. El archivo ``alerts_glad-l-glad-s2-radd_2026-10-01_2026-10-20_confirmed.gpkg`` contiene un polígono por alerta confirmada con sus atributos y las dos respuestas, listo para un SIG. El mosaico **Tabla CSV** escribe las mismas alertas como una tabla para una hoja de cálculo. Consulta `Todo el conjunto, desde el Resumen <defo-export-set_>`_."
 
 msgid "One alert"
 msgstr "Una alerta"
@@ -4387,18 +4663,3 @@ msgstr "revisar también las alertas que siguen como **No revisada** en los conj
 msgid "use **Duplicate** in the `Project <defo-project-duplicate_>`_ dialog to monitor a neighbouring area with the same sources, mask and layers."
 msgstr "usar **Duplicar** en el diálogo `Proyecto <defo-project-duplicate_>`_ para monitorear un área vecina con las mismas fuentes, máscara y capas."
 
-
-msgid "``{reviewed_by}``"
-msgstr "``{reviewed_by}``"
-
-msgid "The SEPAL user name of the person who saved the review."
-msgstr "El nombre de usuario de SEPAL de la persona que guardó la revisión."
-
-msgid "The run also gives every alert the names of the administrative areas it touches: ``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit, from the FAO GAUL 2024 boundaries. The boundaries are downloaded once for the project's AOI and kept in the project folder (``admin/``). An alert across a border lists every area it touches, separated by commas, the one holding most of it first. If the download fails, the run still ends, with a warning, and the names are filled when an alert is saved."
-msgstr "La ejecución también da a cada alerta los nombres de las áreas administrativas que toca: ``admin1`` es el país, ``admin2`` la unidad de primer nivel y ``admin3`` la unidad de segundo nivel, a partir de los límites FAO GAUL 2024. Los límites se descargan una vez para el AOI del proyecto y se guardan en la carpeta del proyecto (``admin/``). Una alerta que cruza una frontera enumera todas las áreas que toca, separadas por comas, la que contiene la mayor parte primero. Si la descarga falla, la ejecución termina igualmente, con una advertencia, y los nombres se rellenan al guardar una alerta."
-
-msgid "who reviewed it and when: ``reviewed_by`` (your SEPAL user name, looked up once per session; left empty if it is unknown) and ``reviewed_at`` (the time, in UTC, e.g. ``2026-11-11T14:03:22Z``). A group's members get them too, and an alert reset to not reviewed loses them; and"
-msgstr "quién la revisó y cuándo: ``reviewed_by`` (tu nombre de usuario de SEPAL, consultado una vez por sesión; queda vacío si se desconoce) y ``reviewed_at`` (la hora, en UTC, por ejemplo ``2026-11-11T14:03:22Z``). Los miembros de un grupo también los reciben, y una alerta devuelta a sin revisar los pierde; y"
-
-msgid "``admin1`` is the country, ``admin2`` the first-level unit and ``admin3`` the second-level unit. In a group, each alert keeps its own names; the group's single-alert file and report show all the names of the group."
-msgstr "``admin1`` es el país, ``admin2`` la unidad de primer nivel y ``admin3`` la unidad de segundo nivel. En un grupo, cada alerta conserva sus propios nombres; el archivo de alerta única del grupo y el informe muestran todos los nombres del grupo."

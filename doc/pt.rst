@@ -101,9 +101,11 @@ O mapa ocupa a janela inteira. O painel **Fluxo de trabalho**, à direita, cont�
 
 O cabeçalho do painel **Fluxo de trabalho** fica visível enquanto a etapa abaixo dele rola:
 
--   Uma faixa mostra os dois níveis lado a lado, **Preparar alertas** e **Preparar a revisão**, cada um com seu nome sobre uma barra por etapa. Uma barra preenchida tem resultados (uma AOI, períodos, fontes…), uma barra cinza ainda está vazia e uma barra listrada está bloqueada: passe o mouse sobre ela para ler o motivo (por exemplo, "Crie primeiro um conjunto de alertas."). As duas etapas opcionais, **Camadas adicionais** e **Questionário**, têm uma barra tracejada. O nome de um nível ganha uma marca de verificação assim que sua última etapa obrigatória tem resultados. Selecione uma barra para abrir a etapa dela.
--   Abaixo da faixa, a posição da etapa no nível dela (por exemplo, "3 / 5"), o nome dela e o que ela contém ("3 fontes"). Uma etapa opcional ainda vazia não mostra nenhuma contagem: a barra tracejada dela já a marca como opcional. Selecione o nome para ir a outra etapa a partir de uma lista, ou use as setas de cada lado para ir à etapa anterior ou à seguinte.
+-   Uma linha de título mostra a posição da etapa entre todas as etapas (por exemplo, "3 / 8"), o nome dela e o que ela contém ("3 fontes"). Uma etapa opcional ainda vazia não mostra nenhuma contagem. As setas de cada lado vão para a etapa anterior ou para a seguinte.
+-   Selecione o nome para abrir a lista de etapas, agrupadas sob os dois níveis, **Preparar alertas** e **Preparar a revisão**. Cada etapa tem um ponto numerado: preenchido quando a etapa tem resultados (uma AOI, períodos, fontes…), um anel cinza quando ainda está vazia. As duas etapas opcionais, **Camadas adicionais** e **Questionário**, têm um ponto tracejado. Uma etapa bloqueada aparece em cinza e diz o motivo (por exemplo, "Crie primeiro um conjunto de alertas."). O nome de um nível ganha uma marca de verificação assim que sua última etapa obrigatória tem resultados. Selecione uma etapa para abri-la.
 -   Abaixo do nome, uma linha diz o que fazer na etapa (por exemplo, "Defina o período de monitoramento."). O botão de informação no lado direito dessa linha abre a ajuda da etapa.
+
+No rodapé do painel, **Voltar** e **Próximo** vão para a etapa anterior ou para a seguinte, pulando as etapas bloqueadas. Passe o mouse sobre um deles para ver o nome da etapa que ele abre.
 
 Para usar a barra lateral esquerda:
 
@@ -210,6 +212,8 @@ Abrir, pesquisar e excluir projetos
 -   seu tamanho no disco, medido quando a janela abre; e
 -   uma etiqueta **aberto** no projeto que está aberto no momento.
 
+Uma receita salva com a versão anterior do app também aparece na lista, com uma etiqueta **versão 1** (veja `Abrir uma receita da versão 1 <defo-project-v1_>`_).
+
 Para abrir um projeto:
 
 1.  Digite um texto no campo **Pesquisar projetos** para manter apenas os projetos cujo nome o contém.
@@ -274,6 +278,29 @@ Se o mesmo pacote já tiver sido importado, a janela **Já importado** oferece d
 .. important::
 
     Uma *cópia revisada* (o arquivo que um avaliador devolve) não pode ser importada aqui. O criador do projeto a mescla na etapa `Avaliação <defo-evaluation_>`_ do projeto original.
+
+.. _defo-project-v1:
+
+Abrir uma receita da versão 1
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+As receitas salvas com a versão anterior do app (versão 1) continuam nas suas pastas em ``module_results/deforestation_alerts/``. **Gerenciar projetos** as lista entre os projetos, marcadas com uma etiqueta **versão 1**. Passe o mouse sobre a etiqueta para ler: "Salvo com a versão anterior. Ele é convertido na primeira vez que você o abre; os arquivos antigos são mantidos."
+
+Para abrir uma receita, selecione-a e depois selecione **Abrir**, como para um projeto (ou **Continuar**, quando a janela oferece essa opção). Na primeira vez, o app a converte num projeto na mesma pasta: a linha mostra "Convertendo (nome)…" enquanto o app obtém a AOI da receita (do GEE, para uma área administrativa ou um recurso) e lê os alertas dela. O projeto então abre na tela de `Análise <defo-analysis_>`_, e o app confirma, por exemplo "recipe_2026-08-12-101500 foi convertido da versão 1. 5 de 40 alertas revisados." As aberturas seguintes pulam a conversão.
+
+O projeto convertido mantém:
+
+-   o período, as fontes e os alertas da receita;
+-   todas as revisões: o status, a descrição, o polígono desenhado, a área, os nomes administrativos, as imagens de antes e depois, e o alerta em que a revisão parou; e
+-   a máscara e a camada extra da receita, como as camadas adicionais ``v1 mask`` e ``v1 layer``, e o modelo de relatório dela, quando o arquivo ainda existe.
+
+Os alertas são desenhados como retângulos (as caixas que a versão 1 desenhava em volta deles), com o polígono desenhado numa revisão por cima. Eles mantêm os números da versão 1, que começam em 0. Um alerta sem polígono desenhado recebe uma área estimada a partir do seu número de pixels de alerta. Quando parte da receita não pode ser convertida, um aviso a lista uma vez, depois da conversão (por exemplo "fonte CCDC: não importada como fonte, mantida apenas no conjunto de alertas").
+
+Um projeto convertido fica bloqueado, e um aviso diz: "Este projeto vem de uma receita da versão 1. Só as camadas adicionais podem ser alteradas; revisão, salvamento e exportação funcionam normalmente." A AOI, o período, as fontes, Harmonizar, Integrar e vetorizar, o questionário e o modelo de relatório dele não podem mudar, e ele não pode ser duplicado. A etapa `Avaliação <defo-evaluation_>`_ não está disponível: uma só pessoa revisa o projeto. As `Camadas adicionais <defo-layers_>`_ podem ser adicionadas, editadas e excluídas.
+
+Os próprios arquivos da receita (``recipe_parameters.json``, ``alert_db.csv`` e os arquivos feitos para cada alerta) nunca são alterados. Uma receita não pode ser renomeada antes de ser convertida: o ícone de lápis dela diz "Abra-o uma vez para convertê-lo primeiro."
+
+Se a conversão falhar, nada é gravado, e a mensagem dá a causa, por exemplo "Não foi possível obter a área de interesse: (erro). A receita não foi alterada."
 
 Onde ficam os arquivos
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -587,10 +614,12 @@ Cada linha de **Fontes** mostra:
 
             -   **AOI**: a parte da AOI que fica dentro da área de abrangência da fonte, por exemplo "AOI 100%". Uma fonte que cobre só parte da AOI não traz alertas para o restante dela.
             -   As datas: "✓ dados até 2026-10-30" (verde) quando a fonte tem dados até o fim da janela de busca, "dados só até …" (laranja) quando os dados dela param dentro da janela, ou "✗ os dados terminam em …" (vermelho) quando ela não tem nenhum dado na janela.
+
+            Uma fonte de pontos ou polígonos tem um único chip no lugar deles, "recortada à AOI": a cobertura dela não é verificada.
     *   -   **Status**
         -   O estado da linha, ou um botão para baixá-la (veja `Baixar as fontes <defo-alerts-download_>`_).
     *   -   Ícone de mapa
-        -   Mostra a fonte no mapa: os alertas da janela de busca do período ativo. Uma fonte GeoTIFF só aparece depois de harmonizada.
+        -   Mostra a fonte no mapa: os alertas da janela de busca do período ativo. Uma fonte GeoTIFF só aparece depois de harmonizada. Uma fonte de pontos ou polígonos mostra as feições tal como foram lidas do arquivo, depois que a linha dela é lida (veja `Arquivo de pontos ou polígonos <defo-alerts-vector_>`_).
     *   -   Ícone de informação
         -   Abre os **Detalhes** da fonte (veja `A janela de detalhes <defo-harmonize-details_>`_), com a caixa de seleção **Adicionar aos novos períodos** e, para uma fonte personalizada, o botão **Editar**.
     *   -   **Baixar novamente**
@@ -606,7 +635,7 @@ Adicionar uma fonte
 Selecione **Adicionar fonte** para abrir a janela **Adicionar uma fonte de alertas** e escolha o **Tipo de fonte**:
 
 -   **Predefinida ou do projeto**: uma das fontes do catálogo, ou uma fonte do projeto que não está neste período (por exemplo, uma usada num período anterior); ou
--   **Personalizada (0 de 6)**: sua própria imagem ou coleção de imagens do GEE, ou um GeoTIFF. O contador mostra quantas das seis vagas personalizadas do período estão em uso.
+-   **Personalizada (0 de 6)**: sua própria imagem ou coleção de imagens do GEE, ou um GeoTIFF, ou um arquivo de pontos ou polígonos com data. O contador mostra quantas das seis vagas personalizadas do período estão em uso.
 
 Um período comporta no máximo três fontes predefinidas e seis personalizadas. O projeto guarda todas as fontes que já usou, sem limite.
 
@@ -660,7 +689,7 @@ Uma fonte personalizada lê o seu próprio raster de alertas por meio de um de q
         -   O nome da fonte nas listas, legendas e nomes de arquivo.
         -   Sugerido a partir do nome do recurso ou do arquivo. No máximo 24 caracteres, pelo menos uma letra ou um algarismo, único no projeto. GLAD-L, RADD e GLAD-S2 são reservados.
     *   -   **Fonte**
-        -   De onde o raster é lido: **Earth Engine** (um recurso) ou **GeoTIFF / VRT** (um arquivo na sua pasta do SEPAL).
+        -   De onde o raster é lido: **Earth Engine** (um recurso) ou **GeoTIFF / VRT** (um arquivo na sua pasta do SEPAL). A terceira opção, **Arquivo de pontos ou polígonos (CSV, GPKG, SHP)**, não é um raster (veja `Arquivo de pontos ou polígonos <defo-alerts-vector_>`_).
         -   **Earth Engine**.
     *   -   Recurso ou **GeoTIFF / VRT**
         -   A imagem ou coleção de imagens do GEE, ou o arquivo .tif.
@@ -699,6 +728,53 @@ Os quatro formatos:
 
 Quando **Adicionar fonte** é selecionado, o app verifica o raster: se as bandas existem e são numéricas, se as datas podem ser lidas e se a fonte cobre a AOI. Um problema aparece em vermelho dentro da janela, que continua aberta para correções. Enquanto a verificação roda, o botão passa a ser **Cancelar** e a interrompe.
 
+.. _defo-alerts-vector:
+
+Arquivo de pontos ou polígonos
+""""""""""""""""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/pt/img/alerts-add-vector.png
+    :alt: Como adicionar uma fonte personalizada a partir de um arquivo de pontos
+
+Uma fonte personalizada também pode ser um arquivo de pontos ou polígonos com data, como alertas informados a partir do campo ou por outro sistema. Escolha **Arquivo de pontos ou polígonos (CSV, GPKG, SHP)** em **Fonte** e selecione o arquivo em **Arquivo vetorial**: uma tabela .csv, um GeoPackage (.gpkg) ou um Shapefile (.shp, com os arquivos .shx e .dbf ao lado dele). O arquivo é lido na hora ("Lendo o arquivo…"), e os campos que dependem dele aparecem:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
+
+    *   -   Campo
+        -   Descrição
+        -   Padrão e limites
+    *   -   **Camada**
+        -   A camada do GeoPackage a ler.
+        -   Apenas para um GeoPackage com várias camadas. Começa na primeira.
+    *   -   **Coluna de longitude** e **Coluna de latitude**
+        -   As colunas com as coordenadas de cada ponto, em graus (WGS84).
+        -   Apenas para um CSV. Sugeridas a partir dos nomes das colunas (por exemplo, ``lon``, ``latitude``).
+    *   -   **Coluna de data**
+        -   A coluna com a data de cada alerta.
+        -   Sugerida a partir dos nomes das colunas (por exemplo, ``date``, ``fecha``).
+    *   -   **As datas estão escritas**
+        -   **Dia primeiro (dd/mm/aaaa)** ou **Mês primeiro (mm/dd/aaaa)**.
+        -   Apenas quando as datas podem ser lidas das duas maneiras (por exemplo, 03/04/2026).
+    *   -   **Lado do quadrado (m)**
+        -   Cada ponto vira um quadrado com esse lado, centrado no ponto.
+        -   Apenas quando o arquivo tem pontos. 30 m por padrão.
+
+Uma linha abaixo dos campos resume o que foi lido, por exemplo "Datas lidas como dia/mês/ano · 12 pontos, 0 polígonos · 2026-06-12 → 2026-09-11 · 0 ignorados". As linhas sem ponto ou polígono, ou sem data, são ignoradas.
+
+Como o arquivo é lido:
+
+-   As colunas de um CSV podem ser separadas por vírgulas, pontos e vírgulas ou tabulações. Com pontos e vírgulas, vírgulas decimais também são lidas.
+-   Um GeoPackage ou um Shapefile precisa de um sistema de coordenadas, que pode ser qualquer um.
+-   Uma data pode ser um campo de data, ano-mês-dia (``2026-09-14``), ``yyyymmdd`` (``20260914``) ou dia e mês em qualquer ordem (``14/09/2026``).
+-   Todo ponto ou polígono é um alerta confirmado. Um polígono mantém a sua forma; um polígono ou um quadrado menor que um pixel ainda dá um pixel.
+-   Onde as feições se sobrepõem, a data mais antiga é mantida.
+
+A fonte não precisa do GEE: a cobertura dela não é verificada, e só as feições dentro da AOI viram pixels de alerta. A linha dela em `Alertas <defo-alerts-download_>`_ lê as feições da janela de busca do período (**Ler arquivo**); o ícone de mapa dela mostra então as feições tal como foram lidas, os pontos como pontos e os polígonos como contornos. `Harmonizar <defo-harmonize_>`_ as transforma em pixels de alerta na grade do projeto, e o ícone de mapa dela mostra esse raster, para comparar com as feições.
+
+**Ler arquivo** lê o arquivo de novo quando ele foi editado depois que a fonte foi adicionada. Se a edição não combina mais com a fonte (por exemplo, uma coluna escolhida sumiu, ou as datas agora são lidas na outra ordem dia/mês), a linha mostra "O arquivo de alertas mudou desde que foi adicionado. Edite a fonte para verificá-lo novamente."
+
 Editar uma fonte personalizada
 """"""""""""""""""""""""""""""
 
@@ -711,7 +787,7 @@ Depois que um conjunto de alertas usa a fonte, ela não pode mais ser editada: r
 Baixar as fontes
 ^^^^^^^^^^^^^^^^
 
-Cada fonte é baixada na janela de busca do período, na sua própria projeção e recortada pela AOI. Uma fonte GeoTIFF não é baixada: ela é lida do seu arquivo. Baixar não harmoniza a fonte: isso é a próxima etapa, `Harmonizar <defo-harmonize_>`_, que só roda quando você a inicia lá.
+Cada fonte é baixada na janela de busca do período, na sua própria projeção e recortada pela AOI. Uma fonte GeoTIFF não é baixada: ela é lida do seu arquivo. O que este guia diz de uma fonte GeoTIFF vale também para uma fonte de pontos ou polígonos; a linha abaixo do nome dela diz "Arquivo de pontos/polígonos". Baixar não harmoniza a fonte: isso é a próxima etapa, `Harmonizar <defo-harmonize_>`_, que só roda quando você a inicia lá.
 
 A coluna **Status** mostra:
 
@@ -769,6 +845,18 @@ Mensagens comuns
 
 "Este período já tem 6 fontes personalizadas."
     Remova uma fonte personalizada do período antes de adicionar outra.
+
+"Este arquivo não pode ser lido como CSV, GeoPackage ou Shapefile."
+    O arquivo não é um arquivo .csv, .gpkg ou .shp, ou não pôde ser lido como tal.
+
+"O Shapefile está sem o arquivo .shx ou .dbf."
+    Coloque os arquivos .shx e .dbf com o mesmo nome do .shp na pasta dele.
+
+"A coluna de data não pode ser lida: ordens dia/mês misturadas ou nenhuma data válida."
+    Algumas datas estão escritas com o dia primeiro e outras com o mês primeiro, ou nenhum valor pode ser lido como data. Escolha outra **Coluna de data**, ou escreva as datas num único formato.
+
+"Nenhum ponto ou polígono com data neste arquivo."
+    Nenhuma linha tem ao mesmo tempo um ponto ou polígono e uma data. As feições de linha e as linhas sem coordenadas são ignoradas.
 
 "Uma tarefa está gravando neste projeto; …"
     As fontes não podem mudar durante um download ou uma execução de **Integrar e vetorizar**. Espere terminar.
@@ -971,7 +1059,7 @@ Em `Alertas <defo-alerts_>`_, o ícone de informação de uma fonte abre a mesma
     *   -   Seção
         -   O que ela lista
     *   -   **Fonte**
-        -   Uma fonte predefinida: o **Catálogo** e a **Cobertura** da AOI, com a última data de dados e o dia em que foi verificada. Uma fonte personalizada: o **Tipo**, a **Referência**, o **Formato**, a **Codificação das datas**, as **Bandas** e a **Grade nativa**. Uma máscara: a **Referência**, a **Banda**, a **Grade nativa** e os períodos em que é usada (**Usada em**).
+        -   Uma fonte predefinida: o **Catálogo** e a **Cobertura** da AOI, com a última data de dados e o dia em que foi verificada. Uma fonte personalizada: o **Tipo**, a **Referência**, o **Formato**, a **Codificação das datas**, as **Bandas** e a **Grade nativa**. Uma fonte de pontos ou polígonos: o **Tipo**, a **Referência**, a **Camada**, a **Coluna de data** (com a forma como as datas dela são lidas) e o **Lado do quadrado (m)**. Uma máscara: a **Referência**, a **Banda**, a **Grade nativa** e os períodos em que é usada (**Usada em**).
     *   -   **Download** (**Leitura do arquivo** para uma fonte GeoTIFF)
         -   A **Janela de busca**, a **Grade nativa** em que o arquivo foi baixado, o **Tamanho** e o **Arquivo** dele na pasta do projeto.
     *   -   **Harmonização** (**Alinhamento** para uma máscara)
@@ -1263,7 +1351,9 @@ As camadas de visualização apoiam a revisão dos alertas: um mapa de cobertura
 
 Abra a etapa **Camadas adicionais** do painel **Fluxo de trabalho**, a primeira etapa de **Preparar a revisão**. Ela é liberada assim que o projeto tem um conjunto de alertas (veja `Integrar e vetorizar <defo-integrate_>`_).
 
-A etapa é opcional: pule-a e volte a qualquer momento. A barra dela no cabeçalho é tracejada, e a etapa não mostra nenhuma contagem até ter uma camada.
+A etapa é opcional: pule-a e volte a qualquer momento. O ponto dela na lista de etapas é tracejado, e a etapa não mostra nenhuma contagem até ter uma camada.
+
+Num projeto convertido de uma `receita da versão 1 <defo-project-v1_>`_, esta é a única etapa cujas configurações podem mudar.
 
 .. note::
 
@@ -1631,6 +1721,8 @@ Esta etapa define quem revisa os alertas do conjunto ativo:
 -   divida-os entre vários avaliadores. Cada avaliador recebe um *pacote de revisão*, revisa os próprios alertas na sua própria conta do SEPAL e devolve uma *cópia revisada*, que é então mesclada no projeto.
 
 Abra a etapa **Avaliação** do painel **Fluxo de trabalho**, a última etapa de **Preparar a revisão**. Ela é liberada assim que o projeto tem um conjunto de alertas (veja `Integrar e vetorizar <defo-integrate_>`_). Ela trabalha sobre o conjunto ativo: uma divisão pertence a um conjunto de alertas.
+
+Num projeto convertido de uma `receita da versão 1 <defo-project-v1_>`_, a etapa diz "Indisponível para um projeto convertido da versão 1: ele é revisado por uma só pessoa."
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/evaluators.gif
     :alt: O conjunto de alertas é dividido em pacotes, cada avaliador revisa o seu e as revisões são mescladas de volta
@@ -2303,6 +2395,8 @@ O botão preenchido mostra o próximo passo: **Salvar** enquanto o alerta tem al
 
 Com alterações não salvas, **Próximo**, o ícone e os botões **Anterior**, **Próximo**, **Ir** e o ícone da barra superior perguntam antes. Os botões dão lugar a "Este alerta tem alterações não salvas": **Descartar** apaga as alterações e avança, **Ficar** mantém você no alerta.
 
+Uma mudança iniciada em outro lugar (um **Ir** na **Visão geral** ou em um pop-up do mapa, o conjunto de alertas escolhido na **Visão geral**, ou abrir, criar, renomear ou excluir o projeto aberto em **Projeto**) pergunta no diálogo **Alterações não salvas na Análise**, sobre a janela em que você está. **Continuar mesmo assim** apaga as alterações e faz o que você selecionou; **Abrir Análise** cancela e mostra o alerta, para que você possa salvá-lo. Fechar o diálogo não faz nada.
+
 A linha de estado diz "Alterações não salvas neste alerta", "Salve seu desenho antes de salvar esta revisão" ou "Salvo às 14:32".
 
 Um salvamento grava no conjunto de alertas:
@@ -2314,7 +2408,7 @@ Um salvamento grava no conjunto de alertas:
 -   os alertas anteriores marcados em `Alertas anteriores <defo-analysis-earlier_>`_, como os vínculos do alerta;
 -   com alertas próximos marcados, o grupo (veja `Alertas próximos <defo-analysis-nearby_>`_);
 -   quem a revisou e quando: ``reviewed_by`` (seu nome de usuário do SEPAL, consultado uma vez por sessão; fica vazio se for desconhecido) e ``reviewed_at`` (o horário, em UTC, por exemplo ``2026-11-11T14:03:22Z``). Os membros de um grupo também os recebem, e um alerta voltado a não revisado os perde; e
--   os nomes das áreas administrativas sob o alerta, se `Integrar e vetorizar <defo-integrate_>`_ não conseguiu preenchê-los (a partir dos limites FAO GAUL 2024). Os nomes salvos por revisões anteriores são mantidos.
+-   os nomes das áreas administrativas sob o alerta, se `Integrar e vetorizar <defo-integrate_>`_ não conseguiu preenchê-los (a partir dos limites FAO GAUL 2024). Os nomes salvos por revisões anteriores são mantidos. Se o projeto ainda não tem os limites, o primeiro salvamento desse tipo os baixa uma única vez, e enquanto isso o progresso dele indica "Baixando os limites administrativos deste projeto (uma única vez)…".
 
 ``admin1`` é o país, ``admin2`` a unidade de primeiro nível e ``admin3`` a unidade de segundo nível. Em um grupo, cada alerta mantém os próprios nomes; o arquivo de alerta único do grupo e o relatório mostram todos os nomes do grupo.
 
@@ -2473,7 +2567,7 @@ Os números são agrupados em abas, cada uma com dois cartões lado a lado.
     *   -   Aba
         -   Cartões
     *   -   **Status**
-        -   **Por status de revisão**: uma barra dividida por status e, em seguida, uma tabela com, por status, o número de alertas, a área deles, a proporção na medida da página e o tamanho mediano dos alertas, e uma linha **Total**. **Tamanho das alertas**: os alertas por tamanho, de menos de 0,5 ha a 25 ha ou mais.
+        -   **Por status de revisão**: uma barra dividida por status e, em seguida, uma tabela com, por status, o número de alertas, a área deles, a proporção na medida da página e o tamanho mediano dos alertas, e uma linha **Total**. **Tamanho dos alertas**: os alertas por tamanho, de menos de 0,5 ha a 25 ha ou mais.
     *   -   **Ao longo do tempo**
         -   **Ao longo dos períodos de monitoramento**: uma coluna por período de monitoramento do projeto, dividida por status, a partir do conjunto de alertas mais recente de cada um; um período ainda em revisão mostra a parte não revisada hachurada. Com um único período, diz "Este projeto tem um único período de monitoramento. Adicione um segundo e a tendência aparecerá aqui." **Quando a perda foi detectada**: os alertas pela semana em que foram detectados pela primeira vez, divididos por status. As semanas hachuradas são semanas da busca retroativa: ficam antes do início do período (veja `O que os períodos anteriores já reportaram <defo-integrate-earlier_>`_).
     *   -   **Local e fonte**

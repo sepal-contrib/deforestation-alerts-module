@@ -50,6 +50,19 @@ def test_copy_demo_leaves_source_untouched(tmp_path):
     assert _snapshot(src) == before
 
 
+def test_copy_demo_dates_the_review_copy_before_the_demo(tmp_path):
+    src = tmp_path / "demo"
+    project = _demo(src)
+    (project / "project.json").write_text('{"updated_at": "2026-10-20T00:21:40"}', encoding="utf-8")
+    copy = src / "_fixtures" / "review_copy" / "madre-de-dios__e01-ana"
+    copy.mkdir(parents=True)
+    (copy / "project.json").write_text('{"updated_at": "2026-10-20T00:21:48"}', encoding="utf-8")
+    copy_demo(project, tmp_path / "data")
+    copied = json.loads((tmp_path / "data" / copy.name / "project.json").read_text(encoding="utf-8"))
+    assert copied["updated_at"] == "2026-10-20T00:20:40"
+    assert json.loads((copy / "project.json").read_text(encoding="utf-8"))["updated_at"] == "2026-10-20T00:21:48"
+
+
 def test_every_doc_shot_has_a_capture():
     ids = set(_SHOT.findall((REPO / "doc" / "en.rst").read_text(encoding="utf-8")))
     assert ids, "no shot comments found"

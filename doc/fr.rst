@@ -101,9 +101,11 @@ La carte occupe toute la fenêtre. Le panneau **Flux de travail**, à droite, co
 
 L'en-tête du panneau **Flux de travail** reste visible pendant que l'étape en dessous défile :
 
--   Une bande montre les deux niveaux côte à côte, **Préparer les alertes** et **Configurer la revue**, chacun avec son nom au-dessus d'une barre par étape. Une barre pleine a des résultats (une AOI, des périodes, des sources…), une barre grise est encore vide et une barre hachurée est verrouillée : survolez-la pour lire pourquoi (p. ex. « Construisez d'abord un jeu d'alertes. »). Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une barre en pointillés. Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une barre pour ouvrir son étape.
--   Sous la bande, la position de l'étape dans son niveau (p. ex. « 3 / 5 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide n'affiche aucun décompte : sa barre en pointillés la signale déjà comme facultative. Sélectionnez le nom pour passer à une autre étape depuis une liste, ou utilisez les flèches de chaque côté pour aller à l'étape précédente ou suivante.
+-   Une ligne de titre montre la position de l'étape parmi toutes les étapes (p. ex. « 3 / 8 »), son nom et ce qu'elle contient (« 3 sources »). Une étape facultative encore vide n'affiche aucun décompte. Les flèches de chaque côté vont à l'étape précédente ou suivante.
+-   Sélectionnez le nom pour ouvrir la liste des étapes, regroupées sous les deux niveaux, **Préparer les alertes** et **Configurer la revue**. Chaque étape a une pastille numérotée : pleine quand l'étape a des résultats (une AOI, des périodes, des sources…), un anneau gris quand elle est encore vide. Les deux étapes facultatives, **Couches supplémentaires** et **Questionnaire**, ont une pastille en pointillés. Une étape verrouillée est grisée et dit pourquoi (p. ex. « Construisez d'abord un jeu d'alertes. »). Le nom d'un niveau reçoit une coche dès que sa dernière étape obligatoire a des résultats. Sélectionnez une étape pour l'ouvrir.
 -   Sous le nom, une ligne dit quoi faire dans l'étape (p. ex. « Définissez la période de surveillance. »). Le bouton d'information à droite de cette ligne ouvre l'aide de l'étape.
+
+En bas du panneau, **Retour** et **Suivant** vont à l'étape précédente ou suivante, en sautant les étapes verrouillées. Survolez l'un d'eux pour voir le nom de l'étape qu'il ouvre.
 
 Pour utiliser la barre latérale gauche :
 
@@ -212,6 +214,8 @@ Ouvrir, rechercher et supprimer des projets
 -   sa taille sur le disque, mesurée à l'ouverture de la boîte de dialogue ;
 -   une pastille **ouvert** sur le projet ouvert en ce moment.
 
+Une recette enregistrée avec la version précédente de l'application est aussi listée, avec une pastille **version 1** (voir `Ouvrir une recette de la version 1 <defo-project-v1_>`_).
+
 Pour ouvrir un projet :
 
 1.  Saisissez du texte dans le champ **Rechercher des projets** pour ne garder que les projets dont le nom le contient.
@@ -276,6 +280,29 @@ Si le même paquet a déjà été importé, la boîte de dialogue **Déjà impor
 .. important::
 
     Une *copie révisée* (le fichier qu'un évaluateur renvoie) ne peut pas être importée ici. Le créateur du projet la fusionne dans l'étape `Évaluation <defo-evaluation_>`_ du projet d'origine.
+
+.. _defo-project-v1:
+
+Ouvrir une recette de la version 1
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Les recettes enregistrées avec la version précédente de l'application (version 1) restent dans leurs dossiers sous ``module_results/deforestation_alerts/``. **Gérer les projets** les liste parmi les projets, marquées d'une pastille **version 1**. Survolez la pastille pour lire : « Enregistré avec la version précédente. Il est converti la première fois que vous l'ouvrez ; les anciens fichiers sont conservés. »
+
+Pour ouvrir une recette, sélectionnez-la, puis sélectionnez **Ouvrir**, comme pour un projet (ou **Reprendre**, quand la boîte de dialogue le propose). La première fois, l'application la convertit en projet dans le même dossier : la ligne indique « Conversion de (nom)… » pendant que l'application récupère l'AOI de la recette (depuis GEE pour une zone administrative ou un asset) et lit ses alertes. Le projet s'ouvre ensuite sur l'écran `Analyse <defo-analysis_>`_, et l'application le confirme, par exemple « recipe_2026-08-12-101500 a été converti depuis la version 1. 5 alertes sur 40 révisées. » Les ouvertures suivantes sautent la conversion.
+
+Le projet converti conserve :
+
+-   la période, les sources et les alertes de la recette ;
+-   chaque révision : l'état, la description, le polygone dessiné, la surface, les noms administratifs, les images avant et après, et l'alerte à laquelle la revue s'était arrêtée ;
+-   le masque et la couche supplémentaire de la recette, sous forme des couches supplémentaires ``v1 mask`` et ``v1 layer``, et son modèle de rapport quand le fichier existe encore.
+
+Les alertes sont dessinées sous forme de rectangles (les cadres que la version 1 traçait autour d'elles), avec par-dessus le polygone dessiné lors d'une révision. Elles gardent leurs numéros de la version 1, qui commencent à 0. Une alerte sans polygone dessiné reçoit une surface estimée d'après son nombre de pixels d'alerte. Quand une partie de la recette ne peut pas être convertie, un avertissement la signale une fois, après la conversion (par exemple « source CCDC : non importée comme source, conservée uniquement dans le jeu d'alertes »).
+
+Un projet converti est verrouillé, et un bandeau indique : « Ce projet provient d'une recette de la version 1. Seules les couches supplémentaires peuvent être modifiées ; la revue, l'enregistrement et l'export fonctionnent comme d'habitude. » Son AOI, sa période, ses sources, les étapes Harmoniser et Intégrer et vectoriser, son questionnaire et son modèle de rapport ne peuvent pas changer, et il ne peut pas être dupliqué. L'étape `Évaluation <defo-evaluation_>`_ n'est pas disponible : une seule personne examine le projet. Les `Couches supplémentaires <defo-layers_>`_ peuvent être ajoutées, modifiées et supprimées.
+
+Les fichiers propres à la recette (``recipe_parameters.json``, ``alert_db.csv`` et les fichiers produits pour chaque alerte) ne sont jamais modifiés. Une recette ne peut pas être renommée avant d'être convertie : son icône crayon indique « Ouvrez-le une fois pour le convertir d'abord. »
+
+Si la conversion échoue, rien n'est écrit, et le message en donne la cause, par exemple « Impossible d'obtenir la zone d'intérêt : (erreur). La recette n'a pas été modifiée. »
 
 Où se trouvent les fichiers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -585,10 +612,12 @@ Chaque ligne de **Sources** affiche :
 
             -   **AOI** : la part de l'AOI située dans l'emprise de la source, par exemple « AOI : 100 % ». Une source qui ne couvre qu'une partie de l'AOI ne donne aucune alerte sur le reste.
             -   Les dates : « ✓ données jusqu'au 2026-10-30 » (en vert) quand la source a des données jusqu'à la fin de la fenêtre de recherche, « données jusqu'au … seulement » (en orange) quand ses données s'arrêtent dans la fenêtre, ou « ✗ fin des données le … » (en rouge) quand elle n'en a aucune dans la fenêtre.
+
+            Une source de points ou de polygones a une seule pastille à la place, « découpée sur l'AOI » : sa couverture n'est pas vérifiée.
     *   -   **État**
         -   L'état de la ligne, ou un bouton pour la télécharger (voir `Télécharger les sources <defo-alerts-download_>`_).
     *   -   Icône de carte
-        -   Affiche la source sur la carte : les alertes de la fenêtre de recherche de la période active. Une source GeoTIFF n'est affichée qu'une fois harmonisée.
+        -   Affiche la source sur la carte : les alertes de la fenêtre de recherche de la période active. Une source GeoTIFF n'est affichée qu'une fois harmonisée. Une source de points ou de polygones affiche ses entités telles que lues dans le fichier, une fois sa ligne lue (voir `Fichier de points ou de polygones <defo-alerts-vector_>`_).
     *   -   Icône d'information
         -   Ouvre les **Détails** de la source (voir `La boîte de dialogue Détails <defo-harmonize-details_>`_), avec la case **Ajouter aux nouvelles périodes** et, pour une source personnalisée, le bouton **Modifier**.
     *   -   **Télécharger à nouveau**
@@ -604,7 +633,7 @@ Ajouter une source
 Sélectionnez **Ajouter une source** pour ouvrir la boîte de dialogue **Ajouter une source d'alertes**, puis choisissez le **Type de source** :
 
 -   **Prédéfinie ou du projet** : l'une des sources du catalogue, ou une source du projet qui n'est pas dans cette période (par exemple une source utilisée dans une période antérieure) ;
--   **Personnalisée (0 sur 6)** : votre propre image GEE, collection d'images ou GeoTIFF. Le compteur indique combien des six emplacements personnalisés de la période sont occupés.
+-   **Personnalisée (0 sur 6)** : votre propre image GEE, collection d'images ou GeoTIFF, ou un fichier de points ou de polygones datés. Le compteur indique combien des six emplacements personnalisés de la période sont occupés.
 
 Une période contient au plus trois sources prédéfinies et six sources personnalisées. Le projet conserve toutes les sources qu'il a utilisées, sans limite.
 
@@ -658,7 +687,7 @@ Une source personnalisée lit votre propre raster d'alertes selon l'un des quatr
         -   Le nom de la source dans les listes, les légendes et les noms de fichiers.
         -   Proposé à partir du nom de l'asset ou du fichier. 24 caractères au plus, au moins une lettre ou un chiffre, unique dans le projet. GLAD-L, RADD et GLAD-S2 sont réservés.
     *   -   **Source**
-        -   L'endroit d'où le raster est lu : **Earth Engine** (un asset) ou **GeoTIFF / VRT** (un fichier de votre dossier SEPAL : un GeoTIFF, ou un VRT, un raster virtuel GDAL lu comme les GeoTIFF vers lesquels il pointe).
+        -   L'endroit d'où le raster est lu : **Earth Engine** (un asset) ou **GeoTIFF / VRT** (un fichier de votre dossier SEPAL : un GeoTIFF, ou un VRT, un raster virtuel GDAL lu comme les GeoTIFF vers lesquels il pointe). Le troisième choix, **Fichier de points ou de polygones (CSV, GPKG, SHP)**, n'est pas un raster (voir `Fichier de points ou de polygones <defo-alerts-vector_>`_).
         -   **Earth Engine**.
     *   -   Asset ou **GeoTIFF / VRT**
         -   L'image ou la collection d'images GEE, ou le fichier .tif.
@@ -697,6 +726,53 @@ Les quatre formats :
 
 Quand **Ajouter une source** est sélectionné, l'application vérifie le raster : les bandes existent et sont numériques, les dates sont lisibles et la source couvre l'AOI. Un problème s'affiche en rouge dans la boîte de dialogue, qui reste ouverte pour les corrections. Pendant la vérification, le bouton indique **Annuler** et permet de l'arrêter.
 
+.. _defo-alerts-vector:
+
+Fichier de points ou de polygones
+"""""""""""""""""""""""""""""""""
+
+.. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/fr/img/alerts-add-vector.png
+    :alt: Ajout d'une source personnalisée depuis un fichier de points
+
+Une source personnalisée peut aussi être un fichier de points ou de polygones datés, comme des alertes signalées depuis le terrain ou par un autre système. Choisissez **Fichier de points ou de polygones (CSV, GPKG, SHP)** dans **Source**, puis sélectionnez le fichier dans **Fichier vectoriel** : un tableau .csv, un GeoPackage (.gpkg) ou un Shapefile (.shp, avec ses fichiers .shx et .dbf à côté). Le fichier est lu aussitôt (« Lecture du fichier… »), et les champs qui en dépendent apparaissent :
+
+.. list-table::
+    :header-rows: 1
+    :widths: 20 40 40
+
+    *   -   Champ
+        -   Description
+        -   Valeur par défaut et limites
+    *   -   **Couche**
+        -   La couche du GeoPackage à lire.
+        -   Uniquement pour un GeoPackage à plusieurs couches. Démarre sur la première.
+    *   -   **Colonne de longitude** et **Colonne de latitude**
+        -   Les colonnes qui contiennent les coordonnées de chaque point, en degrés (WGS84).
+        -   Uniquement pour un CSV. Proposées à partir des noms des colonnes (par exemple ``lon``, ``latitude``).
+    *   -   **Colonne de date**
+        -   La colonne qui contient la date de chaque alerte.
+        -   Proposée à partir des noms des colonnes (par exemple ``date``, ``fecha``).
+    *   -   **Les dates sont écrites**
+        -   **Jour d'abord (jj/mm/aaaa)** ou **Mois d'abord (mm/jj/aaaa)**.
+        -   Uniquement quand les dates se lisent dans les deux sens (par exemple 03/04/2026).
+    *   -   **Côté du carré (m)**
+        -   Chaque point devient un carré de ce côté, centré sur le point.
+        -   Uniquement quand le fichier contient des points. 30 m par défaut.
+
+Une ligne sous les champs résume ce qui est lu, par exemple « Dates lues comme jour/mois/année · 12 points, 0 polygones · 2026-06-12 → 2026-09-11 · 0 ignorés ». Les lignes sans point ni polygone, ou sans date, sont ignorées.
+
+Comment le fichier est lu :
+
+-   Les colonnes d'un CSV peuvent être séparées par des virgules, des points-virgules ou des tabulations. Avec des points-virgules, les virgules décimales sont lues aussi.
+-   Un GeoPackage ou un Shapefile doit avoir un système de coordonnées, quel qu'il soit.
+-   Une date peut être un champ de date, année-mois-jour (``2026-09-14``), ``yyyymmdd`` (``20260914``) ou jour et mois dans un ordre ou dans l'autre (``14/09/2026``).
+-   Chaque point ou polygone est une alerte confirmée. Un polygone garde sa forme ; un polygone ou un carré plus petit qu'un pixel donne quand même un pixel.
+-   Là où des entités se chevauchent, la date la plus ancienne est conservée.
+
+La source n'a pas besoin de GEE : sa couverture n'est pas vérifiée, et seules les entités situées dans l'AOI deviennent des pixels d'alerte. Sa ligne dans `Alertes <defo-alerts-download_>`_ lit les entités de la fenêtre de recherche de la période (**Lire fichier**) ; son icône de carte les affiche alors telles que lues, les points comme des points et les polygones comme des contours. `Harmoniser <defo-harmonize_>`_ les transforme en pixels d'alerte sur la grille du projet, et son icône de carte affiche ce raster, à comparer avec les entités.
+
+**Lire fichier** relit le fichier lorsqu'il a été modifié après l'ajout de la source. Si la modification ne correspond plus à la source (par exemple, une colonne choisie a disparu, ou les dates se lisent maintenant dans l'autre ordre jour/mois), la ligne affiche « Le fichier d'alertes a changé depuis son ajout. Modifiez la source pour le vérifier à nouveau. »
+
 Modifier une source personnalisée
 """""""""""""""""""""""""""""""""
 
@@ -709,7 +785,7 @@ Dès qu'un jeu d'alertes utilise la source, elle ne peut plus être modifiée : 
 Télécharger les sources
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Chaque source est téléchargée sur la fenêtre de recherche de la période, dans sa propre projection et découpée selon l'AOI. Une source GeoTIFF n'est pas téléchargée : elle est lue depuis son fichier. Le téléchargement n'harmonise pas la source : c'est l'étape suivante, `Harmoniser <defo-harmonize_>`_, qui ne s'exécute que lorsque vous la lancez.
+Chaque source est téléchargée sur la fenêtre de recherche de la période, dans sa propre projection et découpée selon l'AOI. Une source GeoTIFF n'est pas téléchargée : elle est lue depuis son fichier. Ce que ce guide dit d'une source GeoTIFF vaut aussi pour une source de points ou de polygones ; la ligne sous son nom indique « Fichier de points/polygones ». Le téléchargement n'harmonise pas la source : c'est l'étape suivante, `Harmoniser <defo-harmonize_>`_, qui ne s'exécute que lorsque vous la lancez.
 
 La colonne **État** indique :
 
@@ -767,6 +843,18 @@ Messages fréquents
 
 « Cette période a déjà 6 sources personnalisées. »
     Retirez une source personnalisée de la période avant d'en ajouter une autre.
+
+« Ce fichier ne peut pas être lu comme CSV, GeoPackage ou Shapefile. »
+    Le fichier n'est pas un fichier .csv, .gpkg ou .shp, ou il n'a pas pu être lu comme tel.
+
+« Il manque au Shapefile son fichier .shx ou .dbf. »
+    Placez dans le dossier du .shp les fichiers .shx et .dbf du même nom.
+
+« La colonne de date est illisible \: ordres jour/mois mélangés ou aucune date valide. »
+    Certaines dates sont écrites jour d'abord et d'autres mois d'abord, ou aucune valeur ne se lit comme une date. Choisissez une autre **Colonne de date**, ou écrivez les dates dans un seul format.
+
+« Aucun point ni polygone daté dans ce fichier. »
+    Aucune ligne n'a à la fois un point ou un polygone et une date. Les entités linéaires et les lignes sans coordonnées sont ignorées.
 
 « Une tâche écrit dans ce projet ; … »
     Les sources ne peuvent pas changer pendant un téléchargement ou une exécution d'**Intégrer et vectoriser**. Attendez qu'il se termine.
@@ -969,7 +1057,7 @@ Dans `Alertes <defo-alerts_>`_, l'icône d'information d'une source ouvre la mê
     *   -   Section
         -   Ce qu'elle liste
     *   -   **Source**
-        -   Une source prédéfinie : son **Catalogue** et sa **Couverture** de l'AOI, avec la dernière date de données et le jour de la vérification. Une source personnalisée : son **Type**, sa **Référence**, son **Format**, son **Codage des dates**, ses **Bandes** et sa **Grille native**. Un masque : sa **Référence**, sa **Bande**, sa **Grille native** et les périodes où il est utilisé (**Utilisé dans**).
+        -   Une source prédéfinie : son **Catalogue** et sa **Couverture** de l'AOI, avec la dernière date de données et le jour de la vérification. Une source personnalisée : son **Type**, sa **Référence**, son **Format**, son **Codage des dates**, ses **Bandes** et sa **Grille native**. Une source de points ou de polygones : son **Type**, sa **Référence**, sa **Couche**, sa **Colonne de date** (avec la façon dont ses dates sont lues) et son **Côté du carré (m)**. Un masque : sa **Référence**, sa **Bande**, sa **Grille native** et les périodes où il est utilisé (**Utilisé dans**).
     *   -   **Téléchargement** (**Lecture du fichier** pour une source GeoTIFF)
         -   La **Fenêtre de recherche**, la **Grille native** dans laquelle le fichier a été téléchargé, sa **Taille** et son **Fichier** dans le dossier du projet.
     *   -   **Harmonisation** (**Alignement** pour un masque)
@@ -1261,7 +1349,9 @@ Les couches de visualisation appuient l'examen des alertes : une carte d'occupat
 
 Ouvrez l'étape **Couches supplémentaires** du panneau **Flux de travail**, la première étape de **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_).
 
-L'étape est facultative : passez-la et revenez-y à tout moment. Sa barre dans l'en-tête est en pointillés, et l'étape n'affiche aucun décompte tant qu'elle n'a pas de couche.
+L'étape est facultative : passez-la et revenez-y à tout moment. Sa pastille dans la liste des étapes est en pointillés, et l'étape n'affiche aucun décompte tant qu'elle n'a pas de couche.
+
+Dans un projet converti depuis une `recette de la version 1 <defo-project-v1_>`_, c'est la seule étape dont les réglages peuvent changer.
 
 .. note::
 
@@ -1629,6 +1719,8 @@ Cette étape détermine qui examine les alertes du jeu actif :
 -   répartissez-les entre plusieurs évaluateurs. Chaque évaluateur reçoit un *paquet de révision*, examine ses propres alertes dans son propre compte SEPAL et renvoie une *copie révisée*, qui est ensuite fusionnée dans le projet.
 
 Ouvrez l'étape **Évaluation** du panneau **Flux de travail**, la dernière étape de **Configurer la revue**. Elle se déverrouille dès que le projet a un jeu d'alertes (voir `Intégrer et vectoriser <defo-integrate_>`_). Elle porte sur le jeu actif : une répartition appartient à un seul jeu d'alertes.
+
+Dans un projet converti depuis une `recette de la version 1 <defo-project-v1_>`_, l'étape indique « Indisponible pour un projet converti depuis la version 1 : il est examiné par une seule personne. »
 
 .. figure:: https://raw.githubusercontent.com/sepal-contrib/deforestation-alerts-module/release/doc/anim/evaluators.gif
     :alt: Le jeu d'alertes est réparti en paquets, chaque évaluateur examine le sien, et les révisions sont fusionnées en retour
@@ -2301,6 +2393,8 @@ Le bouton plein indique l'étape suivante : **Sauvegarder** tant que l'alerte a 
 
 Avec des modifications non enregistrées, **Suivante**, l'icône et, dans la barre du haut, **Précédente**, **Suivante**, **Aller** et l'icône demandent d'abord. Les boutons laissent la place à « Cette alerte a des modifications non enregistrées » : **Abandonner** supprime les modifications et passe à une autre alerte, **Rester** vous garde sur l'alerte.
 
+Un changement lancé ailleurs (un **Aller** dans **Aperçu** ou dans une fenêtre contextuelle de la carte, le jeu d'alertes choisi dans **Aperçu**, ou ouvrir, créer, renommer ou supprimer le projet ouvert dans **Projet**) demande dans la boîte de dialogue **Modifications non enregistrées dans Analyse**, par-dessus la fenêtre où vous êtes. **Continuer quand même** supprime les modifications et fait ce que vous avez sélectionné ; **Ouvrir Analyse** l'annule et affiche l'alerte, pour que vous puissiez l'enregistrer. Fermer la boîte de dialogue ne fait rien.
+
 La ligne d'état indique « Modifications non enregistrées sur cette alerte », « Enregistrez votre dessin avant d'enregistrer cette revue » ou « Enregistrée à 14:32 ».
 
 Un enregistrement écrit dans le jeu d'alertes :
@@ -2312,7 +2406,7 @@ Un enregistrement écrit dans le jeu d'alertes :
 -   les alertes antérieures cochées dans `Alertes précédentes <defo-analysis-earlier_>`_, comme liens de l'alerte ;
 -   avec des alertes proches cochées, le groupe (voir `Alertes proches <defo-analysis-nearby_>`_) ;
 -   qui l'a examinée et quand : ``reviewed_by`` (votre nom d'utilisateur SEPAL, recherché une fois par session ; laissé vide s'il est inconnu) et ``reviewed_at`` (l'heure, en UTC, par exemple ``2026-11-11T14:03:22Z``). Les membres d'un groupe les reçoivent aussi, et une alerte remise à non examinée les perd ; et
--   les noms des zones administratives sous l'alerte, si `Intégrer et vectoriser <defo-integrate_>`_ n'a pas pu les remplir (d'après les limites FAO GAUL 2024). Les noms enregistrés par des révisions antérieures sont conservés.
+-   les noms des zones administratives sous l'alerte, si `Intégrer et vectoriser <defo-integrate_>`_ n'a pas pu les remplir (d'après les limites FAO GAUL 2024). Les noms enregistrés par des révisions antérieures sont conservés. Si le projet n'a pas encore les limites, le premier enregistrement de ce type les télécharge une seule fois, et sa progression indique pendant ce temps « Téléchargement des limites administratives de ce projet (une seule fois)… ».
 
 ``admin1`` est le pays, ``admin2`` l'unité de premier niveau et ``admin3`` l'unité de second niveau. Dans un groupe, chaque alerte garde ses propres noms ; le fichier d'alerte unique du groupe et le rapport affichent tous les noms du groupe.
 
