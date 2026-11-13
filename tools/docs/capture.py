@@ -1544,6 +1544,29 @@ def radar(page, on: bool):
         stable, last = (stable + 1 if n == last and n > 0 else 0), n
 
 
+_ALERT_LAYERS = """on => {
+  const ids = [];
+  for (const menu of document.querySelectorAll('.mv-layer-menu')) {
+    let section = '';
+    for (const el of menu.querySelectorAll('.mv-layers-section, input[data-id]')) {
+      if (el.matches('.mv-layers-section')) { section = el.dataset.section; continue; }
+      if (section !== 'alerts' || el.checked === on) continue;
+      el.checked = on;
+      el.dispatchEvent(new Event('change', {bubbles: true}));
+      ids.push(el.dataset.id);
+    }
+  }
+  return ids;
+}"""
+
+
+def analysis_alert_layers(page, on) -> list:
+    """Tick or clear the Alerts layers in both Analysis maps' layer menus; the ids changed."""
+    ids = page.evaluate(_ALERT_LAYERS, on)
+    wait(page, 800)
+    return ids
+
+
 def shot_analysis_screen(page):
     guide_alert(page)
     if reviewed() != 12 or store().set_index("alert_id").loc[GUIDE_ALERT, "status"] != "Not reviewed":
@@ -1551,8 +1574,16 @@ def shot_analysis_screen(page):
     radar(page, True)
     open_section(page, T("analysis_tile.sections.questions"))
     maps_ready(page)
+    # The screen's picture shows the two images bare: the alert outlines are off.
+    hidden = analysis_alert_layers(page, False)
+    if not hidden:
+        raise AssertionError("analysis-screen found no alert layer to hide in the maps' layer menus")
     quiet(page)
     save(page, "analysis-screen")
+    for layer in hidden:  # only what this shot hid: later shots show the outlines
+        page.evaluate("""id => document.querySelectorAll(`.mv-layer-menu input[data-id="${id}"]`).forEach(el => {
+            if (!el.checked) { el.checked = true; el.dispatchEvent(new Event('change', {bubbles: true})); } })""", layer)
+    wait(page, 800)
     radar(page, False)
 
 
