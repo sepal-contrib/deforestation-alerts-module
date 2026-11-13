@@ -225,7 +225,8 @@ def AoiStep(app_state, map_, gee_interface, layers):
                 value=app_state.aoi_result.value,
                 on_value=_on_value,
                 loading=loading,
-                methods="ALL",
+                # No Point file: points have no surface to monitor (user, 2026-11-13).
+                methods=["-POINTS"],
                 map_=map_,
                 gee=True,
                 spec=spec,
