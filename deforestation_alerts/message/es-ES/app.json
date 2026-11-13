@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Análisis de Alertas de Pérdida de Cobertura Forestal",
+    "title": "Módulo de análisis de alertas",
     "panel_workflow_title": "Flujo de trabajo",
     "tile_failed": "El panel {tile} no se pudo mostrar ({error}). Recarga la página; los detalles están en el registro del servidor.",
     "drawer_item": {

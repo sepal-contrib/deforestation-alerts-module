@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "deforestation-alerts-module"
 version = "2.0.0"
-description = "Forest Cover Loss Alerts analysis app for SEPAL (pysepal + Solara)."
+description = "Alert analysis module for SEPAL (pysepal + Solara)."
 requires-python = ">=3.10"
 # Runtime dependencies are NOT declared here: sepal_environment.yml is the
 # packaging authority (conda geospatial binaries + pip pins). This project

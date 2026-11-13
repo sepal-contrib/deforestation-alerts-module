@@ -1,4 +1,4 @@
-# Forest Cover Loss Alerts
+# Alert analysis module
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/sepal-contrib/deforestation-alerts-module/blob/main/LICENSE)
 

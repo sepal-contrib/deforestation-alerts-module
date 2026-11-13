@@ -1,4 +1,4 @@
-"""Internationalization for the Forest Cover Loss Alerts GUI (spec §11).
+"""Internationalization for the Alert analysis module GUI (spec §11).
 
 The catalogue is ``deforestation_alerts/message/<locale>/*.json``, bound once
 with pysepal 4's ``catalog()``. ``messages.msg(key, **values)`` renders a key

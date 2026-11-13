@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Forest Loss Alerts Analysis",
+    "title": "Alert analysis module",
     "panel_workflow_title": "Workflow",
     "tile_failed": "The {tile} tile failed to render ({error}). Reload the page; the details are in the server log.",
     "drawer_item": {

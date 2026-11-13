@@ -1,4 +1,4 @@
-"""Solara entry for the Forest Cover Loss Alerts app.
+"""Solara entry for the Alert analysis module app.
 
 Session bootstrap (pysepal solara pattern) + MapApp.element() shell: the rail
 (About, Project, Overview) and the project workflow in the right panel, in
@@ -730,6 +730,15 @@ def _AppShell():
         ".v-dialog__content:has(> .dialog-container) {\n"
         "  left: var(--sepal-drawer-width, 0px) !important;\n"
         "  width: calc(100% - var(--sepal-drawer-width, 0px)) !important;\n"
+        "}\n"
+        # The expanded rail's header has about 220 px for "<app> · <project>" on
+        # one line, so the project name was cut. Two smaller lines instead; a
+        # third would be cut with an ellipsis.
+        ".left-drawer .drawer-header .app-title { min-width: 0; flex: 1 1 auto; white-space: normal; }\n"
+        ".left-drawer .drawer-header .app-title .title {\n"
+        "  font-size: .95rem !important; line-height: 1.2 !important; letter-spacing: 0 !important;\n"
+        "  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;\n"
+        "  overflow: hidden; overflow-wrap: anywhere;\n"
         "}\n"
         ".about-content { text-align: justify; }\n"
         # Markdown `code` came out light-grey on light-grey on the dark theme
