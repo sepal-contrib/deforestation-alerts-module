@@ -316,7 +316,7 @@ Cada projeto é uma pasta com o nome do projeto, em ``module_results/deforestati
     *   -   ``project.json``
         -   As configurações e o histórico do projeto. O app grava esse arquivo a cada salvamento.
     *   -   ``aoi.geojson``
-        -   A AOI, quando ela é uma forma desenhada, um arquivo vetorial ou um arquivo de pontos. Uma área administrativa ou um recurso do GEE é lido diretamente do GEE.
+        -   A AOI, quando ela é uma forma desenhada ou um arquivo vetorial. Uma área administrativa ou um recurso do GEE é lido diretamente do GEE.
     *   -   ``masks/``
         -   As máscaras de `Harmonizar <defo-harmonize_>`_, alinhadas à grade do projeto.
     *   -   ``imagery/``
@@ -333,7 +333,7 @@ Cada projeto é uma pasta com o nome do projeto, em ``module_results/deforestati
 Área de interesse
 -----------------
 
-.. labels-ok: AOI selection method; Country/Province; Admin level 1; Admin level 2; Vector file; Drawn shapes; Point file; GEE Asset name; Select AOI; Select an AOI name; Select an asset; column; value; Use all features; Table file; id; latitude; longitude; Column; Value
+.. labels-ok: AOI selection method; Country/Province; Admin level 1; Admin level 2; Vector file; Drawn shapes; GEE Asset name; Select AOI; Select an AOI name; Select an asset; column; value; Use all features; Table file; id; latitude; longitude; Column; Value
 
 A AOI é a área que o projeto monitora:
 
@@ -386,9 +386,6 @@ A área é desenhada no mapa e salva no projeto na mesma hora.
     *   -   **Drawn shapes**
         -   Formas desenhadas no mapa com as ferramentas de desenho que aparecem, e um nome opcional em **Select an AOI name**.
         -   Todas as formas desenhadas juntas formam a AOI. Sem nome, ela se chama ``drawn_`` seguido da data e da hora.
-    *   -   **Point file**
-        -   Uma tabela .csv ou .txt com uma coluna **id**, uma **latitude** e uma **longitude**.
-        -   Constrói a AOI a partir de pontos. Pontos não têm superfície; para o monitoramento, prefira um método que gere polígonos.
     *   -   **GEE Asset name**
         -   Uma tabela (feature collection) ou uma imagem do GEE que você possa ler, escolhida em **Select an asset** ou colada com o ID completo.
         -   Numa tabela, mantenha só as feições cuja **Column** tem um determinado **Value**.

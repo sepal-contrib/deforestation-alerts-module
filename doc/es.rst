@@ -316,7 +316,7 @@ Cada proyecto es una carpeta con el nombre del proyecto, dentro de ``module_resu
     *   -   ``project.json``
         -   La configuración y el historial del proyecto. La aplicación lo escribe en cada guardado.
     *   -   ``aoi.geojson``
-        -   La AOI, cuando es una forma dibujada, un archivo vectorial o un archivo de puntos. Un área administrativa o un recurso de GEE se leen en cambio desde GEE.
+        -   La AOI, cuando es una forma dibujada o un archivo vectorial. Un área administrativa o un recurso de GEE se leen en cambio desde GEE.
     *   -   ``masks/``
         -   Las máscaras de `Armonizar <defo-harmonize_>`_, alineadas con la cuadrícula del proyecto.
     *   -   ``imagery/``
@@ -333,7 +333,7 @@ Cada proyecto es una carpeta con el nombre del proyecto, dentro de ``module_resu
 Área de interés
 ---------------
 
-.. labels-ok: Método de selección de AOI; País/Provincia; Nivel administrativo 1; Nivel administrativo 2; Archivo vectorial; Dibujar figura(s) en el mapa; Archivo de puntos; Nombre del asset; Usar selección; Crea un nombre para tu AOI; Selecciona un Asset; columna; Valor; id; latitud; longitud; Column; Value
+.. labels-ok: Método de selección de AOI; País/Provincia; Nivel administrativo 1; Nivel administrativo 2; Archivo vectorial; Dibujar figura(s) en el mapa; Nombre del asset; Usar selección; Crea un nombre para tu AOI; Selecciona un Asset; columna; Valor; id; latitud; longitud; Column; Value
 
 La AOI es el área que monitorea el proyecto:
 
@@ -382,9 +382,6 @@ El área se dibuja en el mapa y se guarda con el proyecto de inmediato.
     *   -   **Dibujar figura(s) en el mapa**
         -   Formas dibujadas en el mapa con las herramientas de dibujo que aparecen, y un nombre opcional en **Crea un nombre para tu AOI**.
         -   Todas las formas dibujadas forman juntas la AOI. Sin nombre, se llama ``drawn_`` seguido de la fecha y la hora.
-    *   -   **Archivo de puntos**
-        -   Una tabla .csv o .txt con una columna **id**, una **latitud** y una **longitud**.
-        -   Construye la AOI a partir de puntos. Los puntos no tienen superficie, así que para monitorear es preferible un método que dé polígonos.
     *   -   **Nombre del asset**
         -   Una tabla (colección de entidades) o una imagen de GEE que puedas leer, elegida en **Selecciona un Asset** o pegada con su identificador completo.
         -   Para una tabla, conserva solo las entidades cuya **Column** tiene un **Value** determinado.

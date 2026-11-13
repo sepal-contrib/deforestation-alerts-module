@@ -318,7 +318,7 @@ Chaque projet est un dossier nommé d'après le projet, sous ``module_results/de
     *   -   ``project.json``
         -   Les paramètres et l'historique du projet. L'application l'écrit à chaque enregistrement.
     *   -   ``aoi.geojson``
-        -   L'AOI, lorsqu'il s'agit d'une forme dessinée, d'un fichier vectoriel ou d'un fichier de points. Une zone administrative ou un asset GEE est lu directement dans GEE.
+        -   L'AOI, lorsqu'il s'agit d'une forme dessinée ou d'un fichier vectoriel. Une zone administrative ou un asset GEE est lu directement dans GEE.
     *   -   ``masks/``
         -   Les masques de `Harmoniser <defo-harmonize_>`_, alignés sur la grille du projet.
     *   -   ``imagery/``
@@ -335,7 +335,7 @@ Chaque projet est un dossier nommé d'après le projet, sous ``module_results/de
 Zone d'intérêt
 --------------
 
-.. labels-ok: Methode de selection d'AOI; Pays/Province; Niveau administratif 1; Niveau administratif 2; Fichier de vecteur; Dessiner une forme; Fichier de point; Nom de l'Asset; Selectionner cet AOI; Selectionner un nom d'AOI; Selectionner un Asset; colonne; valeur; Utiliser toutes les features; Fichier de tableau; Id; latitude; longitude; Column; Value
+.. labels-ok: Methode de selection d'AOI; Pays/Province; Niveau administratif 1; Niveau administratif 2; Fichier de vecteur; Dessiner une forme; Nom de l'Asset; Selectionner cet AOI; Selectionner un nom d'AOI; Selectionner un Asset; colonne; valeur; Utiliser toutes les features; Fichier de tableau; Id; latitude; longitude; Column; Value
 
 L'AOI est la zone que le projet surveille :
 
@@ -384,9 +384,6 @@ La zone est dessinée sur la carte et enregistrée aussitôt avec le projet.
     *   -   **Dessiner une forme**
         -   Des formes dessinées sur la carte avec les outils de dessin qui apparaissent, et un nom facultatif dans **Selectionner un nom d'AOI**.
         -   Toutes les formes dessinées forment ensemble l'AOI. Sans nom, elle s'appelle ``drawn_`` suivi de la date et de l'heure.
-    *   -   **Fichier de point**
-        -   Un tableau .csv ou .txt avec une colonne **Id**, une colonne **latitude** et une colonne **longitude**.
-        -   Construit l'AOI à partir de points. Les points n'ont pas de surface : pour le suivi, préférez une méthode qui fournit des polygones.
     *   -   **Nom de l'Asset**
         -   Une table GEE (feature collection) ou une image que vous pouvez lire, choisie dans **Selectionner un Asset** ou collée sous forme d'identifiant complet.
         -   Pour une table, ne gardez que les entités dont la **Column** a une **Value** donnée.

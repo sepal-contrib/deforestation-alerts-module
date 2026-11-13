@@ -324,7 +324,7 @@ Each project is a folder named after the project, under ``module_results/defores
     *   -   ``project.json``
         -   The project's settings and history. The app writes it on every save.
     *   -   ``aoi.geojson``
-        -   The AOI, when it is a drawn shape, a vector file or a point file. An administrative area or a GEE asset is read from GEE instead.
+        -   The AOI, when it is a drawn shape or a vector file. An administrative area or a GEE asset is read from GEE instead.
     *   -   ``masks/``
         -   The masks of `Harmonize <defo-harmonize_>`_, aligned on the project's grid.
     *   -   ``imagery/``
@@ -341,7 +341,7 @@ Each project is a folder named after the project, under ``module_results/defores
 Area of interest
 ----------------
 
-.. labels-ok: AOI selection method; Country/Province; Admin level 1; Admin level 2; Vector file; Drawn shapes; Point file; GEE Asset name; Select AOI; Select an AOI name; Select an asset; column; value; Use all features; Table file; id; latitude; longitude; Column; Value
+.. labels-ok: AOI selection method; Country/Province; Admin level 1; Admin level 2; Vector file; Drawn shapes; GEE Asset name; Select AOI; Select an AOI name; Select an asset; column; value; Use all features; Table file; id; latitude; longitude; Column; Value
 
 The AOI is the area the project monitors:
 
@@ -394,9 +394,6 @@ The area is drawn on the map and saved with the project at once.
     *   -   **Drawn shapes**
         -   Shapes drawn on the map with the drawing tools that appear, and an optional name in **Select an AOI name**.
         -   All the drawn shapes together form the AOI. Without a name, it is called ``drawn_`` plus the date and time.
-    *   -   **Point file**
-        -   A .csv or .txt table with an **id**, a **latitude** and a **longitude** column.
-        -   Builds the AOI from points. Points have no surface, so prefer a method that gives polygons for monitoring.
     *   -   **GEE Asset name**
         -   A GEE table (feature collection) or image you can read, chosen in **Select an asset** or pasted as its full ID.
         -   For a table, keep only the features whose **Column** has a given **Value**.

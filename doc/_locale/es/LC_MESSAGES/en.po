@@ -496,8 +496,8 @@ msgstr "La configuración y el historial del proyecto. La aplicación lo escribe
 msgid "``aoi.geojson``"
 msgstr "``aoi.geojson``"
 
-msgid "The AOI, when it is a drawn shape, a vector file or a point file. An administrative area or a GEE asset is read from GEE instead."
-msgstr "La AOI, cuando es una forma dibujada, un archivo vectorial o un archivo de puntos. Un área administrativa o un recurso de GEE se leen en cambio desde GEE."
+msgid "The AOI, when it is a drawn shape or a vector file. An administrative area or a GEE asset is read from GEE instead."
+msgstr "La AOI, cuando es una forma dibujada o un archivo vectorial. Un área administrativa o un recurso de GEE se leen en cambio desde GEE."
 
 msgid "``masks/``"
 msgstr "``masks/``"
@@ -612,15 +612,6 @@ msgstr "Formas dibujadas en el mapa con las herramientas de dibujo que aparecen,
 
 msgid "All the drawn shapes together form the AOI. Without a name, it is called ``drawn_`` plus the date and time."
 msgstr "Todas las formas dibujadas forman juntas la AOI. Sin nombre, se llama ``drawn_`` seguido de la fecha y la hora."
-
-msgid "**Point file**"
-msgstr "**Archivo de puntos**"
-
-msgid "A .csv or .txt table with an **id**, a **latitude** and a **longitude** column."
-msgstr "Una tabla .csv o .txt con una columna **id**, una **latitud** y una **longitud**."
-
-msgid "Builds the AOI from points. Points have no surface, so prefer a method that gives polygons for monitoring."
-msgstr "Construye la AOI a partir de puntos. Los puntos no tienen superficie, así que para monitorear es preferible un método que dé polígonos."
 
 msgid "**GEE Asset name**"
 msgstr "**Nombre del asset**"
