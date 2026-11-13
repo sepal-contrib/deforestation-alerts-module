@@ -7,14 +7,14 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-msgid "Forest Cover Loss Alerts"
-msgstr "Forest Cover Loss Alerts"
+msgid "Alert analysis module"
+msgstr "Alert analysis module"
 
 msgid "*Monitor forest cover loss alerts in an area of interest, period after period*"
 msgstr "*Surveiller les alertes de perte de couvert forestier sur une zone d'intérêt, période après période*"
 
-msgid "**Forest Cover Loss Alerts** is a SEPAL app for monitoring forest cover loss in an area of interest (AOI). The app:"
-msgstr "**Forest Cover Loss Alerts** est une application SEPAL de suivi de la perte de couvert forestier sur une zone d'intérêt (AOI, *area of interest*). L'application :"
+msgid "**Alert analysis module** is a SEPAL app for monitoring forest cover loss in an area of interest (AOI). The app:"
+msgstr "**Alert analysis module** est une application SEPAL de suivi de la perte de couvert forestier sur une zone d'intérêt (AOI, *area of interest*). L'application :"
 
 msgid "downloads the Global Land Analysis and Discovery (GLAD) alerts GLAD-L and GLAD-S2 and the Radar for Detecting Deforestation (RADD) alerts from Google Earth Engine (GEE), and your own alert sources if you have them;"
 msgstr "télécharge depuis Google Earth Engine (GEE) les alertes GLAD-L et GLAD-S2 du Global Land Analysis and Discovery (GLAD) et les alertes RADD (Radar for Detecting Deforestation), ainsi que vos propres sources d'alertes si vous en avez ;"
@@ -154,8 +154,8 @@ msgstr "un compte GEE connecté à SEPAL ;"
 msgid "for the *Planet* images of the Analysis timeline, access to the Planet NICFI (Norway's International Climate and Forest Initiative) tropical mosaics in GEE."
 msgstr "pour les images *Planet* de la frise chronologique d'Analyse, l'accès aux mosaïques tropicales Planet NICFI (Norway's International Climate and Forest Initiative) dans GEE."
 
-msgid "To start the app, go to the SEPAL **Apps** dashboard and select **Forest Cover Loss Alerts**."
-msgstr "Pour lancer l'application, allez sur le tableau de bord **Apps** de SEPAL et sélectionnez **Forest Cover Loss Alerts**."
+msgid "To start the app, go to the SEPAL **Apps** dashboard and select **Alert analysis module**."
+msgstr "Pour lancer l'application, allez sur le tableau de bord **Apps** de SEPAL et sélectionnez **Alert analysis module**."
 
 msgid "The app runs in your SEPAL session and keeps your projects in your SEPAL home, under ``module_results/deforestation_alerts/``."
 msgstr "L'application s'exécute dans votre session SEPAL et conserve vos projets dans votre dossier personnel SEPAL, sous ``module_results/deforestation_alerts/``."

@@ -1,10 +1,10 @@
-Forest Cover Loss Alerts
-========================
+Alert analysis module
+=====================
 *Monitore os alertas de perda de cobertura florestal numa área de interesse, período após período*
 
-.. labels-ok: Apps; Map; Forest Cover Loss Alerts
+.. labels-ok: Apps; Map; Alert analysis module
 
-**Forest Cover Loss Alerts** é um app do SEPAL para monitorar a perda de cobertura florestal numa área de interesse (AOI, do inglês *area of interest*). O app:
+**Alert analysis module** é um app do SEPAL para monitorar a perda de cobertura florestal numa área de interesse (AOI, do inglês *area of interest*). O app:
 
 -   baixa do Google Earth Engine (GEE) os alertas GLAD-L e GLAD-S2 do Global Land Analysis and Discovery (GLAD) e os alertas do Radar for Detecting Deforestation (RADD), além das suas próprias fontes de alertas, se você tiver;
 -   alinha todos eles numa mesma grade;
@@ -84,7 +84,7 @@ Requisitos:
 -   uma conta do GEE vinculada ao SEPAL; e
 -   para as imagens *Planet* da linha do tempo da Análise, acesso aos mosaicos tropicais Planet NICFI (Norway's International Climate and Forest Initiative) no GEE.
 
-Para iniciar o app, acesse o painel **Apps** do SEPAL e selecione **Forest Cover Loss Alerts**.
+Para iniciar o app, acesse o painel **Apps** do SEPAL e selecione **Alert analysis module**.
 
 O app roda na sua sessão do SEPAL e guarda seus projetos na sua pasta pessoal do SEPAL, em ``module_results/deforestation_alerts/``.
 
