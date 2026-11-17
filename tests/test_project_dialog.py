@@ -89,6 +89,8 @@ def dialog(monkeypatch, tmp_path):
     dialog itself is tested in tests/test_manage_projects.py). The delete
     confirmation is the real one."""
     monkeypatch.setenv("DEFORESTATION_ALERTS_DATA_DIR", str(tmp_path))
+    # pysepal's file input clears a pick outside its root, the home folder
+    monkeypatch.setenv("HOME", str(tmp_path))
     ns = SimpleNamespace(manage=[], dismissed=0, root=tmp_path, state=AppState(), analysis=AnalysisState(),
                          filters=[])
     # The start filter's own behaviour is T5's (tests/test_alert_filter_state.py);
