@@ -48,16 +48,16 @@ def resolve_navigation(view):
     return None
 
 
-def dismiss_dialog(mapapp, nav_model):
+def dismiss_dialog(mapapp, rail):
     """Close the open rail dialog, as its own close button does.
 
     MapApp.vue's ``closeDialog`` closes the dialog and clears the step;
-    from Python, ``current_step = None`` (linked through ``nav_model``)
-    clears the step and ``step_open = False`` closes the dialog. Both are
-    no-ops when no dialog is open.
+    from Python, ``rail`` (the reactive MapApp's ``current_step`` prop
+    follows) set to ``None`` clears the step and ``step_open = False``
+    closes the dialog. Both are no-ops when no dialog is open.
     """
-    if rail_item_for_step(nav_model.current_step) is not None:
-        nav_model.current_step = None
+    if rail_item_for_step(rail.value) is not None:
+        rail.set(None)
     if mapapp is not None:
         mapapp.step_open = False
 
@@ -74,7 +74,7 @@ def _open_panel(mapapp):
         mapapp.vue_handle_right_panel_action("open")
 
 
-def apply_navigation(mapapp, nav_model, app_state, action):
+def apply_navigation(mapapp, rail, app_state, action):
     """Apply a resolved :class:`NavAction`.
 
     Screen target (Analysis): close an open rail dialog (the Overview's
@@ -87,20 +87,40 @@ def apply_navigation(mapapp, nav_model, app_state, action):
     a tile jumps forward only after producing the output that unlocks the
     target, and the header's gates protect user clicks.
 
-    Rail target: only the MapApp step is set; MapApp opens the dialog itself,
+    Rail target: only ``rail`` (MapApp's step) is set; MapApp opens the dialog itself,
     and the right panel is left as the user left it behind the dialog.
 
     ``mapapp`` may be ``None`` (widget not mounted yet) — the state still
     moves; only the panel/dialog handling is skipped.
     """
     if action.kind == "screen":
-        dismiss_dialog(mapapp, nav_model)
+        dismiss_dialog(mapapp, rail)
         app_state.screen.set(action.target)
         return
     if action.kind == "workflow":
         _open_panel(mapapp)
-        nav_model.current_step = None
+        rail.set(None)
         app_state.screen.set("workflow")
         app_state.active_step.set(action.target)
         return
-    nav_model.current_step = action.target
+    rail.set(action.target)
+
+
+def on_rail_step(rail, app_state, sid):
+    """MapApp activated rail step ``sid`` (a click, or ``None`` on close).
+
+    The item's page view is mirrored into ``current_page_view``, so a
+    repeated trigger reaches ``_NavBridge`` again; the panel is left as the
+    user left it behind the dialog, and ``None`` changes nothing (spec D13).
+    """
+    # First, always: rail is MapApp's current_step prop, which reacton pushes
+    # only on a change, so clearing it below must start from this step.
+    rail.set(sid)
+    view = page_view_for_rail_step(sid)
+    if view is not None and app_state.current_page_view.value != view:
+        app_state.current_page_view.value = view
+    if view in PAGE_VIEW_TO_SCREEN:
+        # A screen is not a dialog left open: clear the step (and its rail
+        # highlight) so the next click is a change again, even one made
+        # while the screen already shows.
+        rail.set(None)

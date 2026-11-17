@@ -41,7 +41,8 @@ def test_the_app_starts_on_the_project_dialog():
     from gui.store.workflow_steps import rail_item_for_step
 
     src = _src("gui/solara_app.py")
-    assert "initial_step=2," in src and "initial_step=1" not in src
+    assert "_FIRST_RAIL_STEP = 2\n" in src and "initial_step=_FIRST_RAIL_STEP," in src
+    assert "solara.use_reactive(_FIRST_RAIL_STEP)" in src  # the rail starts on the step MapApp opens
     assert rail_item_for_step(2).key == "project"
 
 
@@ -112,7 +113,7 @@ def test_notification_provider_mounted_before_tiles():
     assert page_body.index("NotificationProvider()") < page_body.index("_AppShell()")
     assert "render_detached(" not in page_body and "MapApp.element" not in page_body
     assert "NotificationProvider()" not in shell_body
-    assert "render_detached(" in shell_body and "MapApp.element" in shell_body
+    assert "render_detached(" in shell_body and "    _RailMapApp(" in shell_body
 
 
 def test_the_enter_listener_is_mounted_once_in_page():
@@ -251,22 +252,23 @@ def test_a_long_file_tile_detail_wraps_inside_the_tile():
 
 def test_the_project_dialog_closes_itself_through_the_shell():
     shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
-    assert 'dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)' in shell
-    for holder in ("nav_model = solara.use_memo(", "mapapp_ref = solara.use_memo("):
+    assert 'dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), rail)' in shell
+    for holder in ("rail = solara.use_reactive(", "mapapp_ref = solara.use_memo("):
         assert shell.count(holder) == 1 and shell.index(holder) < shell.index("project_widget = "), holder
 
 
 def test_the_rail_mirror_only_mirrors_the_page_view():
     """Every rail item is a dialog MapApp opens itself, so a rail click has
-    nothing to apply to the right panel: the observer only keeps
+    nothing to apply to the right panel: the callback only keeps
     ``current_page_view`` faithful, which is what makes a repeated trigger
     (clicking the same item twice) fire the navigation bridge again."""
     src = _src("gui/solara_app.py")
     page_body = src[src.index("def Page():"):]
-    assert 'nav_model.observe(_on_rail_step, "current_step")' in page_body
-    assert "view = page_view_for_rail_step(sid)" in page_body
+    assert "on_rail=_on_rail_step" in page_body
+    assert "on_rail_step(rail, app_state, sid)" in page_body
     assert "panel_view" not in page_body
-    assert 'nav_model.unobserve(_on_rail_step, "current_step")' in page_body
+    shell_call = page_body[page_body.index("    _RailMapApp("):page_body.index("solara.display(analysis_layout.screen)")]
+    assert "model=" not in shell_call  # pysepal 4.2 deprecates MapApp(model=)
 
 
 STEP_FILES = {
@@ -415,7 +417,7 @@ def test_the_shell_installs_auto_save_and_one_set_context():
     for role in ("aux_model", "selected_alerts_model", "app_tile_model"):
         assert f"{role}=set_context," in shell, role
     assert "MapLayers(map_, legends=app_state.layer_legends, selected=app_state.selected_legend)" in shell
-    assert shell.index("MapLegend(app_state=app_state, layers=layers)") < shell.index("app_element = MapApp.element(")
+    assert shell.index("MapLegend(app_state=app_state, layers=layers)") < shell.index("    _RailMapApp(")
     assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget,' in shell
     assert "_ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)" in shell
     assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")
