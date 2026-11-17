@@ -37,14 +37,6 @@ from gui.scripts.error_text import error_text
 
 _LOGGER_NAME = "SEPALUI.deforestation_alerts"
 
-ERROR_TOAST_TIMEOUT = 10.0
-"""Seconds an error toast stays on screen. Successes keep pysepal's 3 s default.
-
-Failures deserve a longer read than confirmations, but nothing is sticky: a
-tracked job's failure also lands in the notification log, which outlives the
-toast.
-"""
-
 # thread ident -> TaskTracker of the tracked job running on that thread.
 _trackers = {}
 _install_lock = threading.Lock()
@@ -176,7 +168,7 @@ def tracked_job(notifier, title: str, total_steps=None, error_format=None):
                     message = str(exc)
                 task.fail(message)
                 logging.getLogger(_LOGGER_NAME).error("Task %r failed: %s", title, message, exc_info=exc)
-                notifier.error(message, timeout=ERROR_TOAST_TIMEOUT)
+                notifier.error(message)  # pysepal keeps errors until clicked
                 raise
 
 
@@ -186,7 +178,7 @@ def current_notifier():
     For raw-widget workers (no component render, so no ``use_notifications``
     hook): it resolves the bus exactly like pysepal's ``track_task``/``notify``
     globals do, but returns a notifier so ``tracked_job`` can publish its error
-    toast with ``ERROR_TOAST_TIMEOUT``.
+    toast.
     """
     from pysepal.solara.notifications import NoopNotifier
     from pysepal.solara.notifications.bus import get_current_bus

@@ -27,7 +27,6 @@ from shapely.geometry import Polygon
 
 import gui.tile.overview_export as overview_export
 from gui.i18n import t
-from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
 
 NAME = "alerts_glad-l_2026-01-01_2026-06-12"
@@ -377,7 +376,7 @@ def test_a_failed_export_tells_the_user_and_leaves_the_tile_to_retry(
     assert data_files(data_root) == []
     (task,) = bus.tasks.value
     assert task.status == TaskStatus.FAILED and task.error_message == "unsupported driver"
-    assert errors == [("unsupported driver", ERROR_TOAST_TIMEOUT, (TaskStatus.FAILED,))]
+    assert errors == [("unsupported driver", None, (TaskStatus.FAILED,))]
     assert _non_error_toasts(bus) == []
 
 

@@ -75,7 +75,6 @@ from gui.scripts.integrate_jobs import run_scope, scope_changed
 from gui.scripts.coverage_ui import note_text, row_notes
 from gui.scripts.error_text import error_text
 from gui.scripts.notify_bridge import (
-    ERROR_TOAST_TIMEOUT,
     tile_progress_reporter,
     tracked_job,
 )
@@ -414,7 +413,7 @@ def _run_item(ctx: PrepareContext, task, title: str, scope: tuple, live, kind: s
         _set_error(ctx, error_key, message)
         if ctx.notifier is not None:
             toast = (_mask_failure_toast if kind == "mask" else _failure_toast)(name, exc, message)
-            ctx.notifier.error(toast, timeout=ERROR_TOAST_TIMEOUT)
+            ctx.notifier.error(toast)
         if isinstance(exc, HarmonizeFailed) and exc.artifacts:
             # The download (or the AOI raster) succeeded: record it, so
             # the next run only re-harmonizes (re-aligns) from disk.
