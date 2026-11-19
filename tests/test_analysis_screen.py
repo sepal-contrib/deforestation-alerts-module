@@ -378,19 +378,22 @@ def test_only_the_main_map_and_the_right_panel_hide_under_the_screen():
     assert [sel for sel in rules if on in sel] == [hide, pill], "two rule sets keyed on the screen"
     assert "display" not in rules[pill], "the log button moves, it is not hidden"
     hidden = [sel for sel, body in rules.items() if "display: none" in body]
-    for kept in (".left-drawer", ".v-application--wrap", "sidebar-controls"):
+    for kept in (".sepal-mapapp__drawer", ".sepal-mapapp__belt", ".v-application--wrap", "sidebar-controls"):
         assert not any(kept in sel for sel in hidden), f"{kept} is hidden: the rail must stay usable"
     assert not any(part.strip().endswith(".v-application") for sel in hidden for part in sel.split(","))
     assert "defo-map-hidden" not in css and ".defo-stage" not in css
 
     root = _rules(SCREEN_CSS)[".defo-analysis-screen"]
-    for decl in ("position: fixed;", "top: 0;", "bottom: 0;", "left: 60px;", "right: 0;", "z-index: 4;"):
+    for decl in ("position: fixed;", "top: var(--sepal-top-reserved, 0px);", "bottom: 0;", "left: 60px;",
+                 "right: 0;", "z-index: 4;"):
         assert decl in root, f"the screen root lacks {decl!r}: it sits right of the rail, full height"
+    # a narrow window: the rail is a 48 px bar across the top (--sepal-top-reserved)
+    assert rules["body:has(.sepal-mapapp--narrow) .defo-analysis-screen"] == "left: 0;"
     assert "inset" not in root and "--sepal-bottom-reserved" not in root and "--sepal-right-panel-width" not in root
     # the expanded rail opens over the screen: the screen does not follow its width
     assert "--sepal-drawer-width" not in root and "transition" not in root
     # ...unless pinned: then it pushes the screen right (user, 2026-11-03)
-    pinned = rules["body:has(.left-drawer .pin-btn .mdi-pin) .defo-analysis-screen"]
+    pinned = rules["body:has(.sepal-mapapp__drawer-header .mdi-pin) .defo-analysis-screen"]
     assert pinned == "left: var(--sepal-drawer-width, 60px);"
 
 
@@ -508,6 +511,20 @@ def test_every_screen_css_rule_is_scoped_to_the_analysis_screen():
                                             "body:has(.analysis-stage--dark) .analysis-")
             ), f"unscoped selector {part.strip()!r}"
     assert ".defo-analysis-screen .v-text-field .v-input__control .v-input__slot" in _rules(SCREEN_CSS)
+
+
+def test_the_app_opens_on_the_project_dialog_not_about():
+    """The shell starts the rail on the Project dialog; the navigation
+    bridge's first run must not move it. AppState's first page view once
+    named About, and the native MapApp opened About at startup."""
+    state = AppState()
+    nav = solara.reactive(2)  # _FIRST_RAIL_STEP
+    rc = _bridges(state, _screen(state), nav)
+    try:
+        assert nav.value == 2
+        assert state.screen.value == "workflow"
+    finally:
+        rc.close()
 
 
 def test_the_rail_reactive_drives_mapapps_step_both_ways():

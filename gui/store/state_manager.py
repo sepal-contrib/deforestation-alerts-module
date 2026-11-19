@@ -106,7 +106,8 @@ class AppState:
         # auto-save hook skips that publish (it would just rewrite the file).
         self._loading = False
         # navigation (unchanged from the workflow-side-panel shell)
-        self.current_page_view = solara.reactive("about_tile")
+        # starts on the startup rail dialog (the shell's _FIRST_RAIL_STEP, Project)
+        self.current_page_view = solara.reactive("project_tile")
         # index into gui.store.workflow_steps.STEPS; owned by the shell, set by
         # the pipeline header and the navigation bridge
         self.active_step = solara.reactive(0)

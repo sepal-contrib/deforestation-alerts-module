@@ -1,9 +1,9 @@
 // js/app/rail_collapse.js
 // App plugin, installed through the adapter's ``always`` list. A click on a
 // view's map collapses MapApp's left rail, as a click on the workflow's main
-// map does. The rail state lives in pysepal's Vue (MapApp.vue: the
-// #map-container click handler, which respects the pin), so replay that click:
-// the container is hidden on the analysis screen, but click() still fires.
+// map does. The rail state lives in pysepal's MapApp (its #map-container click
+// handler, which respects the pin), so replay that click: the container is
+// hidden on the analysis screen, but click() still fires.
 export const railCollapse = {
   name: "railCollapse",
   requires: [],

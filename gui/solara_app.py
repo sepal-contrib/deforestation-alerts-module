@@ -643,14 +643,15 @@ def _AppShell():
         ".right-panel .v-application--wrap { min-height: 0 !important; }\n"
         # The analysis screen (SCREEN_CSS in gui/tile/analysis/analysis_tile.py)
         # is a sibling of MapApp, fixed right of MapApp's rail
-        # (left: var(--sepal-drawer-width)). Its z-index, 4, is the LOWEST
-        # that still covers the map, because the layers that must show over
-        # it are stacked from small values (measured in the running app):
-        # MapApp's `.map-background` (the main map's stacking context) 0 <
-        # screen 4 < the rail collapse arrow 5 < the rail and the right panel
-        # 6 < menus 8 < the task pill 170 < the dialog scrim 201 < dialogs
-        # 202+ (Vuetify's stack minimum, raised by 2 per open dialog) < toasts
-        # 9999.
+        # (left: var(--sepal-drawer-width)). Its z-index, 4, covers the map
+        # and stays under everything that must show over it (pysepal's
+        # native MapApp, measured in the running app 2026-11-19): MapApp's
+        # `.sepal-mapapp__map` (the main map's stacking context) 0 < its step
+        # sheet 1 < screen 4 < the rail collapse arrow 159 < the rail, its
+        # narrow-window bar and the right panel 160 < the task pill 170 < the
+        # dialog scrim 201 < dialogs 202+ (Vuetify's stack minimum, raised by
+        # 2 per open dialog) < menus (a select in the panel opened at 902) <
+        # toasts 9999.
         # MapApp stays mounted while the screen shows, and its rail stays
         # visible and usable (user, 2026-10-09: the title, the About, Project
         # and Overview dialogs, the theme toggle, the language selector).
@@ -671,13 +672,15 @@ def _AppShell():
         "body:has(.defo-analysis-screen--on) .pill-wrapper { right: 501px !important; bottom: 21px !important; }\n"
         # A pinned, expanded rail pushes the screen right, so the views shrink
         # instead of hiding under it (user, 2026-11-03); unpinned, it opens
-        # over them. MapApp keeps the pin in Vue only: its pin button, shown
-        # while expanded, carries mdi-pin (mdi-pin-outline when unpinned).
-        "body:has(.left-drawer .pin-btn .mdi-pin) .defo-analysis-screen { left: var(--sepal-drawer-width, 60px); }\n"
-        # The rail collapse/expand arrow sits on the screen's left edge: keep it
-        # above the screen (MapApp's own value, restated here so the whole order
-        # above is in one place) and below the dialogs.
-        ".v-application .sidebar-controls { z-index: 5 !important; }\n"
+        # over them. MapApp keeps the pin in its own state only: its pin
+        # button, shown while expanded, carries mdi-pin (mdi-pin-outline when
+        # unpinned).
+        "body:has(.sepal-mapapp__drawer-header .mdi-pin) .defo-analysis-screen {"
+        " left: var(--sepal-drawer-width, 60px); }\n"
+        # A narrow window (< 960 px): the rail becomes a bar across the top,
+        # which the screen starts under (SCREEN_CSS's top), and leaves the
+        # whole width.
+        "body:has(.sepal-mapapp--narrow) .defo-analysis-screen { left: 0; }\n"
         # The Analysis panel's sticky footer (gui/tile/analysis/footer.py)
         # paints its own background so the panel scrolls under it. Its inline
         # `var(--v-background-base, #ffffff)` is the light fallback: no theme
@@ -687,14 +690,15 @@ def _AppShell():
         ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
         # The workflow panel's step strip and title stay put and only the
         # step under them scrolls, with its own scrollbar. pysepal's
-        # `.drawer-top` scrolls the whole panel content (an inline
-        # overflow-y): here it and its wrappers down to panel_host become a
-        # flex column that fills the panel, and the steps' body scrolls.
+        # `.drawer-top` scrolls the whole panel content: here it and its
+        # wrappers down to panel_host (the section's `.mb-4`, its class-less
+        # content div and the item's `.mb-3`) become a flex column that fills
+        # the panel, and the steps' body scrolls.
         # MapApp's `pa-4` padding moves onto the header and the body, so the
         # scrollbar sits at the panel's edge; the header pads its own top.
         ".right-panel .drawer-top:has(.defo-workflow-panel) {"
         " overflow-y: hidden !important; display: flex; flex-direction: column; }\n"
-        ".right-panel .drawer-top :is(.pa-4, .mb-4, .mb-3):has(.defo-workflow-panel) {"
+        ".right-panel .drawer-top :is(.pa-4, .mb-4, .mb-4 > div, .mb-3):has(.defo-workflow-panel) {"
         " flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;"
         " margin-bottom: 0 !important; padding: 0 !important; }\n"
         ".defo-workflow-panel { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;"
@@ -733,8 +737,8 @@ def _AppShell():
         # The expanded rail's header has about 220 px for "<app> · <project>" on
         # one line, so the project name was cut. Two smaller lines instead; a
         # third would be cut with an ellipsis.
-        ".left-drawer .drawer-header .app-title { min-width: 0; flex: 1 1 auto; white-space: normal; }\n"
-        ".left-drawer .drawer-header .app-title .title {\n"
+        ".sepal-mapapp__drawer .sepal-mapapp__app-title { min-width: 0; flex: 1 1 auto; white-space: normal; }\n"
+        ".sepal-mapapp__drawer .sepal-mapapp__app-title .title {\n"
         "  font-size: .95rem !important; line-height: 1.2 !important; letter-spacing: 0 !important;\n"
         "  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;\n"
         "  overflow: hidden; overflow-wrap: anywhere;\n"

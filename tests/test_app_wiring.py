@@ -209,21 +209,33 @@ def _z_index(css: str, selector: str) -> int:
 
 
 def test_dialogs_menus_and_the_task_pill_stack_above_the_analysis_screen():
-    """Vuetify stacks every overlay from small z-indexes, measured live in the
-    app: the rail and the right panel at 6, menus from 8, pysepal's task pill
-    at 170, the dialog scrim at 201 and dialogs from 202. The stage at 801
-    covered the About and Project dialogs (elementFromPoint on their content
-    hit the stage's map). The analysis screen sits right of the rail, which
-    stays usable on it (R30): it must stay above the map (0) and below all of
-    them, with the rail's collapse arrow, which sits on its left edge, above
-    it."""
+    """The analysis screen sits right of the rail, which stays usable on it
+    (R30): it must stay above the native MapApp's map (0) and step sheet (1),
+    and below everything else, measured live in the app: the rail's collapse
+    arrow (159), the rail, its narrow-window bar and the right panel (160),
+    pysepal's task pill (170), the dialog scrim (201) and dialogs (202+). The
+    shell does not restack the arrow: the legacy MapApp needed it, the
+    native one already puts it over the screen."""
     from gui.tile.analysis.analysis_tile import SCREEN_CSS
 
     css = _shell_css()
-    screen = _z_index(SCREEN_CSS, ".defo-analysis-screen")
-    arrow = _z_index(css, ".v-application .sidebar-controls")
-    assert 0 < screen < arrow < 6
+    assert 1 < _z_index(SCREEN_CSS, ".defo-analysis-screen") < 159
+    assert "sidebar-controls" not in css
     assert ".defo-stage" not in css and "defo-map-hidden" not in css
+
+
+def test_the_shell_css_targets_the_native_mapapp():
+    """The legacy MapApp's drawer classes are gone in the native shell
+    (issue #10): a rule on them would silently stop applying."""
+    css = _shell_css()
+    for legacy in (".left-drawer", ".pin-btn", ".drawer-header", ".app-title"):
+        assert legacy not in css, legacy
+    rules = {sel.strip(): body for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css)}
+    assert "-webkit-line-clamp: 2" in rules[".sepal-mapapp__drawer .sepal-mapapp__app-title .title"]
+    # the native panel puts a class-less div (its Slot) between the section and
+    # the workflow panel: the flex chain has to include it, or only the page scrolls
+    chain = next(sel for sel in rules if sel.startswith(".right-panel .drawer-top :is("))
+    assert ".mb-4 > div" in chain
 
 
 def test_the_analysis_footer_is_not_white_on_the_dark_theme():
