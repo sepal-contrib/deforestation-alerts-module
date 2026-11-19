@@ -1,5 +1,5 @@
 """The shell's ``_PanelBridge``, rendered for real: the active step's wrapper
-shows, the panel keeps its Workflow title, and the ``current_page_view``
+shows and the ``current_page_view``
 mirror follows the step on the workflow screen only.
 
 The panel itself has one view -- the PipelineHeader over the active step's
@@ -45,7 +45,7 @@ def bridge():
     wrappers = {s.key: SimpleNamespace(style_="") for s in STEPS}
     component = _shell_component("_PanelBridge")
     _, rc = reacton.render(
-        component(app_state=state, panel_wrappers=wrappers, mapapp_ref={}, workflow_config={}),
+        component(app_state=state, panel_wrappers=wrappers),
         handle_error=False,
     )
     yield SimpleNamespace(state=state, wrappers=wrappers)
@@ -60,9 +60,8 @@ def test_the_active_steps_wrapper_shows_and_the_mirror_follows(bridge):
 
 def test_the_mirror_leaves_the_analysis_screen_alone(bridge):
     """On the analysis screen ``current_page_view`` is "analysis_tile". A
-    write of the step's view there (a step change, or a language switch,
-    which re-runs the bridge) would make ``_NavBridge`` send the reviewer
-    back to the workflow."""
+    write of the step's view there (a step change) would make ``_NavBridge``
+    send the reviewer back to the workflow."""
     bridge.state.screen.set("analysis")
     bridge.state.current_page_view.set("analysis_tile")
     bridge.state.active_step.set(step_index("integrate"))
@@ -74,31 +73,25 @@ def test_the_mirror_leaves_the_analysis_screen_alone(bridge):
     assert bridge.state.current_page_view.value == "questionnaire_tile"
 
 
-def test_a_language_switch_puts_the_workflow_title_back():
-    """MapApp copies the (re-translated) Workflow config onto the right panel
-    when the app re-renders for a new language; the bridge must re-apply it
-    afterwards, and the panel's title no longer follows navigation -- the rail
-    items are dialogs, which leave the panel as the user left it."""
+def test_the_panel_title_is_a_prop_not_a_widget_write():
+    """The native MapApp renders ``right_panel_config`` on every shell render,
+    so the re-translated title reaches the panel without the bridge (the
+    legacy MapApp needed it written back onto its RightPanel widget)."""
+    src = (ROOT / "gui" / "solara_app.py").read_text()
+    assert "right_panel[0].config" not in src
+    assert "right_panel_config=WORKFLOW_PANEL_CONFIG," in src
+
+
+def test_a_language_switch_leaves_the_mirror_alone(bridge):
+    """A rail dialog leaves its view in ``current_page_view`` after it closes.
+    A language switch must not rewrite it to the step's view: that write
+    reaches ``_NavBridge`` as a navigation."""
     from pysepal.i18n import set_locale
 
-    panel = SimpleNamespace(config={})
-    state = AppState()
-    workflow_config = {"title": "Workflow", "icon": "mdi-tune", "width": 400}
-    component = _shell_component("_PanelBridge")
+    bridge.state.current_page_view.set("overview_tile")  # the Overview dialog, opened and closed
     set_locale("en")
-    _, rc = reacton.render(
-        component(app_state=state, panel_wrappers={s.key: SimpleNamespace(style_="") for s in STEPS},
-                  mapapp_ref={"widget": SimpleNamespace(right_panel=[panel])},
-                  workflow_config=workflow_config),
-        handle_error=False,
-    )
     try:
-        assert panel.config == {**workflow_config}
-        state.active_step.set(step_index("questionnaire"))  # navigation leaves the title alone
-        assert panel.config == {**workflow_config}
-        panel.config = {"title": "stale"}  # MapApp's prop sync on the language re-render
         set_locale("fr")
-        assert panel.config == {**workflow_config}
+        assert bridge.state.current_page_view.value == "overview_tile"
     finally:
         set_locale("en")
-        rc.close()

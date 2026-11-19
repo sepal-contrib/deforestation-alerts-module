@@ -13,7 +13,7 @@ accompany.
 
 The raw-layout workers run their body under ``notify_bridge.tracked_job``, so a
 failure is reported by the bridge: the task is FAILED first, then exactly ONE
-error toast (``ERROR_TOAST_TIMEOUT``) is published. pysepal's bus REPLACES earlier
+error toast (pysepal's default: it stays until clicked) is published. pysepal's bus REPLACES earlier
 error toasts, so counting ``bus.toasts`` could hide a duplicate — the error count
 is asserted on a ``Notifier.error`` spy instead.
 
@@ -30,7 +30,6 @@ from pysepal.solara.notifications.bus import NotificationBus
 from pysepal.solara.notifications.notifier import Notifier
 from pysepal.solara.notifications.state import TaskStatus, ToastType
 
-from gui.scripts.notify_bridge import ERROR_TOAST_TIMEOUT
 from gui.scripts.solara_threads import spawn_in_context
 from gui.store.state_manager import AppState
 from gui.tile.analysis.state import AnalysisState
@@ -79,7 +78,7 @@ class _Feedback:
         """Exactly one error toast, published after the task was FAILED."""
         assert len(self.errors) == 1, self.errors
         message, timeout, statuses = self.errors[0]
-        assert timeout == ERROR_TOAST_TIMEOUT
+        assert timeout is None
         # fail() lands BEFORE the toast: the run is already recorded as FAILED
         # (with its reason) in the task log by the time the user reads it.
         assert statuses == (TaskStatus.FAILED,)

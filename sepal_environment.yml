@@ -45,7 +45,7 @@ dependencies:
   - ipywidgets>=8.1
   - traitlets>=5.14
   # Locale-aware number formatting (gui/i18n.py format_number); within
-  # pysepal 4.1.0's babel<3,>=2.17
+  # pysepal 4.2.0's babel<3,>=2.17
   - babel>=2.17,<3
   # Serving: Voila in the user's SEPAL sandbox (ui.ipynb). No container.
   - voila
@@ -71,12 +71,13 @@ dependencies:
       # pysepal 4.x resolves the credential source from runtime topology, so
       # Voila/Jupyter get a PROCESS session without the old fork's
       # in_solara_server_context patch (Decision 4 fallback retired).
-      # solara is pinned: pysepal 4 relies on two private solara APIs and
-      # has reviewed 1.60.0-1.62.0 (pysepal's docs/guides/solara-upstream.md).
-      - pysepal==4.1.0
-      # pysepal 4 floor (assets cache survives a cancelled fetch)
-      - "ee-client>=3.2.1,<4"
-      - solara==1.62.0
+      # solara is pinned: pysepal 4 relies on three private solara APIs; 4.2.0
+      # needs >=1.64.1 and has reviewed up to 1.66.2 (pysepal's
+      # docs/guides/solara-upstream.md).
+      - pysepal==4.2.0
+      # pysepal 4.2 floor (tasks.cancel_task_async)
+      - "ee-client>=3.4.0,<4"
+      - solara==1.66.2
       # tensorflow: pip, not conda. conda-forge's tensorflow=2.17 defaults to
       # CUDA builds gated on the __cuda virtual package; when that package is
       # absent (this dev box, and SEPAL's GPU-less app-launcher containers

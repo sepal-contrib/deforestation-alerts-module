@@ -202,9 +202,26 @@ def toasts_since(page, t0_ms=0):
         return []
 
 
+_RAIL_TOGGLE = "() => document.querySelector('.sepal-mapapp__drawer-toggle button').click()"
+
+
 def title(page):
-    loc = page.locator("span.title.font-weight-medium").first
-    return loc.inner_text() if loc.count() else ""
+    """The app title, "<app> · <project>". pysepal's native drawer renders it
+    only while expanded, so a collapsed rail is expanded for the read and
+    collapsed again (a JS click: a dialog's scrim may cover the toggle)."""
+    # the drawer's (the right panel's header reuses its classes) or the narrow bar's
+    loc = page.locator(".sepal-mapapp__drawer .sepal-mapapp__app-title .title, .sepal-mapapp__belt-title").first
+    if loc.count():
+        return loc.inner_text()
+    if not page.locator(".sepal-mapapp__drawer--rail").count():
+        return ""
+    page.evaluate(_RAIL_TOGGLE)
+    try:
+        loc.wait_for(state="attached", timeout=10000)
+        return loc.inner_text()
+    finally:
+        page.evaluate(_RAIL_TOGGLE)
+        page.locator(".sepal-mapapp__drawer--rail").wait_for(state="attached", timeout=10000)
 
 
 def panel_text(page):

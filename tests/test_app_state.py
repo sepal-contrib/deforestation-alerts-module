@@ -85,7 +85,10 @@ def test_a_new_or_closed_project_forgets_the_previous_save_time():
 def test_defaults():
     s = AppState()
     assert s.project.value is None
-    assert s.current_page_view.value == "about_tile"
+    # the startup rail dialog (gui/solara_app.py's _FIRST_RAIL_STEP): the
+    # navigation bridge's first run must find it already showing, or the
+    # native MapApp opens the view this names instead (it opened About)
+    assert s.current_page_view.value == "project_tile"
     assert s.actual_alert_id.value == -1
     assert s.alerts_gdf.value is None
 
@@ -93,7 +96,7 @@ def test_defaults():
 def test_reactives_are_independent_per_instance():
     a, b = AppState(), AppState()
     a.current_page_view.value = "aoi_tile"
-    assert b.current_page_view.value == "about_tile"
+    assert b.current_page_view.value == "project_tile"
 
 
 def test_navigation_helpers():

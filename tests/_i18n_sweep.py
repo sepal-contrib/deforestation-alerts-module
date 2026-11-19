@@ -97,10 +97,13 @@ def _strings(root):
         for row in [*(getattr(w, "candidates", None) or []), getattr(w, "before", None), getattr(w, "after", None)]:
             if isinstance(row, dict) and isinstance(row.get("flag"), str):
                 yield w, "flag", row["flag"]
-        # pysepal's Markdown renders into a template
+        # pysepal's Markdown renders into a template (<4.2) or a child's html
         template = getattr(w, "template", None)
         if isinstance(template, str) and type(w).__name__ != "HandleStrip":
             yield w, "template", re.sub(r"<[^>]+>", " ", template)
+        html = getattr(w, "html", None)
+        if isinstance(html, str) and html:
+            yield w, "html", re.sub(r"<[^>]+>", " ", html)
 
 
 #: A message this long is searched for inside a string, not only matched

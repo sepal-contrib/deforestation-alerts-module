@@ -51,7 +51,6 @@ from pysepal.solara.components.aoi import aoi_view
 from pysepal.solara.components.legend import LegendComponent
 from pysepal.solara.notifications import NotificationProvider, use_notifications
 from shapely.geometry import box
-from traitlets import HasTraits, Int
 
 from deforestation_alerts.engine import grid as gridmod
 from deforestation_alerts.engine.fingerprint import harm_key, raw_key
@@ -105,10 +104,6 @@ ROOT = Path(__file__).resolve().parents[1]
 JAN = Period(id="2026-01-01_2026-01-31", start=date(2026, 1, 1), end=date(2026, 1, 31))
 PARAGUAY = (-55.5, -24.5, -55.0, -24.0)
 NAME = "h"
-
-
-class _NavModel(HasTraits):
-    current_step = Int(allow_none=True, default_value=None)
 
 
 def _shell_component(name, threads, also=()):
@@ -220,8 +215,8 @@ def shell(data_root, monkeypatch):
     panel_bridge = _shell_component("_PanelBridge", threads)
     set_loader = _shell_component("_ActiveSetLoader", threads)
     map_legend = _shell_component("MapLegend", threads, also=("legend_props",))
-    nav_model = _NavModel()
-    mapapp_ref = {}
+    rail = solara.reactive(None)
+    panel_open = solara.reactive(True)
     contexts = []
     tiles = {}
 
@@ -248,7 +243,7 @@ def shell(data_root, monkeypatch):
         def _build():
             _detached("about", lambda: AboutTile())
             _detached("project", lambda: ProjectDialog(
-                app_state=state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)))
+                app_state=state, dismiss=lambda: dismiss_dialog(rail)))
             _detached("overview", lambda: OverviewTile(app_state=state, map_=map_, layers=layers))
             _detached("aoi", lambda: AoiStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("alerts", lambda: AlertsStep(app_state=state, map_=map_, gee_interface=gee, layers=layers,
@@ -269,10 +264,9 @@ def shell(data_root, monkeypatch):
             return wrappers
 
         wrappers = solara.use_memo(_build, [])
-        nav_bridge(app_state=state, nav_model=nav_model, mapapp_ref=mapapp_ref)
+        nav_bridge(app_state=state, rail=rail, panel_open=panel_open)
         screen_bridge(app_state=state, layout=layout)
-        panel_bridge(app_state=state, panel_wrappers=wrappers, mapapp_ref=mapapp_ref,
-                     workflow_config={"title": "Workflow", "icon": "mdi-tune", "width": 480})
+        panel_bridge(app_state=state, panel_wrappers=wrappers)
         set_loader(app_state=state, layers=layers, map_=map_)
         map_legend(app_state=state, layers=layers)
         RemoteFactsLoader(app_state=state, gee_interface=gee)
@@ -292,8 +286,7 @@ def shell(data_root, monkeypatch):
                 th.join(timeout=0.05)
         raise AssertionError("a set load never finished")
 
-    yield SimpleNamespace(state=state, tiles=tiles, reports=reports, mount=mount, settle=settle, data_root=data_root,
-                          nav_model=nav_model)
+    yield SimpleNamespace(state=state, tiles=tiles, reports=reports, mount=mount, settle=settle, data_root=data_root)
     for rc in contexts:
         rc.close()
     if "rc" in holder:

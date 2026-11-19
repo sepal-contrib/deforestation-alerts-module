@@ -41,7 +41,9 @@ def test_the_app_starts_on_the_project_dialog():
     from gui.store.workflow_steps import rail_item_for_step
 
     src = _src("gui/solara_app.py")
-    assert "initial_step=2," in src and "initial_step=1" not in src
+    # MapApp opens on its current_step, so the rail's first value is the startup step
+    assert "_FIRST_RAIL_STEP = 2\n" in src and "rail = solara.use_reactive(_FIRST_RAIL_STEP)" in src
+    assert "initial_step=" not in src
     assert rail_item_for_step(2).key == "project"
 
 
@@ -52,7 +54,7 @@ def test_workflow_panel_is_wired():
     # the header outside the steps' body: only the body scrolls
     assert 'children=[header_widget, v.Html(tag="div", class_="defo-workflow-body",' in src
     assert "children=[*panel_wrappers.values()])]" in src
-    assert "right_panel_open=True" in src
+    assert "panel_open = solara.use_reactive(True)" in src and "right_panel_open=panel_open.value" in src
     assert "is_pinned=False" in src
     assert 'WORKFLOW_PANEL_CONFIG = {' in src and 't("app.panel_workflow_title")' in src
     assert "StageHost" not in src
@@ -112,7 +114,10 @@ def test_notification_provider_mounted_before_tiles():
     assert page_body.index("NotificationProvider()") < page_body.index("_AppShell()")
     assert "render_detached(" not in page_body and "MapApp.element" not in page_body
     assert "NotificationProvider()" not in shell_body
-    assert "render_detached(" in shell_body and "MapApp.element" in shell_body
+    assert "render_detached(" in shell_body and "    _RailMapApp(" in shell_body
+    # issue #10: pysepal's native Solara MapApp, not the legacy widget
+    assert "from pysepal.solara.components.map_app import MapApp" in src
+    assert "sepalwidgets.vue_app" not in src and "MapApp.element" not in src
 
 
 def test_the_enter_listener_is_mounted_once_in_page():
@@ -184,7 +189,7 @@ def test_panel_bridge_drives_views_and_title():
     assert "panel_view" not in body, "the panel has one view: the rail items are dialogs"
     assert 'wrap.style_ = "" if key == spec.key else "display: none;"' in body
     assert "stage_host" not in body and "defo-map-hidden" not in body
-    assert "mapapp.right_panel[0].config = {**workflow_config}" in body
+    assert "right_panel[0].config" not in body  # the native MapApp takes the title as a prop
     # The mirror runs on the workflow screen only (tests/test_panel_bridge.py).
     assert 'app_state.screen.value == "workflow"' in body
     assert "app_state.current_page_view.value = " in body
@@ -205,21 +210,33 @@ def _z_index(css: str, selector: str) -> int:
 
 
 def test_dialogs_menus_and_the_task_pill_stack_above_the_analysis_screen():
-    """Vuetify stacks every overlay from small z-indexes, measured live in the
-    app: the rail and the right panel at 6, menus from 8, pysepal's task pill
-    at 170, the dialog scrim at 201 and dialogs from 202. The stage at 801
-    covered the About and Project dialogs (elementFromPoint on their content
-    hit the stage's map). The analysis screen sits right of the rail, which
-    stays usable on it (R30): it must stay above the map (0) and below all of
-    them, with the rail's collapse arrow, which sits on its left edge, above
-    it."""
+    """The analysis screen sits right of the rail, which stays usable on it
+    (R30): it must stay above the native MapApp's map (0) and step sheet (1),
+    and below everything else, measured live in the app: the rail's collapse
+    arrow (159), the rail, its narrow-window bar and the right panel (160),
+    pysepal's task pill (170), the dialog scrim (201) and dialogs (202+). The
+    shell does not restack the arrow: the legacy MapApp needed it, the
+    native one already puts it over the screen."""
     from gui.tile.analysis.analysis_tile import SCREEN_CSS
 
     css = _shell_css()
-    screen = _z_index(SCREEN_CSS, ".defo-analysis-screen")
-    arrow = _z_index(css, ".v-application .sidebar-controls")
-    assert 0 < screen < arrow < 6
+    assert 1 < _z_index(SCREEN_CSS, ".defo-analysis-screen") < 159
+    assert "sidebar-controls" not in css
     assert ".defo-stage" not in css and "defo-map-hidden" not in css
+
+
+def test_the_shell_css_targets_the_native_mapapp():
+    """The legacy MapApp's drawer classes are gone in the native shell
+    (issue #10): a rule on them would silently stop applying."""
+    css = _shell_css()
+    for legacy in (".left-drawer", ".pin-btn", ".drawer-header", ".app-title"):
+        assert legacy not in css, legacy
+    rules = {sel.strip(): body for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css)}
+    assert "-webkit-line-clamp: 2" in rules[".sepal-mapapp__drawer .sepal-mapapp__app-title .title"]
+    # the native panel puts a class-less div (its Slot) between the section and
+    # the workflow panel: the flex chain has to include it, or only the page scrolls
+    chain = next(sel for sel in rules if sel.startswith(".right-panel .drawer-top :is("))
+    assert ".mb-4 > div" in chain
 
 
 def test_the_analysis_footer_is_not_white_on_the_dark_theme():
@@ -251,22 +268,24 @@ def test_a_long_file_tile_detail_wraps_inside_the_tile():
 
 def test_the_project_dialog_closes_itself_through_the_shell():
     shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
-    assert 'dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)' in shell
-    for holder in ("nav_model = solara.use_memo(", "mapapp_ref = solara.use_memo("):
+    assert 'dismiss=lambda: dismiss_dialog(rail)' in shell
+    assert "mapapp_ref" not in shell
+    for holder in ("rail = solara.use_reactive(", "panel_open = solara.use_reactive("):
         assert shell.count(holder) == 1 and shell.index(holder) < shell.index("project_widget = "), holder
 
 
 def test_the_rail_mirror_only_mirrors_the_page_view():
     """Every rail item is a dialog MapApp opens itself, so a rail click has
-    nothing to apply to the right panel: the observer only keeps
+    nothing to apply to the right panel: the callback only keeps
     ``current_page_view`` faithful, which is what makes a repeated trigger
     (clicking the same item twice) fire the navigation bridge again."""
     src = _src("gui/solara_app.py")
     page_body = src[src.index("def Page():"):]
-    assert 'nav_model.observe(_on_rail_step, "current_step")' in page_body
-    assert "view = page_view_for_rail_step(sid)" in page_body
+    assert "on_rail=_on_rail_step" in page_body
+    assert "on_rail_step(rail, app_state, sid)" in page_body
     assert "panel_view" not in page_body
-    assert 'nav_model.unobserve(_on_rail_step, "current_step")' in page_body
+    shell_call = page_body[page_body.index("    _RailMapApp("):page_body.index("solara.display(analysis_layout.screen)")]
+    assert "model=" not in shell_call  # pysepal 4.2 deprecates MapApp(model=)
 
 
 STEP_FILES = {
@@ -415,7 +434,7 @@ def test_the_shell_installs_auto_save_and_one_set_context():
     for role in ("aux_model", "selected_alerts_model", "app_tile_model"):
         assert f"{role}=set_context," in shell, role
     assert "MapLayers(map_, legends=app_state.layer_legends, selected=app_state.selected_legend)" in shell
-    assert shell.index("MapLegend(app_state=app_state, layers=layers)") < shell.index("app_element = MapApp.element(")
+    assert shell.index("MapLegend(app_state=app_state, layers=layers)") < shell.index("    _RailMapApp(")
     assert 'rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget,' in shell
     assert "_ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)" in shell
     assert shell.index("_PanelBridge(") < shell.index("_ActiveSetLoader(app_state=")

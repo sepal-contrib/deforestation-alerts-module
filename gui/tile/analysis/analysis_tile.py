@@ -776,16 +776,19 @@ def build_controls(widgets, app_state, analysis, aux_model, app_tile_model, id_f
 #: (``timeline.THEME_CSS``, ``handle_strip.py``).
 SCREEN_CSS = (
     # Right of MapApp's rail, which stays usable on the screen (user,
-    # 2026-10-09). ``left`` is the rail's collapsed width (MapApp's 60 px),
+    # 2026-10-09), and under its 48 px bar on a narrow window
+    # (--sepal-top-reserved; the shell's CSS puts ``left`` at 0 there).
+    # ``left`` is the rail's collapsed width (MapApp's 60 px),
     # not its live one (--sepal-drawer-width, 320 px expanded): the expanded
     # rail opens over the screen instead of pushing it right (user,
     # 2026-10-21), unless pinned (the shell's CSS, gui/solara_app.py). ``bottom`` and ``right`` are 0: --sepal-bottom-reserved and
     # --sepal-right-panel-width belong to the right panel, which is hidden here.
-    # z-index 4, HEAD's stage level: above MapApp's map (0); below the rail's
-    # collapse arrow (5), the rail and the right panel (6), menus (8+),
+    # z-index 4: above MapApp's map (0) and step sheet (1); below the rail's
+    # collapse arrow (159), the rail, its bar and the right panel (160),
     # pysepal's task pill (170), the dialog scrim (201), dialogs (202+) and
     # toasts (9999).
-    ".defo-analysis-screen { position: fixed; top: 0; bottom: 0; left: 60px; right: 0;"
+    ".defo-analysis-screen { position: fixed; top: var(--sepal-top-reserved, 0px); bottom: 0; left: 60px;"
+    " right: 0;"
     " z-index: 4; display: flex; flex-direction: column;"
     " background-color: #ffffff; color: rgba(0, 0, 0, 0.87); font-size: 14px; }\n"
     ".defo-analysis-screen.theme--dark { background-color: #121212; color: #ffffff; }\n"

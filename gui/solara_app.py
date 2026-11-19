@@ -1,6 +1,6 @@
 """Solara entry for the Alert analysis module app.
 
-Session bootstrap (pysepal solara pattern) + MapApp.element() shell: the rail
+Session bootstrap (pysepal solara pattern) + pysepal's native MapApp shell: the rail
 (About, Project, Overview) and the project workflow in the right panel, in
 two levels: Prepare data (AOI → Period → Alerts → Harmonize → Integrate &
 vectorize) and Review (Additional layers → Questionnaire → Evaluators); and
@@ -25,12 +25,10 @@ if str(_REPO_ROOT) not in sys.path:
 import ipyvuetify as v
 import solara
 from ipyleaflet import Popup
-from traitlets import HasTraits, Int
 
 from pysepal.i18n import current_locale
 from pysepal.scripts.utils import init_ee
 from pysepal.mapping import SepalMap
-from pysepal.sepalwidgets.vue_app import MapApp
 from pysepal.solara import (
     get_current_gee_interface,
     get_current_theme_state,
@@ -40,6 +38,7 @@ from pysepal.solara import (
     setup_theme_colors,
     with_sepal_sessions,
 )
+from pysepal.solara.components.map_app import MapApp
 from pysepal.solara.notifications import NotificationProvider, use_notifications
 
 from deforestation_alerts.gdal_env import (
@@ -49,10 +48,9 @@ from deforestation_alerts.gdal_env import (
 )
 from gui.scripts.tile_proxy import borrow_localtileserver_prefix, prefer_http_proxy
 from gui.store.navigation import (
-    PAGE_VIEW_TO_SCREEN,
     apply_navigation,
     dismiss_dialog,
-    page_view_for_rail_step,
+    on_rail_step,
     resolve_navigation,
 )
 from gui.i18n import app_available_locales, format_number, t
@@ -70,7 +68,6 @@ from gui.store.project_writers import is_writing
 from gui.store.state_manager import AppState
 from gui.scripts.detached import render_detached
 from gui.scripts.notify_bridge import install_server_log_handler, install_task_log_handler
-from gui.scripts.reacton_widgets import find_rendered_widget
 from gui.store.workflow_steps import RAIL_ITEMS, STEPS, active_set
 from gui.tile.about_tile import AboutTile
 from gui.tile.alerts_step import AlertsStep
@@ -130,36 +127,46 @@ borrow_localtileserver_prefix()
 prefer_http_proxy()
 
 
-class _NavModel(HasTraits):
-    """Tiny HasTraits bridge so we can observe MapApp's active step from Python.
-
-    Passed to ``MapApp.element(model=...)``; MapApp links its ``current_step``
-    trait to this model's (``_setup_model_binding`` links matching trait names).
-    The Vue drawer sets ``MapApp.current_step`` on step activation, which flows
-    here, letting the right-panel host swap to the active tile's controls.
-    """
-
-    current_step = Int(allow_none=True, default_value=None)
+#: The rail step open at startup: the Project dialog (spec A4). Work starts by
+#: creating, opening or managing a project; About stays one rail click away.
+_FIRST_RAIL_STEP = 2
 
 
 @solara.component
-def _NavBridge(app_state, nav_model, mapapp_ref):
+def _RailMapApp(rail, on_rail, panel_open, props):
+    """MapApp with its rail step controlled by ``rail`` and its right panel by
+    ``panel_open`` (two reactives).
+
+    MapApp's ``current_step`` prop follows ``rail``, and ``on_rail`` hears every
+    step MapApp activates (``None`` when a dialog closes), so ``rail`` always
+    holds MapApp's step: a write to ``rail`` from Python opens or closes a
+    dialog, and only a change is an instruction. ``panel_open`` works the same
+    way for the panel, so a navigation can reopen a panel the user closed.
+    A leaf, so a rail move or a panel toggle re-renders only this, not the shell.
+    """
+    MapApp(**props, current_step=rail.value, on_current_step=on_rail,
+           right_panel_open=panel_open.value, on_right_panel_open=panel_open.set)
+
+
+@solara.component
+def _NavBridge(app_state, rail, panel_open):
     """Programmatic navigation: tiles' ``current_page_view`` writes → shell state.
 
     Tiles signal navigation by writing ``app_state.current_page_view``
-    (a finished Integrate, the Overview's "Review"/"Go" and Evaluation's
-    *Start analysis* → the analysis screen, the Overview's "Workflow" → the
-    active step, a new or opened project → AOI). This invisible leaf
+    (the Overview's "Review"/"Go", Evaluation's *Start analysis*, a set
+    opened from its store and an opened review copy → the analysis screen; a
+    new or opened project → AOI). This invisible leaf
     component resolves the string to a workflow index, a rail step id or a
     screen and applies it. It is a *leaf* on purpose: only this component
     re-renders on a nav event, so ``Page`` / ``MapApp`` are not rebuilt.
 
     Threading: the render and the effect run in whichever thread set the
-    reactive. Integrate sets it from its worker thread, so ``_drive`` then
-    runs on that worker, not on the kernel's event loop (reacton renders
-    synchronously in the setting thread; see ``_ActiveSetLoader``). It may
-    only set traits and reactives, as the workers themselves do; it must
-    never start loop-only work (``use_task``, ``asyncio.create_task``).
+    reactive (reacton renders synchronously in the setting thread; see
+    ``_ActiveSetLoader``). Today every writer runs on the kernel's event loop
+    (click handlers, the project dialog's open task), but a writer on a
+    worker thread would run ``_drive`` there: it may only set traits and
+    reactives, never start loop-only work (``use_task``,
+    ``asyncio.create_task``).
     """
     view = app_state.current_page_view.value
 
@@ -170,15 +177,16 @@ def _NavBridge(app_state, nav_model, mapapp_ref):
         # Loop-safety: the target is already showing (e.g. _PanelBridge just
         # mirrored the showing view back into current_page_view). A workflow
         # target is showing only on the workflow screen: from the analysis
-        # screen it is a real navigation back.
+        # screen it is a real navigation back, and behind a closed panel it
+        # still reopens the panel (a project opened while AOI shows).
         if (action.kind == "workflow" and action.target == app_state.active_step.value
-                and app_state.screen.value == "workflow"):
+                and app_state.screen.value == "workflow" and panel_open.value):
             return
         if action.kind == "screen" and action.target == app_state.screen.value:
             return
-        if action.kind == "rail" and action.target == nav_model.current_step:
+        if action.kind == "rail" and action.target == rail.value:
             return
-        apply_navigation(mapapp_ref.get("widget"), nav_model, app_state, action)
+        apply_navigation(rail, panel_open, app_state, action)
 
     solara.use_effect(_drive, [view])
 
@@ -214,49 +222,41 @@ def _ScreenBridge(app_state, layout):
 
 
 @solara.component
-def _PanelBridge(app_state, panel_wrappers, mapapp_ref, workflow_config):
+def _PanelBridge(app_state, panel_wrappers):
     """Apply the workflow position to the widgets: which step's wrapper shows,
-    the panel title/icon, and the ``current_page_view`` mirror. (Layers on the
+    and the ``current_page_view`` mirror. (Layers on the
     shared map belong to the session's ``MapLayers`` registry, not to the
     showing step, spec §4.3; the analysis screen is ``_ScreenBridge``'s.)
 
     A leaf component (same reason as ``_NavBridge``). Runs whenever
-    ``active_step`` or the locale change, whoever set them (header click, rail
-    click, navigation bridge, language selector). The rail items are all
+    ``active_step`` changes, whoever set it (header click, rail click,
+    navigation bridge). The rail items are all
     dialogs, so the panel itself only ever shows the Workflow view.
     """
     active = app_state.active_step.value
-    # A language switch re-renders Page, and MapApp then copies the translated
-    # Workflow config onto the panel: re-apply so the panel keeps its title.
-    locale = current_locale()
     shown = solara.use_ref(active)
 
     def _apply():
         spec = STEPS[active]
         # The step shown slides in from the side it lies on (the stylesheet's
-        # .defo-step-in--*); a re-apply on the same step (a language switch)
-        # leaves its class alone, as a new animation name would replay it.
+        # .defo-step-in--*); a re-apply on the same step leaves its class
+        # alone, as a new animation name would replay it.
         turn = None if shown.current == active else ("fwd" if active > shown.current else "back")
         shown.current = active
         for key, wrap in panel_wrappers.items():
             if key == spec.key and turn:
                 wrap.class_ = f"defo-step-in--{turn}"  # before the style: it plays as display returns
             wrap.style_ = "" if key == spec.key else "display: none;"
-        # Panel title/icon (pysepal RightPanel.config is a synced trait; keep
-        # the width so the config observer is a no-op).
-        mapapp = mapapp_ref.get("widget")
-        if mapapp is not None and mapapp.right_panel:
-            mapapp.right_panel[0].config = {**workflow_config}
         # Mirror, on the workflow screen only: keep current_page_view faithful
         # to what is showing so a *repeated* trigger (e.g. searching twice)
         # still changes the value and re-fires _NavBridge, whose guard then
         # no-ops. On the analysis screen current_page_view is "analysis_tile",
-        # and writing the step's view (a language switch re-runs this) would
-        # send the reviewer back to the workflow.
+        # and writing the step's view would send the reviewer back to the
+        # workflow.
         if app_state.screen.value == "workflow" and app_state.current_page_view.value != spec.page_view:
             app_state.current_page_view.value = spec.page_view
 
-    solara.use_effect(_apply, [active, locale])
+    solara.use_effect(_apply, [active])
 
 
 init_ee()
@@ -636,22 +636,17 @@ def Page():
 @solara.component
 def _AppShell():
     solara.Style(
-        # Embedded-widget height fix: a tile renders raw ipyvuetify widgets via
-        # `solara.display(card)`, and ipyvuetify wraps each standalone display in
-        # its OWN Vuetify `<v-application>` whose `.v-application--wrap` carries
-        # `min-height: 100vh`, so every card would reserve a full viewport height.
-        ".dialog-card .v-application--wrap,\n"
-        ".right-panel .v-application--wrap { min-height: 0 !important; }\n"
         # The analysis screen (SCREEN_CSS in gui/tile/analysis/analysis_tile.py)
         # is a sibling of MapApp, fixed right of MapApp's rail
-        # (left: var(--sepal-drawer-width)). Its z-index, 4, is the LOWEST
-        # that still covers the map, because the layers that must show over
-        # it are stacked from small values (measured in the running app):
-        # MapApp's `.map-background` (the main map's stacking context) 0 <
-        # screen 4 < the rail collapse arrow 5 < the rail and the right panel
-        # 6 < menus 8 < the task pill 170 < the dialog scrim 201 < dialogs
-        # 202+ (Vuetify's stack minimum, raised by 2 per open dialog) < toasts
-        # 9999.
+        # (left: var(--sepal-drawer-width)). Its z-index, 4, covers the map
+        # and stays under everything that must show over it (pysepal's
+        # native MapApp, measured in the running app 2026-11-19): MapApp's
+        # `.sepal-mapapp__map` (the main map's stacking context) 0 < its step
+        # sheet 1 < screen 4 < the rail collapse arrow 159 < the rail, its
+        # narrow-window bar and the right panel 160 < the task pill 170 < the
+        # dialog scrim 201 < dialogs 202+ (Vuetify's stack minimum, raised by
+        # 2 per open dialog) < menus (a select in the panel opened at 902) <
+        # toasts 9999.
         # MapApp stays mounted while the screen shows, and its rail stays
         # visible and usable (user, 2026-10-09: the title, the About, Project
         # and Overview dialogs, the theme toggle, the language selector).
@@ -672,30 +667,33 @@ def _AppShell():
         "body:has(.defo-analysis-screen--on) .pill-wrapper { right: 501px !important; bottom: 21px !important; }\n"
         # A pinned, expanded rail pushes the screen right, so the views shrink
         # instead of hiding under it (user, 2026-11-03); unpinned, it opens
-        # over them. MapApp keeps the pin in Vue only: its pin button, shown
-        # while expanded, carries mdi-pin (mdi-pin-outline when unpinned).
-        "body:has(.left-drawer .pin-btn .mdi-pin) .defo-analysis-screen { left: var(--sepal-drawer-width, 60px); }\n"
-        # The rail collapse/expand arrow sits on the screen's left edge: keep it
-        # above the screen (MapApp's own value, restated here so the whole order
-        # above is in one place) and below the dialogs.
-        ".v-application .sidebar-controls { z-index: 5 !important; }\n"
+        # over them. MapApp keeps the pin in its own state only: its pin
+        # button, shown while expanded, carries mdi-pin (mdi-pin-outline when
+        # unpinned).
+        "body:has(.sepal-mapapp__drawer-header .mdi-pin) .defo-analysis-screen {"
+        " left: var(--sepal-drawer-width, 60px); }\n"
+        # A narrow window (< 960 px): the rail becomes a bar across the top,
+        # which the screen starts under (SCREEN_CSS's top), and leaves the
+        # whole width.
+        "body:has(.sepal-mapapp--narrow) .defo-analysis-screen { left: 0; }\n"
         # The Analysis panel's sticky footer (gui/tile/analysis/footer.py)
         # paints its own background so the panel scrolls under it. Its inline
         # `var(--v-background-base, #ffffff)` is the light fallback: no theme
         # defines `background`, so on the dark theme it was a white bar. Dark:
-        # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
+        # pysepal's drawer surface (MapApp's `darker` sheet, #1a1a1a), with
         # !important since an inline style beats any stylesheet rule.
         ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
         # The workflow panel's step strip and title stay put and only the
         # step under them scrolls, with its own scrollbar. pysepal's
-        # `.drawer-top` scrolls the whole panel content (an inline
-        # overflow-y): here it and its wrappers down to panel_host become a
-        # flex column that fills the panel, and the steps' body scrolls.
+        # `.drawer-top` scrolls the whole panel content: here it and its
+        # wrappers down to panel_host (the section's `.mb-4`, its class-less
+        # content div and the item's `.mb-3`) become a flex column that fills
+        # the panel, and the steps' body scrolls.
         # MapApp's `pa-4` padding moves onto the header and the body, so the
         # scrollbar sits at the panel's edge; the header pads its own top.
         ".right-panel .drawer-top:has(.defo-workflow-panel) {"
         " overflow-y: hidden !important; display: flex; flex-direction: column; }\n"
-        ".right-panel .drawer-top :is(.pa-4, .mb-4, .mb-3):has(.defo-workflow-panel) {"
+        ".right-panel .drawer-top :is(.pa-4, .mb-4, .mb-4 > div, .mb-3):has(.defo-workflow-panel) {"
         " flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;"
         " margin-bottom: 0 !important; padding: 0 !important; }\n"
         ".defo-workflow-panel { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;"
@@ -734,8 +732,8 @@ def _AppShell():
         # The expanded rail's header has about 220 px for "<app> · <project>" on
         # one line, so the project name was cut. Two smaller lines instead; a
         # third would be cut with an ellipsis.
-        ".left-drawer .drawer-header .app-title { min-width: 0; flex: 1 1 auto; white-space: normal; }\n"
-        ".left-drawer .drawer-header .app-title .title {\n"
+        ".sepal-mapapp__drawer .sepal-mapapp__app-title { min-width: 0; flex: 1 1 auto; white-space: normal; }\n"
+        ".sepal-mapapp__drawer .sepal-mapapp__app-title .title {\n"
         "  font-size: .95rem !important; line-height: 1.2 !important; letter-spacing: 0 !important;\n"
         "  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;\n"
         "  overflow: hidden; overflow-wrap: anywhere;\n"
@@ -805,30 +803,31 @@ def _AppShell():
         dependencies=[],
     )
 
-    # MapApp step/dialog content is a synced traitlets `Instance(DOMWidget)` slot
-    # (MapApp.vue binds `:widget="activeStep.content"`), NOT a reacton child — so a
-    # raw @solara.component element is not rendered there. Render each Solara tile to
-    # a concrete widget (gui/scripts/detached.py) and hand MapApp that single widget.
-    # Memoized so the widget is stable across re-renders, and each step is
-    # mounted once per session: steps follow project switches themselves.
-    # nav_model mirrors MapApp's rail step (see below); mapapp_ref holds the
-    # rendered MapApp widget, resolved once it is mounted (_resolve_mapapp).
-    # Both exist before the tiles so the Project dialog can close itself.
+    # Each Solara tile is rendered to a concrete widget (gui/scripts/detached.py)
+    # that MapApp shows in a dialog or the right panel: the tile renders in a
+    # context of its own, so a failing tile shows its traceback in its slot and
+    # does not raise into whoever published the change, and a step can remount
+    # its root on a project switch. Memoized so the widget is stable across
+    # re-renders, and each step is mounted once per session: steps follow
+    # project switches themselves.
+    # rail holds MapApp's rail step and panel_open its right panel
+    # (_RailMapApp). rail exists before the tiles so the Project dialog can
+    # close itself.
     # The prepare jobs' state, one per session, shared by the steps that run them.
     prepare_jobs = solara.use_memo(PrepareJobs, [])
-    nav_model = solara.use_memo(lambda: _NavModel(), dependencies=[])
-    mapapp_ref = solara.use_memo(lambda: {}, dependencies=[])
+    rail = solara.use_reactive(_FIRST_RAIL_STEP)
+    panel_open = solara.use_reactive(True)
     about_widget = solara.use_memo(
         lambda: render_detached(lambda: AboutTile(), t("app.drawer_item.about"))[0], dependencies=[])
     project_widget = solara.use_memo(
         lambda: render_detached(lambda: ProjectDialog(
-            app_state=app_state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model),
+            app_state=app_state, dismiss=lambda: dismiss_dialog(rail),
             analysis=analysis), t("app.drawer_item.project"))[0],
         dependencies=[])
     overview_widget = solara.use_memo(
         lambda: render_detached(lambda: OverviewTile(
             app_state=app_state, map_=map_, layers=layers,
-            dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model)),
+            dismiss=lambda: dismiss_dialog(rail)),
             t("app.drawer_item.overview"))[0], dependencies=[])
     step_widgets = solara.use_memo(
         lambda: {
@@ -873,7 +872,7 @@ def _AppShell():
             app_state=app_state,
             gee_interface=gee_interface,
             theme_state=theme_state,
-            dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), nav_model),
+            dismiss=lambda: dismiss_dialog(rail),
         ),
         dependencies=[],
     )
@@ -881,7 +880,7 @@ def _AppShell():
     # -----------------------------------------------------------------------
     # The right panel (spatial_risk parity): the PipelineHeader above the
     # active workflow step's controls. Which step is active is
-    # app_state.active_step; nav_model.current_step tracks the rail, whose
+    # app_state.active_step; rail tracks the rail, whose
     # three items (About, Project, Overview) are all MapApp dialogs, so the
     # panel never has to change what it shows.
     # -----------------------------------------------------------------------
@@ -907,9 +906,8 @@ def _AppShell():
         lambda: {s.key: _wrap(s.key, s.key == STEPS[0].key) for s in STEPS},
         dependencies=[],
     )
-    # The pipeline header: rendered detached (MapApp's right_panel_content is a
-    # widget slot, not a reacton child) and memoized so it is stable across
-    # Page re-renders. It re-renders on its own when the AppState reactives it
+    # The pipeline header: rendered detached like the steps and memoized so it
+    # is stable across Page re-renders. It re-renders on its own when the AppState reactives it
     # reads change.
     def _header():
         widget = render_detached(lambda: WorkflowHeader(app_state=app_state), t("app.panel_workflow_title"))[0]
@@ -927,31 +925,9 @@ def _AppShell():
         dependencies=[],
     )
 
-    # Rail clicks: every item mirrors its page view, so repeated triggers keep
-    # working. The panel is left as the user left it behind the dialog.
-    # None (dialog closed, "Map" clicked) changes nothing — see spec D13.
-    def _wire_rail_mirror():
-        def _on_rail_step(change):
-            sid = change["new"]
-            view = page_view_for_rail_step(sid)
-            if view is not None and app_state.current_page_view.value != view:
-                app_state.current_page_view.value = view
-            if view in PAGE_VIEW_TO_SCREEN:
-                # A screen is not a dialog left open: clear the step (and its
-                # rail highlight) so the next click is a change again, even
-                # one made while the screen already shows. On both ends: this
-                # runs inside the MapApp -> nav_model link's update, which
-                # drops a write-back, so clearing one end alone would leave
-                # MapApp at this step and swallow the next click.
-                mapapp = mapapp_ref.get("widget")
-                if mapapp is not None:
-                    mapapp.current_step = None
-                nav_model.current_step = None
-
-        nav_model.observe(_on_rail_step, "current_step")
-        return lambda: nav_model.unobserve(_on_rail_step, "current_step")
-
-    solara.use_effect(_wire_rail_mirror, dependencies=[])
+    # Rail clicks (navigation.on_rail_step): every item mirrors its page view.
+    def _on_rail_step(sid):
+        on_rail_step(rail, app_state, sid)
 
     # Theme mirror for the pipeline header's "primary" accent. The app's theme
     # is owned by pysepal's ThemeState (MapApp's toggle), not by Solara's own
@@ -980,8 +956,8 @@ def _AppShell():
     # each one is a dialog over its rendered tile. They carry no
     # right_panel_action — the panel stays as the user left it behind a dialog,
     # as in spatial_risk.
-    # A "screen" item draws nothing; MapApp only needs a non-empty content
-    # list to report its click (``handle_step_activation``).
+    # A "screen" item draws nothing; MapApp only needs some content to
+    # report its click through ``on_current_step``.
     screen_stub = solara.use_memo(lambda: v.Html(tag="span", children=[]), dependencies=[])
     rail_content = {"about": about_widget, "project": project_widget, "overview": overview_widget,
                     "analysis": screen_stub}
@@ -1014,27 +990,26 @@ def _AppShell():
     docs_url = docs_url.replace("{lang}", lang if lang in DOCS_LANGUAGES else "en")
     # The floating legend, a leaf mounted before MapApp (spec §9.4).
     MapLegend(app_state=app_state, layers=layers)
-    app_element = MapApp.element(
-        app_title=app_title,
-        app_icon="mdi-tree",
-        repo_url=REPO_URL,
-        docs_url=docs_url,
-        main_map=[map_],
-        steps_data=steps_data,
-        # Open the Project dialog at startup (rail step id 2): work starts by
-        # creating, opening or managing a project (spec A4). About stays one
-        # rail click away.
-        initial_step=2,
-        theme_state=theme_state,
-        model=nav_model,
-        right_panel_config=WORKFLOW_PANEL_CONFIG,
-        right_panel_content=right_panel_content,
-        right_panel_open=True,
-        is_pinned=False,  # start as the 60px icon rail
-        # Offer every catalog we ship (en, es-ES, fr, pt-BR); without it the default
-        # LocaleSelect is English-only. The selector writes pysepal's Solara
-        # locale, which gui.i18n.t() reads.
-        locales=app_available_locales(),
+    _RailMapApp(
+        rail=rail,
+        on_rail=_on_rail_step,
+        panel_open=panel_open,
+        props=dict(
+            app_title=app_title,
+            app_icon="mdi-tree",
+            repo_url=REPO_URL,
+            docs_url=docs_url,
+            main_map=[map_],
+            steps_data=steps_data,
+            theme_state=theme_state,
+            right_panel_config=WORKFLOW_PANEL_CONFIG,
+            right_panel_content=right_panel_content,
+            is_pinned=False,  # start as the 60px icon rail
+            # Offer every catalog we ship (en, es-ES, fr, pt-BR); without it the default
+            # LocaleSelect is English-only. The selector writes pysepal's Solara
+            # locale, which gui.i18n.t() reads.
+            locales=app_available_locales(),
+        ),
     )
 
     # The analysis screen is a sibling of MapApp (a fixed element inside the
@@ -1043,36 +1018,9 @@ def _AppShell():
     # and keeps its rail.
     solara.display(analysis_layout.screen)
 
-    # Resolve the rendered MapApp widget ONCE here, in Page's own context — where
-    # ``app_element`` is valid (``solara.get_widget`` must be called from the
-    # component that created the element; calling it from _NavBridge raises
-    # KeyError). _NavBridge reads it from this holder to open/close the right panel
-    # + dismiss dialogs (the part the Vue current_step watcher skips); the
-    # holder itself is created above, with nav_model.
-
-    def _resolve_mapapp():
-        try:
-            mapapp_ref["widget"] = solara.get_widget(app_element)
-        except KeyError:
-            # A re-render before the mount effects run (a reactive set while a
-            # child renders) leaves reacton's element->widget map keyed by the
-            # FIRST pass's MapApp element, so get_widget() misses the element
-            # this closure holds. The widget itself is the same one.
-            widget = find_rendered_widget(MapApp)
-            if widget is None:
-                logger.error("Navigation: could not resolve the MapApp widget")
-            mapapp_ref["widget"] = widget
-
-    solara.use_effect(_resolve_mapapp, dependencies=[])
-
-    _NavBridge(app_state=app_state, nav_model=nav_model, mapapp_ref=mapapp_ref)
+    _NavBridge(app_state=app_state, rail=rail, panel_open=panel_open)
     _ScreenBridge(app_state=app_state, layout=analysis_layout)
-    _PanelBridge(
-        app_state=app_state,
-        panel_wrappers=panel_wrappers,
-        mapapp_ref=mapapp_ref,
-        workflow_config=WORKFLOW_PANEL_CONFIG,
-    )
+    _PanelBridge(app_state=app_state, panel_wrappers=panel_wrappers)
     _ActiveSetLoader(app_state=app_state, layers=layers, map_=map_)
     _AlertLayers(app_state=app_state, layers=layers, map_=map_)
     RemoteFactsLoader(app_state=app_state, gee_interface=gee_interface)
