@@ -197,7 +197,7 @@ body:has(.defo-analysis-screen--on) #map-container,
 body:has(.defo-analysis-screen--on) .right-panel { display: none; }
 </style></head><body>
 <div class="v-application"><div class="v-application--wrap">
-  <nav class="left-drawer"><div data-step-id="1">About</div></nav>
+  <nav class="sepal-mapapp__drawer"><div data-step-id="1">About</div></nav>
   <div id="map-container"></div>
   <div class="right-panel">
     <div class="sr-step-jump" id="title" onclick="document.getElementById('menu').innerHTML ? closeMenu() : openMenu()"><span class="defo-step-badge" id="badge"></span></div>

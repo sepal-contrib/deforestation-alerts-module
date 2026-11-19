@@ -185,7 +185,7 @@ def download_labels():
 def set_language(page, lang: str) -> None:
     """Pick ``lang`` in the rail's language selector (pysepal's LocaleSelect)."""
     code = LANGS[lang]
-    page.locator(".left-drawer button:has(.mdi-translate)").first.click()
+    page.locator(".sepal-mapapp__drawer button:has(.mdi-translate)").first.click()
     item = page.locator(f'{w.MODAL} .v-list-item:has-text("({code})")').first
     w.wait_for(lambda: item.count() and item.is_visible(), 15, f"{code} in the language selector")
     item.click()
@@ -797,7 +797,7 @@ OPTICAL_IMAGE = "COPERNICUS/S2_SR_HARMONIZED/20260927T144729_20260927T145044_T19
 
 def map_and_panel(page) -> list:
     """The window right of the rail: the main map and the Workflow panel."""
-    rail = box(page, ".left-drawer")
+    rail = box(page, ".sepal-mapapp__drawer")
     return [rail[0] + rail[2], 0, VIEWPORT["width"] - rail[0] - rail[2], VIEWPORT["height"]]
 
 
@@ -1975,7 +1975,7 @@ USE_CASE_COPY_ALERT = COPY_PLAN[1][0]
 
 def main_map(page) -> list:
     """The main map: right of the rail, left of the Workflow panel."""
-    rail, panel = box(page, ".left-drawer"), box(page, ".right-panel")
+    rail, panel = box(page, ".sepal-mapapp__drawer"), box(page, ".right-panel")
     return [rail[0] + rail[2], 0, panel[0] - rail[0] - rail[2], VIEWPORT["height"]]
 
 

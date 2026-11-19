@@ -382,11 +382,11 @@ SCREEN_THEME = """() => {
 
 #: MapApp's theme toggle, in its rail (pysepal's ThemeToggle: its icon shows
 #: the mode, and a click moves dark → light → auto).
-RAIL_THEME = (".left-drawer button:has(.mdi-weather-night), .left-drawer button:has(.mdi-white-balance-sunny),"
-              " .left-drawer button:has(.mdi-weather-sunny), .left-drawer button:has(.mdi-auto-fix)")
+RAIL_THEME = (".sepal-mapapp__drawer button:has(.mdi-weather-night), .sepal-mapapp__drawer button:has(.mdi-white-balance-sunny),"
+              " .sepal-mapapp__drawer button:has(.mdi-weather-sunny), .sepal-mapapp__drawer button:has(.mdi-auto-fix)")
 #: MapApp's language selector, in its rail (pysepal's LocaleSelect: it opens
 #: a dialog listing "<name> (<code>)", and a pick closes it).
-RAIL_LANGUAGE = ".left-drawer button:has(.mdi-translate)"
+RAIL_LANGUAGE = ".sepal-mapapp__drawer button:has(.mdi-translate)"
 
 
 def shown(page, selector) -> int:
@@ -400,7 +400,7 @@ def beside_rail(page):
     screen must have: right of the rail, from the top of the window to its
     bottom and its right edge (R30)."""
     vw, vh = page.viewport_size["width"], page.viewport_size["height"]
-    rail = page.evaluate(BOX, ".left-drawer")
+    rail = page.evaluate(BOX, ".sepal-mapapp__drawer")
     assert rail and rail[0] == 0 and rail[2] > 0, f"MapApp's rail is not shown: {rail}"
     edge = rail[0] + rail[2]
     return rail, [edge, 0, vw - edge, vh]
@@ -466,7 +466,7 @@ def check_screen(page, out, report):
     report["screen_box"] = page.evaluate(SCREEN_BOX)
     assert near(report["screen_box"], expected), (report["screen_box"], expected)
     vh = page.viewport_size["height"]
-    assert page.evaluate(ON_TOP, [".left-drawer", rail[2] // 2, vh // 3]), "the analysis screen covers MapApp's rail"
+    assert page.evaluate(ON_TOP, [".sepal-mapapp__drawer", rail[2] // 2, vh // 3]), "the analysis screen covers MapApp's rail"
     arrow = page.evaluate(BOX, ".sidebar-controls .control-btn")
     assert arrow and page.evaluate(ON_TOP, [".sidebar-controls", arrow[0] + arrow[2] // 2, arrow[1] + arrow[3] // 2]),         f"the analysis screen covers the rail's collapse arrow: {arrow}"
     # the arrow straddles the screen's left edge: probe the half over the
@@ -518,7 +518,7 @@ def check_screen(page, out, report):
     # close the right panel once while the screen shows (it is hidden: the
     # panel's own close button, clicked from the page), and its tab, which the
     # closed panel adds to the DOM, must stay hidden
-    page.evaluate("() => document.querySelector('.right-panel .pin-btn').click()")
+    page.evaluate("() => document.querySelector('.right-panel .sepal-mapapp__drawer-header button').click()")
     w.wait_for(lambda: page.locator(".right-panel-tab").count() == 1, 15, "the closed panel's tab is in the DOM")
     page.wait_for_timeout(500)
     assert shown(page, ".right-panel-tab") == 0, "the closed right panel's tab shows on the analysis screen"
@@ -540,7 +540,7 @@ def check_rail(page, out, report):
     assert page.locator(w.SCREEN_ON).count() == 1, "check_rail starts on the analysis screen"
 
     # 11. a rail dialog (About) opens over the screen and closes
-    page.locator('.left-drawer [data-step-id="1"]').first.click()
+    page.locator('.sepal-mapapp__drawer [data-step-id="1"]').first.click()
     w.wait_for(lambda: w.dialog_visible(page), 30, "the About dialog over the analysis screen")
     page.wait_for_timeout(1000)
     card = page.evaluate(BOX, w.RAIL_DIALOG)
