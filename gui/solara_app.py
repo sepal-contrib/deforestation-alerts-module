@@ -176,9 +176,10 @@ def _NavBridge(app_state, rail, panel_open):
         # Loop-safety: the target is already showing (e.g. _PanelBridge just
         # mirrored the showing view back into current_page_view). A workflow
         # target is showing only on the workflow screen: from the analysis
-        # screen it is a real navigation back.
+        # screen it is a real navigation back, and behind a closed panel it
+        # still reopens the panel (a project opened while AOI shows).
         if (action.kind == "workflow" and action.target == app_state.active_step.value
-                and app_state.screen.value == "workflow"):
+                and app_state.screen.value == "workflow" and panel_open.value):
             return
         if action.kind == "screen" and action.target == app_state.screen.value:
             return

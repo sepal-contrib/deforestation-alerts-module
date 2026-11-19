@@ -94,7 +94,7 @@ def _screen(state, theme_state=None, controls=None):
     return build_screen(widgets, controls, state, theme_state)
 
 
-def _bridges(state, layout, nav=None):
+def _bridges(state, layout, nav=None, panel_open=None):
     """The shell's three navigation leaves, rendered together as ``_AppShell`` does.
 
     ``nav`` stands in for the shell's rail reactive (MapApp's step: the open
@@ -102,10 +102,11 @@ def _bridges(state, layout, nav=None):
     ns = _shell("_NavBridge", "_ScreenBridge", "_PanelBridge")
     wrappers = {s.key: SimpleNamespace(style_="") for s in STEPS}
     nav = nav if nav is not None else solara.reactive(None)
+    panel_open = panel_open if panel_open is not None else solara.reactive(True)
 
     @solara.component
     def Shell():
-        ns["_NavBridge"](app_state=state, rail=nav, panel_open=solara.reactive(True))
+        ns["_NavBridge"](app_state=state, rail=nav, panel_open=panel_open)
         ns["_ScreenBridge"](app_state=state, layout=layout)
         ns["_PanelBridge"](app_state=state, panel_wrappers=wrappers)
 
@@ -175,6 +176,26 @@ def test_closing_or_opening_a_project_returns_to_the_workflow_screen():
         state.screen.set("analysis")
         install()
         assert state.screen.value == "workflow"
+
+
+def test_opening_a_project_on_aoi_reopens_a_closed_panel():
+    """Review Focus 3: the user closed the panel on AOI (step 0, as at
+    startup), then opens a project from the Project dialog. The project lands
+    on AOI with the panel open, although AOI was already the active step."""
+    from gui.store.navigation import on_rail_step
+
+    state = AppState()
+    nav, panel = solara.reactive(None), solara.reactive(True)
+    rc = _bridges(state, _screen(state), nav=nav, panel_open=panel)
+    try:
+        assert state.active_step.value == 0 and state.screen.value == "workflow"
+        panel.set(False)  # the panel's X
+        on_rail_step(nav, state, 2)  # the Project rail item
+        state.current_page_view.value = "aoi_tile"  # project_dialog's _show_workflow
+        assert panel.value is True
+        assert nav.value is None, "the Project dialog closes"
+    finally:
+        rc.close()
 
 
 def test_a_repeated_review_after_back_to_workflow_opens_analysis_again():
