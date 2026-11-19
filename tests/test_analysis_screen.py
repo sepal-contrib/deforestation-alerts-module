@@ -105,9 +105,9 @@ def _bridges(state, layout, nav=None):
 
     @solara.component
     def Shell():
-        ns["_NavBridge"](app_state=state, rail=nav, mapapp_ref={})
+        ns["_NavBridge"](app_state=state, rail=nav, panel_open=solara.reactive(True))
         ns["_ScreenBridge"](app_state=state, layout=layout)
-        ns["_PanelBridge"](app_state=state, panel_wrappers=wrappers, mapapp_ref={}, workflow_config={})
+        ns["_PanelBridge"](app_state=state, panel_wrappers=wrappers)
 
     _, rc = reacton.render(Shell(), handle_error=False)
     return rc
@@ -151,7 +151,7 @@ def test_analysis_tile_resolves_to_the_screen_and_keeps_the_step():
     state = AppState()
     state.active_step.set(step_index("questionnaire"))
     nav = solara.reactive(3)  # the Overview dialog, where *Review alerts* is
-    apply_navigation(None, nav, state, resolve_navigation("analysis_tile"))
+    apply_navigation(nav, solara.reactive(True), state, resolve_navigation("analysis_tile"))
     assert state.screen.value == "analysis"
     assert state.active_step.value == step_index("questionnaire")
     assert nav.value is None, "the Overview dialog stays open over the screen"
@@ -160,7 +160,7 @@ def test_analysis_tile_resolves_to_the_screen_and_keeps_the_step():
 def test_a_workflow_target_shows_the_workflow_screen():
     state = AppState()
     state.screen.set("analysis")
-    apply_navigation(None, solara.reactive(None), state, resolve_navigation("integrate_tile"))
+    apply_navigation(solara.reactive(None), solara.reactive(True), state, resolve_navigation("integrate_tile"))
     assert state.screen.value == "workflow"
     assert state.active_step.value == step_index("integrate")
 
@@ -272,14 +272,14 @@ def test_a_rail_dialog_opened_on_the_analysis_screen_keeps_the_screen():
             assert _on(layout) and layout.screen.style_ == ""
             assert nav.value == item.step_id, f"{item.key}'s dialog was closed"
             assert state.active_step.value == questionnaire
-            dismiss_dialog(None, nav)  # the dialog's own close button
+            dismiss_dialog(nav)  # the dialog's own close button
             assert nav.value is None
             assert state.screen.value == "analysis" and _on(layout), f"closing {item.key} left the screen"
         # The Overview's *Review alerts* (OverviewTile._review_alerts) from its
         # dialog over the screen: dismiss, then "analysis_tile".
         nav.set(3)
         state.current_page_view.set(page_view_for_rail_step(3))
-        dismiss_dialog(None, nav)
+        dismiss_dialog(nav)
         state.current_page_view.set("analysis_tile")
         assert state.screen.value == "analysis" and _on(layout) and layout.screen.style_ == ""
         assert nav.value is None, "the Overview dialog stays open over the screen"
@@ -511,41 +511,58 @@ def test_every_screen_css_rule_is_scoped_to_the_analysis_screen():
 
 
 def test_the_rail_reactive_drives_mapapps_step_both_ways():
-    """pysepal 4.2 deprecates ``MapApp(model=)``: the shell controls MapApp's
-    ``current_step`` with the ``rail`` reactive instead. A Python write moves
-    MapApp, a click reaches ``on_rail``, and clearing the step from inside
-    that callback (a screen item) reaches the widget, so the next click on
-    the same item is a change again."""
-    import logging
-
-    from pysepal.sepalwidgets.vue_app import MapApp
-
-    from gui.scripts.reacton_widgets import find_rendered_widget
+    """The shell controls the native MapApp's step with the ``rail`` reactive
+    and its right panel with ``panel_open``. A Python write opens or closes
+    the dialog, a click reaches ``on_rail``, and clearing the step from inside
+    that callback (a screen item) leaves no item highlighted, so the next
+    click on the same item is reported again."""
+    from pysepal.solara.components.map_app import MapApp
 
     ns = _shell("_RailMapApp")
-    ns.update(MapApp=MapApp, find_rendered_widget=find_rendered_widget, logger=logging.getLogger(__name__))
-    rail, ref, state = solara.reactive(2), {}, AppState()
+    ns.update(MapApp=MapApp)
+    rail, panel, state = solara.reactive(2), solara.reactive(True), AppState()
     # The real rail ids: 1-3 are dialogs, 4 is Analysis (a screen item)
-    steps = [{"id": r.step_id, "name": r.key, "icon": "mdi-circle", "display": "dialog",
+    steps = [{"id": r.step_id, "name": r.key, "icon": "mdi-circle", "display": r.display,
               "content": [v.Html(tag="span")]} for r in RAIL_ITEMS]
     assert page_view_for_rail_step(4) == "analysis_tile"
+    calls = []
 
-    on_rail = lambda sid: on_rail_step(rail, state, sid)  # noqa: E731 - what the shell's _on_rail_step calls
-    _, rc = reacton.render(ns["_RailMapApp"](rail=rail, on_rail=on_rail, mapapp_ref=ref,
-                                             props=dict(steps_data=steps, initial_step=2)), handle_error=False)
+    def on_rail(sid):  # what the shell's _on_rail_step calls
+        calls.append(sid)
+        on_rail_step(rail, state, sid)
+
+    root, rc = reacton.render(ns["_RailMapApp"](rail=rail, on_rail=on_rail, panel_open=panel,
+                                                props=dict(steps_data=steps, initial_step=2,
+                                                           right_panel_content=[{"content": [v.Html(tag="div")]}])),
+                              handle_error=False)
+
+    def items():
+        return {w.item_attributes["data-step-id"]: w for w in _widgets(root)
+                if "item_attributes" in w.keys and w.item_attributes}
+
+    def dialog_open():
+        return next(w for w in _widgets(root) if isinstance(w, v.Dialog)).v_model
+
     try:
-        mapapp = ref["widget"]
-        assert mapapp.current_step == 2
+        assert dialog_open() and items()["2"].active  # the Project dialog at startup
         rail.set(3)  # apply_navigation to a rail dialog
-        assert mapapp.current_step == 3
-        mapapp.vue_handle_step_activation(1)  # a click on the rail
-        assert rail.value == 1
-        mapapp.vue_handle_step_deactivation()  # the dialog's close button
-        assert rail.value is None and mapapp.current_step is None
-        mapapp.vue_handle_step_activation(4)  # a screen item: cleared at once
-        assert rail.value is None and mapapp.current_step is None
+        assert dialog_open() and items()["3"].active
+        rail.set(None)  # dismiss_dialog
+        assert not dialog_open() and not any(i.active for i in items().values())
+        items()["1"].vue_event_click(None)  # a click on the rail
+        assert rail.value == 1 and dialog_open()
+        rail.set(None)
+        items()["4"].vue_event_click(None)  # a screen item: cleared at once
+        assert rail.value is None and not dialog_open()
+        assert not items()["4"].active
         assert state.current_page_view.value == "analysis_tile"
-        mapapp.vue_handle_step_activation(4)  # and the next click is a change again
-        assert rail.value is None and mapapp.current_step is None
+        state.current_page_view.value = "aoi_tile"  # back on the workflow
+        items()["4"].vue_event_click(None)  # and the next click is reported again
+        assert calls[-2:] == [4, 4] and state.current_page_view.value == "analysis_tile"
+        assert _by_class(root, "sepal-right-panel--open")
+        panel.set(False)
+        assert _by_class(root, "sepal-right-panel--closed")
+        panel.set(True)  # apply_navigation reopens a panel the user closed
+        assert _by_class(root, "sepal-right-panel--open")
     finally:
         rc.close()

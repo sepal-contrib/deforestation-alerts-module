@@ -216,7 +216,7 @@ def shell(data_root, monkeypatch):
     set_loader = _shell_component("_ActiveSetLoader", threads)
     map_legend = _shell_component("MapLegend", threads, also=("legend_props",))
     rail = solara.reactive(None)
-    mapapp_ref = {}
+    panel_open = solara.reactive(True)
     contexts = []
     tiles = {}
 
@@ -243,7 +243,7 @@ def shell(data_root, monkeypatch):
         def _build():
             _detached("about", lambda: AboutTile())
             _detached("project", lambda: ProjectDialog(
-                app_state=state, dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), rail)))
+                app_state=state, dismiss=lambda: dismiss_dialog(rail)))
             _detached("overview", lambda: OverviewTile(app_state=state, map_=map_, layers=layers))
             _detached("aoi", lambda: AoiStep(app_state=state, map_=map_, gee_interface=gee, layers=layers))
             _detached("alerts", lambda: AlertsStep(app_state=state, map_=map_, gee_interface=gee, layers=layers,
@@ -264,10 +264,9 @@ def shell(data_root, monkeypatch):
             return wrappers
 
         wrappers = solara.use_memo(_build, [])
-        nav_bridge(app_state=state, rail=rail, mapapp_ref=mapapp_ref)
+        nav_bridge(app_state=state, rail=rail, panel_open=panel_open)
         screen_bridge(app_state=state, layout=layout)
-        panel_bridge(app_state=state, panel_wrappers=wrappers, mapapp_ref=mapapp_ref,
-                     workflow_config={"title": "Workflow", "icon": "mdi-tune", "width": 480})
+        panel_bridge(app_state=state, panel_wrappers=wrappers)
         set_loader(app_state=state, layers=layers, map_=map_)
         map_legend(app_state=state, layers=layers)
         RemoteFactsLoader(app_state=state, gee_interface=gee)

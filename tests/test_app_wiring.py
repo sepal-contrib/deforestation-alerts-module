@@ -53,7 +53,7 @@ def test_workflow_panel_is_wired():
     # the header outside the steps' body: only the body scrolls
     assert 'children=[header_widget, v.Html(tag="div", class_="defo-workflow-body",' in src
     assert "children=[*panel_wrappers.values()])]" in src
-    assert "right_panel_open=True" in src
+    assert "panel_open = solara.use_reactive(True)" in src and "right_panel_open=panel_open.value" in src
     assert "is_pinned=False" in src
     assert 'WORKFLOW_PANEL_CONFIG = {' in src and 't("app.panel_workflow_title")' in src
     assert "StageHost" not in src
@@ -114,6 +114,9 @@ def test_notification_provider_mounted_before_tiles():
     assert "render_detached(" not in page_body and "MapApp.element" not in page_body
     assert "NotificationProvider()" not in shell_body
     assert "render_detached(" in shell_body and "    _RailMapApp(" in shell_body
+    # issue #10: pysepal's native Solara MapApp, not the legacy widget
+    assert "from pysepal.solara.components.map_app import MapApp" in src
+    assert "sepalwidgets.vue_app" not in src and "MapApp.element" not in src
 
 
 def test_the_enter_listener_is_mounted_once_in_page():
@@ -185,7 +188,7 @@ def test_panel_bridge_drives_views_and_title():
     assert "panel_view" not in body, "the panel has one view: the rail items are dialogs"
     assert 'wrap.style_ = "" if key == spec.key else "display: none;"' in body
     assert "stage_host" not in body and "defo-map-hidden" not in body
-    assert "mapapp.right_panel[0].config = {**workflow_config}" in body
+    assert "right_panel[0].config" not in body  # the native MapApp takes the title as a prop
     # The mirror runs on the workflow screen only (tests/test_panel_bridge.py).
     assert 'app_state.screen.value == "workflow"' in body
     assert "app_state.current_page_view.value = " in body
@@ -252,8 +255,9 @@ def test_a_long_file_tile_detail_wraps_inside_the_tile():
 
 def test_the_project_dialog_closes_itself_through_the_shell():
     shell = _component_body(_src("gui/solara_app.py"), "_AppShell")
-    assert 'dismiss=lambda: dismiss_dialog(mapapp_ref.get("widget"), rail)' in shell
-    for holder in ("rail = solara.use_reactive(", "mapapp_ref = solara.use_memo("):
+    assert 'dismiss=lambda: dismiss_dialog(rail)' in shell
+    assert "mapapp_ref" not in shell
+    for holder in ("rail = solara.use_reactive(", "panel_open = solara.use_reactive("):
         assert shell.count(holder) == 1 and shell.index(holder) < shell.index("project_widget = "), holder
 
 

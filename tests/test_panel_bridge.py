@@ -1,5 +1,5 @@
 """The shell's ``_PanelBridge``, rendered for real: the active step's wrapper
-shows, the panel keeps its Workflow title, and the ``current_page_view``
+shows and the ``current_page_view``
 mirror follows the step on the workflow screen only.
 
 The panel itself has one view -- the PipelineHeader over the active step's
@@ -45,7 +45,7 @@ def bridge():
     wrappers = {s.key: SimpleNamespace(style_="") for s in STEPS}
     component = _shell_component("_PanelBridge")
     _, rc = reacton.render(
-        component(app_state=state, panel_wrappers=wrappers, mapapp_ref={}, workflow_config={}),
+        component(app_state=state, panel_wrappers=wrappers),
         handle_error=False,
     )
     yield SimpleNamespace(state=state, wrappers=wrappers)
@@ -74,31 +74,10 @@ def test_the_mirror_leaves_the_analysis_screen_alone(bridge):
     assert bridge.state.current_page_view.value == "questionnaire_tile"
 
 
-def test_a_language_switch_puts_the_workflow_title_back():
-    """MapApp copies the (re-translated) Workflow config onto the right panel
-    when the app re-renders for a new language; the bridge must re-apply it
-    afterwards, and the panel's title no longer follows navigation -- the rail
-    items are dialogs, which leave the panel as the user left it."""
-    from pysepal.i18n import set_locale
-
-    panel = SimpleNamespace(config={})
-    state = AppState()
-    workflow_config = {"title": "Workflow", "icon": "mdi-tune", "width": 400}
-    component = _shell_component("_PanelBridge")
-    set_locale("en")
-    _, rc = reacton.render(
-        component(app_state=state, panel_wrappers={s.key: SimpleNamespace(style_="") for s in STEPS},
-                  mapapp_ref={"widget": SimpleNamespace(right_panel=[panel])},
-                  workflow_config=workflow_config),
-        handle_error=False,
-    )
-    try:
-        assert panel.config == {**workflow_config}
-        state.active_step.set(step_index("questionnaire"))  # navigation leaves the title alone
-        assert panel.config == {**workflow_config}
-        panel.config = {"title": "stale"}  # MapApp's prop sync on the language re-render
-        set_locale("fr")
-        assert panel.config == {**workflow_config}
-    finally:
-        set_locale("en")
-        rc.close()
+def test_the_panel_title_is_a_prop_not_a_widget_write():
+    """The native MapApp renders ``right_panel_config`` on every shell render,
+    so the re-translated title reaches the panel without the bridge (the
+    legacy MapApp needed it written back onto its RightPanel widget)."""
+    src = (ROOT / "gui" / "solara_app.py").read_text()
+    assert "right_panel[0].config" not in src
+    assert "right_panel_config=WORKFLOW_PANEL_CONFIG," in src

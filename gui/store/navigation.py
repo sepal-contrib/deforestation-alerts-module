@@ -48,57 +48,41 @@ def resolve_navigation(view):
     return None
 
 
-def dismiss_dialog(mapapp, rail):
+def dismiss_dialog(rail):
     """Close the open rail dialog, as its own close button does.
 
-    MapApp.vue's ``closeDialog`` closes the dialog and clears the step;
-    from Python, ``rail`` (the reactive MapApp's ``current_step`` prop
-    follows) set to ``None`` clears the step and ``step_open = False``
-    closes the dialog. Both are no-ops when no dialog is open.
+    ``rail`` is MapApp's ``current_step`` prop: MapApp closes the dialog when
+    it changes to ``None``. A no-op when no dialog is open.
     """
     if rail_item_for_step(rail.value) is not None:
         rail.set(None)
-    if mapapp is not None:
-        mapapp.step_open = False
 
 
-def _open_panel(mapapp):
-    """Dismiss a lingering dialog and make sure the right panel is open.
-
-    ``step_open=False`` is MapApp.vue's close watcher; the Vue ``current_step``
-    watcher does not apply a panel action for programmatic changes, so the
-    panel is opened explicitly.
-    """
-    if mapapp is not None:
-        mapapp.step_open = False
-        mapapp.vue_handle_right_panel_action("open")
-
-
-def apply_navigation(mapapp, rail, app_state, action):
+def apply_navigation(rail, panel_open, app_state, action):
     """Apply a resolved :class:`NavAction`.
+
+    ``rail`` and ``panel_open`` are the shell's reactives behind MapApp's
+    ``current_step`` and ``right_panel_open`` props.
 
     Screen target (Analysis): close an open rail dialog (the Overview's
     *Review alerts* runs from one) and switch the screen. ``active_step`` is
     left alone, so *← Workflow* returns to the step Analysis was entered from.
 
-    Workflow target: show the workflow screen, open the panel, dismiss an open
-    dialog, clear the MapApp step (which un-highlights its rail item) and move
-    the workflow position. Programmatic navigation is deliberately NOT gated:
-    a tile jumps forward only after producing the output that unlocks the
-    target, and the header's gates protect user clicks.
+    Workflow target: show the workflow screen, open the panel, clear the
+    MapApp step (which closes an open dialog and un-highlights its rail item)
+    and move the workflow position. Programmatic navigation is deliberately
+    NOT gated: a tile jumps forward only after producing the output that
+    unlocks the target, and the header's gates protect user clicks.
 
-    Rail target: only ``rail`` (MapApp's step) is set; MapApp opens the dialog itself,
-    and the right panel is left as the user left it behind the dialog.
-
-    ``mapapp`` may be ``None`` (widget not mounted yet) — the state still
-    moves; only the panel/dialog handling is skipped.
+    Rail target: only ``rail`` (MapApp's step) is set; MapApp opens the dialog
+    itself, and the right panel is left as the user left it behind the dialog.
     """
     if action.kind == "screen":
-        dismiss_dialog(mapapp, rail)
+        dismiss_dialog(rail)
         app_state.screen.set(action.target)
         return
     if action.kind == "workflow":
-        _open_panel(mapapp)
+        panel_open.set(True)
         rail.set(None)
         app_state.screen.set("workflow")
         app_state.active_step.set(action.target)

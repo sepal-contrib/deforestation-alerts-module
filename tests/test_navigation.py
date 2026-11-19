@@ -1,6 +1,6 @@
 """Pure navigation logic: current_page_view -> (workflow index | rail step id
-| screen) and the action the _NavBridge applies to the MapApp widget +
-AppState.
+| screen) and the action the _NavBridge applies to the shell's
+reactives (the rail step, the right panel) and AppState.
 
 Side-effect-free (no EE, no UI) so it runs offline."""
 
@@ -61,24 +61,12 @@ def test_resolve_workflow_rail_and_screen_targets():
     assert resolve_navigation("project_tile") == ("rail", 2)
 
 
-class _FakeMapApp:
-    """Records the panel action + step_open writes the bridge applies."""
-
-    def __init__(self):
-        self.step_open = True  # pretend a dialog is currently open
-        self.panel_calls = []
-
-    def vue_handle_right_panel_action(self, action):
-        self.panel_calls.append(action)
-
-
-def test_apply_workflow_target_dismisses_dialog_opens_panel_and_sets_step():
-    mapapp, nav, state = _FakeMapApp(), solara.reactive(3), AppState()
+def test_apply_workflow_target_closes_the_dialog_opens_panel_and_sets_step():
+    nav, panel, state = solara.reactive(3), solara.reactive(False), AppState()
     state.screen.set("analysis")
-    apply_navigation(mapapp, nav, state, resolve_navigation("questionnaire_tile"))
-    assert mapapp.step_open is False
-    assert mapapp.panel_calls == ["open"]
-    assert nav.value is None  # the Overview rail item un-highlights
+    apply_navigation(nav, panel, state, resolve_navigation("questionnaire_tile"))
+    assert panel.value is True  # a panel the user closed opens again
+    assert nav.value is None  # closes the Overview dialog and un-highlights its item
     assert state.active_step.value == 6
     assert state.screen.value == "workflow"
 
@@ -87,61 +75,44 @@ def test_apply_a_screen_target_closes_the_dialog_and_keeps_the_step():
     """The Overview's *Review alerts* opens Analysis from a dialog: the dialog
     closes, the panel is left alone (MapApp's right panel is hidden while the
     screen shows) and the workflow step is remembered for *← Workflow*."""
-    mapapp, nav, state = _FakeMapApp(), solara.reactive(3), AppState()
+    nav, panel, state = solara.reactive(3), solara.reactive(False), AppState()
     state.active_step.set(5)
-    apply_navigation(mapapp, nav, state, resolve_navigation("analysis_tile"))
+    apply_navigation(nav, panel, state, resolve_navigation("analysis_tile"))
     assert state.screen.value == "analysis" and state.active_step.value == 5
-    assert mapapp.step_open is False and nav.value is None
-    assert mapapp.panel_calls == []
+    assert nav.value is None
+    assert panel.value is False
 
 
 @pytest.mark.parametrize("view,step", [("about_tile", 1), ("project_tile", 2), ("overview_tile", 3)])
 def test_apply_a_rail_target_only_activates_its_dialog_step(view, step):
     """Every rail item is a dialog -- About, Project and the Overview
-    dashboard: MapApp opens it itself, and the right panel is left as the
-    user left it behind the dialog."""
-    mapapp, nav, state = _FakeMapApp(), solara.reactive(2), AppState()
+    dashboard: MapApp opens it when its step changes, and the right panel is
+    left as the user left it behind the dialog."""
+    nav, panel, state = solara.reactive(2), solara.reactive(False), AppState()
     state.active_step.set(1)
-    apply_navigation(mapapp, nav, state, resolve_navigation(view))
+    apply_navigation(nav, panel, state, resolve_navigation(view))
     assert nav.value == step
-    assert mapapp.panel_calls == []
-    assert mapapp.step_open is True  # MapApp's own watcher opens the dialog
+    assert panel.value is False
     assert state.active_step.value == 1  # the workflow position is remembered
     assert state.screen.value == "workflow"
 
 
-def test_apply_without_mapapp_still_moves_state():
-    nav, state = solara.reactive(2), AppState()
-    apply_navigation(None, nav, state, resolve_navigation("integrate_tile"))
-    assert state.active_step.value == 4 and nav.value is None
-    apply_navigation(None, nav, state, resolve_navigation("overview_tile"))
-    assert nav.value == 3 and state.active_step.value == 4
-    apply_navigation(None, nav, state, resolve_navigation("analysis_tile"))
-    assert state.screen.value == "analysis" and nav.value is None
-
-
 def test_dismiss_dialog_closes_an_open_dialog_like_its_close_button():
-    """The Project dialog closes itself after opening a project: MapApp.vue's
-    closeDialog clears the step and closes the dialog, and so does this."""
-    mapapp, nav = _FakeMapApp(), solara.reactive(2)  # the Project dialog
-    dismiss_dialog(mapapp, nav)
-    assert mapapp.step_open is False and nav.value is None
-    assert mapapp.panel_calls == []  # the right panel is left as it was
-
-
-def test_dismiss_dialog_clears_any_rail_dialog_and_runs_before_the_mount():
-    mapapp, nav = _FakeMapApp(), solara.reactive(3)  # the Overview dashboard
-    dismiss_dialog(mapapp, nav)
-    assert nav.value is None and mapapp.step_open is False
-    nav = solara.reactive(2)
-    dismiss_dialog(None, nav)  # MapApp not mounted yet: the step still clears
+    """The Project dialog closes itself after opening a project: MapApp
+    closes the dialog when its step is cleared."""
+    nav = solara.reactive(2)  # the Project dialog
+    dismiss_dialog(nav)
+    assert nav.value is None
+    nav = solara.reactive(3)  # the Overview dashboard
+    dismiss_dialog(nav)
     assert nav.value is None
 
 
 def test_dismiss_dialog_with_nothing_open_is_a_no_op():
-    """It is called on every workflow navigation, most of which follow no
+    """It is called on every screen navigation, most of which follow no
     dialog at all: a cleared step must not be written again."""
-    mapapp, nav = _FakeMapApp(), solara.reactive(None)
-    dismiss_dialog(mapapp, nav)
-    assert nav.value is None and mapapp.step_open is False
-    assert mapapp.panel_calls == []
+    nav = solara.reactive(None)
+    writes = []
+    nav.subscribe(writes.append)
+    dismiss_dialog(nav)
+    assert nav.value is None and writes == []
