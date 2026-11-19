@@ -228,19 +228,18 @@ def _PanelBridge(app_state, panel_wrappers):
     showing step, spec §4.3; the analysis screen is ``_ScreenBridge``'s.)
 
     A leaf component (same reason as ``_NavBridge``). Runs whenever
-    ``active_step`` or the locale change, whoever set them (header click, rail
-    click, navigation bridge, language selector). The rail items are all
+    ``active_step`` changes, whoever set it (header click, rail click,
+    navigation bridge). The rail items are all
     dialogs, so the panel itself only ever shows the Workflow view.
     """
     active = app_state.active_step.value
-    locale = current_locale()
     shown = solara.use_ref(active)
 
     def _apply():
         spec = STEPS[active]
         # The step shown slides in from the side it lies on (the stylesheet's
-        # .defo-step-in--*); a re-apply on the same step (a language switch)
-        # leaves its class alone, as a new animation name would replay it.
+        # .defo-step-in--*); a re-apply on the same step leaves its class
+        # alone, as a new animation name would replay it.
         turn = None if shown.current == active else ("fwd" if active > shown.current else "back")
         shown.current = active
         for key, wrap in panel_wrappers.items():
@@ -251,12 +250,12 @@ def _PanelBridge(app_state, panel_wrappers):
         # to what is showing so a *repeated* trigger (e.g. searching twice)
         # still changes the value and re-fires _NavBridge, whose guard then
         # no-ops. On the analysis screen current_page_view is "analysis_tile",
-        # and writing the step's view (a language switch re-runs this) would
-        # send the reviewer back to the workflow.
+        # and writing the step's view would send the reviewer back to the
+        # workflow.
         if app_state.screen.value == "workflow" and app_state.current_page_view.value != spec.page_view:
             app_state.current_page_view.value = spec.page_view
 
-    solara.use_effect(_apply, [active, locale])
+    solara.use_effect(_apply, [active])
 
 
 init_ee()

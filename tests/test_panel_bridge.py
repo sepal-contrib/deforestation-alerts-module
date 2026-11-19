@@ -60,9 +60,8 @@ def test_the_active_steps_wrapper_shows_and_the_mirror_follows(bridge):
 
 def test_the_mirror_leaves_the_analysis_screen_alone(bridge):
     """On the analysis screen ``current_page_view`` is "analysis_tile". A
-    write of the step's view there (a step change, or a language switch,
-    which re-runs the bridge) would make ``_NavBridge`` send the reviewer
-    back to the workflow."""
+    write of the step's view there (a step change) would make ``_NavBridge``
+    send the reviewer back to the workflow."""
     bridge.state.screen.set("analysis")
     bridge.state.current_page_view.set("analysis_tile")
     bridge.state.active_step.set(step_index("integrate"))
@@ -81,3 +80,18 @@ def test_the_panel_title_is_a_prop_not_a_widget_write():
     src = (ROOT / "gui" / "solara_app.py").read_text()
     assert "right_panel[0].config" not in src
     assert "right_panel_config=WORKFLOW_PANEL_CONFIG," in src
+
+
+def test_a_language_switch_leaves_the_mirror_alone(bridge):
+    """A rail dialog leaves its view in ``current_page_view`` after it closes.
+    A language switch must not rewrite it to the step's view: that write
+    reaches ``_NavBridge`` as a navigation."""
+    from pysepal.i18n import set_locale
+
+    bridge.state.current_page_view.set("overview_tile")  # the Overview dialog, opened and closed
+    set_locale("en")
+    try:
+        set_locale("fr")
+        assert bridge.state.current_page_view.value == "overview_tile"
+    finally:
+        set_locale("en")
