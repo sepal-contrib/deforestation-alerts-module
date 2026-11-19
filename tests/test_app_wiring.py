@@ -41,8 +41,9 @@ def test_the_app_starts_on_the_project_dialog():
     from gui.store.workflow_steps import rail_item_for_step
 
     src = _src("gui/solara_app.py")
-    assert "_FIRST_RAIL_STEP = 2\n" in src and "initial_step=_FIRST_RAIL_STEP," in src
-    assert "solara.use_reactive(_FIRST_RAIL_STEP)" in src  # the rail starts on the step MapApp opens
+    # MapApp opens on its current_step, so the rail's first value is the startup step
+    assert "_FIRST_RAIL_STEP = 2\n" in src and "rail = solara.use_reactive(_FIRST_RAIL_STEP)" in src
+    assert "initial_step=" not in src
     assert rail_item_for_step(2).key == "project"
 
 

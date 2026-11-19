@@ -14,7 +14,7 @@ All maps derive from ``gui.store.workflow_steps`` — never hand-edit ids here.
 
 from collections import namedtuple
 
-from gui.store.workflow_steps import RAIL_ITEMS, STEPS, rail_item_for_step
+from gui.store.workflow_steps import RAIL_ITEMS, STEPS
 
 PAGE_VIEW_TO_WORKFLOW = {s.page_view: i for i, s in enumerate(STEPS)}
 #: The rail's dialogs. Its "screen" items (Analysis) navigate by their page
@@ -54,8 +54,7 @@ def dismiss_dialog(rail):
     ``rail`` is MapApp's ``current_step`` prop: MapApp closes the dialog when
     it changes to ``None``. A no-op when no dialog is open.
     """
-    if rail_item_for_step(rail.value) is not None:
-        rail.set(None)
+    rail.set(None)
 
 
 def apply_navigation(rail, panel_open, app_state, action):

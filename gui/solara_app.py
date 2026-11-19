@@ -153,19 +153,20 @@ def _NavBridge(app_state, rail, panel_open):
     """Programmatic navigation: tiles' ``current_page_view`` writes → shell state.
 
     Tiles signal navigation by writing ``app_state.current_page_view``
-    (a finished Integrate, the Overview's "Review"/"Go" and Evaluation's
-    *Start analysis* → the analysis screen, the Overview's "Workflow" → the
-    active step, a new or opened project → AOI). This invisible leaf
+    (the Overview's "Review"/"Go", Evaluation's *Start analysis*, a set
+    opened from its store and an opened review copy → the analysis screen; a
+    new or opened project → AOI). This invisible leaf
     component resolves the string to a workflow index, a rail step id or a
     screen and applies it. It is a *leaf* on purpose: only this component
     re-renders on a nav event, so ``Page`` / ``MapApp`` are not rebuilt.
 
     Threading: the render and the effect run in whichever thread set the
-    reactive. Integrate sets it from its worker thread, so ``_drive`` then
-    runs on that worker, not on the kernel's event loop (reacton renders
-    synchronously in the setting thread; see ``_ActiveSetLoader``). It may
-    only set traits and reactives, as the workers themselves do; it must
-    never start loop-only work (``use_task``, ``asyncio.create_task``).
+    reactive (reacton renders synchronously in the setting thread; see
+    ``_ActiveSetLoader``). Today every writer runs on the kernel's event loop
+    (click handlers, the project dialog's open task), but a writer on a
+    worker thread would run ``_drive`` there: it may only set traits and
+    reactives, never start loop-only work (``use_task``,
+    ``asyncio.create_task``).
     """
     view = app_state.current_page_view.value
 
@@ -635,12 +636,6 @@ def Page():
 @solara.component
 def _AppShell():
     solara.Style(
-        # Embedded-widget height fix: a tile renders raw ipyvuetify widgets via
-        # `solara.display(card)`, and ipyvuetify wraps each standalone display in
-        # its OWN Vuetify `<v-application>` whose `.v-application--wrap` carries
-        # `min-height: 100vh`, so every card would reserve a full viewport height.
-        ".dialog-card .v-application--wrap,\n"
-        ".right-panel .v-application--wrap { min-height: 0 !important; }\n"
         # The analysis screen (SCREEN_CSS in gui/tile/analysis/analysis_tile.py)
         # is a sibling of MapApp, fixed right of MapApp's rail
         # (left: var(--sepal-drawer-width)). Its z-index, 4, covers the map
@@ -685,7 +680,7 @@ def _AppShell():
         # paints its own background so the panel scrolls under it. Its inline
         # `var(--v-background-base, #ffffff)` is the light fallback: no theme
         # defines `background`, so on the dark theme it was a white bar. Dark:
-        # pysepal's drawer surface (`.theme--dark.v-navigation-drawer`), with
+        # pysepal's drawer surface (MapApp's `darker` sheet, #1a1a1a), with
         # !important since an inline style beats any stylesheet rule.
         ".theme--dark .defo-analysis-footer { background-color: #1a1a1a !important; }\n"
         # The workflow panel's step strip and title stay put and only the
@@ -1006,8 +1001,6 @@ def _AppShell():
             docs_url=docs_url,
             main_map=[map_],
             steps_data=steps_data,
-            # Opened at startup; rail (_RailMapApp) starts on the same step.
-            initial_step=_FIRST_RAIL_STEP,
             theme_state=theme_state,
             right_panel_config=WORKFLOW_PANEL_CONFIG,
             right_panel_content=right_panel_content,
