@@ -359,3 +359,29 @@ def test_prepare_row_helpers_find_the_pills_actions_and_a_running_row(_walk_brow
         assert not phases.job_running(page)
     finally:
         page.close()
+
+
+def test_title_reads_a_collapsed_rail_and_leaves_it_collapsed(_walk_browser):
+    """pysepal's native drawer renders the app title only while expanded; its
+    toggle answers after a kernel round trip (a timeout here)."""
+    page = _walk_browser.new_page()
+    try:
+        page.set_content("""<div>
+          <div class="right-panel"><div class="sepal-mapapp__drawer-header"><div class="sepal-mapapp__app-title">
+            <span class="title">Workflow</span></div></div></div>
+          <div class="sepal-mapapp__drawer sepal-mapapp__drawer--rail" id="d">
+            <div class="sepal-mapapp__drawer-header"><div class="sepal-mapapp__app-title" id="t"></div></div></div>
+          <div class="sepal-mapapp__drawer-toggle"><button onclick="setTimeout(() => {
+            const d = document.getElementById('d'), t = document.getElementById('t');
+            const rail = d.classList.toggle('sepal-mapapp__drawer--rail');
+            t.innerHTML = rail ? '' : '<span class=&quot;title&quot;>Alerts · demo</span>';
+          }, 300)">&gt;</button></div></div>""")
+        assert walklib.title(page) == "Alerts · demo"
+        page.wait_for_timeout(100)
+        assert page.locator(".sepal-mapapp__drawer--rail").count() == 1, "the rail was left expanded"
+        page.locator(".sepal-mapapp__drawer-toggle button").click()
+        page.wait_for_timeout(500)
+        assert walklib.title(page) == "Alerts · demo", "an expanded drawer is read as it is"
+        assert page.locator(".sepal-mapapp__drawer--rail").count() == 0
+    finally:
+        page.close()
